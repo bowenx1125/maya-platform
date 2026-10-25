@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from app.core.config import Settings
 from app.modules.knowledge.providers import (
     REAL_EMBEDDING_DIMENSION,
@@ -60,14 +62,23 @@ def tts_provider(settings: Settings) -> TTSProvider:
     if settings.tts_provider == "mock":
         return MockTTSProvider()
     if settings.tts_provider == "dashscope":
-        # Hard failures never fall back to Mock.
-        return DashScopeTTSProvider(_dashscope_config(settings))
+        # Hard failures never fall back to Mock. Speech is Debate-only (Chats
+        # are text), so DEBATE_TTS_MODEL picks the model for unbound voices.
+        config = _dashscope_config(settings)
+        if settings.debate_tts_model:
+            from app.providers.dashscope import ALLOWED_TTS_TARGET_MODELS
+
+            if settings.debate_tts_model not in ALLOWED_TTS_TARGET_MODELS:
+                raise RuntimeError("DEBATE_TTS_MODEL is not a supported speech model")
+            config = replace(config, target_model_key=settings.debate_tts_model)
+        return DashScopeTTSProvider(config)
     raise RuntimeError("tts provider is not supported")
 
 
 def llm_provider(
     settings: Settings,
     *,
+    model_key: str | None = None,
     transport: LLMTransport | None = None,
     tokenizer: LLMTokenizerPort | object | None = None,
     outbound_manifest: LLMOutboundManifestV1 | None = None,
@@ -94,7 +105,7 @@ def llm_provider(
             api_key=settings.dashscope_api_key,
             workspace_id=settings.dashscope_workspace_id,
             region=settings.dashscope_region,
-            model_key=settings.llm_model,
+            model_key=model_key or settings.llm_model,
             policy_hash=policy_hash,
         ),
         transport,

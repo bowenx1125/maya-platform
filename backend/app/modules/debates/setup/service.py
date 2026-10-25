@@ -44,6 +44,7 @@ from app.core.models import (
 )
 from app.core.version_label import agent_version_label
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
+from app.modules.debates.llm_params import configured_playback_rate, resolve_params
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
 from app.modules.debates.owned_copies import (
     adopt_debate_knowledge,
@@ -975,7 +976,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             mode="live",
             current_turn_id=None,
             cursor_ms=0,
-            playback_rate=1.0,
+            playback_rate=configured_playback_rate(db),
             control_version=0,
             next_turn_ready=False,
         )
@@ -1287,6 +1288,7 @@ def create_debate_draft(
     if record is not None:
         _assert_create_claim_owned(db, record)
     timestamp = utc_now()
+    runtime_settings = _settings(db, settings)
     debate = Debate(
         id=str(uuid4()),
         course_id=course_id,
@@ -1302,7 +1304,9 @@ def create_debate_draft(
             frozen_teaching=freeze_teaching_rules(
                 payload.teaching_prompts.model_dump()
                 if payload.teaching_prompts is not None
-                else None
+                else None,
+                # Frozen with the Ruleset: every turn sends these values.
+                llm_params=resolve_params(runtime_settings, payload.llm_params),
             ),
         ),
         status="draft",
@@ -1321,7 +1325,6 @@ def create_debate_draft(
     # created side record.  Keeping it in this writer transaction guarantees
     # every committed new Debate has exactly one closed classroom window.
     create_closed_window(db, debate)
-    runtime_settings = _settings(db, settings)
     _assert_participants_ready(
         db, course_id=debate.course_id, payload=payload, settings=runtime_settings
     )
@@ -1357,7 +1360,7 @@ def create_debate_draft(
             mode="live",
             current_turn_id=None,
             cursor_ms=0,
-            playback_rate=1.0,
+            playback_rate=runtime_settings.debate_playback_rate,
             control_version=0,
             created_at=timestamp,
             updated_at=timestamp,
@@ -1580,9 +1583,13 @@ def update_debate_draft(
         and payload.teaching_prompts.model_dump() != stored_rules.get("teaching_prompts")
     ):
         raise invalid_state("Teaching rules are frozen when the debate is created.")
+    if payload.llm_params is not None and payload.llm_params.model_dump() != stored_rules.get(
+        "llm_params"
+    ):
+        raise invalid_state("Generation parameters are frozen when the debate is created.")
     frozen_teaching = {
         key: stored_rules[key]
-        for key in ("teaching_prompts", "system_prompts")
+        for key in ("teaching_prompts", "system_prompts", "contract_version", "llm_params")
         if key in stored_rules
     }
     timestamp = utc_now()

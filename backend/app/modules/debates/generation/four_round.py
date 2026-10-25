@@ -168,6 +168,11 @@ def usable_memory(value: object, agent_ids: set[str] | None = None) -> dict[str,
 
 
 def system_prompt(round_number: int, language: str) -> str:
-    from app.modules.debates.teaching_rules import compile_system_prompt, default_teaching_prompts
+    """The prompt of a Debate frozen before Rulesets carried their own contract."""
 
-    return compile_system_prompt(default_teaching_prompts()[language], round_number, language)
+    from app.modules.debates.teaching_rules import (
+        legacy_compile_system_prompt,
+        legacy_teaching_prompts,
+    )
+
+    return legacy_compile_system_prompt(legacy_teaching_prompts()[language], round_number, language)

@@ -4387,6 +4387,38 @@
         }
       }
     },
+    "/api/v1/courses/{course_id}/debate-llm-defaults": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/CourseId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "getDebateLLMDefaults",
+        "description": "The DEBATE_LLM_* defaults and ranges the parameter card starts from.",
+        "responses": {
+          "200": {
+            "description": "Default generation parameters and their ranges for a new debate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DebateLLMDefaults"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/courses/{course_id}/debates": {
       "parameters": [
         {
@@ -13386,6 +13418,237 @@
           }
         }
       },
+      "DebateLLMParams": {
+        "additionalProperties": false,
+        "description": "One Debate's overrides; null means \"do not send this parameter\".",
+        "properties": {
+          "enable_thinking": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enable Thinking"
+          },
+          "frequency_penalty": {
+            "anyOf": [
+              {
+                "maximum": 2,
+                "minimum": -2,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frequency Penalty"
+          },
+          "max_tokens": {
+            "anyOf": [
+              {
+                "maximum": 32768,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tokens"
+          },
+          "presence_penalty": {
+            "anyOf": [
+              {
+                "maximum": 2,
+                "minimum": -2,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presence Penalty"
+          },
+          "repetition_penalty": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 2,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repetition Penalty"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 2147483647,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 2,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          },
+          "top_p": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top P"
+          }
+        },
+        "title": "DebateLLMParams",
+        "type": "object"
+      },
+      "DebateLLMParamSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "default": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          },
+          "exclusive_maximum": {
+            "title": "Exclusive Maximum",
+            "type": "boolean"
+          },
+          "exclusive_minimum": {
+            "title": "Exclusive Minimum",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "float",
+              "int",
+              "bool"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "name": {
+            "enum": [
+              "temperature",
+              "top_p",
+              "presence_penalty",
+              "frequency_penalty",
+              "repetition_penalty",
+              "max_tokens",
+              "enable_thinking",
+              "seed"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "sent": {
+            "title": "Sent",
+            "type": "boolean"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "exclusive_minimum",
+          "exclusive_maximum",
+          "sent"
+        ],
+        "title": "DebateLLMParamSpec",
+        "type": "object"
+      },
+      "DebateLLMDefaults": {
+        "additionalProperties": false,
+        "properties": {
+          "params": {
+            "items": {
+              "$ref": "#/components/schemas/DebateLLMParamSpec"
+            },
+            "title": "Params",
+            "type": "array"
+          },
+          "playback_rate": {
+            "title": "Playback Rate",
+            "type": "number"
+          }
+        },
+        "required": [
+          "params",
+          "playback_rate"
+        ],
+        "title": "DebateLLMDefaults",
+        "type": "object"
+      },
       "DebateDraftRequest": {
         "type": "object",
         "required": [
@@ -13393,6 +13656,17 @@
           "participants"
         ],
         "properties": {
+          "llm_params": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DebateLLMParams"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The parameter card's values; omitted means the DEBATE_LLM_* defaults."
+          },
           "topic": {
             "type": "string",
             "minLength": 1,

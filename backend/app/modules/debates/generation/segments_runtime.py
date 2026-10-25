@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Literal, cast
 from uuid import NAMESPACE_URL, uuid5
 
-from app.core.config import configured_llm_model
+from app.core.config import configured_debate_llm_model
 from app.core.errors import PlatformError
 from app.core.llm_admission import debate_llm_slot
 from app.providers.control import LLMAcceptedStageV1, ProviderReservationRequestV1
@@ -304,7 +304,7 @@ class SegmentLLMRuntime:
             policy_hash=policy_hash,
             export_manifest_hash=manifest_hash,
             build_manifest_hash=build_manifest_hash,
-            model_key=configured_llm_model(),
+            model_key=configured_debate_llm_model(),
             operation_id=_operation_key(debate_id, turn_id, attempt_no),
         )
         operation: object | None = None
@@ -506,7 +506,7 @@ class SegmentLLMRuntime:
             policy_hash=prepared.policy_hash,
             export_manifest_hash=prepared.manifest_hash,
             build_manifest_hash=prepared.build_manifest_hash,
-            model_key=configured_llm_model(),
+            model_key=configured_debate_llm_model(),
             output_json=output_json,
             output_hash=output_hash,
             prompt_tokens=candidate.usage.prompt_tokens if candidate.usage else 0,

@@ -90,6 +90,7 @@ const implementedOperationIds = new Set([
   "startDebate",
   "advanceDebatePlayback",
   "prefetchNextDebateAudio",
+  "getDebateLLMDefaults",
   "reportClientMetrics",
   "freezeFinalInput",
   "deleteDebateVoice",

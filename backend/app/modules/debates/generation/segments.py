@@ -568,6 +568,9 @@ class SegmentInputSnapshot:
     receipt_hash: str = ""
     discussion_json: str | None = None
     frozen_system_prompt: str | None = None
+    # Canonical {"contract_version","params"} a Debate froze at creation; absent
+    # for Debates created before, whose hashes and requests stay as they were.
+    frozen_llm_json: str | None = None
 
     @classmethod
     def from_user_payload(
@@ -577,6 +580,7 @@ class SegmentInputSnapshot:
         receipts: Sequence[SnapshotRetrievalReceipt] = (),
         snapshot_id: str | None = None,
         frozen_system_prompt: str | None = None,
+        frozen_llm_json: str | None = None,
     ) -> SegmentInputSnapshot:
         """Load one serialized seven-group payload with server receipts.
 
@@ -657,6 +661,7 @@ class SegmentInputSnapshot:
         )
         return cls(
             frozen_system_prompt=frozen_system_prompt,
+            frozen_llm_json=frozen_llm_json,
             topic=topic,
             language=language,
             round=round_value,
@@ -692,6 +697,7 @@ class SegmentInputSnapshot:
         snapshot_id: str | None = None,
         frozen_system_prompt: str | None = None,
         discussion: Mapping[str, object] | None = None,
+        frozen_llm: Mapping[str, object] | None = None,
     ) -> SegmentInputSnapshot:
         """Create a snapshot from compact fields without provider access."""
 
@@ -718,6 +724,7 @@ class SegmentInputSnapshot:
             receipts=receipts,
             snapshot_id=snapshot_id,
             frozen_system_prompt=frozen_system_prompt,
+            frozen_llm_json=_canonical(dict(frozen_llm)) if frozen_llm is not None else None,
         )
 
     def __post_init__(self) -> None:
@@ -855,6 +862,11 @@ class SegmentInputSnapshot:
                 if self.frozen_system_prompt is not None
                 else {}
             ),
+            **(
+                {"frozen_llm_json": self.frozen_llm_json}
+                if self.frozen_llm_json is not None
+                else {}
+            ),
             "snapshot_id": self.snapshot_id,
             "receipt_hash": self.receipt_hash,
             "input": self.to_user_payload(),
@@ -868,7 +880,10 @@ class SegmentInputSnapshot:
     def from_server_payload(cls, value: Mapping[str, object]) -> SegmentInputSnapshot:
         """Load a full server snapshot and verify its receipt digest."""
 
-        if not isinstance(value, Mapping) or set(value) - {"frozen_system_prompt"} != {
+        if not isinstance(value, Mapping) or set(value) - {
+            "frozen_system_prompt",
+            "frozen_llm_json",
+        } != {
             "snapshot_id",
             "receipt_hash",
             "input",
@@ -878,6 +893,9 @@ class SegmentInputSnapshot:
         frozen_prompt = value.get("frozen_system_prompt")
         if frozen_prompt is not None and not isinstance(frozen_prompt, str):
             raise _error("frozen system prompt must be text.", code="snapshot_invalid")
+        frozen_llm = value.get("frozen_llm_json")
+        if frozen_llm is not None and not isinstance(frozen_llm, str):
+            raise _error("frozen LLM settings must be text.", code="snapshot_invalid")
         snapshot_id = value.get("snapshot_id")
         receipt_hash = value.get("receipt_hash")
         input_value = value.get("input")
@@ -899,6 +917,7 @@ class SegmentInputSnapshot:
                 receipts=receipts,
                 snapshot_id=snapshot_id,
                 frozen_system_prompt=frozen_prompt,
+                frozen_llm_json=frozen_llm,
             )
         except (TypeError, ValueError) as exc:
             raise _error("server snapshot is invalid.", code="snapshot_invalid") from exc
@@ -920,6 +939,14 @@ class SegmentInputSnapshot:
         if self.frozen_system_prompt is not None:
             value = _canonical(
                 {"input": self.to_user_payload(), "system": self.frozen_system_prompt}
+            )
+        if self.frozen_llm_json is not None:
+            value = _canonical(
+                {
+                    "input": self.to_user_payload(),
+                    "system": self.frozen_system_prompt,
+                    "llm": self.frozen_llm_json,
+                }
             )
         return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -988,6 +1015,7 @@ def build_segment_input(
         )
     return SegmentInputSnapshot.from_groups(
         frozen_system_prompt=context.frozen_system_prompt,
+        frozen_llm=context.frozen_llm,
         topic=context.topic,
         language=context.output_language,
         round_number=context.turn.round_no,

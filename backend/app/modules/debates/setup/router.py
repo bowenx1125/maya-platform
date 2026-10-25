@@ -18,6 +18,7 @@ from app.modules.debates.schemas import (
     DebateDetail,
     DebateDraftRequest,
     DebateDraftUpdateRequest,
+    DebateLLMDefaults,
     DebateSummary,
     TeachingPrompts,
 )
@@ -47,6 +48,30 @@ def get_ruleset_defaults(
 
     require_teacher_course(db, context.user.id, str(course_id))
     return TeachingPrompts(**default_teaching_prompts())
+
+
+@router.get(
+    "/courses/{course_id}/debate-llm-defaults",
+    response_model=DebateLLMDefaults,
+    operation_id="getDebateLLMDefaults",
+    responses={
+        200: {"model": DebateLLMDefaults},
+        403: {"model": Error},
+        404: {"model": Error},
+    },
+)
+def get_llm_defaults(
+    course_id: UUID,
+    request: Request,
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> DebateLLMDefaults:
+    """The DEBATE_LLM_* defaults and ranges the parameter card starts from."""
+
+    from app.modules.debates.llm_params import defaults_payload
+
+    require_teacher_course(db, context.user.id, str(course_id))
+    return DebateLLMDefaults.model_validate(defaults_payload(request.app.state.settings))
 
 
 @router.get(

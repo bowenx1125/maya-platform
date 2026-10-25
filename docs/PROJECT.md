@@ -230,28 +230,20 @@ backfill_debate_snapshots, backfill_debate_voice_clones, cleanup_soft_deleted.
 
 Next: live prepares up to3 turns ahead,each after its predecessor is final-ready;
 per-Debate lock;controller-only POST /debates/{id}/next-audio prefetch ticket,stage
-plays the blob (159 routes). debate_timing logs:generation/tts/lock_wait/audio_serve/
+plays the blob. debate_timing logs:generation/tts/lock_wait/audio_serve/
 next_request;browser logs audio_prefetch/audio_start. Uploaded voice auto-selected;
 Team errors name the Agent;agent_in_team names own Teams;unknown codes show the code.
 
-Local CI a9a34db3: backend 3040/22 skip,frontend 1067/1,all gates green.
-Node 24.14 for Prettier/Latin tables. Actions billing-blocked;0 real calls.
+Local CI a9a34db3 (PG16): backend 3040/22 skip, frontend 1067/1, all gates (159 routes).
 
 ## Oct24 cleanup and Record hotfix
 
-Production cleanup --apply rolled back on knowledge_generation_accepted_stages; the
-5-min prune failed on fk_provider_export_manifests_agent_version (RESTRICT in prod,
-SET NULL in models); rolled-back deletes had already unlinked 841 files. Hard deletes
-now run through app/modules/purge.py: one rule (delete/null/protect) per foreign key
-into every deleted table, read from the live catalog, never relying on ON DELETE;
-records,answers,Debate copies and ledgers only get null; a test fails on an unruled FK.
-Files unlink only after the outermost commit (dropped on rollback). Teacher Record
-reads attempts by course+student only (no Team/publication/chat/Agent checks); a
-Team-deleted unfinished attempt shows as paused for both sides; ungrouped students
-listed; a deleted chat no longer 500s Record (conversation_id nullable). Teacher delete
-is real (attempt,answers,scores; chat kept). Prod-shaped 0076→0078 seeded run:
-main reproduced the FK error and file loss; fix dry-run→apply→apply second run 0,
-Debate snapshots/answers/participants unchanged. 0078 lost no link fields: no backfill.
+Prod cleanup rolled back on an unruled FK and had unlinked 841 files. Hard deletes now
+run through app/modules/purge.py: one rule (delete/null/protect) per FK into every
+deleted table from the live catalog (a test fails on an unruled FK); records, answers,
+Debate copies and ledgers only get null; files unlink after the outermost commit.
+Teacher Record reads attempts by course+student; teacher delete is real (chat kept).
+Prod-shaped 0076→0078 run: dry-run→apply→second apply 0, snapshots unchanged.
 
 ## Oct24 Agent hints and Debate create
 
@@ -274,7 +266,7 @@ Each request logs a `request_timing` JSON line (method,route template,status,ms,
 db_ms/queries,provider ms per kind,host,slow≥1s; streams to headers; fast /health
 probes omitted); debate_timing adds prefetch_request and audio_serve authorize/read. Browser samples 25%
 of page loads: Next→speech,first contentful paint,assessment send→reply; POST
-/client-metrics (160 routes) logs `client_metric`,stores nothing. Read-only
+/client-metrics logs `client_metric`,stores nothing. Read-only
 `scripts/slow_endpoints_report.py` summarises docker logs: route p50/p95/p99/max,db,
 provider,top20 by p95,browser metrics,Debate stages. No ids,user data or payloads logged.
 
@@ -300,3 +292,11 @@ DEBATE_AUDIO_MP3 (prod on): format=mp3 via ffmpeg, 64 MB memory LRU by WAV diges
 WAV default; private,max-age=300, 304. Playback routes/WS commands off the event loop
 (offload.py, guard test); per-Debate thread + pg advisory lock; tickets in Postgres
 (0079, hash only). Next 103→35 SQL; tests/bench_debate_next.py.
+
+## Oct24 Debate generation parameters (PR E)
+
+DEBATE_LLM_* env (no MAYA_ prefix): model, temperature 0.65, top_p 0.8, penalties,
+max_tokens, seed, thinking, timeout 120; DEBATE_TTS_MODEL. Unset = previous values.
+The create card starts from GET /courses/{id}/debate-llm-defaults; values freeze into
+rule_snapshot_json.llm_params (ruleset_contract_v3; null = not sent). The execution
+contract lives in default_rules/{zh,en}.md ({round}); pre-v3 Debates keep legacy.

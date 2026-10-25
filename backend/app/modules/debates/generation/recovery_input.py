@@ -13,7 +13,7 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Literal, cast
 
-from app.core.config import configured_llm_model
+from app.core.config import configured_debate_llm_model
 from app.providers.control import LLM_RECOVERY_INPUT_VERSION, LLMRecoveryInputV1
 
 from .policy import TurnPlan
@@ -246,7 +246,7 @@ def build_llm_recovery_input(
             stage, "repair_policy_hash", prepared.repair_policy_hash or None
         ),
         "generation_fence": generation_fence_hash,
-        "model_key": str(_read(stage, "model_key", configured_llm_model())),
+        "model_key": str(_read(stage, "model_key", configured_debate_llm_model())),
         "debate_id": prepared.debate_id,
         "turn_id": str(_read(stage, "turn_id", prepared.turn_id)),
         "attempt_no": _int_value(_read(stage, "attempt_no", prepared.attempt_no)),

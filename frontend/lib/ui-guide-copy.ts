@@ -169,6 +169,14 @@ export const uiGuideCopy = {
     en: "Edit the teaching instructions for future debates.",
     zh: "编辑之后新建辩论使用的教学规则。",
   },
+  "debate.llmParams": {
+    en: "Sampling settings frozen into the debate with its rules. Unchecked values are not sent to the model.",
+    zh: "随规则一起固定进辩论的生成参数；不传的参数不会发给模型。",
+  },
+  "debate.llmParamsReset": {
+    en: "Restore the server defaults for every parameter.",
+    zh: "把所有参数恢复为服务器默认值。",
+  },
   "debate.rulesetSave": {
     en: "Save these teaching instructions for future debates.",
     zh: "保存这些教学规则，供之后创建的辩论使用。",

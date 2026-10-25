@@ -17,12 +17,19 @@ import {
   type IdempotencyHandle,
   type DebateDetail,
   type DebateDraftRequest,
+  type DebateLLMDefaults,
   type DebateSummary,
   type PlatformApi,
   type PublishedAgentSummary,
 } from "../../../lib/api";
 import { localizeError, type MessageKey } from "../../../lib/i18n";
 import { RulesetEditor, type TeachingPrompts } from "./ruleset-editor";
+import {
+  LlmParamsCard,
+  defaultParamValues,
+  paramsPayload,
+  type LLMParamValues,
+} from "./llm-params-card";
 import sectionStyles from "./create-section.module.css";
 import { validateDebateTopic } from "../../../lib/debate-topic";
 import { useLocale, useT } from "../../locale";
@@ -58,6 +65,9 @@ export type DebateListController = {
 export type DebateCreateController = {
   loadRuleset: (courseId: string) => Promise<TeachingPrompts>;
   loadCandidates: (courseId: string) => Promise<PublishedAgentSummary[]>;
+  /** The env defaults and ranges the parameter card starts from. Without
+   * it the card is not shown and the server freezes those defaults itself. */
+  loadLLMDefaults?: (courseId: string) => Promise<DebateLLMDefaults>;
   create: (
     courseId: string,
     payload: DebateDraftRequest,
@@ -357,6 +367,7 @@ function defaultCreateController(api: PlatformApi): DebateCreateController {
   return {
     loadCandidates: (courseId) => api.publishedAgents(courseId),
     loadRuleset: (courseId) => api.debateRulesetDefaults(courseId),
+    loadLLMDefaults: (courseId) => api.debateLLMDefaults(courseId),
     create: (courseId, payload, idempotency) =>
       api.createDebate(courseId, payload, { idempotency }),
   };
@@ -389,6 +400,10 @@ export function TeacherDebateCreate({
     en: "",
   });
   const [rulesEditing, setRulesEditing] = useState(false);
+  const [llmDefaults, setLLMDefaults] = useState<DebateLLMDefaults | null>(
+    null,
+  );
+  const [llmValues, setLLMValues] = useState<LLMParamValues | null>(null);
   const rulesLoaded = useRef(false);
   const [outputLanguage, setOutputLanguage] = useState<"en" | "zh">("zh");
   const ruleSetId: DebateRuleSetId = "ordered_multi_expert_mutual_learning_v1";
@@ -438,12 +453,19 @@ export function TeacherDebateCreate({
     setLoading(true);
     setError(null);
     try {
-      const [next, defaults] = await Promise.all([
+      const [next, defaults, llm] = await Promise.all([
         effectiveController.loadCandidates(courseId),
         rulesLoaded.current
           ? Promise.resolve(null)
           : effectiveController.loadRuleset(courseId),
+        rulesLoaded.current || !effectiveController.loadLLMDefaults
+          ? Promise.resolve(null)
+          : effectiveController.loadLLMDefaults(courseId),
       ]);
+      if (llm !== null) {
+        setLLMDefaults(llm);
+        setLLMValues(defaultParamValues(llm.params));
+      }
       if (defaults !== null) {
         setTeachingPrompts(defaults);
         rulesLoaded.current = true;
@@ -545,6 +567,7 @@ export function TeacherDebateCreate({
       rule_set_id: ruleSetId,
       total_duration_seconds: null,
       turn_duration_seconds: null,
+      ...(llmValues ? { llm_params: paramsPayload(llmValues) } : {}),
     };
     const unstanced = payload.participants.find(
       (item) => item.stance_mode === "assigned" && !item.assigned_stance,
@@ -611,10 +634,14 @@ export function TeacherDebateCreate({
       error,
       (index) => agentNames[selectedIds[index]] ?? "",
     ) ?? []
-  ).map((problem) => t(problem.key, problem.params ?? {}));
-  const lines = [topicError, formError, ...fieldLines].filter(
-    (line): line is string => Boolean(line),
-  );
+  ).map((problem) => ({
+    text: t(problem.key, problem.params ?? {}),
+    href: problem.anchor ? `#${problem.anchor}` : null,
+  }));
+  const lines = [
+    ...[topicError, formError].filter((line): line is string => Boolean(line)),
+    ...fieldLines,
+  ];
   const mustFix = lines.length > 0 || issues.some((item) => item.blocking);
   const otherError =
     error && !agentIssuesFromError(error) && fieldLines.length === 0
@@ -831,6 +858,19 @@ export function TeacherDebateCreate({
           onSave={setTeachingPrompts}
           onEditingChange={setRulesEditing}
         />
+        {llmDefaults && llmValues ? (
+          <LlmParamsCard
+            specs={llmDefaults.params}
+            values={llmValues}
+            disabled={busy}
+            onChange={(name, next) =>
+              setLLMValues((current) =>
+                current ? { ...current, [name]: next } : current,
+              )
+            }
+            onReset={() => setLLMValues(defaultParamValues(llmDefaults.params))}
+          />
+        ) : null}
         {/* Creating mid-edit would freeze rules other than the ones on
           screen, so Done waits until the ruleset edit is saved or discarded. */}
         {!rulesEditing ? (

@@ -646,6 +646,8 @@ class GenerationContext:
     barrages: tuple[Mapping[str, object], ...] = ()
     teaching_protocol: str | None = None
     frozen_system_prompt: str | None = None
+    # {"contract_version","params"} frozen into the Debate; None before that existed.
+    frozen_llm: Mapping[str, object] | None = None
 
     def __post_init__(self) -> None:
         if self.turn_protocol not in {"legacy_v1", "segments_v2"}:

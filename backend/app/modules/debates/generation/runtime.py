@@ -21,7 +21,7 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Literal, Protocol, cast
 
-from app.core.config import configured_llm_model
+from app.core.config import configured_debate_llm_model
 from app.core.errors import PlatformError
 from app.core.llm_admission import debate_llm_slot
 from app.providers.control import (
@@ -576,7 +576,7 @@ class LLMTurnRuntime:
             result = ExportManifestV1(
                 scope_id=debate_id,
                 provider_operation=LLM_DEBATE_OPERATION,
-                model_key=configured_llm_model(),
+                model_key=configured_debate_llm_model(),
                 policy_hash=policy_hash,
                 build_manifest_hash=build_manifest_hash,
                 persona_spec_hash=prompt.request.persona_spec_hash,
@@ -960,7 +960,7 @@ class LLMTurnRuntime:
             "export_manifest_hash": manifest_hash,
             "build_manifest_hash": build_manifest_hash
             or _result_value(request, "build_manifest_hash", default=prompt.request.receipt_hash),
-            "model_key": configured_llm_model(),
+            "model_key": configured_debate_llm_model(),
             "max_tokens": max_tokens,
             "max_cost_cny": max_cost,
             "budget_bucket": LLM_DEBATE_BUCKET,
@@ -1217,7 +1217,7 @@ class LLMTurnRuntime:
                 "build_manifest_hash",
                 default=prepared.build_manifest_hash or prepared.prompt.request.receipt_hash,
             ),
-            "model_key": _result_value(request, "model_key", default=configured_llm_model()),
+            "model_key": _result_value(request, "model_key", default=configured_debate_llm_model()),
             "output_json": output_json,
             "output_hash": output_hash,
             "prompt_tokens": _as_int(

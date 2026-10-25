@@ -33,9 +33,9 @@ from tests.test_wave2_setup import (
 @pytest.mark.parametrize("round_number", [1, 2, 3, 4])
 def test_actual_wire_uses_only_frozen_markdown_and_execution_contract(language, round_number):
     custom = (
-        "# 本场独有规则\n\n解释一个实用案例。"
+        "# 本场独有规则\n\n第 {round} 轮：解释一个实用案例。"
         if language == "zh"
-        else "# Unique lesson\n\nExplain one practical example."
+        else "# Unique lesson\n\nRound {round}: explain one practical example."
     )
     prompts = {"zh": custom, "en": custom}
     rules = freeze_teaching_rules(prompts)
@@ -48,17 +48,12 @@ def test_actual_wire_uses_only_frozen_markdown_and_execution_contract(language, 
     )
     request = adapter().build_request(frozen)
     assert request.system_message.content == system
-    assert custom in system
-    assert default_teaching_prompts()[language] not in system
-    if language == "zh":
-        assert f"只执行 4 轮中的第 {round_number} 轮" in system
-        assert "# 执行约定" in system
-        assert "Execution contract" not in system
-    else:
-        assert f"Execute round {round_number} of 4" in system
-        assert "# Execution contract" in system
+    # The execution contract lives in the Ruleset template: the wire carries
+    # exactly the teacher's Markdown with {round} filled in, nothing appended.
+    assert system == custom.replace("{round}", str(round_number))
+    assert "# 执行约定" not in system
+    assert "Execution contract" not in system
     assert "Output speech in" not in system
-    assert "segments" in system
     assert "First-person pronouns in a history entry" not in system
     assert "preserve who gave it and whom it was addressed to" not in system
     assert "frozen_system_prompt" not in json.loads(request.user_message.content)
@@ -99,12 +94,7 @@ def test_recovery_preserves_exact_prompt_and_detects_changed_rule_hash(monkeypat
 
 
 def test_blank_markdown_does_not_restore_old_teaching_rules():
-    system = compile_system_prompt("", 2)
-    assert "# Execution contract" in system
-    assert "Output speech in" not in system
-    assert "initial_position" not in system
-    assert "question_target_id" in system
-    assert "S IDs are internal metadata only" in system
+    assert compile_system_prompt("", 2) == ""
 
 
 def test_generation_context_binds_prompt_into_snapshot_identity():
@@ -203,7 +193,7 @@ def test_selected_language_only_uses_its_own_frozen_prompt():
     defaults = default_teaching_prompts()
     rules = freeze_teaching_rules({**defaults, "zh": "# Chinese-only revision"})
     english = frozen_system_prompt(json.dumps(rules), 1, "en")
-    assert defaults["en"] in english
+    assert english == defaults["en"].replace("{round}", "1")
     assert "Chinese-only revision" not in english
     assert "Chinese-only revision" in frozen_system_prompt(json.dumps(rules), 1, "zh")
     assert DebateDraftRequest.model_fields["output_language"].default == "zh"
@@ -229,8 +219,9 @@ def test_attribution_guidance_is_editable_ruleset_not_hidden_execution(language,
     assert heading not in edited_message
     assert "First-person pronouns" not in edited_message
     assert "preserve who gave it" not in edited_message
+    assert edited_message == edited
     assert (
         "只以 discussion.self_id 的身份发言"
         if language == "zh"
         else "Only act as discussion.self_id"
-    ) in edited_message
+    ) in message.split(contract_heading, 1)[1]

@@ -16,7 +16,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import httpx
 
@@ -33,6 +33,7 @@ from app.modules.debates.generation.segments import (
     parse_segment_output_json,
     validate_segment_output,
 )
+from app.modules.debates.llm_params import CONTRACT_VERSION, default_params, request_fields
 from app.providers.llm_adapter import LLMAdapterError, LLMUsageV1
 from app.providers.llm_price_card import (
     LLM_INPUT_TOKEN_CAP,
@@ -54,6 +55,7 @@ from app.providers.llm_tokenizer import (
     tokenizer_asset_hash_valid,
 )
 from app.providers.llm_transport import (
+    LLM_CONNECT_TIMEOUT_SECONDS,
     HttpxLLMTransport,
     LLMAcceptanceUnknown,
     LLMTransport,
@@ -64,6 +66,8 @@ from app.providers.llm_transport import (
 SEGMENT_PROTOCOL: Literal["segments_v2"] = "segments_v2"
 SEGMENT_PROMPT_VERSION = "segment_prompt_v2"
 FOUR_ROUND_SEGMENT_PROMPT_VERSION = "segment_prompt_four_round_v2"
+# The Ruleset template carries the execution contract (ruleset_contract_v3).
+RULESET_CONTRACT_PROMPT_VERSION = "segment_prompt_four_round_v3"
 SEGMENT_OUTPUT_SCHEMA_ID = "maya_llm_turn_output_v2"
 SEGMENT_OPERATION = "llm_debate_turn"
 SEGMENT_ENDPOINT_PATH = "/compatible-mode/v1/chat/completions"
@@ -101,11 +105,35 @@ SEGMENT_REPAIR_PREFIX_ZH = (
 
 
 def segment_prompt_version(snapshot: SegmentInputSnapshot) -> str:
-    return (
-        FOUR_ROUND_SEGMENT_PROMPT_VERSION
-        if getattr(snapshot, "discussion_json", None) is not None
-        else SEGMENT_PROMPT_VERSION
+    if getattr(snapshot, "discussion_json", None) is None:
+        return SEGMENT_PROMPT_VERSION
+    if _frozen_llm(snapshot).get("contract_version") == CONTRACT_VERSION:
+        return RULESET_CONTRACT_PROMPT_VERSION
+    return FOUR_ROUND_SEGMENT_PROMPT_VERSION
+
+
+def _debate_timeout() -> httpx.Timeout:
+    """DEBATE_LLM_TIMEOUT_SECONDS total, the transport's own connect cap."""
+
+    from app.core.config import get_settings
+
+    return httpx.Timeout(
+        timeout=get_settings().debate_llm_timeout_seconds,
+        connect=LLM_CONNECT_TIMEOUT_SECONDS,
     )
+
+
+def _frozen_llm(snapshot: SegmentInputSnapshot) -> dict[str, Any]:
+    """The Debate's frozen contract version and parameters, else today's defaults."""
+
+    raw = getattr(snapshot, "frozen_llm_json", None)
+    if raw:
+        value = json.loads(raw)
+        if isinstance(value, dict) and isinstance(value.get("params"), dict):
+            return value
+    from app.core.config import get_settings
+
+    return {"contract_version": None, "params": default_params(get_settings())}
 
 
 def _schema_candidates() -> tuple[Path, Path]:
@@ -764,7 +792,10 @@ class SegmentLLMAdapter:
         query_catalog = tuple(_query_record(item) for item in queries)
         system = build_segment_system_prompt(snapshot)
         zh = getattr(snapshot, "language", "en") == "zh"
-        if snapshot.history:
+        frozen_llm = _frozen_llm(snapshot)
+        # A Ruleset template carries the no-copy rule itself; Debates frozen
+        # before that keep having it appended, as they always did.
+        if snapshot.history and frozen_llm.get("contract_version") != CONTRACT_VERSION:
             system += SEGMENT_NO_HISTORY_COPY_RULE_ZH if zh else SEGMENT_NO_HISTORY_COPY_RULE
         if repair_feedback is not None:
             system += (SEGMENT_REPAIR_PREFIX_ZH if zh else SEGMENT_REPAIR_PREFIX) + _canonical(
@@ -808,10 +839,10 @@ class SegmentLLMAdapter:
         body: dict[str, object] = {
             "model": getattr(self.config, "model", LLM_MODEL_KEY),
             "messages": [{"role": item.role, "content": item.content} for item in messages],
-            "enable_thinking": False,
             "stream": False,
-            "temperature": 0.65,
-            "top_p": 0.8,
+            # The Debate's frozen parameters (or the DEBATE_LLM_* defaults);
+            # an empty one is not sent.
+            **request_fields(frozen_llm["params"]),
             "n": 1,
             "response_format": {
                 "type": "json_schema",
@@ -880,7 +911,7 @@ class SegmentLLMAdapter:
                 request.endpoint,
                 headers=self._headers(),
                 json=request.body,
-                timeout=HttpxLLMTransport.timeout(),
+                timeout=_debate_timeout(),
             )
         except PlatformError:
             raise
@@ -1140,6 +1171,7 @@ __all__ = [
     "SEGMENT_OUTPUT_SCHEMA_ID",
     "SEGMENT_PROMPT_VERSION",
     "FOUR_ROUND_SEGMENT_PROMPT_VERSION",
+    "RULESET_CONTRACT_PROMPT_VERSION",
     "SEGMENT_NO_HISTORY_COPY_RULE_ZH",
     "segment_prompt_version",
     "SEGMENT_PROTOCOL",

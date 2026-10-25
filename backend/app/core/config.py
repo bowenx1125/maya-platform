@@ -142,6 +142,39 @@ class Settings(BaseSettings):
         validation_alias="VOICE_CLONE_MODEL",
     )
 
+    # Debate generation defaults. Each new Debate freezes these, overridden by
+    # the teacher's parameter card, into its snapshot; an empty value means the
+    # parameter is not sent. Unset, they match the values Debates ran with.
+    debate_llm_model: str | None = Field(default=None, validation_alias="DEBATE_LLM_MODEL")
+    debate_llm_temperature: float | None = Field(
+        default=0.65, validation_alias="DEBATE_LLM_TEMPERATURE"
+    )
+    debate_llm_top_p: float | None = Field(default=0.8, validation_alias="DEBATE_LLM_TOP_P")
+    debate_llm_presence_penalty: float | None = Field(
+        default=None, validation_alias="DEBATE_LLM_PRESENCE_PENALTY"
+    )
+    debate_llm_frequency_penalty: float | None = Field(
+        default=None, validation_alias="DEBATE_LLM_FREQUENCY_PENALTY"
+    )
+    debate_llm_repetition_penalty: float | None = Field(
+        default=None, validation_alias="DEBATE_LLM_REPETITION_PENALTY"
+    )
+    debate_llm_max_tokens: int | None = Field(
+        default=None, validation_alias="DEBATE_LLM_MAX_TOKENS"
+    )
+    debate_llm_enable_thinking: bool = Field(
+        default=False, validation_alias="DEBATE_LLM_ENABLE_THINKING"
+    )
+    debate_llm_seed: int | None = Field(default=None, validation_alias="DEBATE_LLM_SEED")
+    debate_llm_timeout_seconds: float = Field(
+        default=120.0, gt=0, le=600, validation_alias="DEBATE_LLM_TIMEOUT_SECONDS"
+    )
+    # Speech model for voices bound to no model; a clone keeps its own.
+    debate_tts_model: str | None = Field(default=None, validation_alias="DEBATE_TTS_MODEL")
+    debate_playback_rate: float = Field(
+        default=1.25, ge=0.95, le=1.25, validation_alias="DEBATE_PLAYBACK_RATE"
+    )
+
     # These server-only operational values are also part of C02/C08. They are
     # intentionally not exposed in browser-facing DTOs. PostgreSQL only.
     database_url: str = Field(
@@ -559,6 +592,32 @@ class Settings(BaseSettings):
     def empty_demo_quick_login_is_false(cls, value: object) -> object:
         # Compose forwards an empty value when DEMO_QUICK_LOGIN is unset.
         return False if isinstance(value, str) and not value.strip() else value
+
+    @field_validator(
+        "debate_llm_model",
+        "debate_llm_temperature",
+        "debate_llm_top_p",
+        "debate_llm_presence_penalty",
+        "debate_llm_frequency_penalty",
+        "debate_llm_repetition_penalty",
+        "debate_llm_max_tokens",
+        "debate_llm_seed",
+        "debate_tts_model",
+        mode="before",
+    )
+    @classmethod
+    def empty_debate_value_is_unset(cls, value: object) -> object:
+        # Compose forwards an empty value for ${VAR:-}; empty means not sent.
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("debate_llm_model")
+    @classmethod
+    def debate_llm_model_is_an_explicit_id(cls, value: object) -> object:
+        if value is not None and (
+            not isinstance(value, str) or _LLM_MODEL_RE.fullmatch(value.strip()) is None
+        ):
+            raise ValueError("DEBATE_LLM_MODEL must be a model id")
+        return value.strip() if isinstance(value, str) else value
 
     @field_validator("voice_clone_model", mode="before")
     @classmethod
@@ -1052,6 +1111,13 @@ def get_settings() -> Settings:
 
 
 def configured_llm_model() -> str:
-    """Chat, debate and report model. One env value, not a per-surface id."""
+    """Chat and report model. Debates use ``configured_debate_llm_model``."""
 
     return get_settings().llm_model
+
+
+def configured_debate_llm_model() -> str:
+    """The Debate turn model: DEBATE_LLM_MODEL, else the shared LLM_MODEL."""
+
+    settings = get_settings()
+    return settings.debate_llm_model or settings.llm_model
