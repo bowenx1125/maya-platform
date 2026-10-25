@@ -412,3 +412,85 @@ def test_one_agent_failing_to_prune_does_not_stop_the_sweep(
         }
     assert counts[seen[0]] == 4  # the failed Agent is rolled back, untouched
     assert counts[seen[1]] == 2  # current + the previous version's AGENT.md
+
+
+def test_prune_keeps_a_version_a_withdrawn_chat_still_names(
+    client: TestClient, database: Any
+) -> None:
+    """Production 2026-10-25: clearing it broke ck_conversations_entry."""
+
+    from app.core.models import AgentVersion
+    from app.modules.real_delete import prune_agent_versions
+
+    from tests.test_mayaform_team_conversations import _create, _make_agent_version
+    from tests.test_mayaform_teams import MAYA_ID
+
+    _, csrf = login(client, "maya")
+    # Not a Team member: nothing but the chat keeps this version.
+    _agent_id, pinned_id = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Withdrawn chat Agent", visibility="public"
+    )
+    chat = _create(client, csrf, {"kind": "agent", "version_id": pinned_id})
+    now = datetime.now(UTC)
+    with database.session() as db:
+        row = db.get(Conversation, chat["id"])
+        assert row is not None
+        row.withdrawn_at = now
+        db.add(
+            ConversationTurn(
+                id=str(uuid4()),
+                conversation_id=row.id,
+                position=0,
+                user_text="kept",
+                assistant_text="still here",
+                sources_json="[]",
+                mode="mock",
+                state="ready",
+                created_at=now,
+            )
+        )
+        pinned = db.get(AgentVersion, pinned_id)
+        assert pinned is not None
+        agent = db.get(Agent, pinned.agent_id)
+        assert agent is not None
+        pinned.state = "superseded"
+        current_id = ""
+        for seq in (1, 2, 3):
+            version_id = str(uuid4())
+            db.add(
+                AgentVersion(
+                    id=version_id,
+                    agent_id=agent.id,
+                    version_seq=pinned.version_seq + seq,
+                    state="published" if seq == 3 else "superseded",
+                    revision=1,
+                    agent_md=f"version {seq}",
+                    avatar_config_json=pinned.avatar_config_json,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            current_id = version_id
+        db.flush()
+        agent.current_published_version_id = current_id
+        agent_id = agent.id
+    with database.session() as db:
+        prune_agent_versions(db, agent_id, database.data_root)
+    with database.session() as db:
+        row = db.get(Conversation, chat["id"])
+        assert row is not None and row.agent_version_id == pinned_id
+        assert row.source_removed_at is None
+        assert [turn.user_text for turn in row_turns(db, row.id)] == ["kept"]
+        remaining = db.scalars(
+            select(AgentVersion.version_seq).where(AgentVersion.agent_id == agent_id)
+        ).all()
+        # The chat's version, the previous AGENT.md and the current version.
+        assert len(remaining) == 3
+
+
+def row_turns(db: Any, conversation_id: str) -> list[Any]:
+    return list(
+        db.scalars(
+            select(ConversationTurn).where(ConversationTurn.conversation_id == conversation_id)
+        ).all()
+    )
