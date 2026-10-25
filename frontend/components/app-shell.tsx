@@ -817,7 +817,8 @@ export function AppShell({
         >
           <button
             type="button"
-            className="absolute top-5 -right-[18px] z-10 grid size-8 place-items-center rounded-full border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none"
+            data-sidebar-toggle
+            className={`absolute top-[calc(50%-16px)] ${collapsed ? "-right-[26px]" : "-right-[22px]"} z-10 grid size-8 max-[900px]:top-5 max-[900px]:-right-[18px] place-items-center rounded-full border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none`}
             aria-label={toggleLabel}
             aria-expanded={mobile ? drawerOpen : !collapsed}
             aria-controls={SIDEBAR_ID}

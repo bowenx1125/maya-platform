@@ -311,3 +311,25 @@ describe("tour on a phone", () => {
     );
   });
 });
+
+describe("edge toggle", () => {
+  it("straddles the right edge at mid-screen; on a phone it stays at the top", () => {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "0");
+    renderShell("student", "/student");
+    const button = toggle();
+    const sidebar = document.getElementById("workspace-sidebar")!;
+    expect(button.parentElement).toBe(sidebar);
+    expect(sidebar.className).toMatch(/(^| )sticky( |$)/);
+    expect(sidebar.className).toContain("h-dvh");
+    expect(button.className).toContain("absolute");
+    expect(button.className).toContain("top-[calc(50%-16px)]");
+    // It sits clear of the rows (12px padding) and of the collapsed tiles.
+    expect(button.className).toContain("-right-[22px]");
+    expect(button.className).toContain("max-[900px]:top-5");
+    act(() => {
+      fireEvent.click(button);
+    });
+    expect(toggle().className).toContain("-right-[26px]");
+    expect(toggle().className).toContain("top-[calc(50%-16px)]");
+  });
+});
