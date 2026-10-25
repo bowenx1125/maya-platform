@@ -272,7 +272,10 @@ def _sync_graph_in_session(
     *,
     transaction_started: bool = False,
 ) -> _SyncOutcome:
-    """Apply the complete desired graph in one SQLite writer transaction.
+    """Apply the complete desired graph in one transaction.
+
+    Startup runs this under the database's startup advisory lock, so only one
+    replica synchronizes the catalog at a time.
 
     The returned mapping is only published by the Database wrapper after its
     commit succeeds. A failed commit therefore cannot advance auth reads.
@@ -286,8 +289,7 @@ def _sync_graph_in_session(
 
     try:
         if not transaction_started:
-            # ``BEGIN IMMEDIATE`` obtains SQLite's single writer lock before
-            # any catalog-owned row is read or changed.
+            # Opens the transaction; serialization comes from the startup lock.
             begin_immediate(session)
 
         course = session.scalar(select(Course).where(Course.code == "demo-course-001"))
@@ -518,7 +520,7 @@ def bootstrap_demo_accounts(
     seed_callback: Callable[[Session], None],
     graph: DesiredAccountGraph | None = None,
 ) -> AccountSyncResult:
-    """Seed and synchronize in one BEGIN IMMEDIATE transaction.
+    """Seed and synchronize in one transaction (under the startup lock).
 
     The callback is injected so the auth module does not own the Wave 0 seed
     implementation. A caller can wire this helper from the composition root

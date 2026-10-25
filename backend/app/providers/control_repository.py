@@ -1,4 +1,4 @@
-"""SQLite/SQLAlchemy persistence for the server-only ProviderDataCall ledger.
+"""SQLAlchemy persistence for the server-only ProviderDataCall ledger.
 
 The repository is intentionally not wired to a selector, route or provider
 adapter.  It persists only the immutable policy/export hashes, conservative
@@ -199,7 +199,7 @@ class ProviderRepository:
 
     @contextmanager
     def _write_connection(self) -> Iterator[Connection]:
-        """Open one independent transaction, serializing SQLite writers."""
+        """Open one independent transaction on its own connection."""
 
         shared = self._shared.get()
         if shared is not None:
@@ -3448,7 +3448,7 @@ def _llm_recovery_input_from_row(
 
 
 def _stages_equal(left: LLMAcceptedStageV1, right: LLMAcceptedStageV1) -> bool:
-    """Compare normalized records so SQLite Decimal values are deterministic."""
+    """Compare normalized records so Decimal values compare deterministically."""
 
     left_record = left.as_record()
     right_record = right.as_record()

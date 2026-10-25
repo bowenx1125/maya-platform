@@ -16,7 +16,7 @@ from uuid import uuid4
 
 import pytest
 from app.core.config import Settings
-from app.modules.debates.llm_params import (
+from app.modules.debates.generation_params import (
     defaults_payload,
     frozen_voice_params,
     voice_request_fields,

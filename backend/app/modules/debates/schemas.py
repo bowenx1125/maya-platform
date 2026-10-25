@@ -20,7 +20,7 @@ from app.modules.debates.generation.types import (
     MutualLearningSynthesisV1,
     MutualLearningTurnResultV1,
 )
-from app.modules.debates.llm_params import DebateLLMParams, DebateVoiceParams
+from app.modules.debates.generation_params import DebateLLMParams, DebateVoiceParams
 
 Stance = Literal["support", "oppose", "neutral"]
 StanceMode = Literal["assigned", "open"]

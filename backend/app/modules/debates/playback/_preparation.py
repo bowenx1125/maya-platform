@@ -144,8 +144,7 @@ class PlaybackPreparationMixin(PlaybackCore):
         #
         # A thread is safe here rather than merely convenient: the session is
         # handed over, not shared.  This coroutine awaits the thread and
-        # touches ``db`` neither before the handover nor until it returns, and
-        # the SQLite connections are built with ``check_same_thread=False``.
+        # touches ``db`` neither before the handover nor until it returns.
         # An async preparer is only constructed in the thread and is still
         # awaited on the loop, so a test double keeps its own semantics.
         work = asyncio.create_task(asyncio.to_thread(call))

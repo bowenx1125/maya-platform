@@ -44,7 +44,7 @@ from app.core.models import (
 )
 from app.core.version_label import agent_version_label
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
-from app.modules.debates.llm_params import resolve_params, resolve_voice_params
+from app.modules.debates.generation_params import resolve_params, resolve_voice_params
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
 from app.modules.debates.owned_copies import (
     adopt_debate_knowledge,
