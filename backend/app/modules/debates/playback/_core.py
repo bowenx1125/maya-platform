@@ -47,6 +47,7 @@ from .schemas import (
     MediaPreparedResult,
     PlaybackStateDTO,
 )
+from .ticket_store import SqlMediaTicketStore
 
 LOGGER = logging.getLogger(__name__)
 # Lock waits at or above this are logged; shorter ones are routine.
@@ -179,7 +180,11 @@ class PlaybackCore:
     ) -> None:
         self.repository: PlaybackRepository = repository or MemoryPlaybackRepository()
         self.audio_store = audio_store
-        self.ticket_store = ticket_store or MediaTicketStore()
+        # PR C: tickets live in PostgreSQL whenever the service has a
+        # database, so the other replica honors them too.
+        self.ticket_store = ticket_store or (
+            SqlMediaTicketStore(session_factory) if session_factory else MediaTicketStore()
+        )
         self.event_hub = event_hub or DebateEventHub()
         if task_manager is None:
             from .task_manager import TaskManager
