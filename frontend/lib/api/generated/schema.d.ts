@@ -9669,12 +9669,15 @@ export interface operations {
             query?: {
                 /** @description Short-lived platform ticket returned privately to the active playback controller for current-turn bootstrap; never a supplier token. */
                 media_ticket?: components["parameters"]["MediaTicket"];
+                /** @description mp3 asks for the compressed copy; WAV is served when none exists. */
+                format?: "wav" | "mp3";
             };
             header?: {
                 /** @description A single RFC 9110 byte range used by the classroom audio element. */
                 Range?: components["parameters"]["Range"];
                 /** @description Strong platform ETag or RFC 9110 IMF-fixdate returned for this audio. */
                 "If-Range"?: components["parameters"]["IfRange"];
+                "If-None-Match"?: string;
             };
             path: {
                 debate_id: components["parameters"]["DebateId"];
@@ -9694,6 +9697,7 @@ export interface operations {
                 };
                 content: {
                     "audio/wav": string;
+                    "audio/mpeg": string;
                 };
             };
             /** @description Teacher-authorized single byte range of retained audio. */
@@ -9707,7 +9711,16 @@ export interface operations {
                 };
                 content: {
                     "audio/wav": string;
+                    "audio/mpeg": string;
                 };
+            };
+            /** @description The browser's copy (If-None-Match) is still current. */
+            304: {
+                headers: {
+                    ETag: components["headers"]["AudioEtag"];
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];

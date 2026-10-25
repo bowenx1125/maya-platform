@@ -1758,6 +1758,32 @@ class PlaybackCore:
                 except RuntimeError:
                     pass
 
+    def _warm_compressed(self, debate_id: str, turn_id: str) -> None:
+        """Encode a ready speech's MP3 copy in the background (best effort).
+
+        The browser's first download then finds the copy already in memory.
+        """
+
+        store = self.audio_store
+        if store is None or not store.compressed:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        def warm() -> None:
+            try:
+                store.compressed_copy(debate_id, turn_id)
+            except Exception:  # noqa: BLE001 - a later request encodes it instead
+                LOGGER.info(
+                    "debate_timing stage=audio_compress_skipped debate_id=%s turn_id=%s",
+                    debate_id,
+                    turn_id,
+                )
+
+        loop.run_in_executor(None, warm)
+
     @asynccontextmanager
     async def _debate_lock(self, debate_id: str, operation: str) -> AsyncIterator[None]:
         lock = self._debate_locks.get(debate_id)

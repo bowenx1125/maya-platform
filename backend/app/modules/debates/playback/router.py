@@ -13,7 +13,7 @@ import contextlib
 import logging
 import time
 from collections.abc import AsyncGenerator, Iterator
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Literal, cast
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, Query, Request, WebSocket, WebSocketDisconnect
@@ -44,7 +44,7 @@ from app.modules.debates.schemas import (
 )
 from app.providers.factory import tts_provider
 
-from .audio import AudioStore
+from .audio import AudioStore, playback_transcoder
 from .eligibility import has_complete_finished_playback
 from .events import DebateEventHub, private_result_to_wire
 from .schemas import (
@@ -79,7 +79,11 @@ def get_playback_service(request: Request) -> PlaybackService:
     selected_tts = tts_provider(settings)
     service = PlaybackService(
         repository,
-        audio_store=AudioStore(settings.resolved_data_root, tts_provider=selected_tts),
+        audio_store=AudioStore(
+            settings.resolved_data_root,
+            tts_provider=selected_tts,
+            transcoder=playback_transcoder(settings),
+        ),
         event_hub=event_hub,
         session_factory=database.session_factory,
         settings=settings,
@@ -890,7 +894,10 @@ async def debate_events_route(
     responses={
         200: {
             "description": "Teacher-authorized complete retained audio.",
-            "content": {"audio/wav": {"schema": {"type": "string", "format": "binary"}}},
+            "content": {
+                "audio/wav": {"schema": {"type": "string", "format": "binary"}},
+                "audio/mpeg": {"schema": {"type": "string", "format": "binary"}},
+            },
             "headers": {
                 "Accept-Ranges": {"schema": {"type": "string", "const": "bytes"}},
                 "ETag": {"schema": {"type": "string", "pattern": '^"[0-9a-f]{64}"$'}},
@@ -899,7 +906,10 @@ async def debate_events_route(
         },
         206: {
             "description": "Teacher-authorized single byte range of retained audio.",
-            "content": {"audio/wav": {"schema": {"type": "string", "format": "binary"}}},
+            "content": {
+                "audio/wav": {"schema": {"type": "string", "format": "binary"}},
+                "audio/mpeg": {"schema": {"type": "string", "format": "binary"}},
+            },
             "headers": {
                 "Accept-Ranges": {"schema": {"type": "string", "const": "bytes"}},
                 "ETag": {"schema": {"type": "string", "pattern": '^"[0-9a-f]{64}"$'}},
@@ -910,6 +920,12 @@ async def debate_events_route(
                         "pattern": "^bytes [0-9]+-[0-9]+/[0-9]+$",
                     }
                 },
+            },
+        },
+        304: {
+            "description": "The browser's copy (If-None-Match) is still current.",
+            "headers": {
+                "ETag": {"schema": {"type": "string", "pattern": '^"[0-9a-f]{64}"$'}},
             },
         },
         403: {"model": Error},
@@ -933,10 +949,18 @@ async def stream_audio_route(
         Header(alias="Range", pattern=r"^bytes=(?:[0-9]+-[0-9]*|-[0-9]+)$"),
     ] = None,  # type: ignore[assignment]
     if_range: Annotated[str, Header(alias="If-Range")] = None,  # type: ignore[assignment]
+    if_none_match: Annotated[str, Header(alias="If-None-Match", max_length=1024)] = None,  # type: ignore[assignment]
     media_ticket: Annotated[
         str,
         Query(min_length=43, max_length=43, pattern=r"^[A-Za-z0-9_-]{43}$"),
     ] = None,  # type: ignore[assignment]
+    audio_format: Annotated[
+        Literal["wav", "mp3"],
+        Query(
+            alias="format",
+            description="mp3 asks for the compressed copy; WAV is served when none exists.",
+        ),
+    ] = "wav",
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
     service: PlaybackService = Depends(get_playback_service),
@@ -954,11 +978,15 @@ async def stream_audio_route(
     )
     read_started = time.monotonic()
     try:
-        result = service.audio_store.response(
+        # File reads, hashing and a first MP3 encode stay off the event loop.
+        result = await asyncio.to_thread(
+            service.audio_store.response,
             str(debate_id),
             str(turn_id),
             range_header=range_header,
             if_range=if_range,
+            if_none_match=if_none_match,
+            audio_format=audio_format,
         )
     except FileNotFoundError as exc:
         if str(exc) == "audio_not_retained":
@@ -978,20 +1006,23 @@ async def stream_audio_route(
             headers=result.headers,
         )
     LOGGER.info(
-        "debate_timing stage=audio_serve debate_id=%s turn_id=%s status=%d bytes=%d "
+        "debate_timing stage=audio_serve debate_id=%s turn_id=%s status=%d format=%s bytes=%d "
         "authorize_ms=%d read_ms=%d ms=%d",
         debate_id,
         turn_id,
         result.status_code,
+        "mp3" if result.media_type == "audio/mpeg" else "wav",
         len(result.body),
         int((read_started - served_started) * 1000),
         int((time.monotonic() - read_started) * 1000),
         int((time.monotonic() - served_started) * 1000),
     )
+    if result.status_code == 304:
+        return Response(status_code=304, headers=result.headers)
     return Response(
         content=result.body,
         status_code=result.status_code,
-        media_type="audio/wav",
+        media_type=result.media_type,
         headers=result.headers,
     )
 
