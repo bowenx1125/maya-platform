@@ -70,10 +70,12 @@ const courseTeacherInTwoGroups = {
   ],
 };
 
+/** Today's top-level entries (Mayaform, the group headings, Live, Debates,
+ * Accounts): the sidebar sub-items sit beside them without a data-tour. */
 function navHrefs() {
-  return within(screen.getByRole("navigation"))
-    .getAllByRole("link")
-    .map((link) => link.getAttribute("href"));
+  return [
+    ...screen.getByRole("navigation").querySelectorAll("a[data-tour]"),
+  ].map((link) => link.getAttribute("href"));
 }
 
 beforeEach(() => {
@@ -91,7 +93,9 @@ describe("PW3-E teacher information architecture", () => {
     const navigationElement = screen.getByRole("navigation");
     const primaryNavigation = within(navigationElement);
     const destinations = [
-      ...navigationElement.querySelectorAll("a, [aria-disabled='true']"),
+      ...navigationElement.querySelectorAll(
+        "a[data-tour], [aria-disabled='true']",
+      ),
     ];
     expect(destinations.map((item) => item.textContent?.trim())).toEqual([
       "Mayaform",
@@ -100,11 +104,7 @@ describe("PW3-E teacher information architecture", () => {
       "Debates",
       "Accounts",
     ]);
-    expect(
-      primaryNavigation
-        .getAllByRole("link")
-        .map((link) => link.getAttribute("href")),
-    ).toEqual([
+    expect(navHrefs()).toEqual([
       "/teacher",
       "/teacher/studyform",
       "/teacher/chat",
@@ -167,7 +167,7 @@ describe("PW3-E teacher information architecture", () => {
       "utf8",
     );
     const shell = readFileSync(
-      join(frontendRoot, "components", "app-shell.module.css"),
+      join(frontendRoot, "components", "app-shell.tsx"),
       "utf8",
     );
     expect(globals).toMatch(
@@ -492,6 +492,9 @@ describe("student shell navigation", () => {
     const studyform = nav.getByRole("link", { name: "Studyform" });
     expect(studyform.getAttribute("href")).toBe("/student/groups/group-b");
     expect(studyform.getAttribute("aria-current")).toBe("page");
-    expect(nav.queryByRole("link", { name: "Voices" })).toBeNull();
+    // Sidebar (DESIGN-RULES §7): Voices is a Brainform row on the group.
+    expect(nav.getByRole("link", { name: "Voices" }).getAttribute("href")).toBe(
+      "/student/groups/group-b/voices",
+    );
   });
 });

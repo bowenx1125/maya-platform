@@ -2,10 +2,16 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 
 import workspaceStyles from "./workspace-theme.module.css";
-import styles from "./app-shell.module.css";
 import { SecretDoor } from "./card-table/secret-door";
 import { ViewTransition } from "./view-transition";
 import { WorkspaceIcon, type WorkspaceIconName } from "./workspace-icon";
@@ -34,6 +40,77 @@ type ActionRegistration = {
 type ActionRegistrationState = Partial<
   Record<WorkspaceActionName, ActionRegistration[]>
 >;
+
+/** The sidebar's collapsed state survives reloads (DESIGN-RULES §7, toggle A). */
+export const SIDEBAR_COLLAPSED_KEY = "maya.sidebar.collapsed";
+const collapsedListeners = new Set<() => void>();
+let collapsedFallback = false;
+
+function readCollapsed() {
+  try {
+    const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+    return stored === null ? collapsedFallback : stored === "1";
+  } catch {
+    return collapsedFallback;
+  }
+}
+
+function writeCollapsed(value: boolean) {
+  collapsedFallback = value;
+  try {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, value ? "1" : "0");
+  } catch {
+    // Private mode: the state lasts for this page only.
+  }
+  for (const listener of collapsedListeners) listener();
+}
+
+function subscribeCollapsed(listener: () => void) {
+  collapsedListeners.add(listener);
+  window.addEventListener("storage", listener);
+  return () => {
+    collapsedListeners.delete(listener);
+    window.removeEventListener("storage", listener);
+  };
+}
+
+const MOBILE_QUERY = "(max-width: 900px)";
+
+function subscribeMobile(listener: () => void) {
+  const query = window.matchMedia?.(MOBILE_QUERY);
+  query?.addEventListener?.("change", listener);
+  return () => query?.removeEventListener?.("change", listener);
+}
+
+function readMobile() {
+  return Boolean(window.matchMedia?.(MOBILE_QUERY).matches);
+}
+
+type SidebarItem = {
+  key: string;
+  href: string;
+  label: string;
+  icon: WorkspaceIconName;
+  tour?: string;
+  disabled?: boolean;
+};
+type SidebarGroup = {
+  key: "studyform" | "brainform" | "chatform" | "classroom";
+  label: string;
+  /** Today's top-level entry for this group, kept as the heading link. */
+  heading?: { href: string; tour: string };
+  rail: string;
+  tile: string;
+  square: string;
+  items: SidebarItem[];
+};
+
+const ITEM =
+  "group/item relative flex min-h-11 items-center gap-2.5 rounded-arc-s border-[3px] px-2 py-1 font-body text-sm font-bold text-ink no-underline transition-[background-color,box-shadow] duration-150";
+const ITEM_IDLE = "border-transparent hover:bg-white/60";
+const ITEM_ACTIVE = "border-border bg-main shadow-arc-s";
+const ICON_ITEM =
+  "relative grid size-11 place-items-center rounded-arc-s border-[3px] text-ink no-underline";
 
 export function AppShell({
   children,
@@ -450,131 +527,480 @@ export function AppShell({
       .sort((left, right) => right.href.length - left.href.length)[0]?.href ??
     (activePath.startsWith(`${home}/`) ? home : undefined);
 
+  const collapsedPreference = useSyncExternalStore(
+    subscribeCollapsed,
+    readCollapsed,
+    () => false,
+  );
+  const mobile = useSyncExternalStore(subscribeMobile, readMobile, () => false);
+  const collapsed = collapsedPreference && !mobile;
+  // The drawer belongs to the page it was opened on, so navigating closes it.
+  const [drawerPath, setDrawerPath] = useState<string | null>(null);
+  const drawerOpen = drawerPath === pathname;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setDrawerPath(null);
+        return;
+      }
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        event.altKey ||
+        event.shiftKey ||
+        event.key.toLowerCase() !== "b"
+      )
+        return;
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable) return;
+      event.preventDefault();
+      if (readMobile())
+        setDrawerPath((open) =>
+          open === window.location.pathname ? null : window.location.pathname,
+        );
+      else writeCollapsed(!readCollapsed());
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const studentVoicesHref =
+    !teacherSurface && groupId
+      ? `/student/groups/${groupId}/voices`
+      : undefined;
+  const brainHref = visit ? `/teacher/knowledge?group_id=${visit}` : undefined;
+  const chatHref = links.find((link) => link.icon === "chat")?.href ?? "";
+  const brainItemHref = brainHref ?? studyformHref;
+  const groups: SidebarGroup[] = [
+    {
+      key: "studyform",
+      label: t("studyform"),
+      heading: { href: studyformHref, tour: "knowledge" },
+      rail: "border-studyform",
+      tile: "bg-studyform",
+      square: "bg-studyform",
+      items: [
+        {
+          key: "agents",
+          href: studyformHref,
+          label: t("agents"),
+          icon: "agent",
+        },
+        {
+          key: "teams",
+          href: studyformHref,
+          label: t("sidebarTeams"),
+          icon: "team",
+        },
+      ],
+    },
+    {
+      key: "brainform",
+      label: "Brainform",
+      heading: brainHref ? { href: brainHref, tour: "brain" } : undefined,
+      rail: "border-brainform",
+      tile: "bg-brainform",
+      square: "bg-brainform",
+      items: [
+        { key: "rag", href: brainItemHref, label: t("rag"), icon: "file" },
+        {
+          key: "voices",
+          href: studentVoicesHref ?? brainItemHref,
+          label: t("voices"),
+          icon: "voice",
+        },
+        {
+          key: "record",
+          href: brainItemHref,
+          label: t("sidebarRecord"),
+          icon: "clock",
+        },
+        ...(teacherSurface
+          ? [
+              {
+                key: "knowledge",
+                href: brainItemHref,
+                label: t("knowledge"),
+                icon: "knowledge" as const,
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      key: "chatform",
+      label: "Chatform",
+      heading: { href: chatHref, tour: "chat" },
+      rail: "border-chatform",
+      tile: "bg-chatform",
+      square: "bg-chatform",
+      items: [
+        {
+          key: "chat-agent",
+          href: chatHref,
+          label: t("sidebarChatAgent"),
+          icon: "chat",
+        },
+        {
+          key: "chat-team",
+          href: chatHref,
+          label: t("sidebarChatTeam"),
+          icon: "chatTeam",
+        },
+      ],
+    },
+    {
+      key: "classroom",
+      label: t("sidebarClassroom"),
+      rail: "border-ink",
+      tile: "bg-surface",
+      square: "bg-ink",
+      items: links
+        .filter((link) => ["live", "classroom", "accounts"].includes(link.icon))
+        .map((link) => ({
+          key: link.icon,
+          href: link.href,
+          label: link.label,
+          icon: link.icon,
+          tour: link.icon,
+          disabled: link.disabled,
+        })),
+    },
+  ];
+  // The pink pill marks one row: Voices on its own page, otherwise the first
+  // row that opens the active page. aria-current stays on today's entries.
+  const onVoices = Boolean(studentVoicesHref && pathname === studentVoicesHref);
+  let litKey: string | undefined;
+  for (const group of groups) {
+    for (const item of group.items) {
+      if (litKey) break;
+      if (onVoices ? item.key === "voices" : item.href === activeHref)
+        litKey = `${group.key}:${item.key}`;
+    }
+  }
+  const pill = (
+    <ViewTransition name="nav-active" share="nav-pill" default="none">
+      <span
+        className="absolute inset-0 -z-10 rounded-[inherit]"
+        aria-hidden="true"
+      />
+    </ViewTransition>
+  );
+  const lamp = (on: boolean, corner: boolean) => (
+    <span
+      aria-hidden="true"
+      data-live-lamp={on ? "on" : "off"}
+      className={`${corner ? "absolute -top-1 -right-1" : "ml-auto"} size-2.5 rounded-full border-2 border-border ${on ? "bg-ok shadow-[0_0_0_2px_rgba(34,197,94,0.35),0_0_10px_2px_rgba(34,197,94,0.75)]" : "bg-[#9ca3af]"}`}
+    />
+  );
+  const toggleLabel = mobile
+    ? t("sidebarCollapse")
+    : collapsed
+      ? t("sidebarExpand")
+      : t("sidebarCollapse");
+  const mayaformLit = activeHref === home;
+
+  function renderItem(group: SidebarGroup, item: SidebarItem, index: number) {
+    const lit = litKey === `${group.key}:${item.key}`;
+    // Today's entries keep their aria-current, active class and data-tour.
+    const legacy = links.find((link) => link.icon === item.key);
+    const current = legacy ? activeHref === legacy.href : collapsed && lit;
+    const tour =
+      item.tour ?? (collapsed && index === 0 ? group.heading?.tour : undefined);
+    const isLive = item.key === "live";
+    if (item.disabled) {
+      return (
+        <li key={item.key}>
+          <span
+            aria-disabled="true"
+            data-tour={tour}
+            title={collapsed ? item.label : undefined}
+            aria-label={collapsed ? item.label : undefined}
+            className={
+              collapsed
+                ? `${ICON_ITEM} border-transparent opacity-55`
+                : `${ITEM} ${ITEM_IDLE} cursor-not-allowed text-arc-muted hover:bg-transparent`
+            }
+          >
+            <span className={collapsed ? "" : "opacity-55"}>
+              <WorkspaceIcon name={item.icon} size={18} />
+            </span>
+            {collapsed ? null : (
+              <span className="opacity-55">{item.label}</span>
+            )}
+            {isLive ? lamp(false, collapsed) : null}
+          </span>
+        </li>
+      );
+    }
+    return (
+      <li key={item.key}>
+        <Link
+          href={item.href}
+          aria-current={current ? "page" : undefined}
+          aria-label={collapsed ? item.label : undefined}
+          title={collapsed ? item.label : undefined}
+          data-tour={tour}
+          data-sidebar-item={item.key}
+          data-lit={lit || undefined}
+          className={`${collapsed ? ICON_ITEM : ITEM} isolate ${lit ? ITEM_ACTIVE : collapsed ? "border-transparent hover:bg-white/60" : ITEM_IDLE}${current ? " active" : ""}`}
+        >
+          {lit ? pill : null}
+          <WorkspaceIcon name={item.icon} size={18} />
+          {collapsed ? null : <span>{item.label}</span>}
+          {isLive ? (
+            collapsed ? (
+              lamp(true, true)
+            ) : (
+              <span
+                aria-hidden="true"
+                data-live-sticker=""
+                className="ml-auto inline-flex -rotate-6 items-center gap-1 rounded-full border-2 border-border bg-ok px-1.5 py-px text-[9px] leading-none font-extrabold tracking-[0.08em] text-white uppercase shadow-[2px_2px_0_#111]"
+              >
+                <span className="size-1.5 rounded-full bg-white" />
+                {t("sidebarOnAir")}
+              </span>
+            )
+          ) : null}
+        </Link>
+      </li>
+    );
+  }
+
   return (
     <WorkspaceActionsContext.Provider value={actionRegistry}>
-      <div className={styles.frame}>
-        <header className={styles.sidebar}>
-          <nav
-            aria-label={`${teacherSurface ? t("teacher") : t("student")} ${t("navigation")}`}
-            className={`${styles.navigation} nav-links`}
+      <div
+        className={`grid min-h-dvh max-[900px]:grid-cols-1 ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[248px_minmax(0,1fr)]"}`}
+      >
+        <div className="sticky top-0 z-30 hidden h-14 items-center gap-3 border-b-[3px] border-border bg-sidebar px-4 max-[900px]:flex">
+          <button
+            type="button"
+            className="grid size-10 place-items-center rounded-arc-s border-[3px] border-border bg-surface text-ink shadow-arc-s active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
+            aria-label={t("sidebarExpand")}
+            aria-expanded={drawerOpen}
+            aria-controls="workspace-sidebar"
+            onClick={() => setDrawerPath(pathname)}
           >
-            {links.map((link) =>
-              link.disabled ? (
-                <span
-                  className={`${styles.link} ${styles.disabled}`}
-                  aria-disabled="true"
-                  key={link.href}
-                  data-tour={link.icon}
-                >
-                  <WorkspaceIcon name={link.icon} />
-                  <span>{link.label}</span>
-                </span>
-              ) : (
-                <Link
-                  aria-current={activeHref === link.href ? "page" : undefined}
-                  className={`${styles.link} ${activeHref === link.href ? styles.active : ""} ${link.icon === "live" ? styles.live : ""}`}
-                  href={link.href}
-                  key={link.href}
-                  data-tour={link.icon}
-                >
-                  {activeHref === link.href ? (
-                    <ViewTransition
-                      name="nav-active"
-                      share="nav-pill"
-                      default="none"
-                    >
-                      <span className={styles.pill} aria-hidden="true" />
-                    </ViewTransition>
-                  ) : null}
-                  {link.icon === "home" ? (
-                    <span
-                      className={`brand-dot ${styles.homeMark}`}
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <WorkspaceIcon name={link.icon} />
-                  )}
-                  <span>{link.label}</span>
-                </Link>
-              ),
-            )}
-            {(
-              [
-                ["new", "New"],
-                ["back", "Back"],
-                ["done", "Done"],
-              ] as const
-            ).map(([name, label]) => {
-              const action = actions[name];
-              // New stays in the sidebar once a page registers it, faded when
-              // it cannot run. Back and Done exist only while their owning
-              // screen needs them, and remain disabled during busy work.
-              if (!action) return null;
-              const faded = Boolean(action.disabled);
-              const content = (
-                <>
-                  {action.busy ? (
-                    <span className="spinner" aria-hidden="true" />
-                  ) : (
-                    <WorkspaceIcon name={name} />
-                  )}
-                  <span>{label}</span>
-                </>
-              );
-              return action.href && !faded ? (
-                <Link
-                  key={name}
-                  className={`${styles.link} ${styles.sidebarAction}`}
-                  href={action.href}
-                  onClick={action.onClick}
-                  data-ui-guide={`workspace.${name}`}
-                  aria-disabled={faded || undefined}
-                  tabIndex={faded ? -1 : undefined}
-                >
-                  {content}
-                </Link>
-              ) : (
-                <button
-                  key={name}
-                  className={`${styles.link} ${styles.action} ${styles.sidebarAction}${faded ? ` ${styles.disabled}` : ""}`}
-                  type={action.form ? "submit" : "button"}
-                  form={action.form}
-                  disabled={faded}
-                  aria-busy={action.busy || undefined}
-                  onClick={action.onClick}
-                  data-ui-guide={`workspace.${name}`}
-                >
-                  {content}
-                </button>
-              );
-            })}
-          </nav>
-          <div className={styles.account}>
-            <p className={styles.credit}>
-              <span className={styles.creditTitle}>Meet Problems?</span>
-              <a
-                className={styles.creditMail}
-                href="mailto:t330034059@mail.bnbu.edu.cn"
-              >
-                Send to t330034059@mail.bnbu.edu.cn
-              </a>
-            </p>
-            <button
-              className={styles.logout}
-              type="button"
-              disabled={busy}
-              data-ui-guide="workspace.logout"
-              onClick={() => void signOut()}
+            <WorkspaceIcon name="menu" />
+          </button>
+          <span
+            className="flex items-center gap-2 font-display text-lg font-extrabold text-ink"
+            aria-hidden="true"
+          >
+            <span className="size-3 rounded-full border-2 border-border bg-main" />
+            {t("appName")}
+          </span>
+        </div>
+        {drawerOpen ? (
+          <div
+            aria-hidden="true"
+            className="fixed inset-0 z-40 bg-black/40 min-[901px]:hidden"
+            onClick={() => setDrawerPath(null)}
+          />
+        ) : null}
+        <header
+          id="workspace-sidebar"
+          data-collapsed={collapsed || undefined}
+          className={`sticky top-0 z-20 h-dvh border-r-[3px] border-border bg-sidebar max-[900px]:fixed max-[900px]:inset-y-0 max-[900px]:left-0 max-[900px]:z-50 max-[900px]:w-[min(300px,85vw)] max-[900px]:transition-transform max-[900px]:duration-150 max-[900px]:motion-reduce:transition-none ${drawerOpen ? "" : "max-[900px]:invisible max-[900px]:-translate-x-full"}`}
+        >
+          <button
+            type="button"
+            className="absolute top-5 -right-[18px] z-10 grid size-8 place-items-center rounded-full border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none"
+            aria-label={toggleLabel}
+            aria-expanded={mobile ? drawerOpen : !collapsed}
+            aria-controls="workspace-sidebar"
+            aria-keyshortcuts="Control+B Meta+B"
+            title={`${toggleLabel} (Ctrl/⌘ B)`}
+            onClick={() =>
+              mobile ? setDrawerPath(null) : writeCollapsed(!collapsed)
+            }
+          >
+            <WorkspaceIcon
+              name={collapsed ? "chevronRight" : "chevronLeft"}
+              size={16}
+            />
+          </button>
+          <div
+            className={`flex h-full flex-col gap-5 overflow-y-auto pt-5 pb-4 ${collapsed ? "items-center px-2" : "px-3"}`}
+          >
+            <nav
+              aria-label={`${teacherSurface ? t("teacher") : t("student")} ${t("navigation")}`}
+              className={`nav-links grid content-start ${collapsed ? "justify-items-center gap-3" : "gap-4"}`}
             >
-              <WorkspaceIcon name="logout" />
-              {t("logout")}
-            </button>
+              <Link
+                href={home}
+                aria-current={mayaformLit ? "page" : undefined}
+                aria-label={collapsed ? t("appName") : undefined}
+                title={collapsed ? t("appName") : undefined}
+                data-tour="home"
+                data-lit={mayaformLit || undefined}
+                className={`isolate ${collapsed ? `${ICON_ITEM} border-border bg-main shadow-arc-s` : `${ITEM} font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " active" : ""}`}
+              >
+                {mayaformLit && !collapsed ? pill : null}
+                <span
+                  className={`brand-dot size-3 shrink-0 rounded-full border-2 border-border ${collapsed ? "bg-surface" : "bg-main"}`}
+                  aria-hidden="true"
+                />
+                {collapsed ? null : <span>{t("appName")}</span>}
+              </Link>
+              {groups.map((group) => {
+                const headingId = `sidebar-group-${group.key}`;
+                const headingCurrent =
+                  group.heading && activeHref === group.heading.href;
+                return (
+                  <div
+                    key={group.key}
+                    role="group"
+                    aria-labelledby={collapsed ? undefined : headingId}
+                    aria-label={collapsed ? group.label : undefined}
+                    data-sidebar-group={group.key}
+                    className={
+                      collapsed
+                        ? `grid gap-1 rounded-arc-s border-[3px] border-border p-1 shadow-arc-s ${group.tile}`
+                        : "grid gap-1.5"
+                    }
+                  >
+                    {collapsed ? null : (
+                      <div
+                        id={headingId}
+                        className="flex items-center gap-1.5 px-1 font-body text-[11px] font-extrabold tracking-[0.12em] text-ink uppercase"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`size-2 border-2 border-border ${group.square}`}
+                        />
+                        {group.heading ? (
+                          <Link
+                            href={group.heading.href}
+                            data-tour={group.heading.tour}
+                            aria-current={headingCurrent ? "page" : undefined}
+                            className={`rounded-[3px] text-ink no-underline hover:underline${headingCurrent ? " active" : ""}`}
+                          >
+                            {group.label}
+                          </Link>
+                        ) : (
+                          <span>{group.label}</span>
+                        )}
+                      </div>
+                    )}
+                    <ul
+                      className={
+                        collapsed
+                          ? "m-0 grid list-none gap-1 p-0"
+                          : `m-0 ml-[9px] grid list-none gap-1 border-l-4 py-0 pr-0 pl-2 ${group.rail}`
+                      }
+                    >
+                      {group.items.map((item, index) =>
+                        renderItem(group, item, index),
+                      )}
+                    </ul>
+                  </div>
+                );
+              })}
+              {(
+                [
+                  ["new", "New"],
+                  ["back", "Back"],
+                  ["done", "Done"],
+                ] as const
+              ).map(([name, label]) => {
+                const action = actions[name];
+                // New stays in the sidebar once a page registers it, faded when
+                // it cannot run. Back and Done exist only while their owning
+                // screen needs them, and remain disabled during busy work.
+                if (!action) return null;
+                const faded = Boolean(action.disabled);
+                const content = (
+                  <>
+                    {action.busy ? (
+                      <span className="spinner" aria-hidden="true" />
+                    ) : (
+                      <WorkspaceIcon name={name} size={18} />
+                    )}
+                    {collapsed ? (
+                      <span className="sr-only">{label}</span>
+                    ) : (
+                      <span>{label}</span>
+                    )}
+                  </>
+                );
+                const actionClass = `${collapsed ? `${ICON_ITEM}` : ITEM} border-border bg-surface shadow-arc-s hover:-translate-y-px active:translate-x-[3px] active:translate-y-[3px] active:shadow-none`;
+                return action.href && !faded ? (
+                  <Link
+                    key={name}
+                    className={actionClass}
+                    href={action.href}
+                    onClick={action.onClick}
+                    data-ui-guide={`workspace.${name}`}
+                    title={collapsed ? label : undefined}
+                  >
+                    {content}
+                  </Link>
+                ) : (
+                  <button
+                    key={name}
+                    className={`${actionClass} w-full cursor-pointer text-left disabled:cursor-not-allowed disabled:opacity-50`}
+                    type={action.form ? "submit" : "button"}
+                    form={action.form}
+                    disabled={faded}
+                    aria-busy={action.busy || undefined}
+                    onClick={action.onClick}
+                    data-ui-guide={`workspace.${name}`}
+                    title={collapsed ? label : undefined}
+                  >
+                    {content}
+                  </button>
+                );
+              })}
+            </nav>
+            <div
+              className={`mt-auto grid gap-2 ${collapsed ? "justify-items-center" : ""}`}
+            >
+              {collapsed ? (
+                <a
+                  href="mailto:t330034059@mail.bnbu.edu.cn"
+                  title="Send to t330034059@mail.bnbu.edu.cn"
+                  className={`${ICON_ITEM} border-border bg-surface shadow-arc-s`}
+                >
+                  <WorkspaceIcon name="mail" size={18} />
+                  <span className="sr-only">
+                    Meet Problems? Send to t330034059@mail.bnbu.edu.cn
+                  </span>
+                </a>
+              ) : (
+                <p className="m-0 grid gap-0.5 rounded-arc-s border-[3px] border-border bg-surface p-2.5 font-body text-xs font-medium text-arc-muted shadow-arc-s">
+                  <span className="font-display text-sm font-extrabold text-ink">
+                    Meet Problems?
+                  </span>
+                  <a
+                    className="font-bold [overflow-wrap:anywhere] text-ink underline"
+                    href="mailto:t330034059@mail.bnbu.edu.cn"
+                  >
+                    Send to t330034059@mail.bnbu.edu.cn
+                  </a>
+                </p>
+              )}
+              <button
+                className={`${collapsed ? `${ICON_ITEM}` : `${ITEM} w-full`} cursor-pointer border-border bg-surface text-left shadow-arc-s active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-wait disabled:opacity-60`}
+                type="button"
+                disabled={busy}
+                data-ui-guide="workspace.logout"
+                title={collapsed ? t("logout") : undefined}
+                onClick={() => void signOut()}
+              >
+                <WorkspaceIcon name="logout" size={18} />
+                {collapsed ? (
+                  <span className="sr-only">{t("logout")}</span>
+                ) : (
+                  t("logout")
+                )}
+              </button>
+            </div>
           </div>
         </header>
         <main
           id="workspace-content"
           tabIndex={-1}
-          className={`${styles.main} ${workspaceStyles.surface} ${pathname === "/teacher/chat" || pathname === "/student/chat" ? styles.chatMain : ""}`}
+          className={`relative mx-auto w-[min(100%,1320px)] min-w-0 px-[clamp(24px,4vw,64px)] pt-12 max-[900px]:px-6 max-[900px]:pt-8 max-[480px]:px-4 max-[480px]:pt-7 ${workspaceStyles.surface} ${pathname === "/teacher/chat" || pathname === "/student/chat" ? "pb-[max(24px,env(safe-area-inset-bottom))]" : "pb-20 max-[900px]:pb-16 max-[480px]:pb-12"}`}
         >
           <ViewTransition>{children}</ViewTransition>
         </main>

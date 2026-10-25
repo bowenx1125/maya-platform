@@ -10,7 +10,16 @@ export type WorkspaceIconName =
   | "new"
   | "back"
   | "done"
-  | "logout";
+  | "logout"
+  | "agent"
+  | "team"
+  | "file"
+  | "clock"
+  | "chatTeam"
+  | "mail"
+  | "menu"
+  | "chevronLeft"
+  | "chevronRight";
 
 const paths: Record<WorkspaceIconName, string> = {
   home: "M3 10 12 3l9 7M5 9v11h5v-6h4v6h5V9",
@@ -28,14 +37,30 @@ const paths: Record<WorkspaceIconName, string> = {
   back: "M19 12H5m7-7-7 7 7 7",
   done: "m5 12 4 4L19 6",
   logout: "M9 4H4v16h5M9 12h12m-4-4 4 4-4 4",
+  agent: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM5 21v-1a7 7 0 0 1 14 0v1",
+  team: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20v-1a6 6 0 0 1 10-4.5M12 20v-1a6 6 0 0 1 10-1v2",
+  file: "M14 3H6v18h12V7l-4-4Zm0 0v4h4M9 13h6M9 17h6",
+  clock: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM12 7v5l3 2",
+  chatTeam:
+    "M17 9a6 6 0 0 1-6 6H7l-4 3 1-4a6 6 0 0 1 7-11 6 6 0 0 1 6 6ZM20 12a5 5 0 0 1 1 6l1 3-4-2h-4",
+  mail: "M3 5h18v14H3zm0 0 9 7 9-7",
+  menu: "M4 6h16M4 12h16M4 18h16",
+  chevronLeft: "m15 5-7 7 7 7",
+  chevronRight: "m9 5 7 7-7 7",
 };
 
-export function WorkspaceIcon({ name }: { name: WorkspaceIconName }) {
+export function WorkspaceIcon({
+  name,
+  size = 20,
+}: {
+  name: WorkspaceIconName;
+  size?: number;
+}) {
   return (
     <svg
       aria-hidden="true"
-      width="20"
-      height="20"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

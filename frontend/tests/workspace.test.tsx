@@ -1544,9 +1544,9 @@ describe("teacher workspace access", () => {
     expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
     const navigation = screen.getByRole("navigation");
     expect(
-      Array.from(navigation.children)
-        .filter((item) => item.matches("a, [aria-disabled='true']"))
-        .map((item) => item.textContent?.trim()),
+      Array.from(
+        navigation.querySelectorAll("a[data-tour], [aria-disabled='true']"),
+      ).map((item) => item.textContent?.trim()),
     ).toEqual(["Mayaform", "Studyform", "Chatform", "Debates", "Accounts"]);
     expect(screen.queryByText("Components")).toBeNull();
     expect(screen.queryByRole("button", { name: "Set API Key" })).toBeNull();

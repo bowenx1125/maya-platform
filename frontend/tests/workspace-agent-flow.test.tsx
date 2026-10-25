@@ -275,7 +275,9 @@ describe("Workspace Agent flow", () => {
         <GroupWorkspace groupId="group-id" />
       </AppShell>,
     );
-    const link = await screen.findByRole("link", { name: /Agent/ });
+    const link = await within(screen.getByRole("main")).findByRole("link", {
+      name: /Agent/,
+    });
     link.focus();
     expect(document.activeElement).toBe(link);
     expect(link.getAttribute("href")).toBe("/student/agents/agent-id");
@@ -334,10 +336,14 @@ describe("Workspace Agent flow", () => {
     expect(api.deleteAgent).not.toHaveBeenCalled();
     fireEvent.click(button);
     await screen.findByText("Used by a Debate");
-    expect(screen.getByRole("link", { name: /Agent/ })).toBeTruthy();
+    expect(
+      within(screen.getByRole("main")).getByRole("link", { name: /Agent/ }),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() =>
-      expect(screen.queryByRole("link", { name: /Agent/ })).toBeNull(),
+      expect(
+        within(screen.getByRole("main")).queryByRole("link", { name: /Agent/ }),
+      ).toBeNull(),
     );
     expect(api.deleteAgent).toHaveBeenCalledTimes(2);
   });
