@@ -601,9 +601,11 @@ def _versions_in_use(db: Session, version_ids: list[str]) -> set[str]:
         return set()
     live_chat = (Conversation.source_removed_at.is_(None), Conversation.withdrawn_at.is_(None))
     queries = (
-        select(Conversation.agent_version_id).where(
-            Conversation.agent_version_id.in_(version_ids), *live_chat
-        ),
+        # Any chat row that still names the version keeps it, withdrawn ones
+        # included: ck_conversations_entry forbids clearing agent_version_id on
+        # a single-Agent chat whose source was not removed, and the chat's own
+        # record must not change. It is pruned once that chat is deleted.
+        select(Conversation.agent_version_id).where(Conversation.agent_version_id.in_(version_ids)),
         select(ConversationParticipant.agent_version_id)
         .join(Conversation, Conversation.id == ConversationParticipant.conversation_id)
         .where(ConversationParticipant.agent_version_id.in_(version_ids), *live_chat),
