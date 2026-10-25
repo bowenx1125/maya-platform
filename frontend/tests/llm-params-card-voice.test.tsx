@@ -63,13 +63,13 @@ describe("voice parameters on the generation card", () => {
     );
     expect(screen.getByRole("heading", { name: "Voice" })).toBeTruthy();
     const rateHelp = screen.getByRole("button", { name: /^rate:/ });
-    expect(rateHelp.getAttribute("data-ui-guide-text")).toContain("0.5 to 2.0");
+    expect(rateHelp.getAttribute("data-ui-guide-text")).toContain("0.5 到 2.0");
     expect(rateHelp.getAttribute("data-ui-guide-text")).toContain("1.1–1.3");
     expect(
       screen
         .getByRole("button", { name: /^seed:/ })
         .getAttribute("data-ui-guide-text"),
-    ).toContain("0 to 65535");
+    ).toContain("0 到 65535");
 
     fireEvent.change(screen.getByRole("slider", { name: "rate slider" }), {
       target: { value: "1.5" },
