@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Caveat, Lexend } from "next/font/google";
+import { Bricolage_Grotesque, Caveat, Lexend, Space_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 
 import { SessionProvider } from "../components/session-provider";
@@ -22,6 +22,13 @@ const body = Lexend({
   display: "swap",
 });
 
+// Album sticker numbers (#01), same setup as the RAG album.
+const mono = Space_Mono({
+  subsets: ["latin"],
+  weight: "700",
+  variable: "--font-space-mono",
+  display: "swap",
+});
 // Handwriting for the Voices album "Made by" signature line.
 const hand = Caveat({
   subsets: ["latin"],
@@ -40,7 +47,7 @@ export default async function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en-US" className={`${display.variable} ${body.variable} ${hand.variable}`}>
+    <html lang="en-US" className={`${display.variable} ${body.variable} ${hand.variable} ${mono.variable}`}>
       <body>
         <SessionProvider>
           {children}
