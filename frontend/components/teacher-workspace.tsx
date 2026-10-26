@@ -142,7 +142,7 @@ export function TeacherDashboard() {
       <HomeHero name={name}>
         {/* A teacher opens this page to read the class: how many groups,
             how many students. The Agents count heads their row below. */}
-        <div className="home-stats mt-6 flex flex-wrap gap-5 max-[767px]:gap-3">
+        <div className="home-stats mt-7 flex flex-wrap gap-5 max-[767px]:gap-3">
           <HomeStat
             tone="lime"
             value={<CountUp value={groups.length} />}
@@ -160,15 +160,16 @@ export function TeacherDashboard() {
         <EmptyCard title={t("noPublishedAgents")} />
       ) : (
         <section
-          className="published-section grid min-w-0 gap-2"
+          className="published-section grid min-w-0 gap-[26px] max-[767px]:gap-[23px]"
           aria-labelledby="teacher-agents-title"
         >
           <h2 id="teacher-agents-title" className={HOME_TAPE_TITLE}>
             {t("agents")} · {published.length + owned.length}
           </h2>
           <HomeAgentRow>
-            {published.map((item) => (
+            {published.map((item, index) => (
               <PublishedAgentCard
+                index={index}
                 groupName={
                   groups.find((group) => group.id === item.agent.group_id)
                     ?.name ?? ""
@@ -177,9 +178,10 @@ export function TeacherDashboard() {
                 key={item.agent.id}
               />
             ))}
-            {owned.map((agent) => (
+            {owned.map((agent, index) => (
               <AgentCard
                 key={agent.id}
+                index={published.length + index}
                 id={agent.id}
                 name={agent.name}
                 href={`/teacher/agents/${agent.id}`}
@@ -207,9 +209,11 @@ export function TeacherDashboard() {
 function PublishedAgentCard({
   item,
   groupName,
+  index,
 }: {
   item: PublishedAgentSummary;
   groupName: string;
+  index?: number;
 }) {
   const t = useT();
   const hasUnpublishedWork =
@@ -218,6 +222,7 @@ function PublishedAgentCard({
       item.agent.current_published_version_id;
   return (
     <AgentCard
+      index={index}
       id={item.agent.id}
       name={item.agent.name}
       href={`/teacher/agents/${item.agent.id}`}

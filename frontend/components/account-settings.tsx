@@ -16,7 +16,7 @@ const PANEL = "grid min-w-0 content-start gap-4 py-1 pr-8 max-[640px]:pr-0";
 const HEADING = "m-0 font-display text-lg font-extrabold text-ink";
 const LABEL = "grid min-w-0 gap-1.5 text-[13px] font-bold text-ink";
 const FIELD =
-  "min-h-10 w-full rounded-lg border-[3px] border-ink bg-white px-3 py-2 font-body text-sm text-ink focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#67E8F9] disabled:opacity-60";
+  "min-h-[46px] max-[640px]:min-h-[51px] w-full rounded-lg border-[3px] border-ink bg-white px-3 py-2 font-body text-sm text-ink focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#67E8F9] disabled:opacity-60";
 const SAVED =
   "rotate-[-3deg] rounded border-2 border-ink bg-[#A3E635] px-2 py-px text-xs font-extrabold text-ink shadow-[2px_2px_0_#111]";
 /** Save as an arcade key: pink, inked, pressing down 6px into its shadow. */

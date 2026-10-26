@@ -242,16 +242,17 @@ export function StudentDashboard() {
       <HomeHero name={name} />
       {published.length ? (
         <section
-          className="home-panel grid min-w-0 gap-2"
+          className="home-panel grid min-w-0 gap-[26px] max-[767px]:gap-[23px]"
           aria-labelledby="student-agents-title"
         >
           <h2 id="student-agents-title" className={HOME_TAPE_TITLE}>
             {t("agents")} · {published.length}
           </h2>
           <HomeAgentRow>
-            {published.map((item) => (
+            {published.map((item, index) => (
               <VersionTile
                 key={item.agent.id}
+                index={index}
                 id={item.agent.id}
                 materialTheme={
                   item.current_version.avatar_config?.material_theme
