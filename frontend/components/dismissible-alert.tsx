@@ -4,8 +4,14 @@ import { useRef, useState, type HTMLAttributes, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { useT } from "../lib/i18n";
-import { IconClose } from "./quiet-icons";
 import { NOTICE_TAIL_CLASS, useNoticeTray } from "./notice-tray";
+import {
+  KindSticker,
+  MascotBadge,
+  RoundX,
+  useTransientFold,
+  type ErrorKind,
+} from "./ui/error-kit";
 
 /**
  * The compact × that closes an error, failure or warning line. Closing only
@@ -20,15 +26,12 @@ export function DismissButton({
 }) {
   const t = useT();
   return (
-    <button
-      type="button"
+    <RoundX
       className="alert-dismiss"
       aria-label={label ?? t("noticeDismiss")}
       title={label ?? t("noticeDismiss")}
       onClick={onDismiss}
-    >
-      <IconClose size={12} />
-    </button>
+    />
   );
 }
 
@@ -48,9 +51,20 @@ export function DismissibleAlert({
   role = "alert",
   resetKey,
   dismissLabel,
+  kind = "server",
+  n,
+  done,
+  transient = false,
   children,
   ...rest
 }: {
+  /** U3: the sticker that starts an error line (default: server "!"). */
+  kind?: ErrorKind;
+  /** The field number, for a field error. */
+  n?: number;
+  done?: boolean;
+  /** Chat and live classroom errors fold into the mascot badge after 6 s. */
+  transient?: boolean;
   as?: "p" | "div" | "span";
   className?: string;
   role?: "alert" | "status";
@@ -70,6 +84,8 @@ export function DismissibleAlert({
       : typeof children === "string" || typeof children === "number"
         ? children
         : SAME_MOUNT;
+  const t = useT();
+  const fold = useTransientFold(transient && tray !== null, key);
   if (dismissed !== NOT_DISMISSED && Object.is(dismissed, key)) return null;
   function dismiss() {
     // Closing removes the focused ×; hand focus to the field this line
@@ -106,11 +122,13 @@ export function DismissibleAlert({
         tray
           ? `notice notice-error dismissible-alert-tray pointer-events-auto flex-none ${NOTICE_TAIL_CLASS}`
           : "",
+        fold.folded ? "hidden" : "",
       ]
         .filter(Boolean)
         .join(" ")}
       role={role}
     >
+      {role === "alert" ? <KindSticker kind={kind} n={n} done={done} /> : null}
       <span className="dismissible-alert-body">{children}</span>
       <DismissButton label={dismissLabel} onDismiss={dismiss} />
     </Tag>
@@ -120,6 +138,13 @@ export function DismissibleAlert({
     <>
       <span ref={anchorRef} hidden />
       {createPortal(alertLine, tray)}
+      {fold.folded ? (
+        <MascotBadge
+          tray={tray}
+          label={t("noticeReopen")}
+          onOpen={fold.reopen}
+        />
+      ) : null}
     </>
   );
 }

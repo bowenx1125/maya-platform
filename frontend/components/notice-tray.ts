@@ -7,9 +7,9 @@ const noSubscription = () => () => {};
 /**
  * Classes of the one mascot tray (DESIGN option C): fixed bottom-right at
  * z-index 60, the gold scholar speaking from the corner, a tail on the newest
- * bubble only, and on a phone only the newest two bubbles with the rest
- * folded into "+N". The mascot and the fold are pseudo-elements, so the
- * tray's children stay exactly the notices and `:empty` still hides it.
+ * bubble only. U3: a newer bubble replaces the older ones at every width,
+ * and there is no "+N" chip. The mascot is a pseudo-element, so the tray's
+ * children stay the notices (and the mascot badge) and `:empty` hides it.
  */
 const TRAY_CLASS = [
   "notice-tray fixed right-6 bottom-[var(--arc-tray-bottom,16px)] z-[60] flex flex-col items-end gap-3",
@@ -17,23 +17,11 @@ const TRAY_CLASS = [
   "max-h-[var(--arc-tray-max,calc(100dvh-32px))] overflow-y-auto overscroll-contain",
   "after:content-[''] after:block after:flex-none after:mr-3 after:w-24 after:h-[120px]",
   "after:bg-[url(/mascots/wave.svg)] after:bg-contain after:bg-bottom after:bg-no-repeat after:drop-shadow-[3px_3px_0_#111]",
-  "data-[more]:before:content-['+'_attr(data-more)] data-[more]:before:self-end",
-  "data-[more]:before:rounded-full data-[more]:before:border-2 data-[more]:before:border-border",
-  "data-[more]:before:bg-surface data-[more]:before:px-2.5 data-[more]:before:py-0.5",
-  "data-[more]:before:text-xs data-[more]:before:font-bold data-[more]:before:shadow-[2px_2px_0_#111]",
   "max-[680px]:left-3 max-[680px]:right-3 max-[680px]:w-auto max-[680px]:bottom-[var(--arc-tray-bottom,12px)]",
   "max-[680px]:gap-2 max-[680px]:after:w-14 max-[680px]:after:h-[70px] max-[680px]:after:mr-1",
   "max-[680px]:[&>.notice]:text-[13px] max-[680px]:[&>.notice]:py-2.5 max-[680px]:[&>.notice]:pr-[38px] max-[680px]:[&>.notice]:pl-3",
-  "max-[680px]:[&>.notice:nth-last-child(n+3)]:hidden",
+  "[&>.notice:has(~.notice)]:hidden",
 ].join(" ");
-
-/** Hidden older bubbles on a phone are counted for the "+N" chip. */
-function countFolded(element: HTMLElement) {
-  const folded = element.children.length - 2;
-  const small = window.matchMedia?.("(max-width: 680px)").matches ?? false;
-  if (small && folded > 0) element.setAttribute("data-more", String(folded));
-  else element.removeAttribute("data-more");
-}
 
 /** One tray at the bottom of the page, so notices never push a page down. */
 export function noticeTray(): HTMLElement {
@@ -42,11 +30,6 @@ export function noticeTray(): HTMLElement {
     element = document.createElement("div");
     element.className = TRAY_CLASS;
     document.body.append(element);
-    const tray = element;
-    if (typeof MutationObserver === "function")
-      new MutationObserver(() => countFolded(tray)).observe(tray, {
-        childList: true,
-      });
   }
   return element;
 }
