@@ -14,6 +14,7 @@ import { cachedCall, requestCacheIdentity } from "../../lib/request-cache";
 import { useT } from "../../lib/i18n";
 import { useSession } from "../session-provider";
 import { IconClose, IconDownload } from "../quiet-icons";
+import { PageAction } from "../page-action";
 import { ASSESSMENT_COMPLETED_EVENT } from "../../lib/assessment-events";
 import { ErrorNotice } from "../ui";
 
@@ -456,11 +457,14 @@ export function RecordDetail({
   team,
   scope = "course",
   onDelete,
+  onBack,
 }: {
   team: RecordTeam | undefined;
   scope?: RecordScope;
   /** A course teacher's delete; the server only hides the attempt. */
   onDelete?: (attempt: OverviewResult) => Promise<void>;
+  /** Dedicated record page: Back sits inside the clipboard (same band as list chrome). */
+  onBack?: () => void;
 }) {
   const own = scope === "own";
   const t = useT();
@@ -485,6 +489,12 @@ export function RecordDetail({
   if (!team) {
     return (
       <ClipboardBoard labelledBy="brainform-record-team">
+        {onBack ? (
+          <div className="mb-5 flex items-center gap-3">
+            <span className="flex-1" />
+            <PageAction name="back" placement="page" onClick={onBack} />
+          </div>
+        ) : null}
         <p className="m-0 text-center text-base font-bold text-[#555]">
           {t("overviewNoResults")}
         </p>
@@ -497,15 +507,22 @@ export function RecordDetail({
   const average = averageRatio(team.attempts);
   return (
     <ClipboardBoard labelledBy="brainform-record-team">
-      <p className="mb-1 text-[11px] font-extrabold uppercase tracking-[1.4px] text-[#0E7490]">
-        Record
-      </p>
-      <h2
-        id="brainform-record-team"
-        className="mb-4 mt-0 text-[34px] font-extrabold leading-none"
-      >
-        {team.name}
-      </h2>
+      <div className="mb-4 flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="mb-1 text-[11px] font-extrabold uppercase tracking-[1.4px] text-[#0E7490]">
+            Record
+          </p>
+          <h2
+            id="brainform-record-team"
+            className="m-0 text-[34px] font-extrabold leading-none"
+          >
+            {team.name}
+          </h2>
+        </div>
+        {onBack ? (
+          <PageAction name="back" placement="page" onClick={onBack} />
+        ) : null}
+      </div>
 
       <dl className="mb-[18px] flex flex-wrap gap-3">
         {own ? (

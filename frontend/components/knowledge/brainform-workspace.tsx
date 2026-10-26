@@ -2368,7 +2368,8 @@ function BrainformWorkspaceBody({
           }
         />
       ) : null}
-      {pane || initialMode ? (
+      {(pane || initialMode) &&
+      !(recordPage && pane?.kind === "record") ? (
         <WorkspaceAction
           name="back"
           onClick={closePane}
@@ -2858,6 +2859,7 @@ function BrainformWorkspaceBody({
         <RecordDetail
           scope={recordScope}
           team={assessmentRecord.teams.find((team) => team.name === pane.team)}
+          onBack={recordPage ? closePane : undefined}
           onDelete={
             role === "teacher"
               ? async (attempt) => {
