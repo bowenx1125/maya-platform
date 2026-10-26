@@ -7,8 +7,19 @@ import type { TeamSummaryDto } from "../lib/api";
 import { useT } from "../lib/i18n";
 import { cn } from "../lib/utils";
 import { MascotFigure, MASCOT_IDS, type MascotId } from "./academy/mascots";
-import { AGENT_BANNER, AGENT_BANNER_TITLE, AGENT_PAGE } from "./agent-chrome";
-import { AGENTS_NEW_CLASS, DeleteX, NewButton } from "./ui/agent-card";
+import {
+  AGENT_PAGE,
+  STUDYFORM_BANNER,
+  STUDYFORM_BANNER_TITLE,
+  STUDYFORM_NEW_CLASS,
+} from "./agent-chrome";
+import { teamVersionLabel } from "./studyform-layout";
+import {
+  AGENTS_NEW_CLASS,
+  agentMascot,
+  DeleteX,
+  NewButton,
+} from "./ui/agent-card";
 import { IconPlus } from "./quiet-icons";
 
 /*
@@ -31,45 +42,53 @@ const WELLS = [
 ] as const;
 
 /**
- * TeamSummary carries only member_count, not who the members are, so the
- * faces are picked from the team id (same hash as agentMascot).
+ * G2 faces, leader first, at most four. TeamSummary does not list members yet
+ * (MayaUI API ask: TeamSummary.members[{agent_id, material_theme, is_leader}]
+ * capped at 4, leader first). Until it does, the faces hash from the team id
+ * with the same picker as agentMascot.
  */
-function teamFaces(id: string, count: number): MascotId[] {
+function teamFaces(team: TeamSummaryDto): MascotId[] {
+  const listed = (team as TeamSummaryDto & { members?: TeamFaceMember[] })
+    .members;
+  if (Array.isArray(listed) && listed.length)
+    return [...listed]
+      .sort((left, right) => Number(right.is_leader) - Number(left.is_leader))
+      .slice(0, 4)
+      .map((member) => agentMascot(member.agent_id, member.material_theme));
   let hash = 0;
-  for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  for (const char of team.id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return Array.from(
-    { length: Math.min(Math.max(count, 0), 3) },
+    { length: Math.min(Math.max(team.member_count, 0), 4) },
     (_, index) => MASCOT_IDS[(hash + index) % MASCOT_IDS.length],
   );
 }
+type TeamFaceMember = {
+  agent_id: string;
+  material_theme?: string | null;
+  is_leader?: boolean;
+};
 
-function Faces({
-  faces,
-  more = 0,
-  size,
-}: {
-  faces: MascotId[];
-  more?: number;
-  size: "card" | "starter";
-}) {
+const FACE =
+  "relative grid shrink-0 place-items-end overflow-hidden rounded-full border-[3px] border-[#111] bg-white shadow-[2px_2px_0_#111]";
+
+/** G2 row: overlapping 50px faces (390: 36px), then a "+N" coin past four. */
+function Faces({ faces, more = 0 }: { faces: MascotId[]; more?: number }) {
   return (
-    <span className="relative flex items-end justify-center" aria-hidden="true">
+    <span className="flex items-center" aria-hidden="true">
       {faces.map((face, index) => (
         <span
           key={index}
-          style={{ zIndex: 10 - index }}
+          style={{ zIndex: 9 - index }}
           className={cn(
-            "-ml-[18px] grid shrink-0 place-items-end overflow-hidden rounded-full border-[3px] border-[#111] bg-white shadow-[2px_2px_0_#111] first:ml-0",
-            size === "card"
-              ? "size-[58px] max-[767px]:-ml-3 max-[767px]:size-10 max-[767px]:first:ml-0"
-              : "size-[52px]",
+            FACE,
+            "-ml-4 size-[50px] first:ml-0 max-[767px]:-ml-3.5 max-[767px]:size-9 max-[767px]:first:ml-0",
           )}
         >
           <MascotFigure id={face} className="h-[120%] w-auto translate-y-[8%]" />
         </span>
       ))}
       {more > 0 ? (
-        <span className="-ml-3.5 grid size-10 place-items-center rounded-full border-[3px] border-[#111] bg-[#FFE14D] font-body text-xs font-extrabold text-[#111] shadow-[2px_2px_0_#111] max-[767px]:size-[30px]">
+        <span className="relative -ml-2.5 grid size-9 shrink-0 place-items-center rounded-full border-[3px] border-[#111] bg-[#FFE14D] font-body text-xs font-extrabold text-[#111] shadow-[2px_2px_0_#111] max-[767px]:size-7 max-[767px]:text-[10px]">
           +{more}
         </span>
       ) : null}
@@ -82,7 +101,7 @@ const POLAROID =
 const TAPE =
   "absolute -top-3 left-1/2 w-max max-w-[88%] -translate-x-1/2 -rotate-2 border-2 border-[#111] bg-[#FFE14D] px-3.5 py-0.5 text-center font-display leading-[1.15] font-extrabold text-[#111] shadow-[2px_2px_0_#111]";
 const PHOTO =
-  "mt-2.5 flex items-end justify-center border-[3px] border-[#111] pb-2.5";
+  "mt-2.5 flex items-center justify-center border-[3px] border-[#111]";
 const SUN =
   "[background:radial-gradient(circle_at_50%_50%,#FFE14D_0_24%,transparent_25%),repeating-conic-gradient(from_0deg_at_50%_50%,#FFF7CC_0_9deg,#fff_9deg_18deg)]";
 
@@ -102,7 +121,7 @@ function TeamPolaroid({
   onDelete?: () => void;
 }) {
   const t = useT();
-  const faces = teamFaces(team.id, team.member_count);
+  const faces = teamFaces(team);
   const isPublic = team.visibility === "public";
   return (
     <li
@@ -110,16 +129,15 @@ function TeamPolaroid({
       style={{ "--r": `${TILTS[index % TILTS.length]}deg` } as CSSProperties}
     >
       <Link href={href} className="block text-[#111] no-underline">
-        <span className={cn(TAPE, "text-[13px] max-[767px]:max-w-[92%] max-[767px]:truncate max-[767px]:whitespace-nowrap max-[767px]:text-[11px]")}>{team.display_name}</span>
+        <span className={cn(TAPE, "text-[13px] max-[767px]:max-w-[80%]")}>{team.display_name}</span>
+        <span className="absolute -top-2.5 -left-2.5 z-[3] -rotate-4 rounded-[6px] border-2 border-[#111] bg-white px-2 py-px font-body text-[11px] font-extrabold text-[#111] shadow-[2px_2px_0_#111]">
+          {teamVersionLabel(team.current_version_seq)}
+        </span>
         <span
-          className={cn(PHOTO, "h-[130px] max-[767px]:h-[100px]")}
+          className={cn(PHOTO, "h-[130px] max-[767px]:h-[110px]")}
           style={{ backgroundColor: WELLS[index % WELLS.length] }}
         >
-          <Faces
-            faces={faces}
-            more={Math.max(team.member_count - 3, 0)}
-            size="card"
-          />
+          <Faces faces={faces} more={Math.max(team.member_count - 4, 0)} />
         </span>
         <span className="mt-2.5 flex">
           <span className="inline-flex overflow-hidden rounded-[6px] border-2 max-[767px]:w-full border-[#111] font-body text-[11px] font-extrabold shadow-[2px_2px_0_#111]">
@@ -149,16 +167,12 @@ function GhostPolaroid({ side }: { side: "left" | "right" }) {
     <div
       aria-hidden="true"
       className={cn(
-        "box-border w-[170px] rounded-[4px] border-[3px] border-dashed border-[#1117] bg-[#fff8] p-3 opacity-55 max-[767px]:hidden",
+        "box-border h-[200px] w-[170px] rounded-[4px] border-[3px] border-dashed border-[#1117] bg-[#fff8] opacity-55 max-[767px]:hidden",
         side === "left"
           ? "[transform:rotate(-8deg)_translateX(28px)]"
-          : "[transform:rotate(8deg)_translateX(-28px)]",
+          : "[transform:rotate(7deg)_translateX(-28px)]",
       )}
-    >
-      <div className="mx-auto mt-[-22px] mb-2 h-[18px] w-3/5 border-2 border-dashed border-[#1115] bg-[#FFE14D55]" />
-      <div className="h-[110px] border-[3px] border-dashed border-[#1113] bg-[#1111]" />
-      <div className="mt-2 h-[26px] w-[70%] border-2 border-dashed border-[#1113]" />
-    </div>
+    />
   );
 }
 
@@ -182,31 +196,20 @@ export function TeamsPage({
   const newLabel = t("newAgent");
   return (
     <>
-      {/* F1 page ground: the Agents-area blue grid (app-shell.tsx:828),
-          which the shell only paints on Agents routes, so Teams paints it. */}
-      <div
-        aria-hidden="true"
-        data-testid="teams-ground"
-        className="pointer-events-none fixed inset-0 z-0 bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px]"
-      />
-      <div className={cn(AGENT_PAGE, "relative z-[1]")}>
-        <header
-          className={cn(
-            AGENT_BANNER,
-            "py-[45px] max-[767px]:flex-nowrap max-[767px]:py-[18px]",
-          )}
-        >
+      <div className={AGENT_PAGE}>
+        <header className={STUDYFORM_BANNER}>
           <h1
             id="studyform-teams"
-            className={cn(
-              AGENT_BANNER_TITLE,
-              "max-[767px]:order-none max-[767px]:mt-[18px] max-[767px]:mb-5 max-[767px]:basis-auto",
-            )}
+            className={STUDYFORM_BANNER_TITLE}
           >
             {t("chatTargetTeams")}
           </h1>
           {teams.length && newHref ? (
-            <NewButton href={newHref} label={newLabel} className={AGENTS_NEW_CLASS} />
+            <NewButton
+              href={newHref}
+              label={newLabel}
+              className={STUDYFORM_NEW_CLASS}
+            />
           ) : null}
         </header>
         <section aria-labelledby="studyform-teams">
@@ -227,14 +230,14 @@ export function TeamsPage({
           ) : (
             <div className="relative flex min-h-[360px] items-center justify-center pt-10 pb-5">
               <GhostPolaroid side="left" />
-              <div className="relative z-[2] w-[240px] scale-[1.12] max-[767px]:w-full max-[767px]:scale-100">
+              <div className="relative z-[2] w-[240px] max-[767px]:w-full">
                 <div
                   className={cn(POLAROID, "w-[240px] max-[767px]:w-full")}
                   style={{ "--r": "-1.5deg" } as CSSProperties}
                 >
-                  <p className={cn(TAPE, "m-0 text-base")}>{t("teamNoneYet")}</p>
+                  <p className={cn(TAPE, "m-0 text-[13px]")}>{t("teamNoneYet")}</p>
                   <div className={cn(PHOTO, SUN, "h-[130px] max-[767px]:h-[100px]")}>
-                    <Faces faces={["wave", "wreath", "scroll"]} size="starter" />
+                    <Faces faces={["scroll", "wreath", "tablet"]} />
                   </div>
                   <div className="mt-2.5 flex justify-center">
                     {newHref ? (

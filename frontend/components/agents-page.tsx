@@ -2,8 +2,11 @@
 
 import type { ReactNode } from "react";
 
-import { cn } from "../lib/utils";
-import { AGENT_BANNER, AGENT_BANNER_TITLE, AGENT_PAGE } from "./agent-chrome";
+import {
+  AGENT_PAGE,
+  STUDYFORM_BANNER,
+  STUDYFORM_BANNER_TITLE,
+} from "./agent-chrome";
 
 /**
  * The Agents page (r2-list.mjs list A / empty E2): the sunburst banner with
@@ -22,18 +25,10 @@ export function AgentsPage({
 }) {
   return (
     <div className={AGENT_PAGE}>
-      <header
-        className={cn(
-          AGENT_BANNER,
-          "py-[45px] max-[767px]:flex-nowrap max-[767px]:py-[18px]",
-        )}
-      >
+      <header className={STUDYFORM_BANNER}>
         <h1
           id="studyform-agents"
-          className={cn(
-            AGENT_BANNER_TITLE,
-            "max-[767px]:order-none max-[767px]:mt-[18px] max-[767px]:mb-5 max-[767px]:basis-auto",
-          )}
+          className={STUDYFORM_BANNER_TITLE}
         >
           {title}
         </h1>

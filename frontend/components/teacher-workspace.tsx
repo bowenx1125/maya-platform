@@ -1,5 +1,6 @@
 "use client";
 
+import { STUDYFORM_NEW_CLASS } from "./agent-chrome";
 import { agentLastEditedTitle } from "../lib/agent-tooltip";
 import { CountUp } from "./count-up";
 import { HomeAgentRow } from "./home/agent-row";
@@ -11,7 +12,6 @@ import {
 } from "./home/home-hero";
 import {
   AgentCard,
-  AGENTS_NEW_CLASS,
   AgentsEmpty,
   NewButton,
   agentMascot,
@@ -262,7 +262,7 @@ export function TeacherStudyformWorkspace({
   view,
 }: {
   /** "agents": the Agents page alone (the sidebar's Agents item). */
-  view?: "agents";
+  view?: "agents" | "teams";
   initialGroupId?: string;
   initialMode?: string;
   initialTeamId?: string;
@@ -278,10 +278,11 @@ export function TeacherStudyformWorkspace({
   // Knowledge, Record) joined Studyform. Only Team modes swap the page; any
   // other mode belongs to the embedded cards and must not reload Studyform.
   const teamMode =
-    initialMode === "team-new" ||
+    view === "teams" &&
+    (initialMode === "team-new" ||
     initialMode === "team-edit" ||
     initialMode === "maya-new" ||
-    initialMode === "maya-edit";
+    initialMode === "maya-edit");
   const pageMode = teamMode ? initialMode : "";
   const brainformMode = teamMode ? undefined : initialMode;
   const [brainformPane, setBrainformPane] = useState(false);
@@ -450,7 +451,6 @@ export function TeacherStudyformWorkspace({
   if (teamForm)
     return (
       <>
-        <PageIntro title={t("studyform")} />
         {teacherCourseId ? (
           <TeamEntryFlow
             key={scope}
@@ -459,7 +459,8 @@ export function TeacherStudyformWorkspace({
             agents={chatAgents}
             variant="team"
             standalone
-            backHref="/teacher/studyform"
+            backHref="/teacher/teams"
+            agentCreateHref="/teacher/agents/new"
             initialRouteMode={
               initialMode === "team-new" || initialMode === "maya-new"
                 ? "team-new"
@@ -483,7 +484,7 @@ export function TeacherStudyformWorkspace({
               <NewButton
                 href="/teacher/agents/new"
                 label={t("newAgent")}
-                className={AGENTS_NEW_CLASS}
+                className={STUDYFORM_NEW_CLASS}
               />
             ) : null
           }
@@ -554,17 +555,17 @@ export function TeacherStudyformWorkspace({
       </>
     );
 
-  // ?mode=teams (where Team Back / Done return): the F1 Teams page.
-  if (initialMode === "teams")
+  // /teacher/teams (where Team Back / Done return): the Teams page.
+  if (view === "teams")
     return (
       <>
         {error ? <ErrorNotice error={error} /> : null}
         <TeamsPage
           deleting={deletingId !== null}
-          newHref={teacherCourseId ? "/teacher/studyform?mode=team-new" : undefined}
+          newHref={teacherCourseId ? "/teacher/teams?mode=team-new" : undefined}
           teams={teams.map((team) => ({
             team,
-            href: `/teacher/studyform?mode=team-edit&team_id=${encodeURIComponent(team.id)}`,
+            href: `/teacher/teams?mode=team-edit&team_id=${encodeURIComponent(team.id)}`,
             onDelete: team.can_edit
               ? () =>
                   void deleteOwnedTeam(team.id, t("deletePrivateTeamConfirm"))
@@ -640,7 +641,12 @@ export function TeacherStudyformWorkspace({
   );
 }
 
-export function TeacherPersonalAgentCreate() {
+export function TeacherPersonalAgentCreate({
+  returnHref,
+}: {
+  /** ?return= from Create/Edit Team (Teams paths only). */
+  returnHref?: string;
+} = {}) {
   const t = useT();
   const { identityGeneration, user } = useSession();
   const teacherMembership = user?.courses.find(
@@ -651,7 +657,11 @@ export function TeacherPersonalAgentCreate() {
   }
   const scopeKey = `${user.id}:${teacherMembership.course_id}:${identityGeneration}`;
   return (
-    <CreateAgentForm key={scopeKey} courseId={teacherMembership.course_id} />
+    <CreateAgentForm
+      key={scopeKey}
+      courseId={teacherMembership.course_id}
+      returnHref={returnHref}
+    />
   );
 }
 

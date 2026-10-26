@@ -965,6 +965,9 @@ const enMessages = {
     "Maya Team published. Students can choose it from New in Chatform.",
   mayaTeamNoneYet: "No Maya Teams yet.",
   teamNoneYet: "No Teams yet.",
+  teamMembersNoAgents:
+    "No Agents yet. Create one on the Agents page, then come back here to check it.",
+  teamGoToAgents: "Agents",
   studyformOpenMayaTeams: "Open Maya Team",
   chatCreateTeam: "Create Team",
   chatEditTeam: "Edit Team",

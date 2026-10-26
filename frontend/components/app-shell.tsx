@@ -122,12 +122,9 @@ const ICON_ITEM =
 export function AppShell({
   children,
   role,
-  teamsPage = false,
 }: {
   children: ReactNode;
   role: "student" | "teacher";
-  /** The page renders the F1 Teams list (?mode=teams): light Teams. */
-  teamsPage?: boolean;
 }) {
   const t = useT();
   const { api, user, logout, refresh, identityGeneration } = useSession();
@@ -192,7 +189,7 @@ export function AppShell({
   // The Agents page names its group in ?group_id.
   const routeGroupId =
     groupRouteId ??
-    (pathname === "/student/agents"
+    (pathname === "/student/agents" || pathname === "/student/teams"
       ? (new URLSearchParams(locationSearch).get("group_id") ?? undefined)
       : undefined);
   const [agentRoute, agentRouteKind, agentRouteId] =
@@ -445,11 +442,16 @@ export function AppShell({
       : groupId
         ? `/student/groups/${groupId}`
         : "/student#student-groups";
-  // The sidebar's Teams item opens the F1 Teams page (?mode=teams) on
-  // Studyform, keeping the group_id the Studyform link carries.
-  const teamsHref = studyformHref.includes("#")
-    ? studyformHref
-    : `${studyformHref}${studyformHref.includes("?") ? "&" : "?"}mode=teams`;
+  // The sidebar's Teams item opens the Teams page, like Agents.
+  const teamsHref = visit
+    ? `/student/teams?group_id=${visit}`
+    : teacherSurface
+      ? `/teacher/teams${routeGroupId && !visitingGroup ? `?group_id=${encodeURIComponent(routeGroupId)}` : ""}`
+      : groupId
+        ? `/student/teams?group_id=${encodeURIComponent(groupId)}`
+        : "/student#student-groups";
+  // The Teams list, Create Team and Edit Team all light Teams.
+  const teamsPage = pathname === "/student/teams" || pathname === "/teacher/teams";
   // The sidebar's Agents item opens the Agents page.
   const agentsHref = visit
     ? `/student/agents?group_id=${visit}`
@@ -835,7 +837,7 @@ export function AppShell({
   return (
     <WorkspaceActionsContext.Provider value={actionRegistry}>
       <div
-        className={`grid min-h-dvh max-[900px]:grid-cols-1 ${pathname === "/student" || pathname === "/teacher" || agentsArea ? "bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px]" : ""} ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[220px_minmax(0,1fr)]"}`}
+        className={`grid min-h-dvh max-[900px]:grid-cols-1 ${pathname === "/student" || pathname === "/teacher" || agentsArea || teamsPage ? "bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px]" : ""} ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[220px_minmax(0,1fr)]"}`}
       >
         <div className="sticky top-0 z-30 hidden h-[50px] items-center justify-center border-b-[3px] border-border bg-sidebar px-3 max-[900px]:flex">
           <button
