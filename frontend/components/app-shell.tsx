@@ -693,7 +693,7 @@ export function AppShell({
       label: t("sidebarClassroom"),
       rail: "border-ink",
       tile: "bg-surface",
-      square: "bg-ink",
+      square: "bg-white",
       items: links
         .filter((link) => ["live", "classroom", "accounts"].includes(link.icon))
         .map((link) => ({
@@ -930,7 +930,7 @@ export function AppShell({
                         <div
                           id={headingId}
                           data-tour={group.headingTour}
-                          className="flex items-center gap-1.5 px-1 font-body text-[11px] font-extrabold tracking-[0.12em] text-ink uppercase"
+                          className="flex items-center gap-1.5 px-1 font-body text-[11px] font-extrabold tracking-[0.08em] text-ink uppercase"
                         >
                           <span
                             aria-hidden="true"
@@ -1059,7 +1059,7 @@ export function AppShell({
             // "New Debate" header, the Agents pattern). Same handlers.
             <div
               data-page-actions
-              className="relative z-10 float-right mb-[22px] ml-4 flex gap-2.5"
+              className="relative z-10 mb-[22px] flex justify-end gap-2.5"
             >
               {(
                 [
