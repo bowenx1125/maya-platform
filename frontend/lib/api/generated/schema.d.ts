@@ -2998,6 +2998,16 @@ export interface components {
              * @enum {string}
              */
             ownership_scope: "group" | "personal";
+            /**
+             * Owner User Id
+             * @description The uploader.
+             */
+            owner_user_id?: string | null;
+            /**
+             * Owner Username
+             * @description The uploader's username. Filled on the two library list endpoints (GET /groups/{group_id}/knowledge-documents, GET /courses/{course_id}/workspace-documents); null elsewhere.
+             */
+            owner_username?: string | null;
             /** Safe Error Code */
             safe_error_code?: string | null;
             /** Source Filename */
@@ -3007,6 +3017,11 @@ export interface components {
              * @enum {string}
              */
             source_owner_role: "student" | "teacher";
+            /**
+             * Used By Agents
+             * @description Live Agents whose current published version uses this file, limited to Agents the caller may use (same filter as GET /knowledge-documents/{document_id}/affected-agents). Filled on the two library list endpoints; null elsewhere.
+             */
+            used_by_agents?: components["schemas"]["AffectedAgent"][] | null;
             /**
              * Visibility
              * @enum {string}
