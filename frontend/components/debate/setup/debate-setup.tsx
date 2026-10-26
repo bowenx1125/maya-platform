@@ -48,7 +48,14 @@ import {
   PageIntro,
   SectionCard,
 } from "../../ui";
-import { AgentHintBar } from "../../agent-issue-list";
+import {
+  ChecklistBadge,
+  CreateChecklist,
+  checklistLineId,
+  useCreateChecklist,
+  type ChecklistItem,
+} from "../../agent-issue-list";
+import { AGENT_ISSUE_MESSAGES, issueKey } from "../../../lib/agent-readiness";
 import {
   agentIssuesFromError,
   debateFieldProblems,
@@ -416,6 +423,8 @@ export function TeacherDebateCreate({
   const [error, setError] = useState<unknown>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [topicError, setTopicError] = useState<string | null>(null);
+  // The Agent the form problem is about (a stance), for its card's badge.
+  const [formAgent, setFormAgent] = useState<string | null>(null);
   // Bumped on every validation pass and refusal, so the bar at the top is
   // scrolled back into view even when the same problem repeats.
   const [validationAttempt, setValidationAttempt] = useState(0);
@@ -504,6 +513,7 @@ export function TeacherDebateCreate({
 
   function toggleCandidate(candidate: PublishedAgentSummary) {
     setFormError(null);
+    setFormAgent(null);
     setError(null);
     setValidationAttempt((attempt) => attempt + 1);
     const id = candidate.agent.id;
@@ -533,26 +543,31 @@ export function TeacherDebateCreate({
     event.preventDefault();
     if (rulesEditing || busy || !rulesLoaded.current) return;
     setFormError(null);
+    setFormAgent(null);
     setValidationAttempt((attempt) => attempt + 1);
+    // Every problem at once, so the mascot lists them all in one bubble.
     const topicValidation = validateDebateTopic(topic);
-    if (!topicValidation.valid) {
-      setTopicError(copy(t, "debateTopicRequired"));
-      return;
+    setTopicError(
+      topicValidation.valid ? null : copy(t, "debateTopicRequired"),
+    );
+    const blocking = selectedReadiness.some((item) => item.blocking);
+    const unstancedId = selectedIds.find((agentId) => {
+      const draft = participantDrafts[agentId] ?? defaultParticipant();
+      return draft.mode === "assigned" && !draft.stance;
+    });
+    let problem: string | null = null;
+    if (selectedIds.length < 2) problem = copy(t, "debateSelectAtLeast");
+    else if (!courseId) problem = copy(t, "debateNoCourse");
+    else if (unstancedId) {
+      problem = t("debateFieldStanceMissing", {
+        name: agentNames[unstancedId] ?? "",
+      });
+      setFormAgent(unstancedId);
     }
-    setTopicError(null);
+    if (problem) setFormError(problem);
     // The same checks the server makes, already on screen: nothing to send.
-    if (selectedReadiness.some((item) => item.blocking)) {
-      setError(null);
-      return;
-    }
-    if (selectedIds.length < 2) {
-      setFormError(copy(t, "debateSelectAtLeast"));
-      return;
-    }
-    if (!courseId) {
-      setFormError(copy(t, "debateNoCourse"));
-      return;
-    }
+    if (blocking) setError(null);
+    if (!topicValidation.valid || blocking || problem || !courseId) return;
     const payload: SetupDraftPayload = {
       topic: topicValidation.normalized,
       background,
@@ -626,11 +641,6 @@ export function TeacherDebateCreate({
     }
   }
 
-  if (loading) return <LoadingCard />;
-  if (error && candidates.length === 0) {
-    return <ErrorNotice inline error={error} onRetry={() => void load()} />;
-  }
-
   const issues = mergeIssues(
     [agentIssuesFromError(error) ?? [], selectedReadiness],
     agentNames,
@@ -644,29 +654,61 @@ export function TeacherDebateCreate({
     text: t(problem.key, problem.params ?? {}),
     href: problem.anchor ? `#${problem.anchor}` : null,
   }));
-  const lines = [
-    ...[topicError, formError].filter((line): line is string => Boolean(line)),
-    ...fieldLines,
-  ];
-  const mustFix = lines.length > 0 || issues.some((item) => item.blocking);
+  const mustFix =
+    Boolean(topicError || formError || fieldLines.length) ||
+    issues.some((item) => item.blocking);
   const otherError =
     error && !agentIssuesFromError(error) && fieldLines.length === 0
       ? error
       : null;
   const editAgentHref = (agentId: string) =>
     `/teacher/agents/${encodeURIComponent(agentId)}`;
+  const checklistItems: ChecklistItem[] = [
+    ...(topicError
+      ? [{ key: "topic", text: topicError, target: "debate-topic" }]
+      : []),
+    ...(formError
+      ? [
+          {
+            key: `form:${formError}`,
+            text: formError,
+            target: formAgent ? `debate-stance-${formAgent}` : "debate-agents",
+            agentId: formAgent ?? undefined,
+          },
+        ]
+      : []),
+    ...fieldLines.map((line) => ({
+      key: `field:${line.text}`,
+      text: line.text,
+      target: line.href ? line.href.slice(1) : undefined,
+    })),
+    ...issues.map((item) => ({
+      key: `agent:${issueKey(item)}`,
+      text: t(AGENT_ISSUE_MESSAGES[item.issue], { name: item.agent_name }),
+      agentId: item.agent_id,
+      href: editAgentHref(item.agent_id),
+      editLabel: t("agentIssueEdit", { name: item.agent_name }),
+    })),
+  ];
+  const entries = useCreateChecklist(checklistItems, validationAttempt);
+  const topicEntry = entries.find((entry) => entry.key === "topic");
+  const agentEntry = (agentId: string) =>
+    entries.find((entry) => entry.agentId === agentId && !entry.done);
+  if (loading) return <LoadingCard />;
+  if (error && candidates.length === 0) {
+    return <ErrorNotice inline error={error} onRetry={() => void load()} />;
+  }
+
   return (
     <div className={styles.pageStack}>
       <PageIntro title={copy(t, "newDebateTitle")} />
       {!rulesEditing ? (
         <PageAction name="back" href="/teacher/debates" disabled={busy} />
       ) : null}
-      <AgentHintBar
+      <CreateChecklist
         title={t(mustFix ? "debateFixBeforeCreate" : "debateAgentsHints")}
-        issues={issues}
-        lines={lines}
-        editHref={editAgentHref}
-        revealKey={validationAttempt}
+        entries={entries}
+        attempt={validationAttempt}
         alert={mustFix}
       />
       {otherError ? (
@@ -684,17 +726,29 @@ export function TeacherDebateCreate({
         <div className={styles.topicColumns}>
           <SectionCard
             title={copy(t, "debateTopic")}
-            className={`${styles.topicCard} ${sectionStyles.section}`}
+            className={`${styles.topicCard} ${sectionStyles.section} relative overflow-visible`}
             guide="debate.topic"
           >
+            <ChecklistBadge entry={topicEntry} />
             <div>
               <textarea
                 ref={topicInputRef}
                 aria-label={copy(t, "debateTopic")}
                 aria-invalid={topicError !== null}
+                aria-describedby={
+                  topicEntry && !topicEntry.done
+                    ? checklistLineId(topicEntry.n)
+                    : undefined
+                }
                 disabled={busy}
                 id="debate-topic"
-                className={styles.contextInput}
+                className={`${styles.contextInput} ${
+                  topicEntry
+                    ? topicEntry.done
+                      ? "border-ok! shadow-[0_0_0_3px_#E3FBE9]!"
+                      : "border-err! shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
+                    : ""
+                }`}
                 onChange={(event) => {
                   setTopic(event.target.value);
                   if (topicError) setTopicError(null);
@@ -738,16 +792,22 @@ export function TeacherDebateCreate({
           {candidates.length === 0 ? (
             <EmptyCard title={copy(t, "debateNoCandidates")} />
           ) : (
-            <div className={styles.agentOrderList}>
+            <div
+              id="debate-agents"
+              tabIndex={-1}
+              className={`${styles.agentOrderList} overflow-visible outline-none`}
+            >
               {candidates.map((candidate) => {
                 const id = candidate.agent.id;
                 const order = selectedIds.indexOf(id);
                 const selected = order !== -1;
                 const draft = participantDrafts[id] ?? defaultParticipant();
+                const problem = selected ? agentEntry(id) : undefined;
                 return (
                   <div
                     key={id}
-                    className={`${styles.agentOrderRow} ${selected ? styles.agentOrderSelected : ""}`}
+                    data-invalid={problem ? true : undefined}
+                    className={`${styles.agentOrderRow} ${selected ? styles.agentOrderSelected : ""} relative ${problem ? "border-err! shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!" : ""}`}
                     onClick={(event) => {
                       if (
                         !busy &&
@@ -764,8 +824,12 @@ export function TeacherDebateCreate({
                       disabled={busy}
                       aria-label={candidate.agent.name}
                       aria-pressed={selected}
+                      aria-describedby={
+                        problem ? checklistLineId(problem.n) : undefined
+                      }
                       onClick={() => toggleCandidate(candidate)}
                     >
+                      <ChecklistBadge entry={problem} />
                       <span className={styles.orderNumber} aria-hidden="true">
                         {selected ? order + 1 : "+"}
                       </span>
@@ -817,6 +881,7 @@ export function TeacherDebateCreate({
                         </div>
                         {draft.mode === "assigned" ? (
                           <select
+                            id={`debate-stance-${id}`}
                             aria-label={`${candidate.agent.name} ${copy(t, "debateAssigned")}`}
                             disabled={busy}
                             onChange={(event) =>
