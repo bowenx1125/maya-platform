@@ -36,6 +36,7 @@ import {
   SIDEBAR_MOBILE_QUERY,
   SIDEBAR_REVEAL_EVENT,
 } from "../lib/sidebar-reveal";
+import { NoticeTraySlot } from "./ui/error-kit";
 
 type ActionRegistration = {
   owner: string;
@@ -1131,6 +1132,7 @@ export function AppShell({
             </div>
           ) : null}
           <ViewTransition>{children}</ViewTransition>
+          <NoticeTraySlot />
         </main>
         <SecretDoor />
         {isStudent && user ? (
