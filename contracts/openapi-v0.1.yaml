@@ -11783,6 +11783,16 @@ components:
         can_edit:
           type: boolean
           title: Can Edit
+        can_delete:
+          type: boolean
+          title: Can Delete
+          description: Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group).
+        last_edited_by_name:
+          title: Last Edited By Name
+          type:
+          - string
+          - 'null'
+          description: No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone.
         created_at:
           type: string
           format: date-time
@@ -11829,6 +11839,8 @@ components:
       - current_version_seq
       - member_count
       - can_edit
+      - can_delete
+      - last_edited_by_name
       - created_at
       - updated_at
       - members
@@ -11952,6 +11964,20 @@ components:
         can_edit:
           type: boolean
           title: Can Edit
+        can_delete:
+          type: boolean
+          title: Can Delete
+          description: Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group).
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+        last_edited_by_name:
+          title: Last Edited By Name
+          type:
+          - string
+          - 'null'
+          description: No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone.
       additionalProperties: false
       type: object
       required:
@@ -11968,6 +11994,9 @@ components:
       - current_version_seq
       - member_count
       - can_edit
+      - can_delete
+      - updated_at
+      - last_edited_by_name
       title: TeamSummary
     PublishedAgentAuthor:
       properties:
