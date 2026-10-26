@@ -18255,6 +18255,19 @@
             "type": "boolean",
             "title": "Can Edit"
           },
+          "can_delete": {
+            "type": "boolean",
+            "title": "Can Delete",
+            "description": "Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group)."
+          },
+          "last_edited_by_name": {
+            "title": "Last Edited By Name",
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone."
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -18312,6 +18325,8 @@
           "current_version_seq",
           "member_count",
           "can_edit",
+          "can_delete",
+          "last_edited_by_name",
           "created_at",
           "updated_at",
           "members",
@@ -18395,6 +18410,44 @@
         ],
         "title": "TeamMemberInput"
       },
+      "TeamFaceMember": {
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id",
+            "description": "Null once the Agent itself is deleted; the Team version keeps its snapshot."
+          },
+          "material_theme": {
+            "title": "Material Theme",
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "avatar_config.material_theme of the Team version's member snapshot."
+          },
+          "is_leader": {
+            "type": "boolean",
+            "title": "Is Leader"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "agent_id",
+          "material_theme",
+          "is_leader"
+        ],
+        "title": "TeamFaceMember",
+        "description": "One face on a Team card: the member's Agent and its frozen avatar theme."
+      },
       "TeamSummary": {
         "properties": {
           "id": {
@@ -18472,6 +18525,33 @@
           "can_edit": {
             "type": "boolean",
             "title": "Can Edit"
+          },
+          "can_delete": {
+            "type": "boolean",
+            "title": "Can Delete",
+            "description": "Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group)."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "last_edited_by_name": {
+            "title": "Last Edited By Name",
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone."
+          },
+          "members": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "$ref": "#/components/schemas/TeamFaceMember"
+            },
+            "title": "Members",
+            "description": "Up to four members of the current version, Leader first, then by position. Read-only card faces; TeamDetail.members keeps the full list."
           }
         },
         "additionalProperties": false,
@@ -18489,7 +18569,11 @@
           "current_version_id",
           "current_version_seq",
           "member_count",
-          "can_edit"
+          "can_edit",
+          "can_delete",
+          "updated_at",
+          "last_edited_by_name",
+          "members"
         ],
         "title": "TeamSummary"
       },

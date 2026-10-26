@@ -4932,6 +4932,16 @@ export interface components {
             /** Can Edit */
             can_edit: boolean;
             /**
+             * Can Delete
+             * @description Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group).
+             */
+            can_delete: boolean;
+            /**
+             * Last Edited By Name
+             * @description No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone.
+             */
+            last_edited_by_name: string | null;
+            /**
              * Created At
              * Format: date-time
              */
@@ -4996,6 +5006,24 @@ export interface components {
             /** Position */
             position: number;
         };
+        /**
+         * TeamFaceMember
+         * @description One face on a Team card: the member's Agent and its frozen avatar theme.
+         */
+        TeamFaceMember: {
+            /**
+             * Agent Id
+             * @description Null once the Agent itself is deleted; the Team version keeps its snapshot.
+             */
+            agent_id: string | null;
+            /**
+             * Material Theme
+             * @description avatar_config.material_theme of the Team version's member snapshot.
+             */
+            material_theme: string | null;
+            /** Is Leader */
+            is_leader: boolean;
+        };
         /** TeamSummary */
         TeamSummary: {
             /**
@@ -5042,6 +5070,26 @@ export interface components {
             member_count: number;
             /** Can Edit */
             can_edit: boolean;
+            /**
+             * Can Delete
+             * @description Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group).
+             */
+            can_delete: boolean;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Last Edited By Name
+             * @description No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone.
+             */
+            last_edited_by_name: string | null;
+            /**
+             * Members
+             * @description Up to four members of the current version, Leader first, then by position. Read-only card faces; TeamDetail.members keeps the full list.
+             */
+            members: components["schemas"]["TeamFaceMember"][];
         };
         /** PublishedAgentAuthor */
         PublishedAgentAuthor: {
