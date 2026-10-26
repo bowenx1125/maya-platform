@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { DismissibleAlert } from "../dismissible-alert";
-import { KindSticker } from "../ui/error-kit";
+import { KindSticker, NoticeTraySlot } from "../ui/error-kit";
 import { apiErrorMessage, PlatformApiError } from "../../lib/api";
 import { cn } from "../../lib/utils";
 import { useT } from "../../lib/i18n";
@@ -806,6 +806,9 @@ export function AudienceInteractionForm({
             </div>
           )}
         </section>
+        {/* Below 900px the shared notice tray sits here in the page flow,
+            inside the page padding (14px sides, 40px bottom) like the mock. */}
+        <NoticeTraySlot />
       </div>
     </main>
   );
