@@ -3613,7 +3613,9 @@ export function DebateStage({
               {providerGate.loading ? (
                 <span>{labels.providerGateLoading}</span>
               ) : providerGate.error ? (
-                <span role="alert">{providerGate.error}</span>
+                <DismissibleAlert as="span">
+                  {providerGate.error}
+                </DismissibleAlert>
               ) : providerGate.value?.items.length ? (
                 <ul>
                   {providerGate.value.items
