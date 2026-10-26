@@ -168,7 +168,9 @@ export function Notice({
         : SAME_NOTICE,
     tone === "error" || tone === "warning",
   );
-  if (closed || (!inline && !tray)) return null;
+  // No tray (shell-less surfaces like immerse boot): keep the notice in
+  // flow. Line below used to return null here and wiped immerse not-found.
+  if (closed) return null;
   const sticker: ErrorKind | undefined =
     badge !== undefined
       ? "field"

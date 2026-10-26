@@ -165,4 +165,11 @@ describe("U3 tray: in flow below 900px, fixed from 900px", () => {
     await flush();
     expect(scroll).not.toHaveBeenCalled();
   });
+
+  it("falls back to in-flow notice when no tray slot exists (immerse boot)", async () => {
+    setViewport({ width: 1440 });
+    render(<ErrorNotice error={new Error("missing debate")} />);
+    await flush();
+    expect(screen.getByRole("alert").textContent).toMatch(/missing debate/i);
+  });
 });

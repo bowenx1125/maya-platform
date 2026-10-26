@@ -33,7 +33,7 @@ import { expectedTurnCount } from "../../../../../lib/debate-rounds";
 const BOOT =
   "grid content-center justify-items-start gap-[18px] w-[min(680px,calc(100%_-_40px))] min-h-screen mx-auto my-0";
 const BOOT_BACK =
-  "[color:var(--muted)] [font-size:0.88rem] hover:[color:var(--ink)]";
+  "secondary-action inline-flex min-h-11 items-center no-underline";
 const REPORT_DIALOG =
   "w-[min(1040px,calc(100vw_-_40px))] max-h-[calc(100dvh_-_48px)] [padding:var(--workspace-inset)] border border-solid [border-color:var(--line)] rounded-[24px] [background:var(--paper,#fcfaf6)] [color:var(--ink)] shadow-[0_24px_80px_rgba(29,26,23,0.2)] backdrop:bg-[rgba(29,26,23,0.35)] backdrop:backdrop-blur-[4px] [&>section+section]:[margin-top:var(--workspace-gap)]";
 const REPORT_ACTIONS =
