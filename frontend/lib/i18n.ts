@@ -641,6 +641,7 @@ const enMessages = {
   debateParamsEmpty: "Empty = not sent",
   debateParamsOmit: "Do not send to the model",
   debateParamsVoice: "Voice",
+  debateParamsDebate: "Debate",
   debateFieldOther: "The field “{field}” is not valid.",
   errorEditTeam: "Edit Team “{name}”",
   errorChatFailed:

@@ -307,7 +307,7 @@ describe("teacher debate preview", () => {
     expect(screen.queryByRole("link", { name: "Immerse" })).toBeNull();
   });
 
-  it("retries through a labeled icon button and keeps it disabled while retrying", () => {
+  it("retries through an icon + text button and keeps it disabled while retrying", () => {
     const retry = vi.fn();
     const view = render(
       <DebatePreview
@@ -318,7 +318,7 @@ describe("teacher debate preview", () => {
     );
     const button = screen.getByRole("button", { name: "Retry turn" });
     expect(button.querySelector("svg")).toBeTruthy();
-    expect(button.textContent).toBe("");
+    expect(button.textContent).toBe("Retry turn");
     fireEvent.click(button);
     expect(retry).toHaveBeenCalledWith("turn-a");
     view.rerender(
@@ -332,6 +332,7 @@ describe("teacher debate preview", () => {
     const busy = screen.getByRole("button", { name: "Retrying…" });
     expect(busy).toHaveProperty("disabled", true);
     expect(busy.getAttribute("aria-busy")).toBe("true");
+    expect(busy.textContent).toBe("Retrying…");
     fireEvent.click(busy);
     expect(retry).toHaveBeenCalledTimes(1);
   });

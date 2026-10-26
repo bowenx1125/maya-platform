@@ -313,26 +313,10 @@
   pointer-events: none;
 }
 
+/* Capsule visuals live in Tailwind on barrage-lane.tsx (BULLET). */
 .bullet,
 .bulletStatic {
   position: absolute;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 3px 12px 4px;
-  border-radius: 999px;
-  background: rgba(252, 250, 245, 0.82);
-  color: var(--ink, #1d1d1f);
-  font-size: 0.9rem;
-  line-height: 1.55;
-  white-space: nowrap;
-}
-
-.bullet b,
-.bulletStatic b {
-  color: #a63328;
-  font-size: 0.78rem;
-  font-weight: 600;
 }
 
 .bullet {

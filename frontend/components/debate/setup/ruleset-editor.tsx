@@ -2,10 +2,26 @@
 
 import { useState } from "react";
 import { ReportMarkdown } from "../../report/report-markdown";
-import { IconArrowLeft, IconCheck, IconEdit } from "../../quiet-icons";
-import { SectionCard } from "../../ui";
-import styles from "./ruleset-editor.module.css";
-import sectionStyles from "./create-section.module.css";
+import {
+  IconArrowLeft,
+  IconCheck,
+  IconEdit,
+  IconGlobe,
+} from "../../quiet-icons";
+import { cn } from "../../../lib/utils";
+import {
+  CREATE_SEG,
+  CREATE_SEG_BUTTON,
+  CREATE_SMALL_BUTTON,
+  CREATE_TEXTAREA,
+} from "../debate-chrome";
+import { CreateCard } from "./create-card";
+
+/** `.ta.rules`: the ruleset box, monospace, at least 200px. */
+const RULES_BOX = cn(
+  CREATE_TEXTAREA,
+  "h-[200px] min-h-[200px] overflow-auto font-mono text-[13px] leading-[1.55] whitespace-pre-wrap",
+);
 
 export type TeachingPrompts = { zh: string; en: string };
 
@@ -46,21 +62,18 @@ export function RulesetEditor({
   // Ruleset chrome stays on this card: edit → back → checkmark when dirty.
   // Do not register left-rail Back/Done here — those belong to the whole Debate.
   return (
-    <SectionCard
+    <CreateCard
       title="Debate Ruleset"
-      className={`${styles.card} ${sectionStyles.section}`}
       guide="debate.ruleset"
       action={
-        <div className={styles.actions}>
-          <div
-            className={styles.languageSwitch}
-            role="group"
-            aria-label="Language"
-          >
+        <div className="flex shrink-0 items-center gap-2.5">
+          <div className={CREATE_SEG} role="group" aria-label="Language">
+            <IconGlobe size={18} />
             {(["zh", "en"] as const).map((value) => (
               <button
                 key={value}
                 type="button"
+                className={CREATE_SEG_BUTTON}
                 disabled={disabled || editing}
                 aria-pressed={language === value}
                 onClick={() => onLanguageChange(value)}
@@ -72,7 +85,7 @@ export function RulesetEditor({
           {editing ? (
             <button
               type="button"
-              className={`${styles.action} ${styles.iconAction}`}
+              className={CREATE_SMALL_BUTTON}
               disabled={disabled}
               aria-label={dirty ? "Save" : "Back"}
               data-ui-guide={
@@ -80,12 +93,13 @@ export function RulesetEditor({
               }
               onClick={dirty ? save : cancel}
             >
-              {dirty ? <IconCheck /> : <IconArrowLeft />}
+              {dirty ? <IconCheck size={14} /> : <IconArrowLeft size={14} />}
+              <span aria-hidden="true">{dirty ? "Save" : "Back"}</span>
             </button>
           ) : (
             <button
               type="button"
-              className={`${styles.action} ${styles.iconAction}`}
+              className={CREATE_SMALL_BUTTON}
               disabled={disabled}
               aria-label="Edit"
               data-ui-guide="debate.rulesetEdit"
@@ -95,17 +109,18 @@ export function RulesetEditor({
                 onEditingChange(true);
               }}
             >
-              <IconEdit />
+              <IconEdit size={14} />
+              <span aria-hidden="true">Edit</span>
             </button>
           )}
         </div>
       }
     >
-      <div id="ruleset-content" className={styles.content}>
+      <div id="ruleset-content" className="mt-3">
         {editing ? (
           <textarea
             aria-label={language === "zh" ? "中文规则" : "English rules"}
-            className={styles.raw}
+            className={cn(RULES_BOX, "mt-0 min-h-[320px]")}
             value={draft[language]}
             disabled={disabled}
             spellCheck={false}
@@ -114,7 +129,7 @@ export function RulesetEditor({
             }
           />
         ) : (
-          <div className={styles.document}>
+          <div className={cn(RULES_BOX, "mt-0 max-h-[420px] overflow-auto")}>
             <ReportMarkdown
               label={language === "zh" ? "中文规则" : "English rules"}
             >
@@ -123,6 +138,6 @@ export function RulesetEditor({
           </div>
         )}
       </div>
-    </SectionCard>
+    </CreateCard>
   );
 }

@@ -701,24 +701,7 @@
   font-size: 0.78rem;
 }
 
-.streamReplay {
-  flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1;
-  cursor: pointer;
-}
 
-.streamReplay:hover {
-  border-color: var(--indigo);
-  color: var(--indigo);
-}
 
 /* Deliberately larger than the old transcript text: this is now the only
    place the speech appears, and it is read from across a room. */

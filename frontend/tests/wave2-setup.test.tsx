@@ -38,14 +38,6 @@ import {
 const courseId = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b";
 import { AppShell } from "../components/app-shell";
 
-/** Back, Done and New all sit in the page header (data-page-actions). */
-function pageActions() {
-  return within(
-    (document.querySelector("[data-page-actions]") as HTMLElement | null) ??
-      document.createElement("div"),
-  );
-}
-
 function render(ui: Parameters<typeof renderComponent>[0]) {
   return renderComponent(<AppShell role="teacher">{ui}</AppShell>);
 }
@@ -196,11 +188,13 @@ describe("Wave 2 teacher debate setup", () => {
     );
     expect(screen.getByText("4 Rounds")).toBeTruthy();
     expect(
-      link.closest("section")?.querySelector(".section-card-header"),
+      link.closest("section")?.querySelector(".section-card-header") ?? null,
     ).toBeNull();
     expect(
       (
-        await waitFor(() => pageActions().getByRole("link", { name: "New" }))
+await within(screen.getByRole("main")).findByRole("link", {
+          name: "New",
+        })
       ).getAttribute("href"),
     ).toBe("/teacher/debates/new");
   });
@@ -592,28 +586,25 @@ describe("Wave 2 teacher debate setup", () => {
     for (const scope of [voiced, silent]) {
       const enter = within(scope).getByRole("link", { name: "Immerse" });
       const remove = within(scope).getByRole("button", { name: "Delete" });
+      // Final redesign: icon + visible label (same accessible name).
       for (const control of [enter, remove]) {
-        expect(control.getAttribute("title")).toBe(
-          control.getAttribute("aria-label"),
-        );
-        expect(control.textContent).toBe("");
+        expect(control.textContent).toBe(control.getAttribute("aria-label"));
         expect(control.querySelector("svg[aria-hidden='true']")).toBeTruthy();
       }
       expect(within(scope).queryByText("Preview")).toBeNull();
     }
     // Rebirth is a recycle icon, still named Rebirth.
     const rebirth = within(finished).getByRole("button", { name: "Rebirth" });
-    expect(rebirth.getAttribute("title")).toBe("Rebirth");
-    expect(rebirth.textContent).toBe("");
+    expect(rebirth.textContent).toBe("Rebirth");
     expect(rebirth.querySelector("svg[aria-hidden='true']")).toBeTruthy();
     // Audio present: a bell; clicking it devocalizes.
     const bell = within(voiced).getByRole("button", { name: "Devocalize" });
     expect(bell.getAttribute("data-vocalized")).toBe("true");
-    expect(bell.getAttribute("title")).toBe("Devocalize");
+    expect(bell.textContent).toBe("Devocalize");
     // Audio removed: the bell is struck through; clicking it revocalizes.
     const bellOff = within(silent).getByRole("button", { name: "Revocalize" });
     expect(bellOff.getAttribute("data-vocalized")).toBe("false");
-    expect(bellOff.getAttribute("title")).toBe("Revocalize");
+    expect(bellOff.textContent).toBe("Revocalize");
     expect(bellOff.querySelectorAll("path").length).toBe(
       bell.querySelectorAll("path").length + 1,
     );
@@ -1102,16 +1093,14 @@ it("removes bulk Refresh and never retries stalled records when reading the list
   render(<TeacherDebateList />);
   await screen.findByText("Needs recovery");
   expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
+  // Final redesign: New is a shared Button in the list title row.
   expect(
     (
-      await waitFor(() => pageActions().getByRole("link", { name: "New" }))
+await within(screen.getByRole("main")).findByRole("link", {
+        name: "New",
+      })
     ).getAttribute("href"),
   ).toBe("/teacher/debates/new");
-  expect(
-    within(screen.getByRole("main"))
-      .queryAllByRole("link", { name: "New" })
-      .filter((el) => !el.closest("[data-page-actions]")),
-  ).toHaveLength(0);
   fireEvent.focus(window);
   await waitFor(() => expect(api.debates).toHaveBeenCalledTimes(2));
   expect(api.remakeDebate).not.toHaveBeenCalled();

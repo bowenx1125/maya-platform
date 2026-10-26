@@ -7,10 +7,22 @@ import { teachingRoundLabel } from "../../../lib/debate-rounds";
 import type { SegmentEvidence } from "../../../lib/evidence-grading";
 import { SegmentGrade } from "../../evidence/segment-grade";
 
-import { ErrorNotice, Notice, SectionCard, StatusBadge } from "../../ui";
-import { tm } from "../../../lib/i18n";
-import { IconRefresh } from "../../quiet-icons";
-import styles from "./debate-preview.module.css";
+import { ErrorNotice, Notice } from "../../ui";
+import { statusLabel, tm } from "../../../lib/i18n";
+import { cn } from "../../../lib/utils";
+import { buttonVariants } from "../../ui/button";
+import { IconBust, IconEye, IconPlay, IconRefresh } from "../../quiet-icons";
+import {
+  DEBATE_BUTTON,
+  DEBATE_PAGE,
+  DEBATE_PRIMARY,
+  DEBATE_TAG,
+  DEBATE_TAG_TONE,
+  PREVIEW_TAPE,
+  PREVIEW_TONES,
+  PREVIEW_TURN,
+  PREVIEW_TURN_PENDING,
+} from "../debate-chrome";
 
 export type DebatePreviewProgress = {
   prepared_turns: number;
@@ -99,62 +111,141 @@ export function DebatePreview({
   );
   const firstFailed = audioFailed[0];
 
+  const tones = new Map(
+    detail.participants.map((participant, index) => [
+      participant.id,
+      PREVIEW_TONES[index % PREVIEW_TONES.length],
+    ]),
+  );
+  const perFighter = Math.max(
+    1,
+    Math.ceil(
+      progress.expected_turns / Math.max(1, detail.participants.length),
+    ),
+  );
+  const percent =
+    progress.expected_turns > 0
+      ? Math.min(100, (progress.prepared_turns / progress.expected_turns) * 100)
+      : 0;
+
   return (
-    <div className={styles.page} data-testid="debate-preview">
-      <div className={styles.header}>
-        <div>
-          <h1>{detail.topic}</h1>
-        </div>
-        <div className={styles.headerActions}>
+    <div className={DEBATE_PAGE}>
+      <div className={PREVIEW_TAPE} data-testid="debate-preview">
+        <div className="flex items-center gap-4 max-[600px]:flex-wrap">
+          <h1 className="m-0 max-w-none min-w-0 flex-1 font-display text-[26px] leading-[normal] font-bold max-[600px]:text-xl">
+            {detail.topic}
+          </h1>
           {actions}
-          <div className={styles.navigationActions}>
-            {progress.ready ? (
-              <Link className="primary-action" href={openClassroomHref}>
-                Immerse
-              </Link>
-            ) : null}
+          {progress.ready ? (
+            <Link
+              className={cn(
+                buttonVariants({ variant: "default" }),
+                DEBATE_PRIMARY,
+                "py-3 pr-[22px] pl-4 text-base leading-[normal]",
+              )}
+              href={openClassroomHref}
+            >
+              <IconPlay size={18} />
+              Immerse
+            </Link>
+          ) : null}
+        </div>
+
+        {detail.participants.length > 0 ? (
+          <div className="mt-4 grid grid-cols-3 gap-3 max-[600px]:grid-cols-1">
+            {detail.participants.map((participant) => {
+              const done = turns.filter(
+                (turn) =>
+                  turn.participant_id === participant.id && turnPrepared(turn),
+              ).length;
+              return (
+                <div
+                  key={participant.id}
+                  className="flex min-w-0 items-center gap-2.5 rounded-full border-[2.5px] border-[#111] bg-(--tone) py-1.5 pr-4 pl-1.5 shadow-[3px_4px_0_#111]"
+                  style={
+                    {
+                      "--tone": tones.get(participant.id),
+                    } as React.CSSProperties
+                  }
+                >
+                  <span
+                    className="box-border grid size-11 flex-none place-items-end-center overflow-hidden rounded-full border-[2.5px] border-[#111] bg-white [&_svg]:w-[34px]"
+                    aria-hidden="true"
+                  >
+                    <IconBust size={34} />
+                  </span>
+                  <div className="min-w-0 font-body text-base leading-[normal]">
+                    <b className="font-body text-[15px] leading-[normal] font-extrabold">
+                      {participant.agent_name}
+                    </b>
+                    <div className="mt-[5px] flex gap-[3px]" aria-hidden="true">
+                      {Array.from({ length: perFighter }, (_, index) => (
+                        <i
+                          key={index}
+                          className={cn(
+                            "box-border size-[11px] rounded-full border-2 border-[#111]",
+                            index < done ? "bg-[#111]" : "bg-white",
+                          )}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        <div className="mt-4 flex justify-center" aria-hidden="true">
+          <div className="relative box-border h-3.5 w-full overflow-hidden rounded-full border-[2.5px] border-[#111] bg-white">
+            <i
+              className="absolute inset-y-0 left-0 rounded-full bg-[#67E8F9]"
+              style={{ width: `${percent}%` }}
+            />
           </div>
         </div>
-      </div>
 
-      {error ? <ErrorNotice error={error} /> : null}
+        {error ? (
+          <div className="mt-4">
+            <ErrorNotice error={error} />
+          </div>
+        ) : null}
 
-      {firstFailed ? (
-        <Notice
-          inline
-          tone="error"
-          action={
-            onRetryTurn ? (
-              <button
-                className="inline-button"
-                type="button"
-                data-testid="preview-audio-failed-retry"
-                disabled={retryingTurnId !== null}
-                onClick={() => onRetryTurn(firstFailed.id)}
-              >
-                Retry
-              </button>
-            ) : null
-          }
-        >
-          <span data-testid="preview-audio-failed">
-            {tm("debatePreviewAudioFailed", {
-              count: audioFailed.length,
-              code: firstFailed.safe_error_code ?? "turn_generation_failed",
-            })}
-          </span>
-        </Notice>
-      ) : null}
+        {firstFailed ? (
+          <div className="mt-4">
+            <Notice
+              inline
+              tone="error"
+              action={
+                onRetryTurn ? (
+                  <button
+                    className="inline-button"
+                    type="button"
+                    data-testid="preview-audio-failed-retry"
+                    disabled={retryingTurnId !== null}
+                    onClick={() => onRetryTurn(firstFailed.id)}
+                  >
+                    Retry
+                  </button>
+                ) : null
+              }
+            >
+              <span data-testid="preview-audio-failed">
+                {tm("debatePreviewAudioFailed", {
+                  count: audioFailed.length,
+                  code: firstFailed.safe_error_code ?? "turn_generation_failed",
+                })}
+              </span>
+            </Notice>
+          </div>
+        ) : null}
 
-      {turns.length === 0 && !background ? (
-        <SectionCard>
-          <p className={styles.empty}>No saved turns yet.</p>
-        </SectionCard>
-      ) : (
-        <div className={styles.turns}>
+        <div className="mt-4 grid gap-3">
           {background ? <BackgroundCard text={background} /> : null}
           {turns.length === 0 ? (
-            <p className={styles.empty}>No saved turns yet.</p>
+            <p className="m-0 font-body text-sm text-[#6B7280]">
+              No saved turns yet.
+            </p>
           ) : null}
           {turns.map((turn) => (
             <PreviewTurnCard
@@ -162,28 +253,31 @@ export function DebatePreview({
               participantName={
                 participantNames.get(turn.participant_id) ?? "Agent"
               }
+              pendingShimmer={!progress.ready}
               retryBusy={retryingTurnId !== null}
               retrying={retryingTurnId === turn.id}
               teachingProtocol={detail.teaching_protocol === "four_round_v1"}
+              tone={tones.get(turn.participant_id) ?? PREVIEW_TONES[0]}
               turn={turn}
               onRetry={onRetryTurn}
             />
           ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
 function BackgroundCard({ text }: { text: string }) {
   return (
-    <article className={styles.turnCard} data-testid="preview-background">
-      <div className={styles.turnHeader}>
-        <div>
-          <h2>Background</h2>
-        </div>
-      </div>
-      <p className={styles.speech}>{text}</p>
+    <article
+      className="rounded-[18px] border-[2.5px] border-[#111] bg-[#FFF7CC] px-3.5 py-3"
+      data-testid="preview-background"
+    >
+      <h2 className="m-0 font-display text-[15px] leading-[normal] font-bold">
+        Background
+      </h2>
+      <p className="mt-1 mb-0 font-body text-sm leading-[normal]">{text}</p>
     </article>
   );
 }
@@ -195,7 +289,11 @@ function PreviewTurnCard({
   retrying,
   onRetry,
   teachingProtocol,
+  tone,
+  pendingShimmer,
 }: {
+  tone: string;
+  pendingShimmer: boolean;
   turn: DebatePreviewTurn;
   participantName: string;
   retryBusy: boolean;
@@ -221,44 +319,57 @@ function PreviewTurnCard({
       "tts_result_download_failed",
       "tts_audio_invalid",
     ].includes(turn.safe_error_code ?? "");
+  const tagTone = turn.audio_ready ? "ready" : failed ? "stalled" : "thinking";
   return (
     <article
-      className={styles.turnCard}
+      className={cn(
+        PREVIEW_TURN,
+        pendingShimmer && !savedSpeech && PREVIEW_TURN_PENDING,
+      )}
+      style={{ "--tone": tone } as React.CSSProperties}
       data-testid={`preview-turn-${turn.id}`}
     >
-      <div className={styles.turnHeader}>
-        <div>
-          <span className={styles.turnRound}>
-            Round {turn.round_no}
-            {teachingProtocol
-              ? ` · ${teachingRoundLabel(turn.round_no, "en")}`
-              : ""}
-          </span>
-          <h2>{participantName}</h2>
-        </div>
-        <div className={styles.turnStatus}>
-          <StatusBadge
-            status={
-              turn.audio_ready
-                ? "Audio Ready"
-                : failed
-                  ? "Audio Not Ready"
-                  : "Preparing"
-            }
-            tone={turn.audio_ready ? "good" : failed ? "bad" : "warn"}
-          />
-        </div>
+      <div className="flex items-center gap-2.5">
+        <span className="rounded-full border-2 border-[#111] bg-(--tone) px-[7px] py-0.5 font-body text-[11px] leading-[normal] font-extrabold text-[#111]">
+          Round {turn.round_no}
+          {teachingProtocol
+            ? ` · ${teachingRoundLabel(turn.round_no, "en")}`
+            : ""}
+        </span>
+        <h2 className="m-0 min-w-0 font-display text-base leading-[normal] font-bold">
+          {participantName}
+        </h2>
+        <span
+          className={cn(
+            DEBATE_TAG,
+            DEBATE_TAG_TONE[tagTone],
+            "ml-auto px-[9px]",
+            pendingShimmer && tagTone === "thinking" && "bg-[#FEF9C3]",
+          )}
+        >
+          {statusLabel(
+            turn.audio_ready
+              ? "Audio Ready"
+              : failed
+                ? "Audio Not Ready"
+                : "Preparing",
+          )}
+        </span>
       </div>
 
       {savedSpeech ? (
-        <p className={styles.speech}>{turn.speech}</p>
+        <p className="mt-1.5 mb-0 font-body text-sm leading-[1.5]">
+          {turn.speech}
+        </p>
       ) : (
-        <p className={styles.missingSpeech}>Speech is not available yet.</p>
+        <p className="mt-1.5 mb-0 font-body text-sm leading-[1.5] text-[#6B7280] italic">
+          Speech is not available yet.
+        </p>
       )}
 
       {failed ? (
         <div
-          className={styles.errorRow}
+          className="mt-2 flex items-center gap-2.5 rounded-[14px] border-2 border-[#111] bg-[#FFE4E4] px-2 py-1.5 font-body text-[13px] leading-[normal] font-medium"
           role="status"
           data-text-fallback-ready={textFallbackReady ? "true" : "false"}
         >
@@ -266,20 +377,27 @@ function PreviewTurnCard({
             {savedSpeech ? "Audio needs attention." : "Speech needs attention."}
           </span>
           {turn.safe_error_code ? (
-            <code data-testid="preview-safe-error-code">
+            <code
+              className="font-mono text-xs font-bold text-[#B91C1C]"
+              data-testid="preview-safe-error-code"
+            >
               {turn.safe_error_code}
             </code>
           ) : null}
           {onRetry ? (
             <button
-              className={`icon-action ${styles.retryButton}`}
+              className={cn(
+                DEBATE_BUTTON,
+                "ml-auto py-1 pr-2.5 pl-2.5 text-xs leading-[normal]",
+              )}
               aria-label={retrying ? "Retrying…" : "Retry turn"}
               aria-busy={retrying}
               disabled={retryBusy}
               onClick={() => onRetry(turn.id)}
               type="button"
             >
-              <IconRefresh />
+              <IconRefresh size={18} />
+              {retrying ? "Retrying…" : "Retry turn"}
             </button>
           ) : null}
         </div>
@@ -303,33 +421,54 @@ function RagCheck({
     sources.map((source) => [source.source_id, source]),
   );
   return (
-    <details className={styles.ragCheck}>
-      <summary>
-        Check RAG
-        <span className={styles.evidenceCount}>{sourceById.size}</span>
+    <details className="mt-2.5 border-0 border-t-2 border-dashed border-[#111] pt-2.5 font-body [&_summary]:min-h-0 [&_summary]:p-0">
+      <summary
+        className={cn(
+          DEBATE_BUTTON,
+          "list-none py-1 pr-2.5 pl-2 text-xs leading-[normal] [&::-webkit-details-marker]:hidden",
+        )}
+        data-testid="preview-check-rag"
+      >
+        <IconEye size={18} />
+        <span>Check RAG</span>
+        <span className="ml-0.5 inline-grid h-[1.35rem] min-w-[1.35rem] place-items-center rounded-full border-2 border-[#111] bg-[#FFE14D] text-[11px] font-extrabold">
+          {sourceById.size}
+        </span>
       </summary>
-      <div className={styles.segmentList}>
+      <div className="mt-2.5 grid gap-2.5">
         {segments.map((segment, index) => (
-          <div className={styles.segment} key={`${index}-${segment.text}`}>
+          <div
+            className="grid min-w-0 gap-2 border-0 border-l-[3px] border-[#FFE14D] pl-2.5"
+            key={`${index}-${segment.text}`}
+          >
             <SegmentGrade segment={segment} />
-            <p>{segment.text}</p>
-            <div className={styles.segmentSources}>
+            <p className="m-0 text-sm leading-[1.5] [overflow-wrap:anywhere] whitespace-pre-wrap">
+              {segment.text}
+            </p>
+            <div className="grid gap-2">
               {segment.source_ids.length === 0 ? (
-                <span className={styles.noSource}>General reasoning</span>
+                <span className="text-[13px] text-[#6B7280]">
+                  General reasoning
+                </span>
               ) : (
                 segment.source_ids.map((sourceId) => {
                   const source = sourceById.get(sourceId);
                   return source ? (
-                    <div className={styles.source} key={sourceId}>
+                    <div
+                      className="grid min-w-0 gap-0.5 rounded-[12px] border-2 border-[#111] bg-[#F1F7FF] p-2.5 [&>*]:[overflow-wrap:anywhere]"
+                      key={sourceId}
+                    >
                       <strong>{source.source_filename}</strong>
-                      <span>
+                      <span className="text-[13px] text-[#6B7280]">
                         {source.version_label} · query:{" "}
                         {source.query_text ?? "none recorded"}
                       </span>
-                      <small>{source.excerpt}</small>
+                      <small className="text-[13px] leading-[1.45] whitespace-pre-wrap text-[#6B7280]">
+                        {source.excerpt}
+                      </small>
                     </div>
                   ) : (
-                    <span className={styles.noSource} key={sourceId}>
+                    <span className="text-[13px] text-[#6B7280]" key={sourceId}>
                       Source unavailable
                     </span>
                   );
@@ -343,15 +482,18 @@ function RagCheck({
   );
 }
 
+function turnPrepared(turn: DebatePreviewTurn): boolean {
+  return (
+    ["final_ready", "ready", "completed"].includes(turn.generation_status) &&
+    Boolean(turn.speech.trim())
+  );
+}
+
 function deriveProgress(
   turns: readonly DebatePreviewTurn[],
 ): DebatePreviewProgress {
   const expected = turns.length;
-  const prepared = turns.filter(
-    (turn) =>
-      ["final_ready", "ready", "completed"].includes(turn.generation_status) &&
-      Boolean(turn.speech.trim()),
-  ).length;
+  const prepared = turns.filter(turnPrepared).length;
   return {
     prepared_turns: prepared,
     expected_turns: expected,

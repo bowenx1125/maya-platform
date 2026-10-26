@@ -126,23 +126,14 @@ describe("Wave 1A copy and V2 style boundary", () => {
     );
   });
   it("keeps the debate setup section-card-header free of a hairline divider", () => {
-    const css = readFileSync(
-      resolve(
-        process.cwd(),
-        "components/debate/setup/create-section.module.css",
-      ),
+    // The setup cards are Tailwind CreateCards now (CSS Module deleted in
+    // the Debates final); they never render the shared hairline header.
+    const source = readFileSync(
+      resolve(process.cwd(), "components/debate/setup/create-card.tsx"),
       "utf8",
     );
-    // workspace-theme `.surface` is a CSS Module local (hashed in DOM), so a
-    // global surface prefix never matches. Assert !important so this rule
-    // beats theme regardless of equal specificity / load order.
-    expect(css).not.toMatch(/:global\(\.surface\)\s*\.section/);
-    const rule = css.match(
-      /\.section\s*:global\(\.section-card-header\)\s*\{[^}]*\}/,
-    )?.[0];
-    expect(rule).toBeDefined();
-    expect(rule).not.toMatch(/border-bottom:\s*1px\s+solid/);
-    expect(rule).toMatch(/border-bottom:\s*0\s*!important/);
+    expect(source).not.toMatch(/section-card-header/);
+    expect(source).not.toMatch(/border-b(?:-|\s|")/);
   });
   it("keeps hidden upload controls out of full-width input styling", () => {
     const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");

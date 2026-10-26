@@ -27,7 +27,19 @@ import {
 import { useT } from "../../../../../lib/i18n";
 import { localizeError } from "../../../../../lib/i18n";
 import { expectedTurnCount } from "../../../../../lib/debate-rounds";
-import styles from "./control.module.css";
+
+/* The immersive surface has no app shell, so the states before the stage
+   exists need a ground and a way back of their own. */
+const BOOT =
+  "grid content-center justify-items-start gap-[18px] w-[min(680px,calc(100%_-_40px))] min-h-screen mx-auto my-0";
+const BOOT_BACK =
+  "[color:var(--muted)] [font-size:0.88rem] hover:[color:var(--ink)]";
+const REPORT_DIALOG =
+  "w-[min(1040px,calc(100vw_-_40px))] max-h-[calc(100dvh_-_48px)] [padding:var(--workspace-inset)] border border-solid [border-color:var(--line)] rounded-[24px] [background:var(--paper,#fcfaf6)] [color:var(--ink)] shadow-[0_24px_80px_rgba(29,26,23,0.2)] backdrop:bg-[rgba(29,26,23,0.35)] backdrop:backdrop-blur-[4px] [&>section+section]:[margin-top:var(--workspace-gap)]";
+const REPORT_ACTIONS =
+  "flex justify-end [margin:0_0_var(--workspace-gap)]";
+const REPORT_CLOSE =
+  "inline-flex items-center justify-center w-[44px] h-[44px] min-h-[44px] p-0 rounded-[12px]";
 
 const INITIAL_PLAYBACK_AUTHORITY: PlaybackAuthorityState = {
   connection: "connecting",
@@ -270,36 +282,6 @@ export default function TeacherDebateControlPage() {
     }
   }, [api, debateId, joinUrl]);
 
-  const closeCollection = useCallback(async () => {
-    if (
-      !debateId ||
-      interactionInFlight.current ||
-      (!joinUrl && interaction?.status !== "open")
-    ) {
-      return;
-    }
-    if (!window.confirm(betaLabels.closeCollectionConfirm)) return;
-    interactionInFlight.current = true;
-    setInteractionBusy(true);
-    setInteractionError(null);
-    // Reuse the Conclude close key so a click racing Conclude replays the same
-    // durable request instead of double-finalizing.
-    const idempotency =
-      interactionCloseKey.current ?? createIdempotencyHandle();
-    interactionCloseKey.current = idempotency;
-    try {
-      const finalized = await api.closeInteraction(debateId, { idempotency });
-      interactionCloseKey.current = null;
-      setInteraction(finalized);
-      setJoinUrl(null);
-      setJoinCodeVisible(false);
-    } catch (cause) {
-      setInteractionError(localizeError(cause));
-    } finally {
-      interactionInFlight.current = false;
-      setInteractionBusy(false);
-    }
-  }, [api, betaLabels, debateId, interaction?.status, joinUrl]);
 
   const refreshSnapshot = useCallback(async () => {
     if (!debateId) throw new Error("Debate id is missing.");
@@ -493,8 +475,8 @@ export default function TeacherDebateControlPage() {
   return (
     <RouteGuard role="teacher">
       {!detail || !debateId ? (
-        <div className={styles.boot}>
-          <Link className={styles.bootBack} href="/teacher/debates">
+        <div className={BOOT}>
+          <Link className={BOOT_BACK} href="/teacher/debates">
             {t("debateBack")}
           </Link>
           {loading ? <LoadingCard /> : null}
@@ -519,62 +501,49 @@ export default function TeacherDebateControlPage() {
           <BetaDebateStage
             headerActions={(replayButton) => (
               <>
-                <Link className="secondary-action" href="/teacher/debates">
+                <Link
+                  className="secondary-action"
+                  data-dock="back"
+                  href="/teacher/debates"
+                >
                   {t("debateBack")}
                 </Link>
+                {/* A1 dock order via data-dock: Back · Interact|Hide · Next · End · Transcript */}
+                {showOpenInteraction ? (
+                  <button
+                    aria-expanded={Boolean(joinUrl) && joinCodeVisible}
+                    aria-controls="classroom-join-code"
+                    className="secondary-action"
+                    data-dock="interact"
+                    disabled={interactionBusy}
+                    onClick={() => void openInteraction()}
+                    type="button"
+                  >
+                    {interactionBusy && !joinUrl
+                      ? betaLabels.interactionOpening
+                      : joinUrl && joinCodeVisible
+                        ? betaLabels.hideInteraction
+                        : betaLabels.openInteraction}
+                  </button>
+                ) : null}
                 {!playbackComplete &&
                 detail.status === "running" &&
                 detail.playback.mode === "live" ? (
-                  <>
-                    <button
-                      className="primary-action"
-                      disabled={finishBusy || !finishAllowed}
-                      onClick={() => void finish()}
-                      type="button"
-                    >
-                      {finishBusy ? "Finishing…" : stageLabels.finish}
-                    </button>
-                  </>
+                  <button
+                    className="danger-action"
+                    data-dock="end"
+                    disabled={finishBusy || !finishAllowed}
+                    onClick={() => void finish()}
+                    type="button"
+                  >
+                    {finishBusy ? "Finishing…" : stageLabels.finish}
+                  </button>
                 ) : null}
-                {/* Beta opens classroom messages during the debate, not
-                      after it, so the join code can go up on the stage while
-                      the Agents are still speaking. */}
-                {showOpenInteraction ? (
-                  <>
-                    <button
-                      aria-expanded={Boolean(joinUrl) && joinCodeVisible}
-                      aria-controls="classroom-join-code"
-                      className="secondary-action"
-                      disabled={interactionBusy}
-                      onClick={() => void openInteraction()}
-                      type="button"
-                    >
-                      {interactionBusy && !joinUrl
-                        ? betaLabels.interactionOpening
-                        : joinUrl && joinCodeVisible
-                          ? betaLabels.hideInteraction
-                          : betaLabels.openInteraction}
-                    </button>
-                    {/* Close collection is independent of Hide: it finalizes
-                        the open window while the debate keeps running. */}
-                    {joinUrl ? (
-                      <button
-                        className="secondary-action"
-                        disabled={interactionBusy}
-                        onClick={() => void closeCollection()}
-                        type="button"
-                      >
-                        {interactionBusy
-                          ? betaLabels.closingCollection
-                          : betaLabels.closeCollection}
-                      </button>
-                    ) : null}
-                  </>
-                ) : null}
-                {replayButton}
+                <span data-dock="replay">{replayButton}</span>
                 {showSegmentsConclude ? (
                   <button
                     className="primary-action"
+                    data-dock="conclude"
                     disabled={interactionBusy}
                     onClick={() => void conclude()}
                     type="button"
@@ -585,6 +554,7 @@ export default function TeacherDebateControlPage() {
                 {showSegmentsReport ? (
                   <button
                     className="secondary-action"
+                    data-dock="conclude"
                     disabled={
                       interactionBusy || detail.playback.mode === "replay"
                     }
@@ -636,13 +606,13 @@ export default function TeacherDebateControlPage() {
           {showSegmentsReport && reportOpen ? (
             <dialog
               ref={reportDialogRef}
-              className={styles.reportDialog}
+              className={REPORT_DIALOG}
               aria-label="Report"
               onClose={() => setReportOpen(false)}
             >
-              <form method="dialog" className={styles.reportActions}>
+              <form method="dialog" className={REPORT_ACTIONS}>
                 <button
-                  className={`secondary-action ${styles.reportClose}`}
+                  className={`secondary-action ${REPORT_CLOSE}`}
                   aria-label={"Close"}
                   type="submit"
                   autoFocus

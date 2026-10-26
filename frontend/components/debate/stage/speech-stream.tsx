@@ -149,8 +149,6 @@ function StreamItem({
   const visibleSegmentChars = Math.ceil(segmentLength * (progress ?? 1));
   const who = describe(turn.participant_id);
   const phase = phaseOf(turn);
-  const audioUrl = turn.playback_resource?.playback_url ?? null;
-  const reviewRef = useRef<HTMLAudioElement | null>(null);
   return (
     <article className={styles.streamItem}>
       <div className={styles.streamItemTop}>
@@ -162,25 +160,6 @@ function StreamItem({
           {labels.round} {turn.round_no}
           {phase ? ` · ${phase}` : ""}
         </span>
-        {audioUrl ? (
-          // Review playback uses its own element. The classroom audio is
-          // driven by server media commands and reports its cursor back;
-          // replaying a past speech through it would desynchronise that.
-          <button
-            aria-label={`${labels.replayTurn ?? "Replay"} — ${who.name}`}
-            className={styles.streamReplay}
-            onClick={() => {
-              const element = reviewRef.current;
-              if (!element) return;
-              element.src = audioUrl;
-              element.currentTime = 0;
-              void element.play().catch(() => undefined);
-            }}
-            type="button"
-          >
-            ↻
-          </button>
-        ) : null}
       </div>
       {segments.length > 0 ? (
         <div className={styles.streamParagraphs}>
@@ -238,7 +217,6 @@ function StreamItem({
           </p>
         </>
       )}
-      {audioUrl ? <audio preload="none" ref={reviewRef} /> : null}
     </article>
   );
 }
@@ -325,7 +303,7 @@ export function SpeechStream({
       {turns.length === 0 ? (
         <p className={styles.streamEmpty}>{emptyMessage}</p>
       ) : (
-        <div className={styles.streamList} ref={listRef}>
+        <div className={styles.streamList} data-stream-list="" ref={listRef}>
           {turns.map((turn) => (
             <StreamItem
               styles={styles}

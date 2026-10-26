@@ -333,3 +333,96 @@ export function IconPlus({ size = 16 }: { size?: number }) {
     </svg>
   );
 }
+
+/** Trash can (Debates list Delete, final mockup F). */
+export function IconTrash({ size = 16 }: { size?: number }) {
+  return (
+    <OutlineIcon size={size}>
+      <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />
+    </OutlineIcon>
+  );
+}
+
+/** Globe: marks the 中文/English language switch. */
+export function IconGlobe({ size = 16 }: { size?: number }) {
+  return (
+    <OutlineIcon size={size}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+    </OutlineIcon>
+  );
+}
+
+/** Busy spinner: a faint ring with a turning arc. Decorative; the button
+ * carries aria-busy. Stops turning under reduced motion. */
+export function IconSpinner({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+      className="animate-spin motion-reduce:animate-none"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity=".25"
+        strokeWidth="3.2"
+      />
+      <path
+        d="M21 12a9 9 0 0 0-9-9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** Paper plane: "send to the model"; struck through when omitted. */
+export function IconSend({
+  size = 15,
+  off = false,
+}: {
+  size?: number;
+  off?: boolean;
+}) {
+  return (
+    <OutlineIcon size={size}>
+      <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" />
+      {off ? <path d="M3 3l18 18" /> : null}
+    </OutlineIcon>
+  );
+}
+
+/** Padlock: a value that is saved but never sent. */
+export function IconLock({ size = 14 }: { size?: number }) {
+  return (
+    <OutlineIcon size={size}>
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </OutlineIcon>
+  );
+}
+
+/** Solid bust used as a decorative avatar placeholder. */
+export function IconBust({ size = 30 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 40 40"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="20" cy="14" r="8" fill="currentColor" />
+      <path d="M6 40c0-9 6-14 14-14s14 5 14 14z" fill="currentColor" />
+    </svg>
+  );
+}
