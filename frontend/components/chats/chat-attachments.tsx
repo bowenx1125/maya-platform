@@ -6,7 +6,7 @@ import type { ChatAttachment } from "../../lib/api/platform";
 import { localizeError } from "../../lib/i18n";
 import { useT } from "../../lib/i18n";
 import { IconClose } from "../quiet-icons";
-import { Notice, StickerBadge } from "../ui";
+import { KindSticker, Notice } from "../ui";
 import { useSession } from "../session-provider";
 import styles from "../agent-chat.module.css";
 
@@ -107,7 +107,8 @@ export function ChatAttachments({
         <Notice
           id="chat-attachment-error"
           tone="error"
-          badge={1}
+          kind="file"
+          transient
           onClose={() => setError(null)}
         >
           {localizeError(error, "errorFileOperationFailed")}
@@ -123,7 +124,7 @@ export function ChatAttachments({
         disabled={disabled || uploading}
         onClick={() => input.current?.click()}
       >
-        {error ? <StickerBadge n={1} /> : null}
+        {error ? <KindSticker kind="file" on /> : null}
         <svg
           viewBox="0 0 24 24"
           width="18"

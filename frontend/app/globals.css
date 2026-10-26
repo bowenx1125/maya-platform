@@ -435,42 +435,20 @@ span.dismissible-alert {
   min-width: 0;
 }
 
+/* The × itself is the shared round × (components/ui/error-kit.tsx). */
 .alert-dismiss {
-  display: inline-grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  margin: 0 -2px 0 auto;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: inherit;
-  opacity: 0.7;
-  cursor: pointer;
-}
-
-.alert-dismiss:hover {
-  background: rgba(39, 35, 61, 0.08);
-  opacity: 1;
-}
-
-.alert-dismiss:focus-visible {
-  outline: 2px solid var(--accent, #76591f);
-  outline-offset: 2px;
-  opacity: 1;
+  margin-left: auto;
 }
 
 /* 14 option A: every error line speaks in the notices-v3 bubble look
-   (3px border, 18px radius, hard shadow) with a tilted sticker dot. */
+   (3px border, 18px radius, hard shadow), led by its U3 kind sticker. */
 p.dismissible-alert[role="alert"],
 div.dismissible-alert[role="alert"] {
   position: relative;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
   margin: 12px 0 0;
-  padding: 10px 40px 10px 14px;
+  padding: 12px 46px 12px 16px;
   border: 3px solid #111;
   border-radius: 18px;
   background: #ffe4e4;
@@ -482,36 +460,12 @@ div.dismissible-alert[role="alert"] {
   text-align: left;
 }
 
-.dismissible-alert[role="alert"]::before {
-  content: "";
-  flex: none;
-  width: 14px;
-  height: 14px;
-  margin-top: 3px;
-  border: 2px solid #111;
-  border-radius: 50%;
-  background: #ef4444;
-  box-shadow: 2px 2px 0 #111;
-  transform: rotate(-8deg);
-}
-
 p.dismissible-alert[role="alert"] > .alert-dismiss,
 div.dismissible-alert[role="alert"] > .alert-dismiss {
   position: absolute;
-  top: 8px;
+  top: 9px;
   right: 10px;
-  width: 24px;
-  height: 24px;
   margin: 0;
-  border: 2px solid #111;
-  background: #fff;
-  opacity: 1;
-}
-
-p.dismissible-alert[role="alert"] > .alert-dismiss:hover,
-div.dismissible-alert[role="alert"] > .alert-dismiss:hover {
-  background: #ef4444;
-  color: #fff;
 }
 
 .form-error {

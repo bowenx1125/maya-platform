@@ -131,11 +131,22 @@ function avatarSpec(value: string | null | undefined) {
   return { shape: match[1] as Shape, colour: match[2] as Colour };
 }
 
+/**
+ * Letter tiles: the same four hues, darkened so the white letter passes
+ * WCAG AA (each ≥ 4.6:1 against #fff) at every size.
+ */
+const FALLBACK_COLORS = [
+  ["#8069ab", "#6d5c93"],
+  ["#b05e3d", "#9c5539"],
+  ["#577d63", "#547d62"],
+  ["#956e20", "#ad8028"],
+] as const;
+
 function fallbackColour(seed: string) {
   let hash = 0;
   for (const character of seed)
     hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  return Object.values(COLORS)[hash % Object.keys(COLORS).length];
+  return FALLBACK_COLORS[hash % FALLBACK_COLORS.length];
 }
 
 export function UserAvatar({
