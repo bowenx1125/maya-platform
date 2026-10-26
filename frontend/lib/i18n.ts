@@ -208,6 +208,7 @@ const enMessages = {
   debateMissingId: "The debate identifier is missing.",
   requestFailed: "Request failed",
   noticeDismiss: "Dismiss",
+  noticeReopen: "Show the message",
   requestFallback: "The platform request could not be completed.",
   httpError: "Platform API returned HTTP {status}.",
   revisionConflict: "Revision conflict",
@@ -457,6 +458,11 @@ const enMessages = {
   tourLiveTitle: "Live",
   tourLiveBody:
     "When your teacher starts a class debate, this lights up and takes you there.",
+  tourNewTitle: "The New button",
+  tourNewBody:
+    "Each page keeps its New button up here, next to the page title.",
+  tourNewEmptyTitle: "New",
+  tourNewEmptyBody: "Press New to make your first Agent.",
   tourGuideTitle: "Your next steps",
   tourGuideBody:
     "Work down this list. The step in dark ink is the one to do next.",
@@ -541,7 +547,8 @@ const enMessages = {
   errorInvalidState: "That action is not available in the current state.",
   errorVersionImmutable: "Published versions are immutable.",
   errorStaleRevision: "Someone else changed this content. Please refresh.",
-  agentLastEditedTooltip: "Latest version: {version} · Last edited by: {name}",
+  agentLastEditedTooltip: "Last edited by: {name}",
+  agentLastEditedBy: "Last edited by: {name}",
   errorStaleControlVersion:
     "The classroom state changed. Refresh and try again.",
   errorIdempotencyConflict:
@@ -613,6 +620,7 @@ const enMessages = {
   debateFieldLlmParam:
     "Generation parameters: {field} is out of range. Correct it, then create again.",
   debateFieldEdit: "Edit this setting",
+  debateShowMe: "Show me",
   debateParamsTitle: "Generation Parameters",
   debateParamsReset: "Restore defaults",
   debateParamsNeverSent: "Saved, never sent to the model",

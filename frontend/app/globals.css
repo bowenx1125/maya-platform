@@ -13,7 +13,7 @@
   --gold-soft: #f6ecd3;
   --green: #2d8a68;
   --red: #b74f5a;
-  --shadow: 0 24px 70px rgba(72, 61, 105, 0.11);
+  --legacy-shadow: 0 24px 70px rgba(72, 61, 105, 0.11);
   /* One settle and one spring for the whole product, so everything that moves
      moves like the same material. */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -42,25 +42,19 @@
 
 html {
   min-width: 320px;
-  background: var(--paper);
+  /* Arcade canvas everywhere (DESIGN-RULES --bg / --bg-grid), shell or not. */
+  background-color: #dcebff;
 }
 
 body {
   min-height: 100vh;
   margin: 0;
   color: var(--ink);
-  background:
-    radial-gradient(
-      circle at 8% 2%,
-      rgba(211, 167, 74, 0.15),
-      transparent 31rem
-    ),
-    radial-gradient(
-      circle at 100% 25%,
-      rgba(84, 73, 166, 0.11),
-      transparent 34rem
-    ),
-    var(--paper);
+  background-color: #dcebff;
+  background-image:
+    linear-gradient(#0001 1px, transparent 1px),
+    linear-gradient(90deg, #0001 1px, transparent 1px);
+  background-size: 32px 32px;
   font-family:
     Inter,
     ui-sans-serif,
@@ -316,8 +310,7 @@ textarea {
 }
 
 .loading-card,
-.empty-card,
-.notice {
+.empty-card {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -402,8 +395,7 @@ textarea {
 }
 
 .empty-card p,
-.muted-copy,
-.notice span {
+.muted-copy {
   color: var(--muted);
   font-size: 0.88rem;
   line-height: 1.6;
@@ -415,55 +407,6 @@ textarea {
   margin: 4px 0 2px 2px;
   background: rgba(201, 162, 39, 0.8);
   transform: rotate(45deg);
-}
-
-.notice {
-  align-items: center;
-  margin: 16px 0;
-  line-height: 1.45;
-}
-
-.notice strong {
-  white-space: nowrap;
-}
-
-.notice-warning {
-  border-color: #e9d6a8;
-  background: #fffaf0;
-}
-
-.notice-error {
-  border-color: #edcdd0;
-  background: #fff7f7;
-}
-
-.notice-success {
-  border-color: #c6e1d5;
-  background: #f5fcf8;
-}
-
-.notice-close {
-  display: inline-grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  margin: -6px -8px -6px auto;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.notice-close:hover {
-  background: rgba(39, 35, 61, 0.06);
-  color: var(--ink);
-}
-
-.notice-close:focus-visible {
-  outline: 2px solid var(--accent, #76591f);
-  outline-offset: 2px;
 }
 
 /* Ad-hoc error, failure and warning lines close with a compact ×. */
@@ -486,72 +429,44 @@ span.dismissible-alert {
   min-width: 0;
 }
 
+/* The × itself is the shared round × (components/ui/error-kit.tsx). */
 .alert-dismiss {
-  display: inline-grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  margin: 0 -2px 0 auto;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: inherit;
-  opacity: 0.7;
-  cursor: pointer;
-}
-
-.alert-dismiss:hover {
-  background: rgba(39, 35, 61, 0.08);
-  opacity: 1;
-}
-
-.alert-dismiss:focus-visible {
-  outline: 2px solid var(--accent, #76591f);
-  outline-offset: 2px;
-  opacity: 1;
-}
-
-/* Notices away from a conversation float above the page's bottom edge. */
-.notice-tray {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 60;
-  display: grid;
-  gap: 10px;
-  width: min(440px, calc(100vw - 32px));
-  pointer-events: none;
-}
-
-.notice-tray:empty {
-  display: none;
-}
-
-.notice-tray .notice {
-  margin: 0;
-  padding: 14px 16px;
-  box-shadow: var(--lift);
-  pointer-events: auto;
-}
-
-@media (max-width: 680px) {
-  .notice-tray {
-    right: 16px;
-    bottom: 16px;
-    left: 16px;
-    width: auto;
-  }
-}
-
-.notice .inline-button {
   margin-left: auto;
-  flex: 0 0 auto;
 }
 
-.notice .inline-button + .notice-close {
-  margin-left: 0;
+/* 14 option A: every error line speaks in the notices-v3 bubble look
+   (3px border, 18px radius, hard shadow), led by its U3 kind sticker. */
+p.dismissible-alert[role="alert"],
+div.dismissible-alert[role="alert"] {
+  position: relative;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 0;
+  /* U3: 13px bubble padding plus the 7px line padding. */
+  padding: 20px 46px 19px 16px;
+  border: 3px solid #111;
+  border-radius: 18px;
+  background: #ffe4e4;
+  box-shadow: 4px 4px 0 #111;
+  color: #111;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: left;
+}
+
+/* U3 tray (audience mocks .bub): a tray bubble has no extra line padding. */
+.notice-tray p.dismissible-alert[role="alert"],
+.notice-tray div.dismissible-alert[role="alert"] {
+  padding: 12px 46px 12px 14px;
+}
+
+p.dismissible-alert[role="alert"] > .alert-dismiss,
+div.dismissible-alert[role="alert"] > .alert-dismiss {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  margin: 0;
 }
 
 .form-error {
@@ -2040,14 +1955,6 @@ button.agent-tile-name {
     justify-self: start;
   }
 
-  .notice {
-    flex-wrap: wrap;
-  }
-
-  .notice .inline-button {
-    margin-left: 0;
-  }
-
   .button-row > .primary-action,
   .button-row > .secondary-action {
     flex: 1 1 auto;
@@ -2346,7 +2253,7 @@ dd {
   border: 1px solid #e0d2b4;
   border-radius: 6px;
   background: #fbf6ec;
-  box-shadow: var(--shadow);
+  box-shadow: var(--legacy-shadow);
 }
 
 .academy-frame {
@@ -3163,4 +3070,14 @@ dd {
   gap: 4px;
   margin-left: 6px;
   vertical-align: middle;
+}
+
+/* A role=alert line moved into the mascot tray: the bubble, full width. */
+.notice-tray > .dismissible-alert.dismissible-alert-tray {
+  display: flex;
+  width: 100%;
+  max-width: 440px;
+  margin: 0;
+  color: #111;
+  font-size: 14px;
 }

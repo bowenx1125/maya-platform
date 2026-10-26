@@ -346,4 +346,27 @@ describe("registration guards the password before the group step", () => {
     expect(await screen.findByText(/do not match/i)).toBeTruthy();
     expect(screen.queryByLabelText("Group name")).toBeNull();
   });
+
+  it("marks the mismatched field and its line with the U3 field sticker", async () => {
+    mount();
+    fireEvent.change(await screen.findByLabelText("Username"), {
+      target: { value: "mismatch" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "correct-horse-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm password"), {
+      target: { value: "correct-horse-2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    const line = await screen.findByRole("alert");
+    expect(line.textContent).toMatch(/do not match/i);
+    expect(
+      line.querySelector('[data-sticker="field"]')?.getAttribute("data-n"),
+    ).toBe("1");
+    const confirm = screen.getByLabelText(/Confirm password/);
+    expect(confirm.getAttribute("aria-invalid")).toBe("true");
+    expect(confirm.getAttribute("aria-describedby")).toBe(line.id);
+  });
 });

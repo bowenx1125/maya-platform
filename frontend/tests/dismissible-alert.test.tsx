@@ -17,7 +17,7 @@ describe("dismissible alerts", () => {
     expect(alert.tagName).toBe("P");
     expect(alert.className).toContain("form-error");
     const close = screen.getByRole("button", { name: "Dismiss" });
-    expect(close.className).toBe("alert-dismiss");
+    expect(close.className.split(" ")).toContain("alert-dismiss");
     expect(close.getAttribute("type")).toBe("button");
     expect(close.querySelector("svg")).toBeTruthy();
     expect(close.textContent).toBe("");

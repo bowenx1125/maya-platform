@@ -14,49 +14,128 @@ import type { MessageKey } from "../lib/i18n";
 import { finishTour, tourPendingFor } from "../lib/onboarding";
 import { usePrefersReducedMotion } from "./academy/motion";
 import { useT } from "../lib/i18n";
-import styles from "./onboarding-tour.module.css";
+import { cn } from "../lib/utils";
+import { Button } from "./ui/button";
+import { GuideDialog, GuideHud } from "./ui/guide-dialog";
 
-type Step = { target: string | null; title: MessageKey; body: MessageKey };
+type Page = "home" | "group";
+type Step = {
+  id: string;
+  target: string | null;
+  title: MessageKey;
+  body: MessageKey;
+  /** Where the step is shown; the tour walks there itself. */
+  page: Page;
+  /** Shown instead when the Agents page has no Agents yet. */
+  empty?: { title: MessageKey; body: MessageKey };
+};
 
 /** The walk round a new student's first home, in the order they will need it. */
 const STEPS: Step[] = [
-  { target: null, title: "tourWelcomeTitle", body: "tourWelcomeBody" },
   {
+    id: "welcome",
+    target: null,
+    title: "tourWelcomeTitle",
+    body: "tourWelcomeBody",
+    page: "home",
+  },
+  {
+    id: "knowledge",
     target: '[data-tour="knowledge"]',
     title: "tourStudyformTitle",
     body: "tourStudyformBody",
+    page: "home",
   },
   {
+    // Step 3 of 9 opens the group's Agents page and points at its New.
+    id: "new",
+    target: '[data-tour="new"]',
+    title: "tourNewTitle",
+    body: "tourNewBody",
+    page: "group",
+    empty: { title: "tourNewEmptyTitle", body: "tourNewEmptyBody" },
+  },
+  {
+    id: "brain",
     target: '[data-tour="brain"]',
     title: "tourBrainformTitle",
     body: "tourBrainformBody",
+    page: "group",
   },
   {
+    id: "chat",
     target: '[data-tour="chat"]',
     title: "tourChatformTitle",
     body: "tourChatformBody",
+    page: "group",
   },
   {
+    id: "live",
     target: '[data-tour="live"]',
     title: "tourLiveTitle",
     body: "tourLiveBody",
+    page: "home",
   },
   {
+    id: "guide",
     target: '[data-tour="guide"]',
     title: "tourGuideTitle",
     body: "tourGuideBody",
+    page: "home",
   },
   {
+    id: "group",
     target: '[data-tour="group"]',
     title: "tourGroupTitle",
     body: "tourGroupBody",
+    page: "home",
   },
   {
+    id: "profile",
     target: ".account-settings-card",
     title: "tourProfileTitle",
     body: "tourProfileBody",
+    page: "home",
   },
 ];
+
+/** The tour's place survives the walk between pages (and a reload). */
+const STATE = "maya.tour.state";
+type Saved = { ids: string[]; index: number; groupHref: string | null };
+
+function readSaved(): Saved | null {
+  try {
+    const raw = window.sessionStorage.getItem(STATE);
+    const saved = raw ? (JSON.parse(raw) as Saved) : null;
+    return saved && Array.isArray(saved.ids) ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSaved(saved: Saved | null) {
+  try {
+    if (saved) window.sessionStorage.setItem(STATE, JSON.stringify(saved));
+    else window.sessionStorage.removeItem(STATE);
+  } catch {
+    // Private mode: the tour simply starts over on a reload.
+  }
+}
+
+/** The group's Agents page, read from the Studyform link in the sidebar. */
+function groupPageHref(): string | null {
+  const link = document.querySelector<HTMLAnchorElement>(
+    '[data-tour="knowledge"]',
+  );
+  const href = link?.getAttribute("href") ?? "";
+  return href.includes("/student/groups/") ? href.split("#")[0] : null;
+}
+
+function onPage(page: Page, pathname: string) {
+  return page === "group"
+    ? pathname.startsWith("/student/groups/")
+    : pathname === "/student" || pathname === "/student/";
+}
 
 /** Room left round the highlighted place, and between it and the card. */
 const HALO = 8;
@@ -143,10 +222,34 @@ export function place(
   };
 }
 
-/** Shows the tour once, to an account that has just registered. */
-export function OnboardingTour({ userId }: { userId: string }) {
+/**
+ * Shows the tour once, to an account that has just registered. It is mounted
+ * by the app shell, so it keeps going while it walks between pages.
+ */
+export function OnboardingTour({
+  userId,
+  pathname,
+  navigate,
+  startHere = true,
+}: {
+  userId: string;
+  /** The current path; falls back to the window's. */
+  pathname?: string;
+  /** Client-side navigation; falls back to a full page load. */
+  navigate?: (href: string) => void;
+  /** A new tour starts only on the home it points at. */
+  startHere?: boolean;
+}) {
   const [open, setOpen] = useState(false);
+  const path =
+    pathname ?? (typeof window === "undefined" ? "" : window.location.pathname);
   useEffect(() => {
+    // A tour already under way picks up where it was.
+    if (readSaved()) {
+      const resume = window.setTimeout(() => setOpen(true), 0);
+      return () => window.clearTimeout(resume);
+    }
+    if (!startHere) return;
     // Wait for the home to lay out: the tour points at what is on it.
     const timer = window.setTimeout(() => {
       // ?tour replays it, for showing someone round.
@@ -154,43 +257,86 @@ export function OnboardingTour({ userId }: { userId: string }) {
       if (replay || tourPendingFor(userId)) setOpen(true);
     }, 600);
     return () => window.clearTimeout(timer);
-  }, [userId]);
+  }, [startHere, userId]);
   const close = useCallback(() => {
     finishTour();
+    writeSaved(null);
     setOpen(false);
   }, []);
-  return open ? createPortal(<Tour onClose={close} />, document.body) : null;
+  const go = useCallback(
+    (href: string) => {
+      if (navigate) navigate(href);
+      else window.location.assign(href);
+    },
+    [navigate],
+  );
+  return open
+    ? createPortal(
+        <Tour onClose={close} pathname={path} navigate={go} />,
+        document.body,
+      )
+    : null;
 }
 
-function Tour({ onClose }: { onClose: () => void }) {
-  const t = useT();
-  const reduced = usePrefersReducedMotion();
+function startSteps(): Saved {
+  const groupHref = groupPageHref();
   // Places this screen does not show (a phone's folded sidebar, a student
   // with no group yet) are left out rather than pointed at in thin air.
-  const [steps] = useState(() =>
-    STEPS.filter(
-      (step) => !step.target || shown(document.querySelector(step.target)),
-    ),
-  );
-  const [index, setIndex] = useState(0);
+  // Steps on the group's page are kept when there is a group to open.
+  const ids = STEPS.filter((step) => {
+    if (!step.target) return true;
+    if (step.page === "group") {
+      if (!groupHref) return false;
+      return step.id === "new" || shown(document.querySelector(step.target));
+    }
+    return shown(document.querySelector(step.target));
+  }).map((step) => step.id);
+  return { ids, index: 0, groupHref };
+}
+
+function Tour({
+  onClose,
+  pathname,
+  navigate,
+}: {
+  onClose: () => void;
+  pathname: string;
+  navigate: (href: string) => void;
+}) {
+  const t = useT();
+  const reduced = usePrefersReducedMotion();
+  const [saved, setSaved] = useState<Saved>(() => readSaved() ?? startSteps());
+  const steps = saved.ids
+    .map((id) => STEPS.find((step) => step.id === id))
+    .filter((step): step is Step => Boolean(step));
+  const index = Math.min(saved.index, steps.length - 1);
   const [target, setTarget] = useState<Box | null>(null);
-  const [card, setCard] = useState({ width: 360, height: 200 });
+  const [empty, setEmpty] = useState(false);
+  const [card, setCard] = useState({ width: 560, height: 220 });
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
   const step = steps[index];
   const last = index === steps.length - 1;
+  const here = !step || onPage(step.page, pathname) || !pathname;
 
-  // Follow the highlighted place as the page scrolls or the window resizes.
+  useEffect(() => writeSaved(saved), [saved]);
+
+  // Walk to the page the step is on (Back walks back the same way).
+  useEffect(() => {
+    if (!step || here) return;
+    const href = step.page === "group" ? saved.groupHref : "/student";
+    if (href) navigate(href);
+  }, [here, navigate, saved.groupHref, step]);
+
+  // Follow the highlighted place as the page scrolls or the window resizes;
+  // after a walk, wait for it to appear.
   useLayoutEffect(() => {
-    const element = step.target
-      ? document.querySelector<HTMLElement>(step.target)
-      : null;
-    element?.scrollIntoView({
-      block: "center",
-      behavior: reduced ? "auto" : "smooth",
-    });
+    if (!step || !here) return;
+    let element: HTMLElement | null = null;
     let frame = 0;
+    let tries = 0;
+    let poll = 0;
     const measure = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
@@ -210,15 +356,31 @@ function Tour({ onClose }: { onClose: () => void }) {
         if (own) setCard({ width: own.offsetWidth, height: own.offsetHeight });
       });
     };
-    measure();
+    const find = () => {
+      element = step.target
+        ? document.querySelector<HTMLElement>(step.target)
+        : null;
+      if (step.target && !element && tries++ < 40) {
+        poll = window.setTimeout(find, 100);
+        return;
+      }
+      setEmpty(element?.hasAttribute("data-tour-empty") ?? false);
+      element?.scrollIntoView({
+        block: "center",
+        behavior: reduced ? "auto" : "smooth",
+      });
+      measure();
+    };
+    find();
     window.addEventListener("resize", measure);
     window.addEventListener("scroll", measure, true);
     return () => {
       cancelAnimationFrame(frame);
+      window.clearTimeout(poll);
       window.removeEventListener("resize", measure);
       window.removeEventListener("scroll", measure, true);
     };
-  }, [step, reduced]);
+  }, [step, here, reduced]);
 
   useEffect(() => {
     nextRef.current?.focus();
@@ -234,10 +396,14 @@ function Tour({ onClose }: { onClose: () => void }) {
 
   const next = useCallback(() => {
     if (last) onClose();
-    else setIndex((current) => current + 1);
+    else setSaved((current) => ({ ...current, index: current.index + 1 }));
   }, [last, onClose]);
   const back = useCallback(
-    () => setIndex((current) => Math.max(0, current - 1)),
+    () =>
+      setSaved((current) => ({
+        ...current,
+        index: Math.max(0, current.index - 1),
+      })),
     [],
   );
 
@@ -265,15 +431,31 @@ function Tour({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener("keydown", keys);
   }, [back, next, onClose]);
 
+  if (!step) return null;
+  const words = empty && step.empty ? step.empty : step;
   const spot = place(target, card, viewport);
-  const ready = viewport.width > 0;
+  const ready = viewport.width > 0 && here;
+  const glide = reduced
+    ? ""
+    : "transition-[top,left,width,height] duration-[460ms] ease-[cubic-bezier(0.2,0.8,0.2,1)]";
   return (
-    <div className={styles.tour} data-ready={ready ? "" : undefined}>
+    <div
+      className={cn(
+        "fixed inset-0 z-[2147482000] font-body opacity-0 transition-opacity duration-200 data-[ready]:opacity-100",
+      )}
+      data-ready={ready ? "" : undefined}
+    >
       {/* Clicks on the dimmed page are caught here: like a game's first
           level, the way on is the card's Next. */}
-      <div className={styles.shield} aria-hidden="true" />
+      <div className="absolute inset-0" aria-hidden="true" />
       <div
-        className={styles.spotlight}
+        className={cn(
+          "pointer-events-none absolute rounded-[14px]",
+          target
+            ? "outline-[4px] outline-offset-4 outline-[#FF4D8D] outline-solid shadow-[0_0_0_200vmax_rgba(17,17,17,0.4)]"
+            : "shadow-[0_0_0_200vmax_rgba(17,17,17,0.4)]",
+          glide,
+        )}
         aria-hidden="true"
         style={
           target
@@ -292,70 +474,73 @@ function Tour({ onClose }: { onClose: () => void }) {
         }
         data-empty={target ? undefined : ""}
       />
-      <div
+      <GuideDialog
         ref={cardRef}
-        className={styles.card}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="tour-title"
-        aria-describedby="tour-body"
+        titleId="tour-title"
+        bodyId="tour-body"
+        className={cn("absolute", glide)}
         style={{ top: spot.top, left: spot.left }}
-        data-side={spot.side ?? undefined}
-      >
-        {spot.side ? (
-          <span
-            className={styles.arrow}
-            aria-hidden="true"
-            style={{ "--arrow": `${spot.arrow}px` } as CSSProperties}
-          >
-            <svg viewBox="0 0 24 24" width="26" height="26">
-              <path
-                d="M20 12H5m6-6-6 6 6 6"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
-        ) : null}
-        <ol className={styles.dots} aria-hidden="true">
-          {steps.map((item, at) => (
-            <li
-              key={item.title}
-              data-state={at === index ? "now" : at < index ? "done" : "todo"}
+        side={spot.side ?? undefined}
+        title={t(words.title)}
+        body={t(words.body)}
+        pointer={
+          spot.side ? (
+            // Guide v3: a white notch on the card's edge points at the target.
+            <span
+              aria-hidden="true"
+              className={cn(
+                "absolute z-[1] size-3.5 rotate-45 border-[3px] border-border bg-white",
+                spot.side === "right" && "-left-[9px] border-t-0 border-r-0",
+                spot.side === "left" && "-right-[9px] border-b-0 border-l-0",
+                spot.side === "below" && "-top-[9px] border-r-0 border-b-0",
+                spot.side === "above" && "-bottom-[9px] border-t-0 border-l-0",
+              )}
+              style={
+                spot.side === "right" || spot.side === "left"
+                  ? { top: spot.arrow - 7 }
+                  : { left: spot.arrow - 7 }
+              }
             />
-          ))}
-        </ol>
-        <h2 id="tour-title" key={`title-${index}`} className={styles.title}>
-          {t(step.title)}
-        </h2>
-        <p id="tour-body" key={`body-${index}`} className={styles.body}>
-          {t(step.body)}
-        </p>
-        <div className={styles.actions}>
-          <button type="button" className={styles.skip} onClick={onClose}>
-            {t("tourSkip")}
-          </button>
-          <span className={styles.progress}>
-            {t("tourProgress", { step: index + 1, total: steps.length })}
-          </span>
-          {index > 0 ? (
-            <button type="button" className={styles.back} onClick={back}>
-              {t("tourBack")}
-            </button>
-          ) : null}
-          <button
-            ref={nextRef}
-            type="button"
-            className={`primary-action ${styles.next}`}
-            onClick={next}
-          >
-            {last ? t("tourFinish") : t("tourNext")}
-          </button>
-        </div>
-      </div>
+          ) : null
+        }
+        hud={<GuideHud total={steps.length} index={index} />}
+        actions={
+          <>
+            <Button
+              variant="neutral"
+              size="sm"
+              className="m-0 h-auto min-h-0 border-0 bg-transparent px-0 py-0 text-[13px] font-semibold underline shadow-none hover:translate-0"
+              onClick={onClose}
+            >
+              {t("tourSkip")}
+            </Button>
+            <span className="ml-auto text-xs font-semibold text-arc-muted">
+              {t("tourProgress", {
+                step: index + 1,
+                total: steps.length,
+              })}
+            </span>
+            {index > 0 ? (
+              <Button
+                variant="neutral"
+                size="sm"
+                className="m-0 h-auto min-h-0 rounded-[6px] border-2 bg-white px-3 py-[5px] text-[13px] font-bold shadow-[0_3px_0_#111]"
+                onClick={back}
+              >
+                {t("tourBack")}
+              </Button>
+            ) : null}
+            <Button
+              ref={nextRef}
+              size="sm"
+              className="m-0 h-auto min-h-0 rounded-[8px] border-[3px] bg-[#FF4D8D] px-3.5 py-[5px] text-[13px] font-bold shadow-[0_4px_0_#111]"
+              onClick={next}
+            >
+              {last ? t("tourFinish") : t("tourNext")}
+            </Button>
+          </>
+        }
+      />
     </div>
   );
 }

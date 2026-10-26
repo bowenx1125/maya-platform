@@ -34,6 +34,7 @@ vi.mock("../components/session-provider", () => ({
 }));
 
 import { AccountSettings } from "../components/account-settings";
+import { PlatformApiError } from "../lib/api/platform";
 import { HomeGuide } from "../components/home-guide";
 import { USER_AVATAR_CHOICES } from "../components/user-avatar";
 
@@ -263,5 +264,56 @@ describe("profile identity boundary", () => {
     expect(session.refresh).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
     expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+describe("profile password (U3)", () => {
+  it("numbers the confirm field and its error line on a mismatch", async () => {
+    inEnglish(<AccountSettings />);
+    fireEvent.change(screen.getByLabelText("Current password"), {
+      target: { value: "old-password" },
+    });
+    fireEvent.change(screen.getByLabelText("New password"), {
+      target: { value: "new-password-1" },
+    });
+    const confirm = screen.getByLabelText("Confirm password");
+    expect(confirm.getAttribute("aria-invalid")).toBeNull();
+    fireEvent.change(confirm, { target: { value: "new-password-2" } });
+    fireEvent.submit(confirm.closest("form")!);
+
+    const line = await screen.findByRole("alert");
+    expect(line.textContent).toMatch(/do not match/i);
+    expect(
+      line.querySelector('[data-sticker="field"]')?.getAttribute("data-n"),
+    ).toBe("1");
+    expect(confirm.getAttribute("aria-invalid")).toBe("true");
+    expect(confirm.getAttribute("aria-describedby")).toBe(line.id);
+    expect(session.api.changePassword).not.toHaveBeenCalled();
+  });
+
+  it("numbers the current password field when it is wrong, not the server !", async () => {
+    session.api.changePassword.mockRejectedValueOnce(
+      new PlatformApiError(401, "password_incorrect", {
+        code: "password_incorrect",
+        message: "That password does not match this account.",
+      }),
+    );
+    inEnglish(<AccountSettings />);
+    const current = screen.getByLabelText("Current password");
+    fireEvent.change(current, { target: { value: "wrong-password" } });
+    fireEvent.change(screen.getByLabelText("New password"), {
+      target: { value: "new-password-1" },
+    });
+    const confirm = screen.getByLabelText("Confirm password");
+    fireEvent.change(confirm, { target: { value: "new-password-1" } });
+    fireEvent.submit(confirm.closest("form")!);
+
+    const line = await screen.findByRole("alert");
+    expect(
+      line.querySelector('[data-sticker="field"]')?.getAttribute("data-n"),
+    ).toBe("1");
+    expect(line.querySelector('[data-sticker="server"]')).toBeNull();
+    expect(current.getAttribute("aria-invalid")).toBe("true");
+    expect(confirm.getAttribute("aria-invalid")).toBeNull();
   });
 });

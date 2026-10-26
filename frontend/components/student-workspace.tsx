@@ -35,7 +35,6 @@ import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
 import { GroupOverview } from "./group-overview";
 import { HomeGuide } from "./home-guide";
-import { OnboardingTour } from "./onboarding-tour";
 import { useT } from "../lib/i18n";
 import { AgentWorkbench } from "./agent-workspace";
 import { useSession } from "./session-provider";
@@ -52,6 +51,13 @@ import {
   VersionTile,
   teamVersionLabel,
 } from "./studyform-layout";
+import {
+  AGENT_GRID_CLASS,
+  AgentsEmpty,
+  NewButton,
+  type AgentRename,
+} from "./ui/agent-card";
+import { GuidePortrait } from "./ui/guide-dialog";
 import {
   EmptyCard,
   ErrorNotice,
@@ -122,6 +128,7 @@ function versionBubble(agent: AgentSummary, versions: AgentVersion[]) {
   const label = published?.version_label ?? draft?.version_label ?? "V1.0";
   return {
     label,
+    materialTheme: (published ?? draft)?.avatar_config?.material_theme,
     pending: agent.status === "archived",
   };
 }
@@ -216,10 +223,14 @@ export function StudentDashboard() {
           <h2 id="student-agents-title">
             {t("agents")} · {published.length}
           </h2>
-          <div className="agent-tile-grid">
+          <ul className={AGENT_GRID_CLASS}>
             {published.map((item) => (
               <VersionTile
                 key={item.agent.id}
+                id={item.agent.id}
+                materialTheme={
+                  item.current_version.avatar_config?.material_theme
+                }
                 name={item.agent.name}
                 href={`/student/agents/${item.agent.id}`}
                 label={item.current_version.version_label}
@@ -228,7 +239,7 @@ export function StudentDashboard() {
                 deleteLabel={t("deleteAgent")}
               />
             ))}
-          </div>
+          </ul>
         </section>
       ) : null}
       {groups.length === 0 ? (
@@ -241,7 +252,13 @@ export function StudentDashboard() {
             data-tour="guide"
           >
             <h2 id="student-guide-title">{t("guide")}</h2>
-            <HomeGuide steps={guide} />
+            {/* The guide speaks from its gold portrait, as in the tour. */}
+            <div className="flex items-start gap-5 max-[680px]:gap-3">
+              <GuidePortrait />
+              <div className="min-w-0 flex-1">
+                <HomeGuide steps={guide} />
+              </div>
+            </div>
           </section>
           {groups.map((overview, index) => (
             <section
@@ -274,7 +291,6 @@ export function StudentDashboard() {
         </div>
       )}
       <AccountSettings onSaved={() => void load()} />
-      {user ? <OnboardingTour userId={user.id} /> : null}
     </div>
   );
 }
@@ -363,6 +379,11 @@ function GroupWorkspaceSession({
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(!snapshot);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [renameError, setRenameError] = useState<{
+    agentId: string;
+    error: unknown;
+  } | null>(null);
+  const renameField = useRef<HTMLInputElement | null>(null);
   const [retryDelete, setRetryDelete] = useState<string | null>(null);
   const mutations = useIdempotencyStore();
   const teacherCourseKey = (user?.courses ?? [])
@@ -561,6 +582,37 @@ function GroupWorkspaceSession({
     }
   }
 
+  async function renameAgent(agentId: string, name: string) {
+    const current = items.find((item) => item.agent.id === agentId);
+    if (!current) return false;
+    setRenameError(null);
+    try {
+      const saved = await api.updateAgentMetadata(agentId, {
+        name,
+        expected_metadata_revision: current.agent.metadata_revision,
+      });
+      invalidateRequestCache(api);
+      setItems((list) =>
+        list.map((item) =>
+          item.agent.id === agentId
+            ? {
+                ...item,
+                agent: {
+                  ...item.agent,
+                  name: saved.name,
+                  metadata_revision: saved.metadata_revision,
+                },
+              }
+            : item,
+        ),
+      );
+      return true;
+    } catch (cause) {
+      setRenameError({ agentId, error: cause });
+      return false;
+    }
+  }
+
   async function deleteOwnedTeam(teamId: string) {
     if (
       deleting ||
@@ -632,6 +684,17 @@ function GroupWorkspaceSession({
           }
         />
       ) : null}
+      {renameError ? (
+        <ErrorNotice
+          id={`agent-rename-error-${renameError.agentId}`}
+          error={renameError.error}
+          onClosed={() => {
+            const field = renameField.current;
+            setRenameError(null);
+            field?.focus();
+          }}
+        />
+      ) : null}
       <ModuleGrid
         variant={teacherIdentity ? undefined : "studyform"}
         paneOpen={brainformPane}
@@ -640,11 +703,14 @@ function GroupWorkspaceSession({
           title={t("agents")}
           labelledBy="studyform-agents"
           empty={
-            items.length || sharedAgents.length ? undefined : t("noAgents")
+            items.length || sharedAgents.length || !teacherIdentity
+              ? undefined
+              : t("noAgents")
           }
           action={
-            teacherIdentity ? null : (
-              <ModulePlus
+            // With no Agents yet, New sits inside the empty card instead.
+            teacherIdentity || !(items.length || sharedAgents.length) ? null : (
+              <NewButton
                 href={`/student/groups/${groupId}/agents/new`}
                 label={t("newAgent")}
               />
@@ -666,11 +732,30 @@ function GroupWorkspaceSession({
                     agent.can_delete ??
                     (!teacherIdentity && agent.can_edit === true)
                   }
+                  rename={
+                    !teacherIdentity && agent.can_edit
+                      ? {
+                          fieldLabel: t("agentName"),
+                          onRename: (name) => renameAgent(agent.id, name),
+                          errorId: `agent-rename-error-${agent.id}`,
+                          invalid: renameError?.agentId === agent.id,
+                          bindInput: (input) => {
+                            if (renameError?.agentId === agent.id)
+                              renameField.current = input;
+                          },
+                        }
+                      : undefined
+                  }
                 />
               ))}
               {sharedAgents.map((item) => (
                 <VersionTile
                   key={item.agent.id}
+                  id={item.agent.id}
+                  editedBy={item.agent.last_edited_by_name}
+                  materialTheme={
+                    item.current_version.avatar_config?.material_theme
+                  }
                   name={item.agent.name}
                   href={`/student/agents/${item.agent.id}`}
                   title={agentLastEditedTitle(
@@ -699,7 +784,13 @@ function GroupWorkspaceSession({
                 />
               ))}
             </ModuleTiles>
-          ) : undefined}
+          ) : teacherIdentity ? undefined : (
+            <AgentsEmpty
+              title={t("noAgents")}
+              newHref={`/student/groups/${groupId}/agents/new`}
+              newLabel={t("newAgent")}
+            />
+          )}
         </ModuleCard>
         <ModuleCard
           title={t("chatTargetTeams")}
@@ -771,17 +862,23 @@ function GroupAgentRow({
   deleting,
   canDelete = true,
   onDelete,
+  rename,
 }: {
   agent: AgentSummary;
   versions: AgentVersion[];
   deleting: boolean;
   canDelete?: boolean;
   onDelete: () => void;
+  rename?: AgentRename;
 }) {
   const t = useT();
   const bubble = versionBubble(agent, versions);
   return (
     <VersionTile
+      id={agent.id}
+      rename={rename}
+      editedBy={agent.last_edited_by_name}
+      materialTheme={bubble.materialTheme}
       name={agent.name}
       href={`/student/agents/${agent.id}`}
       title={agentLastEditedTitle(t, agent, bubble.label)}
