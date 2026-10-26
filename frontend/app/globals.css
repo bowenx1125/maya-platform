@@ -462,6 +462,58 @@ span.dismissible-alert {
   opacity: 1;
 }
 
+/* 14 option A: every error line speaks in the notices-v3 bubble look
+   (3px border, 18px radius, hard shadow) with a tilted sticker dot. */
+p.dismissible-alert[role="alert"],
+div.dismissible-alert[role="alert"] {
+  position: relative;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 10px 40px 10px 14px;
+  border: 3px solid #111;
+  border-radius: 18px;
+  background: #ffe4e4;
+  box-shadow: 4px 4px 0 #111;
+  color: #111;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.dismissible-alert[role="alert"]::before {
+  content: "";
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  border: 2px solid #111;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 2px 2px 0 #111;
+  transform: rotate(-8deg);
+}
+
+p.dismissible-alert[role="alert"] > .alert-dismiss,
+div.dismissible-alert[role="alert"] > .alert-dismiss {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  border: 2px solid #111;
+  background: #fff;
+  opacity: 1;
+}
+
+p.dismissible-alert[role="alert"] > .alert-dismiss:hover,
+div.dismissible-alert[role="alert"] > .alert-dismiss:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
 .form-error {
   margin: 0;
   color: var(--red);

@@ -115,12 +115,17 @@ export function useNoticeTrayAbove(target: HTMLElement | null) {
     };
     place();
     const observer =
-      typeof ResizeObserver === "function" ? new ResizeObserver(schedule) : null;
+      typeof ResizeObserver === "function"
+        ? new ResizeObserver(schedule)
+        : null;
     observer?.observe(target);
     observer?.observe(document.body);
     const view = window.visualViewport;
     window.addEventListener("resize", schedule);
-    window.addEventListener("scroll", schedule, { capture: true, passive: true });
+    window.addEventListener("scroll", schedule, {
+      capture: true,
+      passive: true,
+    });
     view?.addEventListener("resize", schedule);
     view?.addEventListener("scroll", schedule);
     return () => {
@@ -159,8 +164,11 @@ export function Notice({
   action,
   inline = false,
   onClose,
+  badge,
 }: {
   id?: string;
+  /** A field error: the sticker number its field wears, instead of the dot. */
+  badge?: number;
   tone: "error" | "warning" | "success" | "info";
   title?: ReactNode;
   children?: ReactNode;
@@ -179,13 +187,24 @@ export function Notice({
         `notice notice-${tone}`,
         "relative my-4 flex w-full items-start gap-2.5 rounded-[18px] border-[3px] border-border bg-surface py-3 pr-[42px] pl-3.5 text-left font-body text-sm leading-[1.45] font-medium text-ink shadow-[4px_4px_0_#111] max-[680px]:flex-wrap",
         // Status dot instead of an icon font; the colour carries the tone.
-        "before:mt-1 before:size-3 before:flex-none before:rounded-full before:border-2 before:border-border before:bg-main before:content-['']",
+        badge === undefined &&
+          "before:mt-1 before:size-3.5 before:flex-none before:rotate-[-8deg] before:rounded-full before:border-2 before:border-border before:bg-main before:shadow-[2px_2px_0_#111] before:content-['']",
         NOTICE_TONE[tone],
-        !inline &&
-          cn("pointer-events-auto my-0 flex-none", NOTICE_TAIL_CLASS),
+        !inline && cn("pointer-events-auto my-0 flex-none", NOTICE_TAIL_CLASS),
       )}
       role={tone === "error" || tone === "warning" ? "alert" : "status"}
     >
+      {badge !== undefined ? (
+        <span
+          data-n={badge}
+          aria-hidden="true"
+          className={cn(
+            STICKER,
+            "size-6 text-[11px] leading-5 before:content-[attr(data-n)]",
+            STICKER_TONE(false),
+          )}
+        />
+      ) : null}
       {title ? <strong className="whitespace-nowrap">{title}</strong> : null}
       {children ? <span className="min-w-0 flex-1">{children}</span> : null}
       {action}
@@ -200,6 +219,38 @@ export function Notice({
     </div>
   );
   return inline || !tray ? notice : createPortal(notice, tray);
+}
+
+/** Sticker (14 option A): a tilted round red number; green with ✓ once fixed. */
+export const STICKER =
+  "flex-none rotate-[-8deg] rounded-full border-2 border-border text-center font-body font-extrabold shadow-[2px_2px_0_#111]";
+export const STICKER_TONE = (done: boolean) =>
+  done
+    ? "grid place-items-center bg-[#22C55E] text-ink"
+    : "bg-[#EF4444] text-white";
+
+/** The number sticker on an offending field (shared by every form error). */
+export function StickerBadge({
+  n,
+  done = false,
+}: {
+  n: number;
+  done?: boolean;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      data-checklist-badge
+      data-done={done || undefined}
+      className={cn(
+        STICKER,
+        "absolute -top-[13px] -left-[13px] z-[5] size-7 text-[13px] leading-6",
+        STICKER_TONE(done),
+      )}
+    >
+      {done ? "✓" : n}
+    </span>
+  );
 }
 
 /** The tail on the newest tray bubble, pointing down at the mascot. */
