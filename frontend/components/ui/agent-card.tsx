@@ -350,7 +350,7 @@ export function AgentCard({
     );
     return (
       <li
-        className="group/card relative list-none rounded-[12px] border-[3px] border-[#111] bg-white px-3 pt-[30px] pb-3 font-body text-[#111] shadow-[6px_6px_0_#111] [transform:rotate(var(--r,0deg))]"
+        className="group/card relative list-none rounded-[12px] border-[3px] border-[#111] bg-white px-3 pt-[30px] pb-3 font-body text-[#111] shadow-[6px_6px_0_#111] [transform:translateY(var(--card-lift,0px))_rotate(var(--r,0deg))] transition-transform duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:[--card-lift:-2px] motion-reduce:hover:[--card-lift:0px]"
         style={{ "--r": `${tilt}deg` } as CSSProperties}
         data-agent-card={id}
         data-tone={tone}
