@@ -1,5 +1,6 @@
 "use client";
 import { PRESS_MOTION } from "./button";
+import { LIST_CARD_LIFT } from "../agent-chrome";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -33,7 +34,7 @@ export const AGENT_GRID_CLASS =
   "m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5 p-0 pt-4 pr-4 pb-5 max-[680px]:grid-cols-1 max-[680px]:gap-4";
 
 const CARD_CLASS =
-  "group/card relative flex min-h-[248px] flex-col overflow-visible rounded-[14px] border-[3px] border-border bg-surface p-2 font-body text-ink shadow-[6px_6px_0_#111] transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 focus-within:-translate-y-0.5";
+  `group/card relative flex min-h-[248px] flex-col overflow-visible rounded-[14px] border-[3px] border-border bg-surface p-2 font-body text-ink shadow-[6px_6px_0_#111] ${LIST_CARD_LIFT} focus-within:[--card-lift:-2px] motion-reduce:focus-within:[--card-lift:0px]`;
 
 /** Card tones: salmon, periwinkle, sage — title band and sunburst share one. */
 const CARD_TONES = ["#F2B79A", "#C9D3F0", "#C9D9A0"] as const;
@@ -48,8 +49,7 @@ export function agentTone(id: string, index?: number) {
 }
 
 /** Card A on the Agents page (r2-list.mjs .tcA): one frame, 186px wide. */
-const CARD_A_CLASS =
-  "group/card relative block w-[186px] list-none p-0 font-body text-ink max-[767px]:w-auto";
+const CARD_A_CLASS = `group/card relative block w-[186px] list-none p-0 font-body text-ink max-[767px]:w-auto ${LIST_CARD_LIFT}`;
 const FRAME_A_CLASS =
   "flex flex-col overflow-hidden rounded-[12px] border-[3px] border-[#111] bg-white shadow-[5px_5px_0_#111]";
 const BAND_A_CLASS =
@@ -351,7 +351,7 @@ export function AgentCard({
     );
     return (
       <li
-        className="group/card relative list-none rounded-[12px] border-[3px] border-[#111] bg-white px-3 pt-[30px] pb-3 font-body text-[#111] shadow-[6px_6px_0_#111] [transform:translateY(var(--card-lift,0px))_rotate(var(--r,0deg))] transition-transform duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:[--card-lift:-2px] motion-reduce:hover:[--card-lift:0px]"
+        className={cn("group/card relative list-none rounded-[12px] border-[3px] border-[#111] bg-white px-3 pt-[30px] pb-3 font-body text-[#111] shadow-[6px_6px_0_#111]", LIST_CARD_LIFT)}
         style={{ "--r": `${tilt}deg` } as CSSProperties}
         data-agent-card={id}
         data-tone={tone}
