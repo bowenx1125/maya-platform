@@ -73,7 +73,7 @@ import {
   fileExt,
   RagCard,
   ragAlbumClass,
-  useRagAgents,
+  ragAgents,
 } from "./rag-album";
 
 /**
@@ -424,8 +424,6 @@ function isGenerationActive(
 ): boolean {
   return state === "pending" || state === "running";
 }
-
-const NO_DOCUMENTS: KnowledgeDocument[] = [];
 
 function indexStatusText(
   document: KnowledgeDocument,
@@ -2356,7 +2354,6 @@ function BrainformWorkspaceBody({
   const canAddKnowledge = role === "teacher" && !teacherGroupView;
   const canAddRag =
     !teacherGroupView && (role === "teacher" || ragGroupIds.length > 0);
-  const ragAgents = useRagAgents(ragPage ? ragDocuments : NO_DOCUMENTS);
 
   return (
     <main
@@ -2493,14 +2490,12 @@ function BrainformWorkspaceBody({
             <span className={album.tape} aria-hidden="true" />
             <span className={album.sp} />
             {canAddRag ? (
-              ragDocuments.length ? (
-                <AlbumPlus
-                  label={t("brainformNewRag")}
-                  onClick={beginNewRag}
-                  disabled={Boolean(busyKey)}
-                  busy={busyKey === "rag-new"}
-                />
-              ) : null
+              <AlbumPlus
+                label={t("brainformNewRag")}
+                onClick={beginNewRag}
+                disabled={Boolean(busyKey)}
+                busy={busyKey === "rag-new"}
+              />
             ) : (
               <span className={album.count}>{ragDocuments.length}</span>
             )}
@@ -2516,7 +2511,7 @@ function BrainformWorkspaceBody({
                     key={document.id}
                     index={index}
                     document={document}
-                    agents={ragAgents[document.id]}
+                    agents={ragAgents(document)}
                     tone={failed ? "failed" : status ? "pending" : ""}
                     title={
                       renameDocumentId === document.id ? (
@@ -2663,14 +2658,6 @@ function BrainformWorkspaceBody({
                   <path d="M6 3h9l4 4v14H6zM14 3v5h5" />
                 </svg>
                 <p>{t("brainformRagEmpty")}</p>
-                {canAddRag ? (
-                  <AlbumPlus
-                    label={t("brainformNewRag")}
-                    onClick={beginNewRag}
-                    disabled={Boolean(busyKey)}
-                    busy={busyKey === "rag-new"}
-                  />
-                ) : null}
               </div>
               <div className={album.ghost} aria-hidden="true">
                 <AlbumIcon name="plus" size={40} />

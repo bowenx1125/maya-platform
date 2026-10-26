@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import type { AffectedAgent, KnowledgeDocument } from "../../lib/api/platform";
 import { useT } from "../../lib/i18n";
-import { useSession } from "../session-provider";
 import { Button } from "../ui/button";
 
 const PATHS = {
@@ -196,48 +195,20 @@ export function fileExt(filename: string): string {
 }
 
 /**
- * Agents using each RAG, from the existing
- * GET /knowledge-documents/{id}/affected-agents (one call per card).
+ * Agents using each RAG, read straight from the library list response
+ * (`used_by_agents`, filled by GET /groups/{id}/knowledge-documents and
+ * GET /courses/{id}/workspace-documents). No per-card request.
  */
-export function useRagAgents(documents: KnowledgeDocument[]) {
-  const { api } = useSession();
-  const [agents, setAgents] = useState<Record<string, AffectedAgent[]>>({});
-  const ids = documents.map((document) => document.id).join(",");
-  useEffect(() => {
-    let live = true;
-    const list = ids ? ids.split(",") : [];
-    void Promise.all(
-      list.map(async (id) => {
-        try {
-          return [id, await api.knowledgeAffectedAgents(id)] as const;
-        } catch {
-          return [id, null] as const;
-        }
-      }),
-    ).then((rows) => {
-      if (!live) return;
-      const next: Record<string, AffectedAgent[]> = {};
-      for (const [id, value] of rows) if (value) next[id] = value;
-      setAgents(next);
-    });
-    return () => {
-      live = false;
-    };
-  }, [api, ids]);
-  return agents;
+export function ragAgents(document: KnowledgeDocument): AffectedAgent[] {
+  return document.used_by_agents ?? [];
 }
 
-/**
- * Last editor's username. The backend does not send either field yet
- * (see proposals/18-rag-album-final/API-CHANGES.md); the row stays bound
- * to them and shows an empty signature line until it does.
- */
+/** Last editor's username: the uploader until last_edited_by_* exists. */
 export function lastEditor(document: KnowledgeDocument): string | null {
   const extra = document as KnowledgeDocument & {
     last_edited_by_username?: string | null;
-    owner_username?: string | null;
   };
-  return extra.last_edited_by_username || extra.owner_username || null;
+  return extra.last_edited_by_username || document.owner_username || null;
 }
 
 /** Card B: art, plate (title, status, Used by, Last edited by), footer. */
