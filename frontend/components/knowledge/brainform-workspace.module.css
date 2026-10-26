@@ -683,6 +683,8 @@
     }
 
     .studyformGrid > *,
+    .studyformGrid > [aria-labelledby],
+    .studyformGrid > :global(#studyform-voices),
     .studyformGrid [data-studyform-slot="rag"],
     .studyformGrid [data-studyform-slot="record"] > *,
     .embeddedPage > :not(.embeddedSections) {

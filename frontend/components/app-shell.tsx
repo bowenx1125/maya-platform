@@ -714,27 +714,19 @@ export function AppShell({
         })),
     },
   ];
-  // The pink pill marks one row: Voices on its own page, otherwise the first
-  // row that opens the active page; that row carries aria-current.
-  const onVoices = Boolean(studentVoicesHref && pathname === studentVoicesHref);
-  // Teams lights only on the Teams page; the Studyform grid lights no row
-  // (owner decision 2026-10-26), so rows sharing its href stay unlit too.
-  let litKey: string | undefined = agentsArea
+  // The pink pill marks the one row for the current page; that row carries
+  // aria-current. litSidebarKey prefers the most specific match. Teams lights
+  // only on the Teams page; the Studyform grid itself lights no row (owner
+  // decision 2026-10-26).
+  const onStudyformGrid =
+    !teamsPage && pathname === studyformHref.split(/[?#]/, 1)[0];
+  const litKey = agentsArea
     ? "studyform:agents"
-    : onVoices
-      ? undefined
-      : teamsPage
-        ? "studyform:teams"
-        : activeHref === studyformHref
-          ? "none"
-          : undefined;
-  for (const group of groups) {
-    for (const item of group.items) {
-      if (litKey) break;
-      if (onVoices ? item.key === "voices" : item.href === activeHref)
-        litKey = `${group.key}:${item.key}`;
-    }
-  }
+    : teamsPage
+      ? "studyform:teams"
+      : onStudyformGrid
+        ? undefined
+        : litSidebarKey(groups, pathname, activeHref, studentVoicesHref);
   const pill = (
     <ViewTransition name="nav-active" share="nav-pill" default="none">
       <span
@@ -1146,4 +1138,49 @@ export function AppShell({
       </div>
     </WorkspaceActionsContext.Provider>
   );
+}
+
+/** Pages whose own row shares its href with another row (Knowledge opens
+ * Studyform), keyed by pathname. */
+const PAGE_ROW: Record<string, string> = {
+  "/teacher/knowledge": "knowledge",
+  "/student/knowledge": "knowledge",
+};
+
+/**
+ * Picks the sidebar row lit for the current page, most specific first: Voices
+ * on its own page, then the first row whose href opens this very path, then
+ * the page's own row, then the first row opening the
+ * active page, then the row whose href is the longest prefix of the path.
+ */
+export function litSidebarKey(
+  groups: { key: string; items: { key: string; href: string }[] }[],
+  pathname: string,
+  activeHref: string,
+  voicesHref?: string,
+): string | undefined {
+  const rows = groups.flatMap((group) =>
+    group.items.map((item) => ({ ...item, id: `${group.key}:${item.key}` })),
+  );
+  if (voicesHref && pathname === voicesHref) {
+    const voices = rows.find((row) => row.key === "voices");
+    if (voices) return voices.id;
+  }
+  const samePage = rows.find(
+    (row) => row.href.split(/[?#]/, 1)[0] === pathname,
+  );
+  if (samePage) return samePage.id;
+  const own = rows.find((row) => row.key === PAGE_ROW[pathname]);
+  if (own) return own.id;
+  const exact = rows.find((row) => row.href === activeHref);
+  if (exact) return exact.id;
+  let best: { id: string; length: number } | undefined;
+  for (const row of rows) {
+    const path = row.href.split(/[?#]/, 1)[0];
+    if (!path || !(pathname === path || pathname.startsWith(`${path}/`)))
+      continue;
+    if (!best || path.length > best.length)
+      best = { id: row.id, length: path.length };
+  }
+  return best?.id;
 }
