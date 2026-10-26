@@ -373,22 +373,24 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
               onChange={(event) => setNewPassword(event.target.value)}
             />
           </label>
-          <label className="relative">
-            {mismatch ? <StickerBadge n={1} /> : null}
+          <label>
             <span>{t("registerConfirmPassword")}</span>
-            <input
-              aria-invalid={mismatch || undefined}
-              aria-describedby={mismatch ? "password-field-error" : undefined}
-              className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
-              type="password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              minLength={5}
-              maxLength={128}
-              required
-              disabled={busy !== null}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-            />
+            <span className="relative block">
+              {mismatch ? <StickerBadge n={1} /> : null}
+              <input
+                aria-invalid={mismatch || undefined}
+                aria-describedby={mismatch ? "password-field-error" : undefined}
+                className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                minLength={5}
+                maxLength={128}
+                required
+                disabled={busy !== null}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+              />
+            </span>
           </label>
           <div className="profile-action-row">
             <button
