@@ -356,6 +356,8 @@ const enMessages = {
     "Editing creates a new immutable source and updates current drafts that reference the old source.",
   knowledgeFilename: "Filename",
   ragFilename: "File Name",
+  /** Knowledge album create/edit label override (approved copy change). */
+  knowledgeFileNameLabel: "File Name",
   knowledgeContent: "Content",
   knowledgeHidden: "The source is hidden from the active Brainform library.",
   brainformUnavailable: "Brainform is not available for this course.",
