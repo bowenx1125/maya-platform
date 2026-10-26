@@ -560,12 +560,12 @@ describe("W1 teacher personal workspace", () => {
       </>,
     );
 
-    const heading = await screen.findByRole("heading", { name: "Voices" });
-    const voices = heading.closest("section") as HTMLElement;
+    await screen.findByRole("heading", { name: "Voices" });
     await waitFor(() =>
       expect(api.personalVoiceProfiles).toHaveBeenCalledWith(courseId),
     );
-    expect(await within(voices).findByRole("alert")).toBeTruthy();
+    // Errors are spoken by the mascot: the alert floats in the tray.
+    expect((await screen.findAllByRole("alert")).length).toBeGreaterThan(0);
     expect(api.voiceProfiles).not.toHaveBeenCalled();
   });
 
