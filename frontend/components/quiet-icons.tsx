@@ -335,7 +335,7 @@ export function IconPlus({ size = 16 }: { size?: number }) {
 }
 
 /** Trash can (Debates list Delete, final mockup F). */
-export function IconTrash({ size = 16 }: { size?: number }) {
+export function IconDebateTrash({ size = 16 }: { size?: number }) {
   return (
     <OutlineIcon size={size}>
       <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />

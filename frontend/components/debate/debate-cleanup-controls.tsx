@@ -16,7 +16,7 @@ import {
   IconBellOff,
   IconClose,
   IconSpinner,
-  IconTrash,
+  IconDebateTrash,
 } from "../quiet-icons";
 
 type Intent = {
@@ -273,7 +273,7 @@ export function DebateCleanupControls({
         {labelled && deleteBusy ? (
           <IconSpinner size={18} />
         ) : labelled ? (
-          <IconTrash size={18} />
+          <IconDebateTrash size={18} />
         ) : (
           <IconClose size={18} />
         )}
