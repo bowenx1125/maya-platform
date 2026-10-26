@@ -158,7 +158,9 @@ function renderStage(readOnly = true) {
 describe("BetaDebateStage scene layout", () => {
   it("keeps Transcript above the title and recovery actions above Transcript", () => {
     const layer = (classes: string) => {
-      const z = classes.split(/\s+/).find((c) => /^z-(\[\d+\]|\d+|auto)$/.test(c));
+      const z = classes
+        .split(/\s+/)
+        .find((c) => /^z-(\[\d+\]|\d+|auto)$/.test(c));
       return z === "z-auto" ? NaN : Number(z?.replace(/^z-\[?(\d+)\]?$/, "$1"));
     };
     expect(BETA_NOTICES.split(/\s+/)).toContain("z-auto");

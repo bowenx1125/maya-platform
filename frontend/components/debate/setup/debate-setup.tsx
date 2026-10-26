@@ -62,12 +62,7 @@ import {
   RIBBON_COLORS,
 } from "../debate-chrome";
 
-import {
-  EmptyCard,
-  ErrorNotice,
-  LoadingCard,
-  PageIntro,
-} from "../../ui";
+import { EmptyCard, ErrorNotice, LoadingCard, PageIntro } from "../../ui";
 import {
   ChecklistBadge,
   CreateChecklist,

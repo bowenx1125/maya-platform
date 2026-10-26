@@ -241,10 +241,7 @@ export function RosterWorkspace() {
       );
     }
     return (
-      <div
-        className={`list-row account-row ${styles.row}`}
-        key={entry.user_id}
-      >
+      <div className={`list-row account-row ${styles.row}`} key={entry.user_id}>
         <span className={`roster-identity ${styles.identity}`}>
           <UserAvatar
             avatar={entry.avatar}
@@ -402,7 +399,9 @@ export function RosterWorkspace() {
                   <summary>
                     {t("removedMembers")} · {removed.length}
                   </summary>
-                  <div className={`compact-list ${styles.rows} ${styles.removedBody}`}>
+                  <div
+                    className={`compact-list ${styles.rows} ${styles.removedBody}`}
+                  >
                     {removed.map((entry) => memberRow(entry))}
                   </div>
                 </details>

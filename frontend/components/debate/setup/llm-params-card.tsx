@@ -183,7 +183,11 @@ function fillPercent(value: number, min: number, max: number): string {
 }
 
 /** The "?" whose shared ui-guide tooltip carries the meaning and any note. */
-function HelpButton({ name, help, extra }: {
+function HelpButton({
+  name,
+  help,
+  extra,
+}: {
   name: string;
   help: string;
   extra: string[];

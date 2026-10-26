@@ -29,22 +29,28 @@ export const knowledgeAlbum = {
   grid: `grid grid-cols-[repeat(2,minmax(0,1fr))] gap-y-[30px] gap-x-[28px] m-0 p-0 list-none max-[960px]:grid-cols-[minmax(0,1fr)] max-[960px]:gap-[22px]`,
   card: `relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[12px] shadow-[6px_6px_0_#111] [&:nth-child(4n+1)]:[--r:-1.2deg] [&:nth-child(4n+2)]:[--r:1deg] [&:nth-child(4n+3)]:[--r:-0.8deg] [&:nth-child(4n)]:[--r:1.1deg] ${LIST_CARD_LIFT}`,
   art: "h-[104px] border-[3px] border-solid border-[#111] rounded-[8px] overflow-hidden bg-white",
-  plate: "flex flex-col gap-[10px] p-[12px] bg-white border-2 border-solid border-[#111] rounded-[8px]",
+  plate:
+    "flex flex-col gap-[10px] p-[12px] bg-white border-2 border-solid border-[#111] rounded-[8px]",
   fn: "[font:700_16px_var(--font-lexend,'Lexend')] text-[#111] text-left [overflow-wrap:anywhere] whitespace-normal [background:none] border-0 p-0 cursor-pointer",
-  renameInput: "[font:700_16px_var(--font-lexend,'Lexend')] border-2 border-solid border-[#111] rounded-[6px] py-[2px] px-[6px]",
+  renameInput:
+    "[font:700_16px_var(--font-lexend,'Lexend')] border-2 border-solid border-[#111] rounded-[6px] py-[2px] px-[6px]",
   bad: "block w-fit py-[4px] px-[8px] border-2 border-solid border-[#111] rounded-[6px] bg-[#ffe4e4] text-[#b91c1c] [font:600_12px_var(--font-lexend,'Lexend')]",
   ag: "w-fit py-[2px] px-[10px] bg-[#67e8f9] border-2 border-solid border-[#111] rounded-full shadow-[2px_2px_0_#111] [font:800_12px_var(--font-lexend,'Lexend')]",
   ft: "flex items-center gap-[10px] min-h-[40px]",
   ib: "!inline-grid !place-items-center !w-[40px] !h-[40px] !p-0 !bg-white !border-[2.5px] !border-solid !border-[#111] !rounded-[8px] !shadow-[4px_4px_0_#111] !opacity-60",
-  ghost: "grid place-items-center min-h-[300px] text-[#b9ae90] border-[3px] border-dashed border-[#b9ae90] rounded-[12px]",
-  ghostFirst: "grid place-items-center content-center justify-items-center gap-[16px] min-h-[300px] text-[#111] bg-white border-[3px] border-solid border-[#111] rounded-[12px] shadow-[6px_6px_0_#111] [&_p]:m-0 [&_p]:py-[4px] [&_p]:px-[14px] [&_p]:bg-[#ffe14d] [&_p]:border-[3px] [&_p]:border-solid [&_p]:border-[#111] [&_p]:rounded-[6px] [&_p]:shadow-[4px_4px_0_#111] [&_p]:[transform:rotate(-2deg)] [&_p]:[font:800_22px_var(--font-bricolage,'Bricolage_Grotesque'),system-ui]",
-  ghostArt: "w-[180px] h-[70px] border-[3px] border-solid border-[#111] rounded-[8px] overflow-hidden",
+  ghost:
+    "grid place-items-center min-h-[300px] text-[#b9ae90] border-[3px] border-dashed border-[#b9ae90] rounded-[12px]",
+  ghostFirst:
+    "grid place-items-center content-center justify-items-center gap-[16px] min-h-[300px] text-[#111] bg-white border-[3px] border-solid border-[#111] rounded-[12px] shadow-[6px_6px_0_#111] [&_p]:m-0 [&_p]:py-[4px] [&_p]:px-[14px] [&_p]:bg-[#ffe14d] [&_p]:border-[3px] [&_p]:border-solid [&_p]:border-[#111] [&_p]:rounded-[6px] [&_p]:shadow-[4px_4px_0_#111] [&_p]:[transform:rotate(-2deg)] [&_p]:[font:800_22px_var(--font-bricolage,'Bricolage_Grotesque'),system-ui]",
+  ghostArt:
+    "w-[180px] h-[70px] border-[3px] border-solid border-[#111] rounded-[8px] overflow-hidden",
   spread: `grid grid-cols-[240px_minmax(0,1fr)] gap-[34px] items-start max-[960px]:grid-cols-[minmax(0,1fr)] max-[960px]:gap-[22px]`,
   lcol: "flex flex-col gap-[22px]",
   pack: `relative grid place-items-center h-[310px] border-[3px] border-solid border-[#111] border-y-[14px] rounded-[10px] shadow-[6px_6px_0_#111] [transform:rotate(-1.5deg)] cursor-pointer [background:repeating-conic-gradient(from_0deg_at_50%_50%,#ff4d8d_0_10deg,#ff8db5_10deg_20deg)] max-[960px]:h-[170px]`,
   disc: `grid place-items-center w-[96px] h-[96px] rounded-full bg-[#ffe14d] border-[3px] border-solid border-[#111] shadow-[4px_4px_0_#111] max-[960px]:w-[72px] max-[960px]:h-[72px]`,
   req: "relative py-[14px] px-[16px] bg-[#fff1d6] border-[2.5px] border-solid border-[#111] border-l-[12px] border-l-[#ff4d8d] rounded-[6px] shadow-[5px_5px_0_#111] [transform:rotate(-1.2deg)] [font:700_14px/1.45_var(--font-lexend,'Lexend')]",
-  blank: "p-[12px] bg-[#67e8f9] border-[3px] border-solid border-[#111] rounded-[12px] shadow-[7px_7px_0_#111]",
+  blank:
+    "p-[12px] bg-[#67e8f9] border-[3px] border-solid border-[#111] rounded-[12px] shadow-[7px_7px_0_#111]",
   in: "flex flex-col gap-[16px] p-[18px] bg-white border-[3px] border-solid border-[#111] rounded-[8px]",
   /** U3 field error: red edge on the File Name input. */
   flErr: "[&_input]:!border-[#ef4444] [&_input]:!shadow-[3px_3px_0_#ef4444]",
@@ -74,9 +80,30 @@ export function KnowledgeArt({ id }: { id: string }) {
         stroke="#111"
         strokeWidth="3"
       />
-      <circle cx="125" cy="60" r="15" fill="#A3E635" stroke="#111" strokeWidth="3" />
-      <circle cx="170" cy="32" r="13" fill="#67E8F9" stroke="#111" strokeWidth="3" />
-      <circle cx="198" cy="66" r="14" fill="#FF4D8D" stroke="#111" strokeWidth="3" />
+      <circle
+        cx="125"
+        cy="60"
+        r="15"
+        fill="#A3E635"
+        stroke="#111"
+        strokeWidth="3"
+      />
+      <circle
+        cx="170"
+        cy="32"
+        r="13"
+        fill="#67E8F9"
+        stroke="#111"
+        strokeWidth="3"
+      />
+      <circle
+        cx="198"
+        cy="66"
+        r="14"
+        fill="#FF4D8D"
+        stroke="#111"
+        strokeWidth="3"
+      />
     </svg>
   );
 }

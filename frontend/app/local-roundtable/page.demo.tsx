@@ -221,7 +221,10 @@ export default function LocalRoundtablePage() {
       </header>
 
       {message ? (
-        <p className="absolute bottom-3.5 left-3.5 z-[9] m-0 max-w-[calc(100%-28px)] rounded-md border border-[rgba(211,167,74,0.5)] bg-[rgba(252,250,246,0.96)] px-2.5 py-1.5 text-[0.82rem] text-(--ink)" role="status">
+        <p
+          className="absolute bottom-3.5 left-3.5 z-[9] m-0 max-w-[calc(100%-28px)] rounded-md border border-[rgba(211,167,74,0.5)] bg-[rgba(252,250,246,0.96)] px-2.5 py-1.5 text-[0.82rem] text-(--ink)"
+          role="status"
+        >
           {message}
         </p>
       ) : null}

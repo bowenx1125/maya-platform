@@ -48,7 +48,12 @@
 .tapeTitle {
   margin: 0;
   display: inline-block;
-  font-family: var(--font-display, "Bricolage Grotesque", system-ui, sans-serif);
+  font-family: var(
+    --font-display,
+    "Bricolage Grotesque",
+    system-ui,
+    sans-serif
+  );
   font-size: 28px;
   font-weight: 800;
   line-height: 1.15;
@@ -405,7 +410,12 @@
 }
 
 .polarName {
-  font-family: var(--font-display, "Bricolage Grotesque", system-ui, sans-serif);
+  font-family: var(
+    --font-display,
+    "Bricolage Grotesque",
+    system-ui,
+    sans-serif
+  );
   font-size: 16px;
   font-weight: 800;
   text-align: center;

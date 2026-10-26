@@ -1,1 +1,59 @@
-{"texts":["Mayaform","Studyform","Agents","Teams","Brainform","RAG","Voices","Record","Chatform","Chat with Agent","Chat with Team","Classroom","Live","Meet Problems?","Send to t330034059@mail.bnbu.edu.cn","Logout","Chatform","Back","Done","Agents","V1.0","Socrates","V2.0","Confucius","V1.0","Marie Curie","Teams","V1.2","Debate Squad","V1.0","Ethics Circle"],"attrs":[{"aria":"Expand sidebar","title":null,"alt":null,"ph":null,"testid":null},{"aria":"Collapse sidebar","title":null,"alt":null,"ph":null,"testid":null},{"aria":"Student view navigation","title":null,"alt":null,"ph":null,"testid":null}],"hiddenTexts":["Mayaform","No Teams yet."]}
+{
+  "texts": [
+    "Mayaform",
+    "Studyform",
+    "Agents",
+    "Teams",
+    "Brainform",
+    "RAG",
+    "Voices",
+    "Record",
+    "Chatform",
+    "Chat with Agent",
+    "Chat with Team",
+    "Classroom",
+    "Live",
+    "Meet Problems?",
+    "Send to t330034059@mail.bnbu.edu.cn",
+    "Logout",
+    "Chatform",
+    "Back",
+    "Done",
+    "Agents",
+    "V1.0",
+    "Socrates",
+    "V2.0",
+    "Confucius",
+    "V1.0",
+    "Marie Curie",
+    "Teams",
+    "V1.2",
+    "Debate Squad",
+    "V1.0",
+    "Ethics Circle"
+  ],
+  "attrs": [
+    {
+      "aria": "Expand sidebar",
+      "title": null,
+      "alt": null,
+      "ph": null,
+      "testid": null
+    },
+    {
+      "aria": "Collapse sidebar",
+      "title": null,
+      "alt": null,
+      "ph": null,
+      "testid": null
+    },
+    {
+      "aria": "Student view navigation",
+      "title": null,
+      "alt": null,
+      "ph": null,
+      "testid": null
+    }
+  ],
+  "hiddenTexts": ["Mayaform", "No Teams yet."]
+}

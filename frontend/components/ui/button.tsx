@@ -27,10 +27,8 @@ export const buttonVariants = cva(
         default: `text-[var(--main-foreground)] bg-[var(--main)] border-[3px] border-[var(--border)] ${PRESS_MOTION}`,
         noShadow:
           "text-[var(--main-foreground)] bg-[var(--main)] border-[3px] border-[var(--border)]",
-        neutral:
-          `bg-[var(--secondary-background)] text-[var(--foreground)] border-2 border-[var(--border)] ${PRESS_MOTION}`,
-        reverse:
-          `text-[var(--main-foreground)] bg-[var(--main)] border-[3px] border-[var(--border)] ${PRESS_MOTION}`,
+        neutral: `bg-[var(--secondary-background)] text-[var(--foreground)] border-2 border-[var(--border)] ${PRESS_MOTION}`,
+        reverse: `text-[var(--main-foreground)] bg-[var(--main)] border-[3px] border-[var(--border)] ${PRESS_MOTION}`,
         ghost: `bg-transparent text-[var(--foreground)] border-transparent ${ICON_MOTION}`,
       },
       size: {

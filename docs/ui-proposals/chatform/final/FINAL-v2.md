@@ -6,19 +6,19 @@ Only **empty** and **newconv** differ between the two variants (plus shared empt
 
 ## Shared fix (both variants)
 
-| State | Change |
-|---|---|
-| **empty** | Replaced the single radiant-disk with **C’s ORIGINAL empty**: three grey ghost / character-select dashed slots (`scheme-C/empty-*.png`). Copy unchanged. |
-| **newconv** | Radiant-disk kept, but **properly centered** in the chat panel (flex center above the composer). Light peeking title row kept. |
+| State       | Change                                                                                                                                                   |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **empty**   | Replaced the single radiant-disk with **C’s ORIGINAL empty**: three grey ghost / character-select dashed slots (`scheme-C/empty-*.png`). Copy unchanged. |
+| **newconv** | Radiant-disk kept, but **properly centered** in the chat panel (flex center above the composer). Light peeking title row kept.                           |
 
 ## How the two variants differ (newconv only)
 
-| | **final-v2a** | **final-v2b** |
-|---|---|---|
-| Disk size | 192px (w-48) | **Larger** 224px (w-56) + hard shadow |
-| Vertical air | Tight center | **More air** (extra top/bottom margin) |
+|                   | **final-v2a**          | **final-v2b**                                                   |
+| ----------------- | ---------------------- | --------------------------------------------------------------- |
+| Disk size         | 192px (w-48)           | **Larger** 224px (w-56) + hard shadow                           |
+| Vertical air      | Tight center           | **More air** (extra top/bottom margin)                          |
 | Character on disk | Shared mascot (`M[0]`) | **Agent’s own avatar** (Socrates `M[1]` on peach sun `#F2B79A`) |
-| Empty page | Identical (C ghosts) | Identical (C ghosts) |
+| Empty page        | Identical (C ghosts)   | Identical (C ghosts)                                            |
 
 Pick one newconv treatment; empty is the same in both.
 

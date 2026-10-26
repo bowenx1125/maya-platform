@@ -36,8 +36,7 @@ const BOOT_BACK =
   "secondary-action inline-flex min-h-11 items-center no-underline";
 const REPORT_DIALOG =
   "w-[min(1040px,calc(100vw_-_40px))] max-h-[calc(100dvh_-_48px)] [padding:var(--workspace-inset)] border border-solid [border-color:var(--line)] rounded-[24px] [background:var(--paper,#fcfaf6)] [color:var(--ink)] shadow-[0_24px_80px_rgba(29,26,23,0.2)] backdrop:bg-[rgba(29,26,23,0.35)] backdrop:backdrop-blur-[4px] [&>section+section]:[margin-top:var(--workspace-gap)]";
-const REPORT_ACTIONS =
-  "flex justify-end [margin:0_0_var(--workspace-gap)]";
+const REPORT_ACTIONS = "flex justify-end [margin:0_0_var(--workspace-gap)]";
 const REPORT_CLOSE =
   "inline-flex items-center justify-center w-[44px] h-[44px] min-h-[44px] p-0 rounded-[12px]";
 
@@ -274,7 +273,6 @@ export default function TeacherDebateControlPage() {
       setInteractionBusy(false);
     }
   }, [api, debateId, joinUrl]);
-
 
   const refreshSnapshot = useCallback(async () => {
     if (!debateId) throw new Error("Debate id is missing.");

@@ -18,13 +18,13 @@ Design only. No app code, routes, logic, copy, or testids change until approved 
 
 ## States rendered
 
-| State | 1440 | 390 |
-|---|---|---|
-| list (open conversation) | `list-1440.png` | `list-390.png` |
-| create (ChatTargetPicker) | `create-1440.png` | `create-390.png` |
-| empty (no chats) | `empty-1440.png` | `empty-390.png` |
-| newconv (newly-created empty conversation) | `newconv-1440.png` | `newconv-390.png` |
-| error (expanded sticker, Check status inside) | `error-1440.png` | `error-390.png` |
+| State                                         | 1440               | 390               |
+| --------------------------------------------- | ------------------ | ----------------- |
+| list (open conversation)                      | `list-1440.png`    | `list-390.png`    |
+| create (ChatTargetPicker)                     | `create-1440.png`  | `create-390.png`  |
+| empty (no chats)                              | `empty-1440.png`   | `empty-390.png`   |
+| newconv (newly-created empty conversation)    | `newconv-1440.png` | `newconv-390.png` |
+| error (expanded sticker, Check status inside) | `error-1440.png`   | `error-390.png`   |
 
 Generator: `../src/gen-final.mjs`. Matching `.html` beside each PNG. Copy/a11y audit: `../audit/FINAL-RESULT.txt` → **0 missing**.
 

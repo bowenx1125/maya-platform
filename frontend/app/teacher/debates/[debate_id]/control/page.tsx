@@ -11,7 +11,10 @@ import {
   useSession,
 } from "../../../../../components/session-provider";
 import { ErrorNotice, LoadingCard } from "../../../../../components/ui";
-import { createIdempotencyHandle, type DebateDetail } from "../../../../../lib/api";
+import {
+  createIdempotencyHandle,
+  type DebateDetail,
+} from "../../../../../lib/api";
 import { localizeError } from "../../../../../lib/i18n";
 
 /** The 3D Immerse stage that classic-format (legacy_v1) debates now open in. */
@@ -34,25 +37,22 @@ export default function TeacherDebateControlPage() {
   const snapshotRequest = useRef(0);
   const loadRequest = useRef(0);
 
-  const readSnapshot = useCallback(
-    async () => {
-      if (!debateId) throw new Error("Debate id is missing.");
-      const request = ++snapshotRequest.current;
-      const next = await api.debate(debateId);
-      if (request !== snapshotRequest.current) return next;
-      setDetail((current) =>
-        current?.id === next.id &&
-        (current.revision > next.revision ||
-          current.last_sequence > next.last_sequence ||
-          current.playback.control_version > next.playback.control_version)
-          ? current
-          : next,
-      );
-      setError(null);
-      return next;
-    },
-    [api, debateId],
-  );
+  const readSnapshot = useCallback(async () => {
+    if (!debateId) throw new Error("Debate id is missing.");
+    const request = ++snapshotRequest.current;
+    const next = await api.debate(debateId);
+    if (request !== snapshotRequest.current) return next;
+    setDetail((current) =>
+      current?.id === next.id &&
+      (current.revision > next.revision ||
+        current.last_sequence > next.last_sequence ||
+        current.playback.control_version > next.playback.control_version)
+        ? current
+        : next,
+    );
+    setError(null);
+    return next;
+  }, [api, debateId]);
 
   const refreshSnapshot = readSnapshot;
 

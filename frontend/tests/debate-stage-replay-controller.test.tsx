@@ -673,9 +673,7 @@ describe("saved media failure recovery", () => {
         socketFactory: () => socket,
         refreshSnapshot,
       };
-      render(
-        <BetaDebateStage {...props} />,
-      );
+      render(<BetaDebateStage {...props} />);
       await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
       act(() => socket.emitOpen());
       act(() => socket.emitMessage(acquired()));
@@ -732,9 +730,7 @@ describe("saved media failure recovery", () => {
         socketFactory: () => socket,
         refreshSnapshot,
       };
-      render(
-        <BetaDebateStage {...props} />,
-      );
+      render(<BetaDebateStage {...props} />);
       await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
       act(() => socket.emitOpen());
       if (kind === "beta") {

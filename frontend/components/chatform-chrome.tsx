@@ -22,10 +22,7 @@ export function ChatEmptyGhosts() {
           key={id}
           className="grid h-20 w-16 place-items-end overflow-hidden rounded-[8px] border-[3px] border-dashed border-[#111]/50"
         >
-          <MascotFigure
-            id={id}
-            className="h-16 w-auto opacity-40 grayscale"
-          />
+          <MascotFigure id={id} className="h-16 w-auto opacity-40 grayscale" />
         </span>
       ))}
     </div>
@@ -102,7 +99,13 @@ export function ChatAvatar({
     >
       <MascotFigure
         id={mascot}
-        className={size <= 30 ? "h-[27px] w-auto" : size <= 36 ? "h-[32px] w-auto" : "h-[40px] w-auto"}
+        className={
+          size <= 30
+            ? "h-[27px] w-auto"
+            : size <= 36
+              ? "h-[32px] w-auto"
+              : "h-[40px] w-auto"
+        }
       />
     </span>
   );

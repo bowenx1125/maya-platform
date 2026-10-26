@@ -178,7 +178,10 @@ export function EvidenceTraceInspector({
   );
   if (rows.length === 0) {
     return (
-      <p className="m-0 text-[0.78rem] text-(--muted)" data-testid="evidence-trace-absent">
+      <p
+        className="m-0 text-[0.78rem] text-(--muted)"
+        data-testid="evidence-trace-absent"
+      >
         {all.length === 0
           ? "No snapshot evidence was cited in this turn."
           : `Evidence lineage recorded (${all.length}) but it no longer aligns with this speech.`}
@@ -192,7 +195,10 @@ export function EvidenceTraceInspector({
       data-testid="evidence-trace-inspector"
     >
       <summary>
-        Check RAG <span className="ml-1 inline-grid size-[1.35rem] min-w-[1.35rem] place-items-center rounded-full bg-(--accent-soft,#f6ecd3) text-[0.72rem] text-(--indigo-dark)">{rows.length}</span>
+        Check RAG{" "}
+        <span className="ml-1 inline-grid size-[1.35rem] min-w-[1.35rem] place-items-center rounded-full bg-(--accent-soft,#f6ecd3) text-[0.72rem] text-(--indigo-dark)">
+          {rows.length}
+        </span>
       </summary>
       <ol className="mt-2.5 mb-0 grid list-none gap-2 p-0">
         {rows.map((row, index) => {
@@ -226,7 +232,9 @@ export function EvidenceTraceInspector({
               </p>
               {row.query_text ? (
                 <p className="mt-2 mb-0 text-[0.78rem] leading-[1.5] text-(--muted)">
-                  <span className="mr-[5px] font-bold text-(--ink)">Retrieval query</span>
+                  <span className="mr-[5px] font-bold text-(--ink)">
+                    Retrieval query
+                  </span>
                   {queryKindLabel(row.query_kind)}
                 </p>
               ) : null}
@@ -243,11 +251,15 @@ export function EvidenceTraceInspector({
                 <dl className="mt-2 mb-0 grid gap-[5px]">
                   <div className="grid grid-cols-[4.7rem_minmax(0,1fr)] gap-2">
                     <dt className="text-[0.74rem] text-(--muted)">Source</dt>
-                    <dd className="m-0 text-[0.76rem] text-(--ink) [overflow-wrap:anywhere]">{row.source_filename}</dd>
+                    <dd className="m-0 text-[0.76rem] text-(--ink) [overflow-wrap:anywhere]">
+                      {row.source_filename}
+                    </dd>
                   </div>
                   <div className="grid grid-cols-[4.7rem_minmax(0,1fr)] gap-2">
                     <dt className="text-[0.74rem] text-(--muted)">Locator</dt>
-                    <dd className="m-0 text-[0.76rem] text-(--ink) [overflow-wrap:anywhere]">{row.source_locator}</dd>
+                    <dd className="m-0 text-[0.76rem] text-(--ink) [overflow-wrap:anywhere]">
+                      {row.source_locator}
+                    </dd>
                   </div>
                 </dl>
               ) : null}

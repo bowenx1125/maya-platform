@@ -33,8 +33,7 @@ export function agentMascot(id: string, materialTheme?: string | null) {
 export const AGENT_GRID_CLASS =
   "m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5 p-0 pt-4 pr-4 pb-5 max-[680px]:grid-cols-1 max-[680px]:gap-4";
 
-const CARD_CLASS =
-  `group/card relative flex min-h-[248px] flex-col overflow-visible rounded-[14px] border-[3px] border-border bg-surface p-2 font-body text-ink shadow-[6px_6px_0_#111] ${LIST_CARD_LIFT} focus-within:[--card-lift:-2px] motion-reduce:focus-within:[--card-lift:0px]`;
+const CARD_CLASS = `group/card relative flex min-h-[248px] flex-col overflow-visible rounded-[14px] border-[3px] border-border bg-surface p-2 font-body text-ink shadow-[6px_6px_0_#111] ${LIST_CARD_LIFT} focus-within:[--card-lift:-2px] motion-reduce:focus-within:[--card-lift:0px]`;
 
 /** Card tones: salmon, periwinkle, sage — title band and sunburst share one. */
 const CARD_TONES = ["#F2B79A", "#C9D3F0", "#C9D9A0"] as const;
@@ -351,7 +350,10 @@ export function AgentCard({
     );
     return (
       <li
-        className={cn("group/card relative list-none rounded-[12px] border-[3px] border-[#111] bg-white px-3 pt-[30px] pb-3 font-body text-[#111] shadow-[6px_6px_0_#111]", LIST_CARD_LIFT)}
+        className={cn(
+          "group/card relative list-none rounded-[12px] border-[3px] border-[#111] bg-white px-3 pt-[30px] pb-3 font-body text-[#111] shadow-[6px_6px_0_#111]",
+          LIST_CARD_LIFT,
+        )}
         style={{ "--r": `${tilt}deg` } as CSSProperties}
         data-agent-card={id}
         data-tone={tone}

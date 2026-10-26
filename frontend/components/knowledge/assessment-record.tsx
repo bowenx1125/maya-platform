@@ -278,7 +278,10 @@ function Burst({ n = 5, star }: { n?: number; star?: string }) {
     "bg-[#C4B5FD] -rotate-5 shadow-[2px_2px_0_#DDD6FE]",
   ];
   return (
-    <div aria-hidden="true" className="mt-3.5 flex flex-wrap items-center gap-2">
+    <div
+      aria-hidden="true"
+      className="mt-3.5 flex flex-wrap items-center gap-2"
+    >
       {tones.slice(0, n).map((cls, i) => (
         <i
           key={i}
@@ -371,8 +374,7 @@ export function RecordSection({
   const when = useWhen();
   const teacher = scope !== "own";
   const intro =
-    guideText ??
-    t(scope === "own" ? "recordOwnIntro" : "recordIntro");
+    guideText ?? t(scope === "own" ? "recordOwnIntro" : "recordIntro");
 
   return (
     <ClipboardBoard labelledBy="brainform-record-heading">
@@ -380,7 +382,11 @@ export function RecordSection({
       {error ? (
         <ErrorNotice inline error={error} onRetry={onRetry} />
       ) : !loaded ? (
-        <ul className="m-0 flex list-none flex-col gap-4 p-0" aria-busy="true" aria-label={t("loading")}>
+        <ul
+          className="m-0 flex list-none flex-col gap-4 p-0"
+          aria-busy="true"
+          aria-label={t("loading")}
+        >
           {[0, 1, 2].map((index) => (
             <li key={index} className={`${cardShell(index)} animate-pulse`}>
               <span className="h-3.5 w-3/5 rounded bg-[#EBE5DA]" />
@@ -417,7 +423,9 @@ export function RecordSection({
                     {String(index + 1).padStart(2, "0")}
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col gap-1 text-left">
-                    <span className="text-[17px] font-extrabold">{team.name}</span>
+                    <span className="text-[17px] font-extrabold">
+                      {team.name}
+                    </span>
                     <span className="text-xs font-medium text-[#555]">
                       {scope === "own"
                         ? t("recordOwnMeta", { attempts: team.attempts.length })
@@ -540,7 +548,9 @@ export function RecordDetail({
             <dt className="mb-0.5 text-[10px] font-extrabold tracking-wide text-[#666]">
               {t("recordAttempts")}
             </dt>
-            <dd className="m-0 text-2xl font-extrabold">{team.attempts.length}</dd>
+            <dd className="m-0 text-2xl font-extrabold">
+              {team.attempts.length}
+            </dd>
           </div>
         ) : (
           <div className="min-w-[120px] rounded-lg border-[3px] border-black bg-white px-3.5 py-2.5 shadow-[3px_3px_0_#C4B5FD]">
@@ -778,21 +788,36 @@ function AnswerSheet({
       <table className="w-full min-w-[520px] border-collapse text-xs">
         <thead>
           <tr>
-            <th scope="col" className="bg-[#F7F2EA] px-2.5 py-2 text-left font-semibold text-[#625E59]">
+            <th
+              scope="col"
+              className="bg-[#F7F2EA] px-2.5 py-2 text-left font-semibold text-[#625E59]"
+            >
               #
             </th>
-            <th scope="col" className="bg-[#F7F2EA] px-2.5 py-2 text-left font-semibold text-[#625E59]">
+            <th
+              scope="col"
+              className="bg-[#F7F2EA] px-2.5 py-2 text-left font-semibold text-[#625E59]"
+            >
               {t("overviewQuestion")}
             </th>
-            <th scope="col" className="bg-[#F7F2EA] px-2.5 py-2 text-left font-semibold text-[#625E59]">
+            <th
+              scope="col"
+              className="bg-[#F7F2EA] px-2.5 py-2 text-left font-semibold text-[#625E59]"
+            >
               {t("overviewAnswer")}
             </th>
             {own ? null : (
               <>
-                <th scope="col" className="bg-[#F7F2EA] px-2.5 py-2 text-left font-semibold text-[#625E59]">
+                <th
+                  scope="col"
+                  className="bg-[#F7F2EA] px-2.5 py-2 text-left font-semibold text-[#625E59]"
+                >
                   {t("overviewPoints")}
                 </th>
-                <th scope="col" className="bg-[#F7F2EA] px-2.5 py-2 text-left font-semibold text-[#625E59]">
+                <th
+                  scope="col"
+                  className="bg-[#F7F2EA] px-2.5 py-2 text-left font-semibold text-[#625E59]"
+                >
                   {t("overviewFeedback")}
                 </th>
               </>

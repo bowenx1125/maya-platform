@@ -40,8 +40,7 @@ export const BETA_STREAM_STYLES: Record<string, string> = {
     "py-[1px] px-2 border-2 border-solid border-[#111] rounded-full bg-[#e3fbe9] text-[#166534] [font:800_11px/1.4_var(--font-ui,system-ui)] lowercase",
   streamCount:
     "ml-auto py-[2px] px-[10px] border-2 border-solid border-[#111] rounded-full bg-[#ffe14d] [font:800_13px/1.4_var(--font-ui,system-ui)] shadow-[2px_2px_0_#111]",
-  streamList:
-    `grid flex-1 content-start gap-[14px] min-h-0 pt-[14px] px-[14px] pb-4 overflow-y-auto overscroll-contain ${DOTS}`,
+  streamList: `grid flex-1 content-start gap-[14px] min-h-0 pt-[14px] px-[14px] pb-4 overflow-y-auto overscroll-contain ${DOTS}`,
   streamItem:
     "relative grid gap-[7px] min-w-0 py-[10px] pr-3 pl-[18px] bg-white border-[2.5px] border-solid border-[#111] rounded-[14px] [--c:#ffe14d] data-[tone=1]:[--c:#67e8f9] data-[tone=2]:[--c:#a3e635] shadow-[4px_4px_0_var(--c)] before:content-[''] before:absolute before:left-[5px] before:top-[10px] before:bottom-[10px] before:border-0 before:border-l-[2.5px] before:border-dashed before:border-[#111] even:[transform:rotate(-.6deg)] data-[live]:shadow-[4px_4px_0_#ff4d8d] data-[live]:[outline:3px_solid_#ff4d8d] data-[live]:[outline-offset:2px]",
   streamItemTop: "flex flex-wrap items-center gap-2",
@@ -57,8 +56,7 @@ export const BETA_STREAM_STYLES: Record<string, string> = {
   streamSources:
     "m-0 text-[#57534e] [font:500_11.5px/1.4_var(--font-ui,system-ui)] [&_ul]:m-0 [&_ul]:pl-4",
   streamSourcesLabel: "text-[#111] font-bold",
-  caret:
-    "inline-block w-2 h-[15px] ml-[3px] bg-[#ff4d8d] align-[-2px]",
+  caret: "inline-block w-2 h-[15px] ml-[3px] bg-[#ff4d8d] align-[-2px]",
 };
 
 const CARD =
@@ -66,8 +64,7 @@ const CARD =
 export const BETA_CONNECTION_OVERLAY = `absolute z-[13] top-5 left-5 max-w-[min(420px,calc(100%_-_48px))] ${CARD}`;
 export const BETA_FAILURE_CARD = CARD;
 export const BETA_PROVIDER_GATE_CARD = `relative z-[13] ${CARD} [&_ul]:m-0 [&_ul]:pl-4`;
-export const BETA_RECONNECT_BUTTON =
-  `min-h-[44px] border-[3px] border-[#111] rounded-[10px] [color:var(--accent)] [background:var(--accent-soft)] py-2 px-4 cursor-pointer ${PRESS_MOTION}`;
+export const BETA_RECONNECT_BUTTON = `min-h-[44px] border-[3px] border-[#111] rounded-[10px] [color:var(--accent)] [background:var(--accent-soft)] py-2 px-4 cursor-pointer ${PRESS_MOTION}`;
 
 export const BETA_NOTICES =
   "absolute z-auto top-[max(72px,calc(env(safe-area-inset-top)_+_52px))] right-auto bottom-auto left-[max(22px,env(safe-area-inset-left))] grid gap-3 max-w-[min(560px,58vw)] max-h-[calc(100dvh_-_140px_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain pointer-events-none [&>*]:pointer-events-auto max-[600px]:top-[max(12px,env(safe-area-inset-top))] max-[600px]:left-[max(10px,env(safe-area-inset-left))] max-[600px]:right-[max(10px,env(safe-area-inset-right))] max-[600px]:max-w-none";
@@ -87,4 +84,3 @@ export const BETA_JOIN_STICK =
   "flex items-center justify-between gap-2 py-2 px-3 border-0 border-b-[2.5px] border-solid border-[#111] bg-[#ffe14d] text-[#111] [font:800_13px/1.2_var(--font-ui,system-ui)] [&_em]:flex-none [&_em]:py-px [&_em]:px-2 [&_em]:border-2 [&_em]:border-solid [&_em]:border-[#111] [&_em]:rounded-full [&_em]:bg-white [&_em]:[font:800_11px/1.2_var(--font-ui,system-ui)] [&_em]:not-italic";
 export const BETA_JOIN_BODY =
   "grid justify-items-center gap-2 p-[14px] [&_svg]:block [&_svg]:w-[140px]! [&_svg]:h-auto! [&_svg]:border-[2.5px] [&_svg]:border-solid [&_svg]:border-[#111] [&_svg]:rounded-[10px] [&_svg]:bg-white [&_strong]:absolute [&_strong]:w-px [&_strong]:h-px [&_strong]:overflow-hidden [&_strong]:[clip:rect(0,0,0,0)] [&_strong]:whitespace-nowrap [&_code]:block [&_code]:max-w-[160px] [&_code]:text-[#4b5563] [&_code]:[font:500_10px/1.35_var(--font-ui,system-ui)] [&_code]:text-center [&_code]:break-all";
-

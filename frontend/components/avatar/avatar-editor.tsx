@@ -85,7 +85,9 @@ export function AvatarEditor({
       />
       <div className="grid min-w-0 grid-cols-2 gap-[0.85rem] max-[620px]:grid-cols-1">
         <div className="grid min-w-0 gap-[0.42rem] col-span-full max-[620px]:col-auto">
-          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">{t("avatarTemplate")}</span>
+          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">
+            {t("avatarTemplate")}
+          </span>
           <div
             className="grid min-w-0 grid-cols-3 gap-[0.55rem] max-[620px]:grid-cols-1"
             role="radiogroup"
@@ -112,7 +114,9 @@ export function AvatarEditor({
           </div>
         </div>
         <label className="grid min-w-0 gap-[0.42rem]">
-          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">{t("avatarMaterialTheme")}</span>
+          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">
+            {t("avatarMaterialTheme")}
+          </span>
           <select
             className="min-h-11 w-full min-w-0 rounded-[0.7rem] border border-[rgba(35,57,72,0.18)] bg-(--surface,#fff) px-[0.7rem] font-[inherit] text-(--workspace-label,#213a47) disabled:cursor-not-allowed disabled:opacity-[0.56]"
             value={value.material_theme}
@@ -127,7 +131,9 @@ export function AvatarEditor({
           </select>
         </label>
         <label className="grid min-w-0 gap-[0.42rem]">
-          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">{t("avatarEyeColor")}</span>
+          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">
+            {t("avatarEyeColor")}
+          </span>
           <select
             className="min-h-11 w-full min-w-0 rounded-[0.7rem] border border-[rgba(35,57,72,0.18)] bg-(--surface,#fff) px-[0.7rem] font-[inherit] text-(--workspace-label,#213a47) disabled:cursor-not-allowed disabled:opacity-[0.56]"
             value={eyeValue(value.eye_color)}
@@ -149,7 +155,9 @@ export function AvatarEditor({
           </select>
         </label>
         <label className="grid min-w-0 gap-[0.42rem]">
-          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">{t("avatarDefaultExpression")}</span>
+          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">
+            {t("avatarDefaultExpression")}
+          </span>
           <select
             className="min-h-11 w-full min-w-0 rounded-[0.7rem] border border-[rgba(35,57,72,0.18)] bg-(--surface,#fff) px-[0.7rem] font-[inherit] text-(--workspace-label,#213a47) disabled:cursor-not-allowed disabled:opacity-[0.56]"
             value={value.default_expression}
@@ -169,7 +177,9 @@ export function AvatarEditor({
           </select>
         </label>
         <label className="grid min-w-0 gap-[0.42rem]">
-          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">{t("avatarExpressionStrength")}</span>
+          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">
+            {t("avatarExpressionStrength")}
+          </span>
           <select
             className="min-h-11 w-full min-w-0 rounded-[0.7rem] border border-[rgba(35,57,72,0.18)] bg-(--surface,#fff) px-[0.7rem] font-[inherit] text-(--workspace-label,#213a47) disabled:cursor-not-allowed disabled:opacity-[0.56]"
             value={value.expression_strength}
@@ -189,7 +199,9 @@ export function AvatarEditor({
           </select>
         </label>
         <label className="grid min-w-0 gap-[0.42rem]">
-          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">{t("avatarHeadMotion")}</span>
+          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">
+            {t("avatarHeadMotion")}
+          </span>
           <select
             className="min-h-11 w-full min-w-0 rounded-[0.7rem] border border-[rgba(35,57,72,0.18)] bg-(--surface,#fff) px-[0.7rem] font-[inherit] text-(--workspace-label,#213a47) disabled:cursor-not-allowed disabled:opacity-[0.56]"
             value={value.motion_style}
@@ -206,7 +218,9 @@ export function AvatarEditor({
           </select>
         </label>
         <div className="grid min-w-0 gap-[0.42rem] col-span-full max-[620px]:col-auto">
-          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">{t("avatarPreviewState")}</span>
+          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">
+            {t("avatarPreviewState")}
+          </span>
           <div
             className="flex min-w-0 flex-wrap gap-2"
             role="group"

@@ -237,9 +237,7 @@ export function DebateCleanupControls({
   return (
     <div className={className}>
       <button
-        className={
-          labelled ? iconClassName : `icon-action ${iconClassName}`
-        }
+        className={labelled ? iconClassName : `icon-action ${iconClassName}`}
         type="button"
         disabled={busy}
         aria-label={voiceLabel}

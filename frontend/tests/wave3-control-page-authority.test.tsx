@@ -359,5 +359,4 @@ describe("Wave 3 control-page Finish authority gate", () => {
       ),
     );
   });
-
 });

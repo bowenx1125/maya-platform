@@ -132,7 +132,10 @@ export function BarChart({
   return (
     <ul className="m-0 grid min-w-[180px] flex-1 list-none gap-2 p-0">
       {data.map((item, index) => (
-        <li className="grid grid-cols-[minmax(72px,0.35fr)_1fr_auto] items-center gap-2.5 text-[0.86rem]" key={item.id}>
+        <li
+          className="grid grid-cols-[minmax(72px,0.35fr)_1fr_auto] items-center gap-2.5 text-[0.86rem]"
+          key={item.id}
+        >
           <span className="truncate font-[640]">{item.label}</span>
           <span className="h-3 overflow-hidden rounded-full bg-(--line)">
             <span
@@ -143,7 +146,10 @@ export function BarChart({
               }}
             />
           </span>
-          <span className="font-[640] text-(--muted) tabular-nums" style={{ color: valueColor }}>
+          <span
+            className="font-[640] text-(--muted) tabular-nums"
+            style={{ color: valueColor }}
+          >
             {item.value}
           </span>
         </li>

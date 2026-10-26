@@ -185,7 +185,9 @@ export function AvatarCanvas({
         hidden={!resolvedAssetUrl || status !== "ready"}
       />
       {resolvedAssetUrl && status === "loading" ? (
-        <span className="absolute inset-0 grid place-items-center text-[0.86rem] text-(--muted,#62626a)">{t("avatarPreviewLoading")}</span>
+        <span className="absolute inset-0 grid place-items-center text-[0.86rem] text-(--muted,#62626a)">
+          {t("avatarPreviewLoading")}
+        </span>
       ) : null}
       <div
         className="grid aspect-square w-[min(58%,12rem)] place-items-center rounded-full border border-[rgba(35,57,72,0.14)] bg-(--accent-soft,#f6ecd3) text-[clamp(2rem,8vw,4rem)] font-[720] tracking-[0.03em] text-(--accent,#76591f) shadow-[0_1rem_2rem_rgba(74,71,65,0.16)]"

@@ -185,7 +185,9 @@ function StreamItem({
                     className="m-0 rounded-[12px] bg-(--surface-subtle) px-4 py-3 text-[0.95rem] leading-[1.6] text-(--ink) [overflow-wrap:anywhere] [&_p]:mt-1 [&_p]:mb-0 [&_p]:whitespace-pre-wrap"
                     aria-label={replyLabel}
                   >
-                    <span className="text-[0.8rem] text-(--muted)">{replyLabel}</span>
+                    <span className="text-[0.8rem] text-(--muted)">
+                      {replyLabel}
+                    </span>
                     <p>{segment.reply_text}</p>
                   </blockquote>
                 ) : null}

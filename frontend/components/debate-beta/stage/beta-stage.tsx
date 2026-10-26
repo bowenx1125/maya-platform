@@ -755,9 +755,8 @@ export function BetaDebateStage({
   useEffect(() => {
     if (!transcriptOpen) return;
     transcriptRef.current?.focus();
-    const list = transcriptRef.current?.querySelector<HTMLElement>(
-      "[data-stream-list]",
-    );
+    const list =
+      transcriptRef.current?.querySelector<HTMLElement>("[data-stream-list]");
     if (list) list.scrollTop = list.scrollHeight;
   }, [transcriptOpen]);
   const onInteractionOpenedRef = useRef(onInteractionOpened);
@@ -3775,11 +3774,7 @@ export function BetaDebateStage({
         visuals={stageVisuals}
       />
 
-      <div
-        className={BETA_DOCK}
-        role="group"
-        aria-label={labels.stageTitle}
-      >
+      <div className={BETA_DOCK} role="group" aria-label={labels.stageTitle}>
         {!readOnly ? (
           <button
             className="primary-action"
@@ -3926,12 +3921,13 @@ export function BetaDebateStage({
               slot: "",
               name: owner?.agent_name ?? participantId,
               // V1 stubs: yellow / cyan / green by seat order.
-              tone: Math.max(
-                0,
-                detailState.participants.findIndex(
-                  (participant) => participant.id === participantId,
-                ),
-              ) % 3,
+              tone:
+                Math.max(
+                  0,
+                  detailState.participants.findIndex(
+                    (participant) => participant.id === participantId,
+                  ),
+                ) % 3,
             };
           }}
           emptyMessage={labels.noPublishedSpeech ?? ""}

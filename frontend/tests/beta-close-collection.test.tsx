@@ -299,9 +299,7 @@ describe("segments_v2 interaction dock (A1: no Close collection)", () => {
     expect(
       screen.queryByRole("button", { name: "Close collection" }),
     ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Closing…" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Closing…" })).toBeNull();
     expect(api.closeInteraction).not.toHaveBeenCalled();
   });
 });

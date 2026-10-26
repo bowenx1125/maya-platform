@@ -3001,19 +3001,19 @@ function AgentChatScope({
               ) : null}
               {historyItems.map(({ kind, session, name, label }) => (
                 <div className={styles.historyRow} key={session.id}>
-                    <ChatAvatar
-                      agentId={
-                        kind === "agent"
-                          ? session.agent.agent_id
-                          : session.team.id
-                      }
-                      materialTheme={
-                        kind === "agent"
-                          ? session.agent.avatar_config?.material_theme
-                          : null
-                      }
-                      size={36}
-                    />
+                  <ChatAvatar
+                    agentId={
+                      kind === "agent"
+                        ? session.agent.agent_id
+                        : session.team.id
+                    }
+                    materialTheme={
+                      kind === "agent"
+                        ? session.agent.avatar_config?.material_theme
+                        : null
+                    }
+                    size={36}
+                  />
                   {renaming?.session.id === session.id ? (
                     <input
                       className={styles.historyRename}
@@ -3152,7 +3152,10 @@ function AgentChatScope({
                   </div>
                 </header>
                 <div
-                  className={cn(styles.messages, isNewConv && styles.messagesNewConv)}
+                  className={cn(
+                    styles.messages,
+                    isNewConv && styles.messagesNewConv,
+                  )}
                   role="log"
                   aria-live="polite"
                   aria-relevant="additions text"
@@ -3300,73 +3303,75 @@ function AgentChatScope({
                                     peekAgentId
                                   }
                                   materialTheme={
-                                    participant?.avatar_config?.material_theme ??
-                                    null
+                                    participant?.avatar_config
+                                      ?.material_theme ?? null
                                   }
                                   size={30}
                                 />
                                 <div className={styles.reply}>
-                              <h3>
-                                {result.speaker_name}
-                                {participant?.is_leader
-                                  ? ` · ${t("leader")}`
-                                  : ""}
-                              </h3>
-                              {result.assistant_text ? (
-                                result.assistant_text.trim() ===
-                                "正在总结答案" ? (
-                                  <p
-                                    role="status"
-                                    data-team-progress="summarizing"
-                                  >
-                                    {result.assistant_text}
-                                  </p>
-                                ) : (
-                                  <ReportMarkdown>
-                                    {result.assistant_text}
-                                  </ReportMarkdown>
-                                )
-                              ) : result.state === "pending" ||
-                                result.state === "running" ? (
-                                <p className={styles.pending} role="status">
-                                  <span
-                                    className="spinner"
-                                    aria-hidden="true"
-                                  />
-                                  {t("loading")}
-                                </p>
-                              ) : result.state === "acceptance_unknown" ? (
-                                <DismissibleAlert
-                                  className={styles.teamWarning}
-                                  role="status"
-                                >
-                                  {t("errorChatAcceptanceUnknown")}
-                                </DismissibleAlert>
-                              ) : (
-                                <DismissibleAlert
-                                  className={styles.teamWarning}
-                                  role="status"
-                                >
-                                  {teamFailureText(
-                                    result.safe_error_code,
-                                    "teamMemberFailure",
+                                  <h3>
+                                    {result.speaker_name}
+                                    {participant?.is_leader
+                                      ? ` · ${t("leader")}`
+                                      : ""}
+                                  </h3>
+                                  {result.assistant_text ? (
+                                    result.assistant_text.trim() ===
+                                    "正在总结答案" ? (
+                                      <p
+                                        role="status"
+                                        data-team-progress="summarizing"
+                                      >
+                                        {result.assistant_text}
+                                      </p>
+                                    ) : (
+                                      <ReportMarkdown>
+                                        {result.assistant_text}
+                                      </ReportMarkdown>
+                                    )
+                                  ) : result.state === "pending" ||
+                                    result.state === "running" ? (
+                                    <p className={styles.pending} role="status">
+                                      <span
+                                        className="spinner"
+                                        aria-hidden="true"
+                                      />
+                                      {t("loading")}
+                                    </p>
+                                  ) : result.state === "acceptance_unknown" ? (
+                                    <DismissibleAlert
+                                      className={styles.teamWarning}
+                                      role="status"
+                                    >
+                                      {t("errorChatAcceptanceUnknown")}
+                                    </DismissibleAlert>
+                                  ) : (
+                                    <DismissibleAlert
+                                      className={styles.teamWarning}
+                                      role="status"
+                                    >
+                                      {teamFailureText(
+                                        result.safe_error_code,
+                                        "teamMemberFailure",
+                                      )}
+                                    </DismissibleAlert>
                                   )}
-                                </DismissibleAlert>
-                              )}
-                              {/* Formal progress hangs under the Summarizer line.
+                                  {/* Formal progress hangs under the Summarizer line.
                                   Until that card exists, the executor card or
                                   the fallback below carries it. */}
-                              {(formalSummarizerCard ||
-                                (isSummarizerTurn &&
-                                  turn.id ===
-                                    shownTeamTurns[shownTeamTurns.length - 1]
-                                      ?.id)) &&
-                              selectedTeam.assessment_stage &&
-                              selectedTeam.assessment_stage !== "preparing" ? (
-                                <AssessmentProgress
-                                  stage={selectedTeam.assessment_stage}
-                                />
-                              ) : null}
+                                  {(formalSummarizerCard ||
+                                    (isSummarizerTurn &&
+                                      turn.id ===
+                                        shownTeamTurns[
+                                          shownTeamTurns.length - 1
+                                        ]?.id)) &&
+                                  selectedTeam.assessment_stage &&
+                                  selectedTeam.assessment_stage !==
+                                    "preparing" ? (
+                                    <AssessmentProgress
+                                      stage={selectedTeam.assessment_stage}
+                                    />
+                                  ) : null}
                                 </div>
                               </div>
                             </article>

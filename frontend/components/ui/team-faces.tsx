@@ -41,13 +41,15 @@ export type TeamFacesSource = {
 export function teamFaces(team: TeamFacesSource): MascotId[] {
   const listed = team.members;
   if (Array.isArray(listed) && listed.length)
-    return [...listed]
-      .sort((left, right) => Number(right.is_leader) - Number(left.is_leader))
-      .slice(0, 4)
-      // "" hashes to MASCOT_IDS[0], the neutral default face.
-      .map((member) =>
-        agentMascot(member.agent_id ?? "", member.material_theme),
-      );
+    return (
+      [...listed]
+        .sort((left, right) => Number(right.is_leader) - Number(left.is_leader))
+        .slice(0, 4)
+        // "" hashes to MASCOT_IDS[0], the neutral default face.
+        .map((member) =>
+          agentMascot(member.agent_id ?? "", member.material_theme),
+        )
+    );
   let hash = 0;
   for (const char of team.id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return Array.from(

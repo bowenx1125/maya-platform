@@ -2,7 +2,6 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 
-
 const SVG_NS = "http://www.w3.org/2000/svg";
 const ease = (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2);
 
@@ -47,7 +46,8 @@ function lift(group: SVGGElement): Actor | null {
   waddle.style.cssText = "width:100%;height:100%;transform-origin:50% 100%";
   waddle.append(svg);
   const node = document.createElement("div");
-  node.className = "absolute [transform-style:preserve-3d] [&_svg]:block [&_svg]:size-full [&_svg]:overflow-visible";
+  node.className =
+    "absolute [transform-style:preserve-3d] [&_svg]:block [&_svg]:size-full [&_svg]:overflow-visible";
   Object.assign(node.style, {
     left: `${left}px`,
     top: `${top}px`,
@@ -62,7 +62,10 @@ function lift(group: SVGGElement): Actor | null {
 function wheel(): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", "-120 -120 240 240");
-  svg.setAttribute("class", "absolute top-1/2 left-1/2 aspect-square w-[min(46vmin,360px)] -translate-x-1/2 -translate-y-1/2 opacity-0 [filter:drop-shadow(0_18px_30px_rgba(52,45,30,0.35))]");
+  svg.setAttribute(
+    "class",
+    "absolute top-1/2 left-1/2 aspect-square w-[min(46vmin,360px)] -translate-x-1/2 -translate-y-1/2 opacity-0 [filter:drop-shadow(0_18px_30px_rgba(52,45,30,0.35))]",
+  );
   svg.innerHTML = `
     <g data-bolts fill="#b8902e" stroke="#7a5d1c" stroke-width="2">
       <rect x="-9" y="-118" width="18" height="34" rx="3"/>
@@ -121,7 +124,8 @@ export function VaultEntrance({ onDone }: { onDone: () => void }) {
     // The door: a picture of the page, scholars taken off it.
     const rect = frame.getBoundingClientRect();
     const door = document.createElement("div");
-    door.className = "absolute inset-0 overflow-hidden bg-(--paper,#fcfaf6) origin-left [backface-visibility:hidden] shadow-[30px_0_60px_rgba(0,0,0,0.55)] [&_*]:![animation:none] [&_*]:![transition:none] [&_*]:before:![animation:none] [&_*]:after:![animation:none] [&>*:first-child]:absolute [&>*:first-child]:m-0";
+    door.className =
+      "absolute inset-0 overflow-hidden bg-(--paper,#fcfaf6) origin-left [backface-visibility:hidden] shadow-[30px_0_60px_rgba(0,0,0,0.55)] [&_*]:![animation:none] [&_*]:![transition:none] [&_*]:before:![animation:none] [&_*]:after:![animation:none] [&>*:first-child]:absolute [&>*:first-child]:m-0";
     const page = frame.cloneNode(true) as HTMLElement;
     for (const node of [page, ...page.querySelectorAll("[id]")])
       node.removeAttribute("id");
@@ -138,7 +142,8 @@ export function VaultEntrance({ onDone }: { onDone: () => void }) {
     door.append(page, vaultWheel);
 
     const layer = document.createElement("div");
-    layer.className = "pointer-events-none absolute inset-0 [perspective:900px] [transform-style:preserve-3d]";
+    layer.className =
+      "pointer-events-none absolute inset-0 [perspective:900px] [transform-style:preserve-3d]";
     const actors = groups
       .map(lift)
       .filter((actor): actor is Actor => actor !== null);
@@ -300,5 +305,11 @@ export function VaultEntrance({ onDone }: { onDone: () => void }) {
     };
   }, []);
 
-  return <div ref={stage} className="fixed inset-0 z-[2147483001] overflow-hidden [perspective:2400px]" aria-hidden="true" />;
+  return (
+    <div
+      ref={stage}
+      className="fixed inset-0 z-[2147483001] overflow-hidden [perspective:2400px]"
+      aria-hidden="true"
+    />
+  );
 }

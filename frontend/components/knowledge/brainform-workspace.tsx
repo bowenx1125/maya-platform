@@ -2381,8 +2381,7 @@ function BrainformWorkspaceBody({
   const knowledgeEditor =
     knowledgePage &&
     (pane?.kind === "knowledge-new" || pane?.kind === "knowledge-edit");
-  const knowledgeNameError =
-    filenameError ? localizeError(loadError) : null;
+  const knowledgeNameError = filenameError ? localizeError(loadError) : null;
 
   return (
     <main
@@ -2879,7 +2878,8 @@ function BrainformWorkspaceBody({
                         resetKey={`${row.generation_state}:${generationErrorCode ?? ""}`}
                       >
                         {generationErrorCode &&
-                        generationErrorCode !== "provider_confirmation_unavailable"
+                        generationErrorCode !==
+                          "provider_confirmation_unavailable"
                           ? t("brainformGenerationFailedReason", {
                               reason: generationErrorCode.replaceAll("_", " "),
                             })
@@ -3717,12 +3717,14 @@ function BrainformWorkspaceBody({
                       className={album.fl}
                       value={markdownDraft}
                       disabled={
-                        busyKey === `knowledge-save:${markdown.canonical_set_id}`
+                        busyKey ===
+                        `knowledge-save:${markdown.canonical_set_id}`
                       }
                       readOnly={
                         !markdown.can_edit ||
                         markdown.audience !== "full" ||
-                        busyKey === `knowledge-save:${markdown.canonical_set_id}`
+                        busyKey ===
+                          `knowledge-save:${markdown.canonical_set_id}`
                       }
                       rows={13}
                       onChange={(value) => {

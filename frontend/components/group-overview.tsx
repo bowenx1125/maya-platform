@@ -112,8 +112,16 @@ export function GroupOverview({ groupId }: { groupId: string }) {
                       {work.length ? (
                         <ul className="my-0.5 mb-1.5 grid list-none gap-1.5 p-0 pl-[42px]">
                           {work.map((item) => (
-                            <li key={item.id} className="flex min-w-0 items-baseline gap-2">
-                              <Link className="font-semibold text-(--ink,#292820) [overflow-wrap:anywhere]" href={item.href}>{item.name}</Link>
+                            <li
+                              key={item.id}
+                              className="flex min-w-0 items-baseline gap-2"
+                            >
+                              <Link
+                                className="font-semibold text-(--ink,#292820) [overflow-wrap:anywhere]"
+                                href={item.href}
+                              >
+                                {item.name}
+                              </Link>
                               <small className="text-[0.75rem] text-[#625e59]">
                                 {t(
                                   item.visibility === "public"
@@ -150,7 +158,8 @@ export function GroupOverview({ groupId }: { groupId: string }) {
               >
                 <span className={styles.rowCopy}>
                   <span className="leading-[1.4] text-(--ink,#292820) [overflow-wrap:anywhere]">
-                    <strong className="font-[650]">{event.display_name}</strong> {eventText(event, t)}
+                    <strong className="font-[650]">{event.display_name}</strong>{" "}
+                    {eventText(event, t)}
                   </span>
                   <span className={styles.rowMeta}>{when(event.at)}</span>
                 </span>

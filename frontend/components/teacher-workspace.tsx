@@ -833,7 +833,5 @@ export function TeacherAgentDetail({
       <ErrorNotice inline error={new Error(t("publishedAgentNotFound"))} />
     );
   }
-  return (
-    <ErrorNotice inline error={new Error(t("publishedAgentNotFound"))} />
-  );
+  return <ErrorNotice inline error={new Error(t("publishedAgentNotFound"))} />;
 }

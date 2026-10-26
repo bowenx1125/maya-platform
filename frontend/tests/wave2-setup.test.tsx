@@ -192,7 +192,7 @@ describe("Wave 2 teacher debate setup", () => {
     ).toBeNull();
     expect(
       (
-await within(screen.getByRole("main")).findByRole("link", {
+        await within(screen.getByRole("main")).findByRole("link", {
           name: "New",
         })
       ).getAttribute("href"),
@@ -1096,7 +1096,7 @@ it("removes bulk Refresh and never retries stalled records when reading the list
   // Final redesign: New is a shared Button in the list title row.
   expect(
     (
-await within(screen.getByRole("main")).findByRole("link", {
+      await within(screen.getByRole("main")).findByRole("link", {
         name: "New",
       })
     ).getAttribute("href"),

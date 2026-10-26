@@ -14,7 +14,6 @@ import {
 } from "../../lib/report-citations";
 import { ReportMarkdown } from "./report-markdown";
 
-
 export type Report = components["schemas"]["Report"];
 export type ReportRevision = components["schemas"]["ReportRevision"];
 export type ReportRevisionSummary =
@@ -260,33 +259,53 @@ export function ReportPanel({
     >
       <header className="flex items-start justify-between gap-4 border-b border-(--line,#dedee3) pb-(--section-content-gap)">
         <div>
-          <h2 className="m-0 text-[1.24rem] leading-[1.4] text-(--indigo-dark)">{copy.title}</h2>
+          <h2 className="m-0 text-[1.24rem] leading-[1.4] text-(--indigo-dark)">
+            {copy.title}
+          </h2>
         </div>
       </header>
 
       <div className="grid min-w-0 gap-(--section-content-gap) rounded-[14px] border border-transparent bg-(--surface-subtle,#f5f5f7) p-4">
         {error ? (
-          <DismissibleAlert className="mt-2 rounded-[0.7rem] bg-[#fff0ee] px-[0.85rem] py-[0.7rem] leading-[1.55] text-[#a34842]">{error}</DismissibleAlert>
+          <DismissibleAlert className="mt-2 rounded-[0.7rem] bg-[#fff0ee] px-[0.85rem] py-[0.7rem] leading-[1.55] text-[#a34842]">
+            {error}
+          </DismissibleAlert>
         ) : null}
 
         {pollTimedOut && polling ? (
-          <p className="mt-2 rounded-[0.7rem] bg-[#fff8ec] px-[0.85rem] py-[0.7rem] leading-[1.55] text-[#8b6532]" role="status">
+          <p
+            className="mt-2 rounded-[0.7rem] bg-[#fff8ec] px-[0.85rem] py-[0.7rem] leading-[1.55] text-[#8b6532]"
+            role="status"
+          >
             The report is still generating. Reopen this page later.
           </p>
         ) : null}
         {report?.generation_status === "failed" ||
         insight?.status === "failed" ? (
-          <DismissibleAlert className="mt-2 rounded-[0.7rem] bg-[#fff8ec] px-[0.85rem] py-[0.7rem] leading-[1.55] text-[#8b6532]" role="status">
+          <DismissibleAlert
+            className="mt-2 rounded-[0.7rem] bg-[#fff8ec] px-[0.85rem] py-[0.7rem] leading-[1.55] text-[#8b6532]"
+            role="status"
+          >
             {copy.failed}
           </DismissibleAlert>
         ) : null}
 
         {insight?.items.length ? (
-          <ul className="m-0 grid list-none gap-2 p-0" aria-label={copy.insight}>
+          <ul
+            className="m-0 grid list-none gap-2 p-0"
+            aria-label={copy.insight}
+          >
             {insight.items.map((item, index) => (
-              <li key={`${item.category}-${item.summary}-${index}`} className="grid grid-cols-[auto_1fr_auto] items-center gap-[0.65rem] rounded-[0.7rem] border border-[rgba(24,39,61,0.1)] px-[0.8rem] py-[0.65rem]">
-                <span className="text-[0.78rem] font-bold uppercase text-(--muted,#62626a)">{item.category}</span>
-                <p className="m-0 min-w-0 [overflow-wrap:anywhere]">{item.summary}</p>
+              <li
+                key={`${item.category}-${item.summary}-${index}`}
+                className="grid grid-cols-[auto_1fr_auto] items-center gap-[0.65rem] rounded-[0.7rem] border border-[rgba(24,39,61,0.1)] px-[0.8rem] py-[0.65rem]"
+              >
+                <span className="text-[0.78rem] font-bold uppercase text-(--muted,#62626a)">
+                  {item.category}
+                </span>
+                <p className="m-0 min-w-0 [overflow-wrap:anywhere]">
+                  {item.summary}
+                </p>
                 <strong>{item.count}</strong>
               </li>
             ))}
@@ -295,7 +314,11 @@ export function ReportPanel({
 
         <div className="min-w-0 border-0 bg-transparent p-0">
           <div className="flex items-start justify-between gap-4 max-[680px]:flex-wrap max-[680px]:gap-2">
-            {displayed ? <h3 className="m-0 text-base leading-[1.4] text-(--indigo-dark)">{revisionTitle(displayed.revision_no)}</h3> : null}
+            {displayed ? (
+              <h3 className="m-0 text-base leading-[1.4] text-(--indigo-dark)">
+                {revisionTitle(displayed.revision_no)}
+              </h3>
+            ) : null}
             <div className="ml-auto inline-flex shrink-0 items-center gap-[3px] rounded-[10px] border border-(--line,#dedee3) bg-white p-[3px]">
               <button
                 type="button"
@@ -319,11 +342,17 @@ export function ReportPanel({
             </div>
           </div>
           {displayed?.status === "ready" ? (
-            <ReportMarkdown className="mt-4 max-h-[42rem] overflow-auto whitespace-normal [overflow-wrap:anywhere] font-[inherit] leading-[1.65] text-(--ink)" label={copy.report}>
+            <ReportMarkdown
+              className="mt-4 max-h-[42rem] overflow-auto whitespace-normal [overflow-wrap:anywhere] font-[inherit] leading-[1.65] text-(--ink)"
+              label={copy.report}
+            >
               {cleanReportCitations(displayed.english_markdown)}
             </ReportMarkdown>
           ) : displayed?.status === "failed" ? (
-            <DismissibleAlert className="mt-2 rounded-[0.7rem] bg-[#fff8ec] px-[0.85rem] py-[0.7rem] leading-[1.55] text-[#8b6532]" role="status">
+            <DismissibleAlert
+              className="mt-2 rounded-[0.7rem] bg-[#fff8ec] px-[0.85rem] py-[0.7rem] leading-[1.55] text-[#8b6532]"
+              role="status"
+            >
               {displayed.safe_error_code}
             </DismissibleAlert>
           ) : report?.generation_status === "failed" ? null : (
@@ -335,14 +364,21 @@ export function ReportPanel({
 
         <div className="grid min-w-0 gap-[0.8rem] border-0 border-t border-(--line,#dedee3) bg-transparent p-0 pt-4">
           <div className="flex items-start justify-between gap-4 max-[680px]:flex-wrap max-[680px]:gap-2">
-            <h3 className="m-0 text-base leading-[1.4] text-(--muted,#62626a)">{copy.history}</h3>
+            <h3 className="m-0 text-base leading-[1.4] text-(--muted,#62626a)">
+              {copy.history}
+            </h3>
           </div>
           {revisions.length === 0 ? (
-            <p className="mt-2 leading-[1.55] text-(--muted)">{copy.noHistory}</p>
+            <p className="mt-2 leading-[1.55] text-(--muted)">
+              {copy.noHistory}
+            </p>
           ) : (
             <ul className="m-0 grid list-none gap-2 p-0">
               {revisions.map((revision) => (
-                <li key={revision.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-[rgba(24,39,61,0.08)] py-[0.55rem] last:border-b-0 max-[680px]:grid-cols-[1fr_auto]">
+                <li
+                  key={revision.id}
+                  className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-[rgba(24,39,61,0.08)] py-[0.55rem] last:border-b-0 max-[680px]:grid-cols-[1fr_auto]"
+                >
                   <span>{revisionTitle(revision.revision_no)}</span>
                   <span className="text-[0.8rem] text-[#69778b] max-[680px]:col-start-1">
                     {revision.status !== "ready"
