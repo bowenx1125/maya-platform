@@ -229,7 +229,10 @@ function renderTeamManagement(
 }
 
 function sidebarButton(name: string) {
-  return within(screen.getByRole("navigation")).getByRole("button", {
+  // Back and Done sit in the page header (top-right of main); New stays in nav.
+  return within(
+    screen.getByRole(name === "New" ? "navigation" : "main"),
+  ).getByRole("button", {
     name,
   }) as HTMLButtonElement;
 }
@@ -357,7 +360,9 @@ describe("Studyform Teams", () => {
     expect(await screen.findByLabelText("Name")).toBeTruthy();
     expect(sidebarButton("Done")).toBeTruthy();
     expect(
-      within(screen.getByRole("main")).queryByRole("button", { name: "Done" }),
+      within(screen.getByRole("navigation")).queryByRole("button", {
+        name: "Done",
+      }),
     ).toBeNull();
     expect(
       within(screen.getByRole("main")).queryByRole("button", {

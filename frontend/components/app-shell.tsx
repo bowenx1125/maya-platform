@@ -671,7 +671,7 @@ export function AppShell({
       label: t("sidebarClassroom"),
       rail: "border-ink",
       tile: "bg-surface",
-      square: "bg-surface",
+      square: "bg-ink",
       items: links
         .filter((link) => ["live", "classroom", "accounts"].includes(link.icon))
         .map((link) => ({
@@ -840,7 +840,7 @@ export function AppShell({
             <button
               type="button"
               data-sidebar-toggle
-              className={`group/toggle absolute ${mobile ? "top-4 right-3 size-8 rounded-arc-s" : `top-[15px] ${collapsed ? "-right-[26px]" : "-right-[22px]"} size-8 rounded-full`} z-10 grid place-items-center border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none`}
+              className={`group/toggle absolute ${mobile ? "top-4 right-3 size-8 rounded-arc-s" : `top-[calc(50%-16px)] ${collapsed ? "-right-[26px]" : "-right-[22px]"} size-8 rounded-full`} z-10 grid place-items-center border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none`}
               aria-label={toggleLabel}
               aria-expanded={mobile ? drawerOpen : !collapsed}
               aria-controls={SIDEBAR_ID}
@@ -912,7 +912,7 @@ export function AppShell({
                         >
                           <span
                             aria-hidden="true"
-                            className={`size-2 border-2 border-border ${group.square}`}
+                            className={`size-2.5 rounded-[3px] border-2 border-border ${group.square}`}
                           />
                           <span>{group.label}</span>
                         </div>
@@ -931,13 +931,8 @@ export function AppShell({
                     </div>
                   );
                 })}
-                {(
-                  [
-                    ["new", "New"],
-                    ["back", "Back"],
-                    ["done", "Done"],
-                  ] as const
-                ).map(([name, label]) => {
+                {/* Back and Done live in the page header (A mock); only New stays here. */}
+                {([["new", "New"]] as const).map(([name, label]) => {
                   const action = actions[name];
                   // New stays in the sidebar once a page registers it, faded when
                   // it cannot run. Back and Done exist only while their owning
@@ -1003,9 +998,7 @@ export function AppShell({
                   </a>
                 ) : (
                   <p className="m-0 grid gap-[3px] rounded-[6px] border-2 border-border bg-surface px-2.5 py-2 font-body text-xs text-ink shadow-[3px_3px_0_#111]">
-                    <span className="font-bold text-ink">
-                      Meet Problems?
-                    </span>
+                    <span className="font-bold text-ink">Meet Problems?</span>
                     <a
                       className="font-normal [overflow-wrap:anywhere] text-ink underline"
                       href="mailto:t330034059@mail.bnbu.edu.cn"
@@ -1038,6 +1031,58 @@ export function AppShell({
           tabIndex={-1}
           className={`relative mx-auto w-[min(100%,1320px)] min-w-0 px-[clamp(24px,4vw,64px)] pt-12 max-[900px]:px-6 max-[900px]:pt-8 max-[480px]:px-4 max-[480px]:pt-7 ${workspaceStyles.surface} ${pathname === "/teacher/chat" || pathname === "/student/chat" ? "pb-[max(24px,env(safe-area-inset-bottom))]" : "pb-20 max-[900px]:pb-16 max-[480px]:pb-12"}`}
         >
+          {actions.back || actions.done ? (
+            // The page header's own Back / Done, top-right (14 option A
+            // "New Debate" header, the Agents pattern). Same handlers.
+            <div
+              data-page-actions
+              className="relative z-10 float-right mb-[22px] ml-4 flex gap-2.5"
+            >
+              {(
+                [
+                  ["back", "Back"],
+                  ["done", "Done"],
+                ] as const
+              ).map(([name, label]) => {
+                const action = actions[name];
+                if (!action) return null;
+                const faded = Boolean(action.disabled);
+                const cls = `inline-flex items-center gap-1.5 rounded-[10px] border-[3px] border-border px-[18px] py-2 font-body text-sm font-bold text-ink no-underline shadow-[3px_3px_0_#111] hover:-translate-y-px active:translate-x-[3px] active:translate-y-[3px] active:shadow-none max-[480px]:px-3 max-[480px]:py-1.5 max-[480px]:text-[13px] ${name === "done" ? "bg-main" : "bg-surface"}`;
+                const content = (
+                  <>
+                    {action.busy ? (
+                      <span className="spinner" aria-hidden="true" />
+                    ) : null}
+                    <span>{label}</span>
+                  </>
+                );
+                return action.href && !faded ? (
+                  <Link
+                    key={name}
+                    className={cls}
+                    href={action.href}
+                    onClick={action.onClick}
+                    data-ui-guide={`workspace.${name}`}
+                  >
+                    {content}
+                  </Link>
+                ) : (
+                  <button
+                    key={name}
+                    className={`${cls} cursor-pointer disabled:cursor-not-allowed disabled:opacity-50`}
+                    type={action.form ? "submit" : "button"}
+                    form={action.form}
+                    disabled={faded}
+                    aria-busy={action.busy || undefined}
+                    onClick={action.onClick}
+                    data-ui-guide={`workspace.${name}`}
+                  >
+                    {content}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           <ViewTransition>{children}</ViewTransition>
         </main>
         <SecretDoor />
