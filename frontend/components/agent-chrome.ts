@@ -52,3 +52,6 @@ export const AGENT_BANNER =
   "mb-9 flex items-center gap-4 rounded-[16px] border-[3px] border-[#111] bg-[#FFF7CC] px-7 py-[26px] shadow-[0_0_0_3px_#FDBA74,8px_8px_0_3px_#111] [background-image:repeating-conic-gradient(from_0deg_at_92%_100%,#FFE14D55_0_8deg,transparent_8deg_16deg)] max-[767px]:mb-6 max-[767px]:flex-wrap max-[767px]:gap-2.5 max-[767px]:p-[18px]";
 export const AGENT_BANNER_TITLE =
   "m-0 min-w-0 flex-1 font-display text-[52px] leading-[1.1] font-extrabold tracking-normal text-[#111] max-[767px]:order-[-1] max-[767px]:basis-full max-[767px]:text-[34px]";
+/** List-card hover lift (DESIGN-RULES: -2px, --dur-ui 150ms, --ease); keeps the --r tilt; none under reduced motion. */
+export const LIST_CARD_LIFT =
+  "[transform:translateY(var(--card-lift,0px))_rotate(var(--r,0deg))] transition-transform duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:[--card-lift:-2px] motion-reduce:hover:[--card-lift:0px]";
