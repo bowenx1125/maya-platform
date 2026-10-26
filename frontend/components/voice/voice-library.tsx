@@ -1103,12 +1103,12 @@ export function VoiceLibrary({
       >
         <section className={voiceAlbum.alb} aria-labelledby={titleId}>
           <AlbumRings />
-          <div className={voiceAlbum.top}>
+          <div className={`${voiceAlbum.top} max-md:flex-wrap max-md:gap-x-[12px] max-md:gap-y-[16px] max-md:mb-[22px]`}>
             <h2 id={titleId} className={voiceAlbum.h2}>
               {t("voices")}
             </h2>
-            <span className={voiceAlbum.tape} aria-hidden="true" />
-            <span className="flex-1" />
+            <span className={`${voiceAlbum.tape} max-md:w-[44px]`} aria-hidden="true" />
+            <span className="flex-1 max-md:basis-full max-md:h-0" />
             {/* Back / Done inside the album top row (same band as list New). */}
             <PageAction
               name="back"
