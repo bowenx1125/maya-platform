@@ -213,6 +213,8 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
       </p>
       {localError ? (
         <DismissibleAlert
+          kind="field"
+          n={1}
           id="register-field-error"
           className="form-error"
           resetKey={`${attempt}:${localError}`}

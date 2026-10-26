@@ -216,6 +216,7 @@ const enMessages = {
   debateMissingId: "The debate identifier is missing.",
   requestFailed: "Request failed",
   noticeDismiss: "Dismiss",
+  noticeReopen: "Show the message",
   requestFallback: "The platform request could not be completed.",
   httpError: "Platform API returned HTTP {status}.",
   revisionConflict: "Revision conflict",

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { DismissibleAlert } from "../dismissible-alert";
+import { KindSticker } from "../ui/error-kit";
 import { apiErrorMessage, PlatformApiError } from "../../lib/api";
 import { useT } from "../../lib/i18n";
 import {
@@ -491,7 +492,7 @@ export function AudienceInteractionForm({
                   </span>
                 ) : null}
                 <button
-                  className={styles.primaryButton}
+                  className={`${styles.primaryButton} relative`}
                   type="submit"
                   disabled={
                     !canInteract ||
@@ -502,6 +503,7 @@ export function AudienceInteractionForm({
                     barrageState === "busy"
                   }
                 >
+                  {barrageError ? <KindSticker kind="chat" on /> : null}
                   {barrageState === "busy"
                     ? t("audienceSending")
                     : t("audienceBarrageSend")}
@@ -512,6 +514,8 @@ export function AudienceInteractionForm({
                   id="message-error"
                   className={styles.error}
                   resetKey={barrageError}
+                  kind="chat"
+                  transient
                 >
                   {apiErrorMessage(barrageError)}
                 </DismissibleAlert>
@@ -566,12 +570,13 @@ export function AudienceInteractionForm({
                 ))}
               </div>
               <button
-                className={styles.secondaryButton}
+                className={`${styles.secondaryButton} relative`}
                 type="submit"
                 disabled={
                   !canInteract || submissionsClosed || voteState !== "idle"
                 }
               >
+                {voteError ? <KindSticker kind="bell" on /> : null}
                 {voteState === "busy"
                   ? t("audienceSubmitting")
                   : t("audienceVoteSubmit")}
@@ -582,7 +587,12 @@ export function AudienceInteractionForm({
                 </p>
               ) : null}
               {voteError ? (
-                <DismissibleAlert className={styles.error} resetKey={voteError}>
+                <DismissibleAlert
+                  className={styles.error}
+                  resetKey={voteError}
+                  kind="bell"
+                  transient
+                >
                   {apiErrorMessage(voteError)}
                 </DismissibleAlert>
               ) : null}

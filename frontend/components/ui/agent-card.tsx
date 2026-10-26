@@ -7,7 +7,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { MascotFigure, MASCOT_IDS, type MascotId } from "../academy/mascots";
 import { FitTitle } from "../fit-title";
-import { IconClose } from "../quiet-icons";
+import { RoundX } from "./error-kit";
 
 /** Material theme of the Agent's avatar → the mascot on its card. */
 const THEME_MASCOT: Record<string, MascotId> = {
@@ -60,8 +60,7 @@ function DeleteX({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <RoundX
       aria-label={label}
       disabled={disabled}
       onClick={(event) => {
@@ -69,10 +68,8 @@ function DeleteX({
         event.stopPropagation();
         onClick();
       }}
-      className="absolute -top-3 -right-3 z-[3] m-0 inline-grid size-8 min-h-0 cursor-pointer place-items-center rounded-full border-[3px] border-border bg-surface p-0 text-ink shadow-[2px_2px_0_#111] hover:bg-err hover:text-white focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      <IconClose size={14} />
-    </button>
+      className="absolute -top-3 -right-3 z-[3]"
+    />
   );
 }
 
