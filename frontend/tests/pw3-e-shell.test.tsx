@@ -225,9 +225,10 @@ describe("PW3-E teacher information architecture", () => {
       </AppShell>,
     );
     const nav = within(screen.getByRole("navigation"));
-    // Students have no Brainform entry since 2026-10-20 (RAG and Record
-    // moved into Studyform).
-    expect(document.querySelector('[data-tour="brain"]')).toBeNull();
+    // B-final sidebar: the student Brainform heading is the Guide's step.
+    expect(
+      document.querySelector('[data-tour="brain"]')?.textContent?.trim(),
+    ).toBe("Brainform");
     expect(nav.getByRole("link", { name: "New" }).getAttribute("href")).toBe(
       "/student/knowledge/new",
     );
@@ -431,7 +432,9 @@ describe("student shell navigation", () => {
       "/student/groups/group-b",
       "/student/chat",
     ]);
-    expect(document.querySelector('[data-tour="brain"]')).toBeNull();
+    expect(
+      document.querySelector('[data-tour="brain"]')?.textContent?.trim(),
+    ).toBe("Brainform");
   });
 
   it("falls back to the only group on pages that name none", () => {
