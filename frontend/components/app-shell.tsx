@@ -813,189 +813,191 @@ export function AppShell({
         <header
           id={SIDEBAR_ID}
           data-collapsed={collapsed || undefined}
-          className={`sticky top-0 z-20 h-dvh border-r-[3px] border-border bg-sidebar max-[900px]:fixed max-[900px]:inset-y-0 max-[900px]:left-0 max-[900px]:z-50 max-[900px]:w-[min(300px,85vw)] max-[900px]:transition-transform max-[900px]:duration-150 max-[900px]:motion-reduce:transition-none ${drawerOpen ? "" : "max-[900px]:invisible max-[900px]:-translate-x-full"}`}
+          className={`relative z-20 min-h-dvh border-r-[3px] border-border bg-sidebar max-[900px]:fixed max-[900px]:inset-y-0 max-[900px]:left-0 max-[900px]:z-50 max-[900px]:w-[min(300px,85vw)] max-[900px]:transition-transform max-[900px]:duration-150 max-[900px]:motion-reduce:transition-none ${drawerOpen ? "" : "max-[900px]:invisible max-[900px]:-translate-x-full"}`}
         >
-          <button
-            type="button"
-            data-sidebar-toggle
-            className={`absolute top-[calc(50%-16px)] ${collapsed ? "-right-[26px]" : "-right-[22px]"} z-10 grid size-8 max-[900px]:top-5 max-[900px]:-right-[18px] place-items-center rounded-full border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none`}
-            aria-label={toggleLabel}
-            aria-expanded={mobile ? drawerOpen : !collapsed}
-            aria-controls={SIDEBAR_ID}
-            aria-keyshortcuts="Control+B Meta+B"
-            title={`${toggleLabel} (Ctrl/⌘ B)`}
-            onClick={() =>
-              mobile ? setDrawerPath(null) : writeCollapsed(!collapsed)
-            }
-          >
-            <WorkspaceIcon
-              name={collapsed ? "chevronRight" : "chevronLeft"}
-              size={16}
-            />
-          </button>
-          <div
-            className={`flex h-full flex-col gap-5 overflow-y-auto pt-5 pb-4 ${collapsed ? "items-center px-2" : "px-3"}`}
-          >
-            <nav
-              aria-label={`${teacherSurface ? t("teacher") : t("student")} ${t("navigation")}`}
-              className={`nav-links grid content-start ${collapsed ? "justify-items-center gap-3" : "gap-4"}`}
+          <div data-sidebar-pin className="sticky top-0 h-dvh">
+            <button
+              type="button"
+              data-sidebar-toggle
+              className={`absolute top-[calc(50%-16px)] ${collapsed ? "-right-[26px]" : "-right-[22px]"} z-10 grid size-8 max-[900px]:top-5 max-[900px]:-right-[18px] place-items-center rounded-full border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none`}
+              aria-label={toggleLabel}
+              aria-expanded={mobile ? drawerOpen : !collapsed}
+              aria-controls={SIDEBAR_ID}
+              aria-keyshortcuts="Control+B Meta+B"
+              title={`${toggleLabel} (Ctrl/⌘ B)`}
+              onClick={() =>
+                mobile ? setDrawerPath(null) : writeCollapsed(!collapsed)
+              }
             >
-              <Link
-                href={home}
-                aria-current={mayaformLit ? "page" : undefined}
-                aria-label={collapsed ? t("appName") : undefined}
-                title={collapsed ? t("appName") : undefined}
-                data-tour="home"
-                data-lit={mayaformLit || undefined}
-                className={`isolate ${collapsed ? `${ICON_ITEM} border-border bg-main shadow-arc-s` : `${ITEM} w-fit justify-self-start font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " active" : ""}`}
+              <WorkspaceIcon
+                name={collapsed ? "chevronRight" : "chevronLeft"}
+                size={16}
+              />
+            </button>
+            <div
+              className={`flex h-full flex-col gap-5 overflow-y-auto pt-5 pb-4 ${collapsed ? "items-center px-2" : "px-3"}`}
+            >
+              <nav
+                aria-label={`${teacherSurface ? t("teacher") : t("student")} ${t("navigation")}`}
+                className={`nav-links grid content-start ${collapsed ? "justify-items-center gap-3" : "gap-4"}`}
               >
-                {mayaformLit && !collapsed ? pill : null}
-                <span
-                  className={`brand-dot size-3 shrink-0 rounded-full border-2 border-border ${collapsed ? "bg-surface" : "bg-main"}`}
-                  aria-hidden="true"
-                />
-                {collapsed ? null : <span>{t("appName")}</span>}
-              </Link>
-              {groups.map((group) => {
-                const headingId = `sidebar-group-${group.key}`;
+                <Link
+                  href={home}
+                  aria-current={mayaformLit ? "page" : undefined}
+                  aria-label={collapsed ? t("appName") : undefined}
+                  title={collapsed ? t("appName") : undefined}
+                  data-tour="home"
+                  data-lit={mayaformLit || undefined}
+                  className={`isolate ${collapsed ? `${ICON_ITEM} border-border bg-main shadow-arc-s` : `${ITEM} w-fit justify-self-start font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " active" : ""}`}
+                >
+                  {mayaformLit && !collapsed ? pill : null}
+                  <span
+                    className={`brand-dot size-3 shrink-0 rounded-full border-2 border-border ${collapsed ? "bg-surface" : "bg-main"}`}
+                    aria-hidden="true"
+                  />
+                  {collapsed ? null : <span>{t("appName")}</span>}
+                </Link>
+                {groups.map((group) => {
+                  const headingId = `sidebar-group-${group.key}`;
 
-                return (
-                  <div
-                    key={group.key}
-                    role="group"
-                    aria-labelledby={collapsed ? undefined : headingId}
-                    aria-label={collapsed ? group.label : undefined}
-                    data-sidebar-group={group.key}
-                    className={
-                      collapsed
-                        ? `grid gap-1 rounded-arc-s border-[3px] border-border p-1 shadow-arc-s ${group.tile}`
-                        : "grid gap-1.5"
-                    }
-                  >
-                    {collapsed ? null : (
-                      <div
-                        id={headingId}
-                        className="flex items-center gap-1.5 px-1 font-body text-[11px] font-extrabold tracking-[0.12em] text-ink uppercase"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className={`size-2 border-2 border-border ${group.square}`}
-                        />
-                        <span>{group.label}</span>
-                      </div>
-                    )}
-                    <ul
+                  return (
+                    <div
+                      key={group.key}
+                      role="group"
+                      aria-labelledby={collapsed ? undefined : headingId}
+                      aria-label={collapsed ? group.label : undefined}
+                      data-sidebar-group={group.key}
                       className={
                         collapsed
-                          ? "m-0 grid list-none gap-1 p-0"
-                          : `m-0 ml-[9px] grid list-none gap-0.5 border-l-4 py-0 pr-0 pl-2 ${group.rail}`
+                          ? `grid gap-1 rounded-arc-s border-[3px] border-border p-1 shadow-arc-s ${group.tile}`
+                          : "grid gap-1.5"
                       }
                     >
-                      {group.items.map((item, index) =>
-                        renderItem(group, item, index),
+                      {collapsed ? null : (
+                        <div
+                          id={headingId}
+                          className="flex items-center gap-1.5 px-1 font-body text-[11px] font-extrabold tracking-[0.12em] text-ink uppercase"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`size-2 border-2 border-border ${group.square}`}
+                          />
+                          <span>{group.label}</span>
+                        </div>
                       )}
-                    </ul>
-                  </div>
-                );
-              })}
-              {(
-                [
-                  ["new", "New"],
-                  ["back", "Back"],
-                  ["done", "Done"],
-                ] as const
-              ).map(([name, label]) => {
-                const action = actions[name];
-                // New stays in the sidebar once a page registers it, faded when
-                // it cannot run. Back and Done exist only while their owning
-                // screen needs them, and remain disabled during busy work.
-                if (!action) return null;
-                const faded = Boolean(action.disabled);
-                const content = (
-                  <>
-                    {action.busy ? (
-                      <span className="spinner" aria-hidden="true" />
-                    ) : (
-                      <WorkspaceIcon name={name} size={18} />
-                    )}
-                    {collapsed ? (
-                      <span className="sr-only">{label}</span>
-                    ) : (
-                      <span>{label}</span>
-                    )}
-                  </>
-                );
-                const actionClass = `${collapsed ? `${ICON_ITEM}` : ITEM} border-border bg-surface shadow-arc-s hover:-translate-y-px active:translate-x-[3px] active:translate-y-[3px] active:shadow-none`;
-                return action.href && !faded ? (
-                  <Link
-                    key={name}
-                    className={actionClass}
-                    href={action.href}
-                    onClick={action.onClick}
-                    data-ui-guide={`workspace.${name}`}
-                    title={collapsed ? label : undefined}
-                  >
-                    {content}
-                  </Link>
-                ) : (
-                  <button
-                    key={name}
-                    className={`${actionClass} w-full cursor-pointer text-left disabled:cursor-not-allowed disabled:opacity-50`}
-                    type={action.form ? "submit" : "button"}
-                    form={action.form}
-                    disabled={faded}
-                    aria-busy={action.busy || undefined}
-                    onClick={action.onClick}
-                    data-ui-guide={`workspace.${name}`}
-                    title={collapsed ? label : undefined}
-                  >
-                    {content}
-                  </button>
-                );
-              })}
-            </nav>
-            <div
-              className={`mt-auto grid gap-2 ${collapsed ? "justify-items-center" : ""}`}
-            >
-              {collapsed ? (
-                <a
-                  href="mailto:t330034059@mail.bnbu.edu.cn"
-                  title="Send to t330034059@mail.bnbu.edu.cn"
-                  className={`${ICON_ITEM} border-border bg-surface shadow-arc-s`}
-                >
-                  <WorkspaceIcon name="mail" size={18} />
-                  <span className="sr-only">
-                    Meet Problems? Send to t330034059@mail.bnbu.edu.cn
-                  </span>
-                </a>
-              ) : (
-                <p className="m-0 grid gap-0.5 rounded-arc-s border-[3px] border-border bg-surface p-2.5 font-body text-xs font-medium text-arc-muted shadow-arc-s">
-                  <span className="font-display text-sm font-extrabold text-ink">
-                    Meet Problems?
-                  </span>
-                  <a
-                    className="font-bold [overflow-wrap:anywhere] text-ink underline"
-                    href="mailto:t330034059@mail.bnbu.edu.cn"
-                  >
-                    Send to t330034059@mail.bnbu.edu.cn
-                  </a>
-                </p>
-              )}
-              <button
-                className={`${collapsed ? `${ICON_ITEM}` : `${ITEM} w-full`} cursor-pointer border-border bg-surface text-left shadow-arc-s active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-wait disabled:opacity-60`}
-                type="button"
-                disabled={busy}
-                data-ui-guide="workspace.logout"
-                title={collapsed ? t("logout") : undefined}
-                onClick={() => void signOut()}
+                      <ul
+                        className={
+                          collapsed
+                            ? "m-0 grid list-none gap-1 p-0"
+                            : `m-0 ml-[9px] grid list-none gap-0.5 border-l-4 py-0 pr-0 pl-2 ${group.rail}`
+                        }
+                      >
+                        {group.items.map((item, index) =>
+                          renderItem(group, item, index),
+                        )}
+                      </ul>
+                    </div>
+                  );
+                })}
+                {(
+                  [
+                    ["new", "New"],
+                    ["back", "Back"],
+                    ["done", "Done"],
+                  ] as const
+                ).map(([name, label]) => {
+                  const action = actions[name];
+                  // New stays in the sidebar once a page registers it, faded when
+                  // it cannot run. Back and Done exist only while their owning
+                  // screen needs them, and remain disabled during busy work.
+                  if (!action) return null;
+                  const faded = Boolean(action.disabled);
+                  const content = (
+                    <>
+                      {action.busy ? (
+                        <span className="spinner" aria-hidden="true" />
+                      ) : (
+                        <WorkspaceIcon name={name} size={18} />
+                      )}
+                      {collapsed ? (
+                        <span className="sr-only">{label}</span>
+                      ) : (
+                        <span>{label}</span>
+                      )}
+                    </>
+                  );
+                  const actionClass = `${collapsed ? `${ICON_ITEM}` : ITEM} border-border bg-surface shadow-arc-s hover:-translate-y-px active:translate-x-[3px] active:translate-y-[3px] active:shadow-none`;
+                  return action.href && !faded ? (
+                    <Link
+                      key={name}
+                      className={actionClass}
+                      href={action.href}
+                      onClick={action.onClick}
+                      data-ui-guide={`workspace.${name}`}
+                      title={collapsed ? label : undefined}
+                    >
+                      {content}
+                    </Link>
+                  ) : (
+                    <button
+                      key={name}
+                      className={`${actionClass} w-full cursor-pointer text-left disabled:cursor-not-allowed disabled:opacity-50`}
+                      type={action.form ? "submit" : "button"}
+                      form={action.form}
+                      disabled={faded}
+                      aria-busy={action.busy || undefined}
+                      onClick={action.onClick}
+                      data-ui-guide={`workspace.${name}`}
+                      title={collapsed ? label : undefined}
+                    >
+                      {content}
+                    </button>
+                  );
+                })}
+              </nav>
+              <div
+                className={`mt-auto grid gap-2 ${collapsed ? "justify-items-center" : ""}`}
               >
-                <WorkspaceIcon name="logout" size={18} />
                 {collapsed ? (
-                  <span className="sr-only">{t("logout")}</span>
+                  <a
+                    href="mailto:t330034059@mail.bnbu.edu.cn"
+                    title="Send to t330034059@mail.bnbu.edu.cn"
+                    className={`${ICON_ITEM} border-border bg-surface shadow-arc-s`}
+                  >
+                    <WorkspaceIcon name="mail" size={18} />
+                    <span className="sr-only">
+                      Meet Problems? Send to t330034059@mail.bnbu.edu.cn
+                    </span>
+                  </a>
                 ) : (
-                  t("logout")
+                  <p className="m-0 grid gap-0.5 rounded-arc-s border-[3px] border-border bg-surface p-2.5 font-body text-xs font-medium text-arc-muted shadow-arc-s">
+                    <span className="font-display text-sm font-extrabold text-ink">
+                      Meet Problems?
+                    </span>
+                    <a
+                      className="font-bold [overflow-wrap:anywhere] text-ink underline"
+                      href="mailto:t330034059@mail.bnbu.edu.cn"
+                    >
+                      Send to t330034059@mail.bnbu.edu.cn
+                    </a>
+                  </p>
                 )}
-              </button>
+                <button
+                  className={`${collapsed ? `${ICON_ITEM}` : `${ITEM} w-full`} cursor-pointer border-border bg-surface text-left shadow-arc-s active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-wait disabled:opacity-60`}
+                  type="button"
+                  disabled={busy}
+                  data-ui-guide="workspace.logout"
+                  title={collapsed ? t("logout") : undefined}
+                  onClick={() => void signOut()}
+                >
+                  <WorkspaceIcon name="logout" size={18} />
+                  {collapsed ? (
+                    <span className="sr-only">{t("logout")}</span>
+                  ) : (
+                    t("logout")
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </header>

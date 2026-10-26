@@ -318,7 +318,9 @@ describe("edge toggle", () => {
     renderShell("student", "/student");
     const button = toggle();
     const sidebar = document.getElementById("workspace-sidebar")!;
-    expect(button.parentElement).toBe(sidebar);
+    // The sidebar runs the full page; the toggle rides its pinned, viewport-tall layer.
+    expect(button.parentElement?.hasAttribute("data-sidebar-pin")).toBe(true);
+    expect(button.parentElement?.parentElement).toBe(sidebar);
     expect(sidebar.className).toMatch(/(^| )sticky( |$)/);
     expect(sidebar.className).toContain("h-dvh");
     expect(button.className).toContain("absolute");
