@@ -34,13 +34,14 @@ import {
   type LLMParamValues,
   type VoiceParamValues,
 } from "./llm-params-card";
-import sectionStyles from "./create-section.module.css";
+import { CreateCard } from "./create-card";
 import { validateDebateTopic } from "../../../lib/debate-topic";
 import { useT } from "../../../lib/i18n";
 import { useSession } from "../../session-provider";
 import { DebateCleanupControls } from "../debate-cleanup-controls";
 import { DebateStatus } from "../debate-status";
 import {
+  IconBust,
   IconPlay,
   IconPlus,
   IconRecycle,
@@ -50,6 +51,9 @@ import { Button } from "../../ui/button";
 import { NewButton } from "../../ui/agent-card";
 import { cn } from "../../../lib/utils";
 import {
+  CREATE_SEG,
+  CREATE_SEG_BUTTON,
+  CREATE_TEXTAREA,
   DEBATE_PAGE,
   DEBATE_PRIMARY,
   DEBATE_ROW_BUTTON,
@@ -62,7 +66,6 @@ import {
   ErrorNotice,
   LoadingCard,
   PageIntro,
-  SectionCard,
 } from "../../ui";
 import {
   ChecklistBadge,
@@ -78,8 +81,6 @@ import {
   mergeIssues,
   readinessIssues,
 } from "../../../lib/agent-readiness";
-import rulesetStyles from "./ruleset-editor.module.css";
-import styles from "./debate-setup.module.css";
 import { PageAction } from "../../page-action";
 
 export type { DebateDetail, DebateDraftRequest, DebateSummary };
@@ -785,7 +786,7 @@ export function TeacherDebateCreate({
   }
 
   return (
-    <div className={styles.pageStack}>
+    <div className={cn(DEBATE_PAGE, "flex flex-col")}>
       <PageIntro title={copy(t, "newDebateTitle")} />
       {!rulesEditing ? (
         <PageAction name="back" href="/teacher/debates" disabled={busy} />
@@ -807,13 +808,13 @@ export function TeacherDebateCreate({
         noValidate
         ref={formRef}
         id="create-debate-form"
-        className={styles.pageStack}
+        className="flex flex-col"
         onSubmit={submit}
       >
-        <div className={styles.topicColumns}>
-          <SectionCard
+        <div className="grid grid-cols-2 gap-5 max-[600px]:grid-cols-1 max-[600px]:gap-0">
+          <CreateCard
             title={copy(t, "debateTopic")}
-            className={`${styles.topicCard} ${sectionStyles.section} relative overflow-visible`}
+            className="overflow-visible"
             guide="debate.topic"
           >
             <ChecklistBadge entry={topicEntry} />
@@ -829,11 +830,12 @@ export function TeacherDebateCreate({
                 }
                 disabled={busy}
                 id="debate-topic"
-                className={`${styles.contextInput} ${
+                className={cn(
+                  CREATE_TEXTAREA,
                   topicEntry && !topicEntry.done
                     ? "border-err! shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
-                    : ""
-                }`}
+                    : "",
+                )}
                 onChange={(event) => {
                   setTopic(event.target.value);
                   if (topicError) setTopicError(null);
@@ -844,31 +846,41 @@ export function TeacherDebateCreate({
                 value={topic}
               />
             </div>
-          </SectionCard>
-          <SectionCard
+          </CreateCard>
+          <CreateCard
             title="Background"
-            className={`${styles.topicCard} ${sectionStyles.section}`}
+            className="[--sh:#67E8F9]"
             guide="debate.background"
           >
             <textarea
               ref={backgroundInputRef}
               aria-label="Background"
-              className={styles.contextInput}
+              className={CREATE_TEXTAREA}
               disabled={busy}
               placeholder="Optional context"
               rows={3}
               value={background}
               onChange={(event) => setBackground(event.target.value)}
             />
-          </SectionCard>
+          </CreateCard>
         </div>
 
-        <SectionCard
-          className={sectionStyles.section}
-          title="Agents Order"
-          guide="debate.agentOrder"
-        >
-          <p className={styles.listMeta} role="status">
+        <CreateCard title="Agents Order" guide="debate.agentOrder">
+          <p
+            className="my-2.5 flex items-center gap-2.5 font-body text-xs leading-[normal] font-bold"
+            role="status"
+          >
+            <span className="inline-flex gap-[3px]" aria-hidden="true">
+              {[0, 1, 2, 3, 4].map((slot) => (
+                <i
+                  key={slot}
+                  className={cn(
+                    "box-border size-3 rounded-full border-2 border-[#111] bg-white",
+                    slot < selectedIds.length && "bg-[#FF4D8D]",
+                  )}
+                />
+              ))}
+            </span>
             {copy(t, "debateSelectCount").replace(
               "{count}",
               `${selectedIds.length}/5`,
@@ -880,9 +892,9 @@ export function TeacherDebateCreate({
             <div
               id="debate-agents"
               tabIndex={-1}
-              className={`${styles.agentOrderList} overflow-visible outline-none`}
+              className="grid gap-2 overflow-visible outline-none"
             >
-              {candidates.map((candidate) => {
+              {candidates.map((candidate, index) => {
                 const id = candidate.agent.id;
                 const order = selectedIds.indexOf(id);
                 const selected = order !== -1;
@@ -892,7 +904,18 @@ export function TeacherDebateCreate({
                   <div
                     key={id}
                     data-invalid={problem ? true : undefined}
-                    className={`${styles.agentOrderRow} ${selected ? styles.agentOrderSelected : ""} relative ${problem ? "border-err! shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!" : ""}`}
+                    style={
+                      {
+                        "--tone": AGENT_TONES[index % AGENT_TONES.length],
+                      } as CSSProperties
+                    }
+                    className={cn(
+                      "relative box-border flex w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 rounded-[999px] border-[2.5px] border-[#111] bg-white py-1.5 pr-3.5 pl-1.5",
+                      selected &&
+                        "bg-[color-mix(in_srgb,var(--tone)_35%,#fff)] shadow-[3px_4px_0_var(--tone)]",
+                      problem &&
+                        "border-err! shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!",
+                    )}
                     onClick={(event) => {
                       if (
                         !busy &&
@@ -905,7 +928,7 @@ export function TeacherDebateCreate({
                   >
                     <button
                       type="button"
-                      className={styles.agentIdentity}
+                      className="m-0 flex h-auto min-w-0 flex-1 cursor-pointer items-center gap-3 border-0 bg-transparent p-0 text-left font-body text-[#111] shadow-none disabled:cursor-default"
                       disabled={busy}
                       aria-label={candidate.agent.name}
                       aria-pressed={selected}
@@ -915,15 +938,29 @@ export function TeacherDebateCreate({
                       onClick={() => toggleCandidate(candidate)}
                     >
                       <ChecklistBadge entry={problem} />
-                      <span className={styles.orderNumber} aria-hidden="true">
+                      <span
+                        className={cn(
+                          "box-border grid size-7 flex-none place-items-center rounded-full border-2 border-[#111] bg-white font-body text-[15px] leading-[normal] font-extrabold",
+                          selected && "bg-[#FF4D8D]",
+                        )}
+                        aria-hidden="true"
+                      >
                         {selected ? order + 1 : "+"}
                       </span>
-                      <span className={styles.agentText}>
-                        <strong>{candidate.agent.name}</strong>
-                        <span className={styles.agentMeta}>
-                          <span className="status-pill status-good">
+                      <span
+                        className="box-border grid size-10 flex-none place-items-[end_center] overflow-hidden rounded-full border-2 border-[#111] bg-[var(--tone)] text-[#111]"
+                        aria-hidden="true"
+                      >
+                        <IconBust />
+                      </span>
+                      <span className="min-w-0 text-base leading-[normal]">
+                        <strong className="block text-[15px] leading-[normal] font-bold">
+                          {candidate.agent.name}
+                        </strong>
+                        <span className="text-xs leading-[normal] text-[#4B5563]">
+                          <span className="mr-1 rounded-full border-2 border-[#111] bg-white px-1.5 font-body text-[11px] font-bold whitespace-nowrap text-[#111]">
                             {candidate.current_version.version_label}
-                          </span>
+                          </span>{" "}
                           <span>{candidate.group_name}</span>
                         </span>
                       </span>
@@ -931,13 +968,14 @@ export function TeacherDebateCreate({
                     {selected ? (
                       <div
                         data-agent-controls
-                        className={`${styles.orderControls} ${draft.mode === "open" ? styles.orderControlsOpen : ""}`}
+                        className="ml-auto flex flex-wrap items-center gap-2 max-[600px]:ml-0 max-[600px]:w-full max-[600px]:pb-1 max-[600px]:pl-1"
                       >
                         <div
-                          className={rulesetStyles.languageSwitch}
+                          className={CREATE_SEG}
                           aria-label={copy(t, "debateStance") as string}
                         >
                           <button
+                            className={cn(CREATE_SEG_BUTTON, "border-l-0")}
                             aria-pressed={draft.mode === "assigned"}
                             disabled={busy}
                             onClick={() =>
@@ -951,6 +989,7 @@ export function TeacherDebateCreate({
                             {copy(t, "debateAssigned")}
                           </button>
                           <button
+                            className={CREATE_SEG_BUTTON}
                             aria-pressed={draft.mode === "open"}
                             disabled={busy}
                             onClick={() =>
@@ -968,6 +1007,7 @@ export function TeacherDebateCreate({
                           <select
                             id={`debate-stance-${id}`}
                             aria-label={`${candidate.agent.name} ${copy(t, "debateAssigned")}`}
+                            className="h-auto rounded-full border-[2.5px] border-[#111] bg-white px-2.5 py-1 font-body text-xs font-bold text-[#111]"
                             disabled={busy}
                             onChange={(event) =>
                               updateParticipant(id, {
@@ -989,7 +1029,7 @@ export function TeacherDebateCreate({
                         ) : null}
                         <input
                           aria-label={`${candidate.agent.name} ${copy(t, "debateNote")}`}
-                          className={styles.noteInput}
+                          className="box-border h-auto min-h-0 w-44 min-w-0 rounded-full border-[2.5px] border-[#111] bg-white px-3 py-1 font-body text-xs text-[#111] max-[600px]:flex-1"
                           disabled={busy}
                           onChange={(event) =>
                             updateParticipant(id, { note: event.target.value })
@@ -1004,7 +1044,7 @@ export function TeacherDebateCreate({
               })}
             </div>
           )}
-        </SectionCard>
+        </CreateCard>
 
         <RulesetEditor
           prompts={teachingPrompts}
@@ -1054,5 +1094,13 @@ export function TeacherDebateCreate({
     </div>
   );
 }
+
+const AGENT_TONES = [
+  "#FFE14D",
+  "#67E8F9",
+  "#A3E635",
+  "#FF8FB5",
+  "#FDBA74",
+] as const;
 
 // Keep the existing name available for the page-level integration point.

@@ -51,8 +51,38 @@ export const RIBBON_COLORS = [
 
 /** Page body (`.wrap .in`). */
 export const DEBATE_PAGE =
-  "mx-auto box-border w-full max-w-[1100px] font-body text-[#111]";
+  "mx-auto box-border w-full min-w-0 max-w-[1100px] font-body text-[#111]";
 
 /** `.lh h1`: the white pill title with the cyan offset. */
 export const DEBATE_TITLE =
   "m-0 rounded-full border-[2.5px] border-[#111] bg-white px-[22px] py-1 font-display text-[34px] leading-[normal] font-extrabold tracking-normal text-[#111] shadow-[4px_5px_0_#67E8F9] max-[600px]:text-2xl";
+
+/* ---- Create page (F "create D" + F overrides) ---- */
+
+/** `.create .card`: white rounded card, flat black drop; `--sh` tints the dot. */
+export const CREATE_CARD =
+  "relative mb-[22px] box-border min-w-0 rounded-[24px] border-2 border-[#111] bg-white px-[18px] pt-4 pb-[18px] text-[#111] shadow-[0_5px_0_#111] [--sh:#FFE14D]";
+
+/** `.create .ch` with its tinted dot. */
+export const CREATE_CARD_TITLE =
+  "m-0 flex pb-0.5 w-fit items-center gap-2 font-display text-[17px] leading-[normal] font-bold tracking-normal text-[#111] outline-none before:size-3 before:shrink-0 before:rounded-full before:border-2 before:border-[#111] before:bg-[var(--sh)] before:content-['']";
+
+/** `.create .ta`. */
+export const CREATE_TEXTAREA =
+  "mt-3 box-border block min-h-20 w-full resize-y rounded-2xl border-[2.5px] border-[#111] bg-[#F8FBFF] px-3 py-2.5 font-body text-sm leading-normal text-[#111] shadow-none outline-none placeholder:text-[#757575] focus:shadow-[4px_4px_0_#FF4D8D]";
+
+/** `.create .seg`: the 中文/English switch with its globe. */
+export const CREATE_SEG =
+  "inline-flex flex-none items-center overflow-hidden rounded-full border-[2.5px] border-[#111] bg-white text-[#111] [&>svg]:mx-1.5 [&>svg]:flex-none";
+export const CREATE_SEG_BUTTON =
+  "m-0 h-auto min-h-0 cursor-pointer rounded-none border-0 border-l-2 border-[#111] bg-white px-2.5 py-1.5 font-body text-xs leading-[normal] font-bold whitespace-nowrap text-[#111] shadow-none aria-pressed:bg-[#FF4D8D] disabled:cursor-default disabled:opacity-60";
+
+/** `.bt.sm2`: the small Edit / Back / Save pill on a card. */
+export const CREATE_SMALL_BUTTON = cn(
+  DEBATE_BUTTON,
+  "py-1 pr-2.5 pl-2 text-xs leading-[normal]",
+);
+
+/** Parameter sub-card tints. */
+export const CREATE_SUB_DEBATE = "[--sh:#FF8FB5]";
+export const CREATE_SUB_VOICE = "[--sh:#67E8F9]";
