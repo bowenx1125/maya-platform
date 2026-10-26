@@ -821,6 +821,9 @@ const enMessages = {
   avatarStateNodYes: "Nod",
   voiceCreateTitle: "New",
   voiceNone: "No voices yet.",
+  voiceUsedBy: "Used by",
+  voiceMadeBy: "Made by",
+  voiceNoAgentsYet: "No Agents yet",
   voiceSampleFile:
     "Upload a 10–20 second clip of yourself reading aloud (16-bit WAV, MP3, or M4A; max 10 MB).",
   voiceSelectFileFirst: "Select an audio file (.wav, .mp3 or .m4a) first.",

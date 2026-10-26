@@ -113,7 +113,7 @@ describe("sidebar groups", () => {
     expect(groupRows("Classroom")).toEqual(["Live"]);
     expect(
       nav().getByRole("link", { name: "Voices" }).getAttribute("href"),
-    ).toBe("/student/groups/group-a/voices");
+    ).toBe("/student/voices?group_id=group-a");
     expect(
       nav().getByRole("link", { name: "Chat with Team" }).getAttribute("href"),
     ).toBe("/student/chat");
@@ -139,14 +139,17 @@ describe("sidebar groups", () => {
     expect(
       nav().getByRole("link", { name: "Agents" }).getAttribute("href"),
     ).toBe("/teacher/agents");
-    // RAG is its own page (2026-10-26); Voices and Knowledge stay on Studyform.
+    // RAG and Voices are their own pages (2026-10-26 / 2026-10-27);
+    // Knowledge stays on Studyform.
     expect(nav().getByRole("link", { name: "RAG" }).getAttribute("href")).toBe(
       "/teacher/rag",
     );
-    for (const name of ["Voices", "Knowledge"])
-      expect(nav().getByRole("link", { name }).getAttribute("href")).toBe(
-        "/teacher/studyform",
-      );
+    expect(
+      nav().getByRole("link", { name: "Voices" }).getAttribute("href"),
+    ).toBe("/teacher/voices");
+    expect(
+      nav().getByRole("link", { name: "Knowledge" }).getAttribute("href"),
+    ).toBe("/teacher/studyform");
   });
 
   it("keeps a visiting teacher's Brainform entry for that group", () => {
@@ -155,9 +158,9 @@ describe("sidebar groups", () => {
     expect(nav().getByRole("link", { name: "RAG" }).getAttribute("href")).toBe(
       "/teacher/rag?group_id=g",
     );
-    expect(nav().getByRole("link", { name: "RAG" }).getAttribute("href")).toBe(
-      "/teacher/rag?group_id=g",
-    );
+    expect(
+      nav().getByRole("link", { name: "Voices" }).getAttribute("href"),
+    ).toBe("/teacher/voices?group_id=g");
     expect(
       nav().getByRole("link", { name: "Chat with Agent" }).getAttribute("href"),
     ).toBe("/teacher/chat?group_id=g");

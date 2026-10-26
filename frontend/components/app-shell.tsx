@@ -363,6 +363,7 @@ export function AppShell({
     teacherSurface &&
     (pathname === "/teacher/knowledge" ||
       pathname === "/teacher/rag" ||
+      pathname === "/teacher/voices" ||
       pathname === "/teacher/chat")
       ? new URLSearchParams(locationSearch).get("group_id")
       : null;
@@ -408,6 +409,7 @@ export function AppShell({
     const reading =
       window.location.pathname === "/teacher/knowledge" ||
       window.location.pathname === "/teacher/rag" ||
+      window.location.pathname === "/teacher/voices" ||
       window.location.pathname === "/teacher/chat"
         ? new URLSearchParams(window.location.search).get("group_id")
         : null;
@@ -618,6 +620,13 @@ export function AppShell({
     : teacherSurface
       ? "/teacher/rag"
       : "/student/rag";
+  const voicesHref = visit
+    ? `/teacher/voices?group_id=${visit}`
+    : teacherSurface
+      ? "/teacher/voices"
+      : groupId
+        ? `/student/voices?group_id=${groupId}`
+        : "/student/voices";
   const groups: SidebarGroup[] = [
     {
       key: "studyform",
@@ -654,7 +663,7 @@ export function AppShell({
         { key: "rag", href: ragHref, label: t("rag"), icon: "file" },
         {
           key: "voices",
-          href: studentVoicesHref ?? brainItemHref,
+          href: voicesHref,
           label: t("voices"),
           icon: "mic",
         },
@@ -753,9 +762,12 @@ export function AppShell({
     : collapsed
       ? t("sidebarExpand")
       : t("sidebarCollapse");
-  // The RAG page lights only its own row, as Agents does.
+  // RAG and Voices each light only their own row, as Agents does.
   const ragArea = pathname === "/student/rag" || pathname === "/teacher/rag";
-  const mayaformLit = !agentsArea && !ragArea && activeHref === home;
+  const voicesArea =
+    pathname === "/student/voices" || pathname === "/teacher/voices";
+  const mayaformLit =
+    !agentsArea && !ragArea && !voicesArea && activeHref === home;
 
   function renderItem(group: SidebarGroup, item: SidebarItem, index: number) {
     const lit = litKey === `${group.key}:${item.key}`;
@@ -1056,7 +1068,8 @@ export function AppShell({
                     className={cls}
                     href={action.href}
                     onClick={action.onClick}
-                    data-ui-guide={`workspace.${name}`}
+                    aria-describedby={action.describedBy}
+                    data-ui-guide={action.guide ?? `workspace.${name}`}
                   >
                     {content}
                   </Link>
@@ -1069,7 +1082,8 @@ export function AppShell({
                     disabled={faded}
                     aria-busy={action.busy || undefined}
                     onClick={action.onClick}
-                    data-ui-guide={`workspace.${name}`}
+                    aria-describedby={action.describedBy}
+                    data-ui-guide={action.guide ?? `workspace.${name}`}
                   >
                     {content}
                   </button>
@@ -1101,6 +1115,8 @@ const PAGE_ROW: Record<string, string> = {
   "/student/knowledge": "knowledge",
   "/teacher/rag": "rag",
   "/student/rag": "rag",
+  "/teacher/voices": "voices",
+  "/student/voices": "voices",
 };
 
 /**
