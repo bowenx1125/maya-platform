@@ -61,12 +61,15 @@ export const AGENT_BANNER_TITLE =
  */
 export const STUDYFORM_BANNER =
   "mb-9 box-border flex h-[132px] min-h-0 flex-nowrap items-center gap-4 rounded-[16px] border-[3px] border-[#111] bg-[#FFF7CC] px-8 py-0 shadow-[0_0_0_3px_#FDBA74,8px_8px_0_3px_#111] [background-image:repeating-conic-gradient(from_0deg_at_92%_100%,#FFE14D55_0_8deg,transparent_8deg_16deg)] max-[767px]:mb-6 max-[767px]:h-[92px] max-[767px]:gap-2.5 max-[767px]:px-[18px]";
-/** Create/Edit banner: Back · title · Done in one row (390: gap 8). */
-export const STUDYFORM_BANNER_FORM = "max-[767px]:gap-2";
+/** Create/Edit banner: Back · title · Done in one row; at 390 (13-teams-final)
+ * the title takes its own row and Back · Done sit on the next. */
+export const STUDYFORM_BANNER_FORM =
+  "max-[767px]:h-auto max-[767px]:flex-wrap max-[767px]:gap-2.5 max-[767px]:p-[18px]";
 export const STUDYFORM_BANNER_TITLE =
   "m-0 min-w-0 flex-1 overflow-hidden font-display text-[52px] leading-[1.1] font-extrabold tracking-normal text-ellipsis whitespace-nowrap text-[#111] max-[767px]:text-[34px]";
-/** Create/Edit title at 390. */
-export const STUDYFORM_BANNER_FORM_TITLE = "max-[767px]:text-[26px]";
+/** Create/Edit title at 390: first row, full width, 34px. */
+export const STUDYFORM_BANNER_FORM_TITLE =
+  "max-[767px]:order-first max-[767px]:basis-full max-[767px]:text-[34px]";
 /** H2 list "+ New": 52px tall, 22px sides, 17px label, 22px icon (3.5). */
 export const STUDYFORM_NEW_CLASS =
   "m-0 ml-auto box-border inline-flex h-[52px] min-h-[52px] shrink-0 items-center gap-2.5 rounded-[10px] border-[3px] border-[#111] bg-[#FF4D8D] px-[22px] py-0 font-body text-[17px] leading-none font-extrabold text-[#111] no-underline shadow-[0_6px_0_#111] hover:translate-x-0 hover:translate-y-0 hover:shadow-[0_6px_0_#111] [&_svg]:size-[22px] [&_svg]:stroke-[3.5]";
