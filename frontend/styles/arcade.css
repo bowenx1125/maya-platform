@@ -99,6 +99,14 @@
       --p: 100%;
     }
   }
+  /* A Preview turn still waiting for speech shimmers (final mock F
+     `@keyframes shim`); callers pair it with motion-reduce:animate-none. */
+  --animate-debate-shim: debate-shim 1.8s linear infinite;
+  @keyframes debate-shim {
+    to {
+      background-position: -150% 0;
+    }
+  }
   --color-main: var(--arc-main);
   --color-main-fg: var(--arc-main-fg);
   --color-ink: var(--arc-ink);

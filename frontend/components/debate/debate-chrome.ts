@@ -86,3 +86,20 @@ export const CREATE_SMALL_BUTTON = cn(
 /** Parameter sub-card tints. */
 export const CREATE_SUB_DEBATE = "[--sh:#FF8FB5]";
 export const CREATE_SUB_VOICE = "[--sh:#67E8F9]";
+
+/* ---- Preview page (F "preview D" + F overrides) ---- */
+
+/** `.tape`: the white tale-of-the-tape card. */
+export const PREVIEW_TAPE =
+  "box-border min-w-0 rounded-[26px] border-2 border-[#111] bg-white p-[18px] text-[#111] shadow-[0_5px_0_#111]";
+
+/** `.tc`: one saved turn; `--tone` is the speaker's colour. */
+export const PREVIEW_TURN =
+  "min-w-0 overflow-hidden rounded-[20px] border-[2.5px] border-[#111] bg-white px-3.5 py-2.5 shadow-[3px_4px_0_var(--tone)]";
+
+/** `.tape:not(.ready) .tc:has(.say.pend)`: dashed, shimmering placeholder. */
+export const PREVIEW_TURN_PENDING =
+  "border-dashed shadow-none bg-[repeating-linear-gradient(110deg,#fff_0_40%,#EEF5FF_50%,#fff_60%)] bg-size-[300%_100%] animate-debate-shim motion-reduce:animate-none";
+
+/** Speaker colours (`--tone`), by participant order. */
+export const PREVIEW_TONES = ["#FFE14D", "#67E8F9", "#A3E635"] as const;
