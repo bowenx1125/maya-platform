@@ -22,7 +22,6 @@ const TRAY_CLASS = [
   "after:content-[''] after:block after:flex-none after:w-[58px] after:h-[74px]",
   "after:bg-[url(/mascots/wave.svg)] after:bg-contain after:bg-bottom after:bg-no-repeat after:drop-shadow-[3px_3px_0_#111]",
   "[&>.notice]:flex-1 [&>.notice]:min-w-0 [&>.notice]:max-w-none",
-  "max-[680px]:[&>.notice]:text-[13px] max-[680px]:[&>.notice]:py-2.5 max-[680px]:[&>.notice]:pr-[38px] max-[680px]:[&>.notice]:pl-3",
   "[&>.notice:has(~.notice)]:hidden",
 ].join(" ");
 
