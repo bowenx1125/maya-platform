@@ -11,6 +11,7 @@ import {
   STICKER_TONE,
   StickerBadge,
   useNoticeTray,
+  useRevealNotice,
 } from "./ui";
 
 import {
@@ -312,6 +313,7 @@ export function CreateChecklist({
   const t = useT();
   const tray = useNoticeTray(true);
   const [dismissed, setDismissed] = useState<number | null>(null);
+  useRevealNotice(tray, attempt, alert);
   if (!tray || dismissed === attempt) return null;
   if (entries.length === 0 || entries.every((entry) => entry.done)) return null;
   const show = (target: string) => {
