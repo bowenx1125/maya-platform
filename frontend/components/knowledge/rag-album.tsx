@@ -203,12 +203,9 @@ export function ragAgents(document: KnowledgeDocument): AffectedAgent[] {
   return document.used_by_agents ?? [];
 }
 
-/** Last editor's username: the uploader until last_edited_by_* exists. */
+/** Last editor's username, else the uploader's; null leaves the line empty. */
 export function lastEditor(document: KnowledgeDocument): string | null {
-  const extra = document as KnowledgeDocument & {
-    last_edited_by_username?: string | null;
-  };
-  return extra.last_edited_by_username || document.owner_username || null;
+  return document.last_edited_by_username || document.owner_username || null;
 }
 
 /** Card B: art, plate (title, status, Used by, Last edited by), footer. */
