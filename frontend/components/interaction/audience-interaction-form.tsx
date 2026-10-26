@@ -41,10 +41,10 @@ const PANEL =
 const HEADING =
   "flex items-center gap-2.5 [&_h2]:m-0 [&_h2]:font-display [&_h2]:leading-[normal] [&_h2]:tracking-normal [&_h2]:text-xl [&_h2]:font-extrabold [&_h2]:text-white";
 const OK_TAG =
-  "ml-auto rotate-[-3deg] rounded-md border-2 border-black bg-ok px-2 py-[3px] text-xs font-extrabold text-ink shadow-[2px_2px_0_#000]";
+  "ml-auto rotate-[-3deg] rounded-md border-2 border-black bg-ok px-2 py-[3px] text-xs leading-[normal] font-extrabold text-ink shadow-[2px_2px_0_#000]";
 const STATUS_LINE = "m-0 mt-2.5 text-[13px] font-bold text-[#E8FFE0]";
 const ARCADE =
-  "relative cursor-pointer rounded-full border-3 border-black bg-main font-extrabold text-ink shadow-[0_6px_0_#9b1747,0_6px_0_3px_#000] active:translate-y-1.5 active:shadow-[0_0_0_3px_#000] disabled:cursor-default disabled:translate-y-[3px] disabled:bg-[#6b6b6b] disabled:text-[#cfcfcf] disabled:shadow-[0_3px_0_#333,0_3px_0_3px_#000]";
+  "relative cursor-pointer rounded-full border-3 border-black bg-main font-extrabold text-ink shadow-[0_6px_0_#9b1747,0_6px_0_3px_#000] active:translate-y-1.5 active:shadow-[0_0_0_3px_#000] disabled:cursor-default disabled:opacity-100 disabled:translate-y-[3px] disabled:bg-[#6b6b6b] disabled:text-[#cfcfcf] disabled:shadow-[0_3px_0_#333,0_3px_0_3px_#000]";
 // Offsets measured against the mock: the button border (3px) shifts the containing block.
 const STICKER_AT = "left-auto top-[-9px] right-[-11px] size-[26px]";
 const VOTE_STICKER_AT = "left-auto top-[-4px] right-[-6px] size-[26px] z-[6]";
@@ -572,7 +572,7 @@ export function AudienceInteractionForm({
                 }}
                 disabled={barragePayload !== null}
                 className={cn(
-                  "rounded-[10px] border-3 border-white bg-white px-3.5 py-3 text-base leading-[normal] font-semibold text-ink shadow-[inset_0_-4px_0_#ddd] focus:shadow-[0_0_0_3px_#111,5px_5px_0_3px_#FF4D8D] focus:outline-none",
+                  "rounded-[10px] border-3 border-white bg-white px-3.5 py-3 text-base leading-[normal] disabled:opacity-100 font-semibold text-ink shadow-[inset_0_-4px_0_#ddd] focus:shadow-[0_0_0_3px_#111,5px_5px_0_3px_#FF4D8D] focus:outline-none",
                   !canInteract &&
                     "shadow-[0_0_0_3px_#111,5px_5px_0_3px_#FF4D8D]",
                 )}
@@ -649,7 +649,7 @@ export function AudienceInteractionForm({
                   }}
                   maxLength={turnBound ? 300 : undefined}
                   rows={5}
-                  className="mt-2.5 block min-h-[110px] w-full resize-none rounded-[10px] border-3 border-[#444] bg-[#0c0c0c] p-3 text-[15px] leading-normal font-medium text-[#E8FFE0] placeholder:text-[#8a8a8a] aria-invalid:border-err"
+                  className="mt-2.5 block min-h-[110px] w-full resize-none disabled:opacity-100 rounded-[10px] border-3 border-[#444] bg-[#0c0c0c] p-3 text-[15px] leading-normal font-medium text-[#E8FFE0] placeholder:text-[#8a8a8a] aria-invalid:border-err"
                   disabled={
                     !canInteract ||
                     submissionsClosed ||

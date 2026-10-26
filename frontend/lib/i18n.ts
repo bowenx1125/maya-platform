@@ -749,7 +749,7 @@ const enMessages = {
   audienceLoading: "Loading classroom…",
   audienceUnavailable: "Collection unavailable",
   audienceUnavailableHint: "This classroom link is invalid or has ended.",
-  audienceEyebrow: "Maya classroom · anonymous audience",
+  audienceEyebrow: "Debate",
   audienceNickname: "Nickname",
   audienceNicknamePlaceholder: "Your display name",
   audienceVote: "Vote",
