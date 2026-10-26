@@ -104,7 +104,7 @@ from app.modules.knowledge.providers.snapshot_build import (
     DEFAULT_CHUNKING_VERSION,
     SnapshotPublishCandidateV1,
 )
-from app.modules.knowledge.schemas import JobStatus
+from app.modules.knowledge.schemas import AffectedAgentDTO, JobStatus
 from app.modules.knowledge.schemas import KnowledgeDocument as KnowledgeDocumentDTO
 from app.modules.knowledge.source_versions import source_version_filename
 from app.modules.org.access import WorkspaceMember
@@ -1325,6 +1325,8 @@ def _document_dto(
     document: KnowledgeDocument,
     *,
     can_manage_visibility: bool = False,
+    owner_username: str | None = None,
+    used_by_agents: list[AffectedAgentDTO] | None = None,
 ) -> KnowledgeDocumentDTO:
     return KnowledgeDocumentDTO(
         id=UUID(document.id),
@@ -1343,6 +1345,9 @@ def _document_dto(
         workspace_state=cast(Literal["active", "hidden"], document.workspace_state),
         safe_error_code=document.safe_error_code,
         created_at=document.created_at,
+        owner_user_id=UUID(document.owner_user_id) if document.owner_user_id else None,
+        owner_username=owner_username,
+        used_by_agents=used_by_agents,
     )
 
 

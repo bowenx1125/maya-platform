@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -34,6 +35,7 @@ from app.core.models import (
     KnowledgeDocument,
     SnapshotDocument,
     StoredFile,
+    User,
 )
 from app.core.read_memo import request_read_memo
 from app.core.sqlutil import begin_immediate
@@ -254,13 +256,12 @@ def list_knowledge_documents(
         )
         .order_by(KnowledgeDocument.created_at, KnowledgeDocument.id)
     ).all()
-    return [
-        _document_dto(
-            document,
-            can_manage_visibility=document.owner_user_id == context.user.id,
-        )
-        for document in docs
-    ]
+    return _library_dtos(
+        db,
+        context,
+        list(docs),
+        manage=lambda document: document.owner_user_id == context.user.id,
+    )
 
 
 @router.get(
@@ -287,7 +288,44 @@ def list_course_workspace_documents(
         )
         .order_by(KnowledgeDocument.created_at, KnowledgeDocument.id)
     ).all()
-    return [_document_dto(document, can_manage_visibility=True) for document in documents]
+    return _library_dtos(db, context, list(documents), manage=lambda _document: True)
+
+
+def _library_dtos(
+    db: Session,
+    context: AuthContext,
+    documents: list[KnowledgeDocument],
+    *,
+    manage: Callable[[KnowledgeDocument], bool],
+) -> list[KnowledgeDocumentDTO]:
+    """Library rows with the uploader and the Agents using each file, batched."""
+
+    from app.modules.agents.cascade import agents_using_documents
+
+    owner_ids = {document.owner_user_id for document in documents if document.owner_user_id}
+    usernames: dict[str, str] = {}
+    if owner_ids:
+        usernames = {
+            user_id: username
+            for user_id, username in db.execute(
+                select(User.id, User.username).where(User.id.in_(owner_ids))
+            ).all()
+        }
+    used = agents_using_documents(
+        db, [document.id for document in documents], viewer_user_id=context.user.id
+    )
+    return [
+        _document_dto(
+            document,
+            can_manage_visibility=manage(document),
+            owner_username=usernames.get(document.owner_user_id or ""),
+            used_by_agents=[
+                AffectedAgentDTO(agent_id=UUID(item.agent_id), name=item.name)
+                for item in used.get(document.id, [])
+            ],
+        )
+        for document in documents
+    ]
 
 
 def _unique_document_filename(

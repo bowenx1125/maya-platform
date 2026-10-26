@@ -12050,6 +12050,27 @@
             "title": "Ownership Scope",
             "type": "string"
           },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id",
+            "description": "The uploader."
+          },
+          "owner_username": {
+            "title": "Owner Username",
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The uploader's username. Filled on the two library list endpoints (GET /groups/{group_id}/knowledge-documents, GET /courses/{course_id}/workspace-documents); null elsewhere."
+          },
           "safe_error_code": {
             "title": "Safe Error Code",
             "type": [
@@ -12068,6 +12089,21 @@
             ],
             "title": "Source Owner Role",
             "type": "string"
+          },
+          "used_by_agents": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AffectedAgent"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used By Agents",
+            "description": "Live Agents whose current published version uses this file, limited to Agents the caller may use (same filter as GET /knowledge-documents/{document_id}/affected-agents). Filled on the two library list endpoints; null elsewhere."
           },
           "visibility": {
             "enum": [
