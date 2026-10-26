@@ -412,7 +412,7 @@ export function AgentsEmpty({
   return (
     <div className="block [background:radial-gradient(ellipse_at_50%_100%,#FFE14D55_0_30%,transparent_31%)]">
       <div className="relative flex h-[470px] items-start justify-center pt-[18px] max-[767px]:h-[420px]">
-        <GhostSlot fan="left" mascot="wave" />
+        <GhostSlot fan="left" mascot="scroll" />
         <GhostSlot fan="right" mascot="tablet" />
         <div className="relative z-[2] box-border w-[250px] overflow-hidden rounded-[12px] border-[3px] border-[#111] bg-white shadow-[8px_8px_0_#111] max-[767px]:w-[220px]">
           <div className="flex h-[78px] items-center border-b-[3px] border-[#111] bg-[#FFE14D] px-3">
@@ -420,7 +420,7 @@ export function AgentsEmpty({
               {title}
             </p>
           </div>
-          <div className="grid h-[220px] place-items-center bg-[#FF4D8D33] [background-image:radial-gradient(circle_at_50%_50%,#fff9_0_30%,transparent_31%),repeating-conic-gradient(from_0deg_at_50%_50%,#FFE14D88_0_10deg,transparent_10deg_20deg)] max-[767px]:h-[120px]" />
+          <div className="grid h-[220px] place-items-center bg-[#FF4D8D33] [background-image:radial-gradient(circle_at_50%_50%,#fff9_0_30%,transparent_31%),repeating-conic-gradient(from_0deg_at_50%_50%,#FFE14D88_0_10deg,transparent_10deg_20deg)]" />
           <div className="flex justify-center border-t-[3px] border-[#111] p-4">
             {newHref ? (
               <Link
@@ -441,7 +441,10 @@ export function AgentsEmpty({
   );
 }
 
-/** A dashed card-A ghost fanned behind the spotlight card. */
+/**
+ * A dashed card-A ghost fanned behind the spotlight card. As rendered in the
+ * approved E2 mock, its parts sit in one row (band, art, strip, rule).
+ */
 function GhostSlot({
   fan,
   mascot,
@@ -453,16 +456,16 @@ function GhostSlot({
     <div
       aria-hidden="true"
       className={cn(
-        "absolute top-11 box-border w-[186px] rounded-[12px] border-[3px] border-dashed border-[#1155] bg-white max-[767px]:w-[150px]",
+        "absolute top-11 box-border flex w-[186px] rounded-[12px] border-[3px] border-dashed border-[#1155] bg-white max-[767px]:w-[150px]",
         fan === "left"
           ? "translate-x-[-170px] rotate-[-8deg] max-[767px]:translate-x-[-90px]"
           : "translate-x-[170px] rotate-[8deg] max-[767px]:translate-x-[90px]",
       )}
     >
-      <div className="flex h-16 items-center border-b-[3px] border-dashed border-[#1133] px-3">
-        <i className="block h-3 w-[58%] rounded-[4px] bg-[#1112]" />
+      <div className="flex h-16 items-center border-0 border-b-[3px] border-dashed border-[#1133] px-3">
+        <i className="block h-3 w-1 rounded-[4px] bg-[#111]" />
       </div>
-      <div className="flex h-[150px] items-end justify-center border-b-[3px] border-dashed border-[#1133] [background:repeating-conic-gradient(from_0deg_at_50%_60%,#11111100_0_10deg,#1111110d_10deg_20deg)] max-[767px]:h-[120px]">
+      <div className="flex h-[150px] items-end justify-center border-0 border-b-[3px] border-dashed border-[#1133] [background:repeating-conic-gradient(from_0deg_at_50%_60%,#11111100_0_10deg,#1111110d_10deg_20deg)] max-[767px]:h-[120px]">
         <MascotFigure
           id={mascot}
           className="h-[132px] w-auto opacity-[.08] brightness-0 max-[767px]:h-[104px]"
@@ -472,8 +475,8 @@ function GhostSlot({
         <i className="block h-4 w-[38px] rounded-[5px] border-2 border-dashed border-[#1133]" />
         <i className="block h-4 w-[50px] rounded-[5px] border-2 border-l-0 border-dashed border-[#1133]" />
       </div>
-      <div className="mx-2.5 border-t-2 border-dashed border-[#1122] pt-[7px] pb-2.5">
-        <i className="block h-2 w-[70%] rounded-[4px] bg-[#1111]" />
+      <div className="mx-2.5 border-0 border-t-2 border-dashed border-[#1122] pt-[7px] pb-2.5">
+        <i className="block h-2 w-1 rounded-[4px] bg-[#111]" />
       </div>
       <span className="absolute -top-[11px] -right-[11px] size-[26px] rounded-full border-[3px] border-dashed border-[#1144] bg-white" />
     </div>
