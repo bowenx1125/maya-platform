@@ -16,6 +16,9 @@ import { useT } from "../lib/i18n";
 import { cn } from "../lib/utils";
 import { IconClose, IconEdit } from "./quiet-icons";
 import { buttonVariants } from "./ui/button";
+import { NOTICE_TAIL_CLASS, noticeTray, useNoticeTray } from "./notice-tray";
+
+export { NOTICE_TAIL_CLASS, useNoticeTray };
 
 export function LoadingCard({ label }: { label?: string }) {
   const t = useT();
@@ -31,54 +34,6 @@ export function LoadingCard({ label }: { label?: string }) {
       {label ?? t("loading")}
     </div>
   );
-}
-
-const noSubscription = () => () => {};
-
-/**
- * Classes of the one mascot tray (DESIGN option C): fixed bottom-right at
- * z-index 60, the gold scholar speaking from the corner, a tail on the newest
- * bubble only, and on a phone only the newest two bubbles with the rest
- * folded into "+N". The mascot and the fold are pseudo-elements, so the
- * tray's children stay exactly the notices and `:empty` still hides it.
- */
-const TRAY_CLASS = [
-  "notice-tray fixed right-5 bottom-[var(--arc-tray-bottom,20px)] z-[60] grid gap-2.5",
-  "w-[min(520px,calc(100vw-32px))] pr-[90px] pb-1.5 pointer-events-none font-body empty:hidden",
-  "max-h-[var(--arc-tray-max,calc(100dvh-32px))] overflow-y-auto overscroll-contain content-end",
-  "after:content-[''] after:absolute after:right-0 after:bottom-0 after:w-[76px] after:h-[95px]",
-  "after:bg-[url(/mascots/wave.svg)] after:bg-contain after:bg-bottom after:bg-no-repeat",
-  "data-[more]:before:content-['+'_attr(data-more)] data-[more]:before:justify-self-end",
-  "data-[more]:before:rounded-full data-[more]:before:border-2 data-[more]:before:border-border",
-  "data-[more]:before:bg-surface data-[more]:before:px-2.5 data-[more]:before:py-0.5",
-  "data-[more]:before:text-xs data-[more]:before:font-bold data-[more]:before:shadow-[2px_2px_0_#111]",
-  "max-[680px]:left-3 max-[680px]:right-3 max-[680px]:w-auto max-[680px]:bottom-[var(--arc-tray-bottom,12px)]",
-  "max-[680px]:pr-[68px] max-[680px]:after:w-14 max-[680px]:after:h-[70px]",
-  "max-[680px]:[&>.notice:nth-last-child(n+3)]:hidden",
-].join(" ");
-
-/** Hidden older bubbles on a phone are counted for the "+N" chip. */
-function countFolded(element: HTMLElement) {
-  const folded = element.children.length - 2;
-  const small = window.matchMedia?.("(max-width: 680px)").matches ?? false;
-  if (small && folded > 0) element.setAttribute("data-more", String(folded));
-  else element.removeAttribute("data-more");
-}
-
-/** One tray at the bottom of the page, so notices never push a page down. */
-function noticeTray(): HTMLElement {
-  let element = document.querySelector<HTMLElement>(".notice-tray");
-  if (!element) {
-    element = document.createElement("div");
-    element.className = TRAY_CLASS;
-    document.body.append(element);
-    const tray = element;
-    if (typeof MutationObserver === "function")
-      new MutationObserver(() => countFolded(tray)).observe(tray, {
-        childList: true,
-      });
-  }
-  return element;
 }
 
 /**
@@ -140,16 +95,6 @@ export function useNoticeTrayAbove(target: HTMLElement | null) {
   }, [target]);
 }
 
-/** The tray exists only in the browser; the server renders no notice. */
-function useNoticeTray(enabled: boolean) {
-  const browser = useSyncExternalStore(
-    noSubscription,
-    () => true,
-    () => false,
-  );
-  return enabled && browser ? noticeTray() : null;
-}
-
 /**
  * Every error and notice can be closed with its X. Inline notices stay where
  * they are written, such as under the latest Chat message; the rest float in
@@ -163,8 +108,11 @@ export function Notice({
   action,
   inline = false,
   onClose,
+  badge,
 }: {
   id?: string;
+  /** A field error: the sticker number its field wears, instead of the dot. */
+  badge?: number;
   tone: "error" | "warning" | "success" | "info";
   title?: ReactNode;
   children?: ReactNode;
@@ -174,6 +122,9 @@ export function Notice({
 }) {
   const t = useT();
   const [closed, setClosed] = useState(false);
+  // All feedback is spoken by the mascot: errors and warnings always float
+  // in the tray; only success/info lines may stay inline.
+  inline = inline && (tone === "success" || tone === "info");
   const tray = useNoticeTray(!inline);
   if (closed || (!inline && !tray)) return null;
   const notice = (
@@ -181,21 +132,32 @@ export function Notice({
       id={id}
       className={cn(
         `notice notice-${tone}`,
-        "relative my-4 flex w-full items-center gap-3 max-[680px]:flex-wrap rounded-[14px] border-[3px] border-border bg-surface px-3.5 py-2.5 font-body text-sm leading-snug text-ink shadow-[4px_4px_0_#111]",
+        "relative my-4 flex w-full items-start gap-2.5 rounded-[18px] border-[3px] border-border bg-surface py-3 pr-[42px] pl-3.5 text-left font-body text-sm leading-[1.45] font-medium text-ink shadow-[4px_4px_0_#111] max-[680px]:flex-wrap",
         // Status dot instead of an icon font; the colour carries the tone.
-        "before:size-2.5 before:flex-none before:rounded-full before:border-2 before:border-border before:bg-main before:content-['']",
+        badge === undefined &&
+          "before:mt-1 before:size-3.5 before:flex-none before:rotate-[-8deg] before:rounded-full before:border-2 before:border-border before:bg-main before:shadow-[2px_2px_0_#111] before:content-['']",
         NOTICE_TONE[tone],
-        !inline &&
-          "pointer-events-auto my-0 [.notice-tray>&:last-child]:after:absolute [.notice-tray>&:last-child]:after:-right-[11px] [.notice-tray>&:last-child]:after:bottom-3 [.notice-tray>&:last-child]:after:size-4 [.notice-tray>&:last-child]:after:rotate-[-45deg] [.notice-tray>&:last-child]:after:border-r-[3px] [.notice-tray>&:last-child]:after:border-b-[3px] [.notice-tray>&:last-child]:after:border-border [.notice-tray>&:last-child]:after:bg-inherit [.notice-tray>&:last-child]:after:content-['']",
+        !inline && cn("pointer-events-auto my-0 flex-none", NOTICE_TAIL_CLASS),
       )}
       role={tone === "error" || tone === "warning" ? "alert" : "status"}
     >
+      {badge !== undefined ? (
+        <span
+          data-n={badge}
+          aria-hidden="true"
+          className={cn(
+            STICKER,
+            "size-6 text-[11px] leading-5 before:content-[attr(data-n)]",
+            STICKER_TONE(false),
+          )}
+        />
+      ) : null}
       {title ? <strong className="whitespace-nowrap">{title}</strong> : null}
-      {children ? <span className="min-w-0">{children}</span> : null}
+      {children ? <span className="min-w-0 flex-1">{children}</span> : null}
       {action}
       <button
         type="button"
-        className="notice-close ml-auto [.inline-button+&]:ml-0 inline-grid size-[26px] flex-none cursor-pointer place-items-center rounded-full border-2 border-border bg-surface text-ink hover:bg-err hover:text-white focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
+        className="notice-close absolute top-2 right-2.5 inline-grid size-6 text-[13px] flex-none cursor-pointer place-items-center rounded-full border-2 border-border bg-surface text-ink hover:bg-err hover:text-white focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
         aria-label={t("noticeDismiss")}
         onClick={() => (onClose ? onClose() : setClosed(true))}
       >
@@ -204,6 +166,38 @@ export function Notice({
     </div>
   );
   return inline || !tray ? notice : createPortal(notice, tray);
+}
+
+/** Sticker (14 option A): a tilted round red number; green with ✓ once fixed. */
+export const STICKER =
+  "flex-none rotate-[-8deg] rounded-full border-2 border-border text-center font-body font-extrabold shadow-[2px_2px_0_#111]";
+export const STICKER_TONE = (done: boolean) =>
+  done
+    ? "grid place-items-center bg-[#22C55E] text-ink"
+    : "bg-[#EF4444] text-white";
+
+/** The number sticker on an offending field (shared by every form error). */
+export function StickerBadge({
+  n,
+  done = false,
+}: {
+  n: number;
+  done?: boolean;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      data-checklist-badge
+      data-done={done || undefined}
+      className={cn(
+        STICKER,
+        "absolute -top-[13px] -left-[13px] z-[5] size-7 text-[13px] leading-6",
+        STICKER_TONE(done),
+      )}
+    >
+      {done ? "✓" : n}
+    </span>
+  );
 }
 
 const NOTICE_TONE = {

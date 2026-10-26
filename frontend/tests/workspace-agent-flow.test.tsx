@@ -317,7 +317,9 @@ describe("Workspace Agent flow", () => {
     const nav = within(screen.getByRole("navigation"));
     expect(nav.queryByRole("button", { name: "New" })).toBeNull();
     expect(nav.queryByRole("button", { name: "Done" })).toBeNull();
-    expect(nav.getByRole("link", { name: "Back" })).toBeTruthy();
+    expect(
+      within(screen.getByRole("main")).getByRole("link", { name: "Back" }),
+    ).toBeTruthy();
   });
 
   it("deletes a Workspace Agent only after confirmation and retains a blocked row", async () => {

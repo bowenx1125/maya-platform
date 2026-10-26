@@ -22,10 +22,12 @@ export function AgentsPage({
 }) {
   return (
     <div className={AGENT_PAGE}>
-      <header className={cn(
+      <header
+        className={cn(
           AGENT_BANNER,
           "py-[45px] max-[767px]:flex-nowrap max-[767px]:pt-[36px] max-[767px]:pb-[35px]",
-        )}>
+        )}
+      >
         <h1
           id="studyform-agents"
           className={cn(

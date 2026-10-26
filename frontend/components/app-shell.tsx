@@ -104,6 +104,8 @@ type SidebarGroup = {
   label: string;
   /** The tour target today's top-level entry carried; now on the first row. */
   tour?: string;
+  /** A tour target on the group heading itself (B-final student Brainform). */
+  headingTour?: string;
   rail: string;
   tile: string;
   square: string;
@@ -111,7 +113,7 @@ type SidebarGroup = {
 };
 
 const ITEM =
-  "group/item relative flex min-h-11 items-center gap-2.5 rounded-arc-s border-[3px] px-2 py-1 font-body text-sm font-bold text-ink no-underline transition-[background-color,box-shadow] duration-150";
+  "group/item relative flex min-h-11 items-center gap-2.5 rounded-arc-s border-[3px] px-2 py-1 font-body text-sm font-semibold text-ink no-underline transition-[background-color,box-shadow] duration-150";
 const ITEM_IDLE = "border-transparent hover:bg-white/60";
 const ITEM_ACTIVE = "border-border bg-main shadow-arc-s";
 const ICON_ITEM =
@@ -633,6 +635,8 @@ export function AppShell({
       key: "brainform",
       label: "Brainform",
       tour: brainHref ? "brain" : undefined,
+      // Guide v3 (9 steps): a student's Brainform step points at the heading.
+      headingTour: !teacherSurface && !brainHref ? "brain" : undefined,
       rail: "border-brainform",
       tile: "bg-brainform",
       square: "bg-brainform",
@@ -642,7 +646,7 @@ export function AppShell({
           key: "voices",
           href: studentVoicesHref ?? brainItemHref,
           label: t("voices"),
-          icon: "voice",
+          icon: "mic",
         },
         {
           key: "record",
@@ -689,7 +693,7 @@ export function AppShell({
       label: t("sidebarClassroom"),
       rail: "border-ink",
       tile: "bg-surface",
-      square: "bg-surface",
+      square: "bg-ink",
       items: links
         .filter((link) => ["live", "classroom", "accounts"].includes(link.icon))
         .map((link) => ({
@@ -721,11 +725,23 @@ export function AppShell({
       />
     </ViewTransition>
   );
+  // toggle-A / collapse-C: a collapsed rail labels its tiles with a drawn
+  // tooltip (hover or keyboard focus), not a native title.
+  const railTip = (label: string) =>
+    collapsed && !mobile ? (
+      <span
+        aria-hidden="true"
+        data-rail-tip=""
+        className="pointer-events-none invisible absolute top-1/2 left-[calc(100%+10px)] z-50 -translate-y-1/2 rounded-[5px] bg-[#111] px-2 py-[5px] font-body text-xs font-semibold whitespace-nowrap text-white group-hover/tip:visible group-focus-visible/tip:visible"
+      >
+        {label}
+      </span>
+    ) : null;
   const lamp = (on: boolean, corner: boolean) => (
     <span
       aria-hidden="true"
       data-live-lamp={on ? "on" : "off"}
-      className={`${corner ? "absolute -top-1 -right-1" : "ml-auto"} size-2.5 rounded-full border-2 border-border ${on ? "bg-ok shadow-[0_0_0_2px_rgba(34,197,94,0.35),0_0_10px_2px_rgba(34,197,94,0.75)]" : "bg-[#9ca3af]"}`}
+      className={`${corner ? "absolute -top-1 -right-1" : "ml-auto"} ${on ? "size-2.5 rounded-full border-2 border-border bg-ok shadow-[0_0_0_2px_rgba(34,197,94,0.35),0_0_10px_2px_rgba(34,197,94,0.75)]" : `${corner ? "size-2" : "size-[11px]"} rounded-full bg-[#6B6B6B] shadow-[0_0_0_2px_#111]`}`}
     />
   );
   const toggleLabel = mobile
@@ -740,7 +756,12 @@ export function AppShell({
     // Live, Debates and Accounts keep today's aria-current and active class.
     const legacy = links.find((link) => link.icon === item.key);
     const current = legacy ? activeHref === legacy.href : lit;
-    const tour = item.tour ?? (index === 0 ? group.tour : undefined);
+    // A collapsed rail hides headings, so their target falls to the first row.
+    const tour =
+      item.tour ??
+      (index === 0
+        ? (group.tour ?? (collapsed ? group.headingTour : undefined))
+        : undefined);
     const isLive = item.key === "live";
     if (item.disabled) {
       return (
@@ -748,21 +769,21 @@ export function AppShell({
           <span
             aria-disabled="true"
             data-tour={tour}
-            title={collapsed ? item.label : undefined}
             aria-label={collapsed ? item.label : undefined}
             className={
               collapsed
-                ? `${ICON_ITEM} border-transparent opacity-55`
+                ? `${ICON_ITEM} group/tip border-transparent`
                 : `${ITEM} ${ITEM_IDLE} cursor-not-allowed text-arc-muted hover:bg-transparent`
             }
           >
-            <span className={collapsed ? "" : "opacity-55"}>
+            <span className="opacity-55">
               <WorkspaceIcon name={item.icon} size={18} />
             </span>
             {collapsed ? null : (
               <span className="opacity-55">{item.label}</span>
             )}
             {isLive ? lamp(false, collapsed) : null}
+            {railTip(item.label)}
           </span>
         </li>
       );
@@ -773,11 +794,10 @@ export function AppShell({
           href={item.href}
           aria-current={current ? "page" : undefined}
           aria-label={collapsed ? item.label : undefined}
-          title={collapsed ? item.label : undefined}
           data-tour={tour}
           data-sidebar-item={item.key}
           data-lit={lit || undefined}
-          className={`${collapsed ? ICON_ITEM : ITEM} isolate ${lit ? ITEM_ACTIVE : collapsed ? "border-transparent hover:bg-white/60" : ITEM_IDLE}${current ? " active" : ""}`}
+          className={`${collapsed ? `${ICON_ITEM} group/tip` : ITEM} isolate ${lit ? ITEM_ACTIVE : collapsed ? "border-transparent hover:bg-white/60" : ITEM_IDLE}${current ? " active" : ""}`}
         >
           {lit ? pill : null}
           <WorkspaceIcon name={item.icon} size={18} />
@@ -796,6 +816,7 @@ export function AppShell({
               </span>
             )
           ) : null}
+          {railTip(item.label)}
         </Link>
       </li>
     );
@@ -806,22 +827,22 @@ export function AppShell({
       <div
         className={`grid min-h-dvh max-[900px]:grid-cols-1 ${pathname === "/student" || pathname === "/teacher" || agentsArea ? "bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px]" : ""} ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[220px_minmax(0,1fr)]"}`}
       >
-        <div className="sticky top-0 z-30 hidden h-14 items-center gap-3 border-b-[3px] border-border bg-sidebar px-4 max-[900px]:flex">
+        <div className="sticky top-0 z-30 hidden h-[50px] items-center justify-center border-b-[3px] border-border bg-sidebar px-3 max-[900px]:flex">
           <button
             type="button"
-            className="grid size-10 place-items-center rounded-arc-s border-[3px] border-border bg-surface text-ink shadow-arc-s active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
+            className="absolute top-1/2 left-3 grid size-[30px] -translate-y-1/2 place-items-center rounded-[6px] border-[2px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] after:absolute after:-inset-[7px] after:content-[''] active:shadow-none"
             aria-label={t("sidebarExpand")}
             aria-expanded={drawerOpen}
             aria-controls={SIDEBAR_ID}
             onClick={() => setDrawerPath(pathname)}
           >
-            <WorkspaceIcon name="menu" />
+            <WorkspaceIcon name="menu" size={18} />
           </button>
           <span
             className="flex items-center gap-2 font-display text-lg font-extrabold text-ink"
             aria-hidden="true"
           >
-            <span className="size-3 rounded-full border-2 border-border bg-main" />
+            <span className="size-4 rounded-full border-2 border-border bg-[linear-gradient(90deg,#111_50%,var(--color-main)_50%)]" />
             {t("appName")}
           </span>
         </div>
@@ -841,20 +862,30 @@ export function AppShell({
             <button
               type="button"
               data-sidebar-toggle
-              className={`absolute top-[calc(50%-16px)] ${collapsed ? "-right-[26px]" : "-right-[22px]"} z-10 grid size-8 max-[900px]:top-5 max-[900px]:-right-[18px] place-items-center rounded-full border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none`}
+              className={`group/toggle absolute ${mobile ? "top-4 right-3 size-8 rounded-arc-s" : `top-[calc(50%-16px)] ${collapsed ? "-right-[26px]" : "-right-[22px]"} size-8 rounded-full`} z-10 grid place-items-center border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none`}
               aria-label={toggleLabel}
               aria-expanded={mobile ? drawerOpen : !collapsed}
               aria-controls={SIDEBAR_ID}
               aria-keyshortcuts="Control+B Meta+B"
-              title={`${toggleLabel} (Ctrl/⌘ B)`}
               onClick={() =>
                 mobile ? setDrawerPath(null) : writeCollapsed(!collapsed)
               }
             >
               <WorkspaceIcon
-                name={collapsed ? "chevronRight" : "chevronLeft"}
+                name={
+                  mobile ? "pin" : collapsed ? "chevronRight" : "chevronLeft"
+                }
                 size={16}
               />
+              {mobile ? null : (
+                <span
+                  aria-hidden="true"
+                  data-sidebar-toggle-tip
+                  className="pointer-events-none invisible absolute top-[5px] left-[calc(100%+2px)] rounded-[5px] bg-[#111] px-2 py-[5px] font-body text-xs font-semibold whitespace-nowrap text-white group-hover/toggle:visible group-focus-visible/toggle:visible"
+                >
+                  {toggleLabel} · Ctrl B
+                </span>
+              )}
             </button>
             <div
               className={`flex h-full flex-col gap-5 overflow-y-auto pt-5 pb-4 ${collapsed ? "items-center px-2" : "px-3"}`}
@@ -867,17 +898,17 @@ export function AppShell({
                   href={home}
                   aria-current={mayaformLit ? "page" : undefined}
                   aria-label={collapsed ? t("appName") : undefined}
-                  title={collapsed ? t("appName") : undefined}
                   data-tour="home"
                   data-lit={mayaformLit || undefined}
-                  className={`isolate ${collapsed ? `${ICON_ITEM} border-border bg-main shadow-arc-s` : `${ITEM} w-fit justify-self-start font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " active" : ""}`}
+                  className={`isolate ${collapsed ? `${ICON_ITEM} group/tip ${mayaformLit ? "border-border bg-main shadow-arc-s" : "border-transparent"}` : mobile ? `${ITEM} w-fit justify-self-start border-transparent font-display text-lg font-extrabold` : `${ITEM} w-fit justify-self-start font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " active" : ""}`}
                 >
-                  {mayaformLit && !collapsed ? pill : null}
+                  {mayaformLit && !collapsed && !mobile ? pill : null}
                   <span
-                    className={`brand-dot size-3 shrink-0 rounded-full border-2 border-border ${collapsed ? "bg-surface" : "bg-main"}`}
+                    className={`brand-dot size-4 shrink-0 rounded-full border-2 border-border ${(collapsed || mayaformLit) && !mobile ? "bg-[linear-gradient(90deg,#111_50%,var(--color-surface)_50%)]" : "bg-[linear-gradient(90deg,#111_50%,var(--color-main)_50%)]"}`}
                     aria-hidden="true"
                   />
                   {collapsed ? null : <span>{t("appName")}</span>}
+                  {railTip(t("appName"))}
                 </Link>
                 {groups.map((group) => {
                   const headingId = `sidebar-group-${group.key}`;
@@ -898,11 +929,12 @@ export function AppShell({
                       {collapsed ? null : (
                         <div
                           id={headingId}
+                          data-tour={group.headingTour}
                           className="flex items-center gap-1.5 px-1 font-body text-[11px] font-extrabold tracking-[0.12em] text-ink uppercase"
                         >
                           <span
                             aria-hidden="true"
-                            className={`size-2 border-2 border-border ${group.square}`}
+                            className={`size-2.5 rounded-[3px] border-2 border-border ${group.square}`}
                           />
                           <span>{group.label}</span>
                         </div>
@@ -921,13 +953,8 @@ export function AppShell({
                     </div>
                   );
                 })}
-                {(
-                  [
-                    ["new", "New"],
-                    ["back", "Back"],
-                    ["done", "Done"],
-                  ] as const
-                ).map(([name, label]) => {
+                {/* Back and Done live in the page header (A mock); only New stays here. */}
+                {([["new", "New"]] as const).map(([name, label]) => {
                   const action = actions[name];
                   // New stays in the sidebar once a page registers it, faded when
                   // it cannot run. Back and Done exist only while their owning
@@ -948,7 +975,7 @@ export function AppShell({
                       )}
                     </>
                   );
-                  const actionClass = `${collapsed ? `${ICON_ITEM}` : ITEM} border-border bg-surface shadow-arc-s hover:-translate-y-px active:translate-x-[3px] active:translate-y-[3px] active:shadow-none`;
+                  const actionClass = `${collapsed ? `${ICON_ITEM} group/tip` : ITEM} border-border bg-surface shadow-arc-s hover:-translate-y-px active:translate-x-[3px] active:translate-y-[3px] active:shadow-none`;
                   return action.href && !faded ? (
                     <Link
                       key={name}
@@ -956,9 +983,9 @@ export function AppShell({
                       href={action.href}
                       onClick={action.onClick}
                       data-ui-guide={`workspace.${name}`}
-                      title={collapsed ? label : undefined}
                     >
                       {content}
+                      {railTip(label)}
                     </Link>
                   ) : (
                     <button
@@ -970,9 +997,9 @@ export function AppShell({
                       aria-busy={action.busy || undefined}
                       onClick={action.onClick}
                       data-ui-guide={`workspace.${name}`}
-                      title={collapsed ? label : undefined}
                     >
                       {content}
+                      {railTip(label)}
                     </button>
                   );
                 })}
@@ -983,21 +1010,19 @@ export function AppShell({
                 {collapsed ? (
                   <a
                     href="mailto:t330034059@mail.bnbu.edu.cn"
-                    title="Send to t330034059@mail.bnbu.edu.cn"
-                    className={`${ICON_ITEM} border-border bg-surface shadow-arc-s`}
+                    className={`${ICON_ITEM} group/tip border-border bg-surface shadow-arc-s`}
                   >
                     <WorkspaceIcon name="mail" size={18} />
                     <span className="sr-only">
                       Meet Problems? Send to t330034059@mail.bnbu.edu.cn
                     </span>
+                    {railTip("Meet Problems?")}
                   </a>
                 ) : (
-                  <p className="m-0 grid gap-0.5 rounded-arc-s border-[3px] border-border bg-surface p-2.5 font-body text-xs font-medium text-arc-muted shadow-arc-s">
-                    <span className="font-display text-sm font-extrabold text-ink">
-                      Meet Problems?
-                    </span>
+                  <p className="m-0 grid gap-[3px] rounded-[6px] border-2 border-border bg-surface px-2.5 py-2 font-body text-xs text-ink shadow-[3px_3px_0_#111]">
+                    <span className="font-bold text-ink">Meet Problems?</span>
                     <a
-                      className="font-bold [overflow-wrap:anywhere] text-ink underline"
+                      className="font-normal [overflow-wrap:anywhere] text-ink underline"
                       href="mailto:t330034059@mail.bnbu.edu.cn"
                     >
                       Send to t330034059@mail.bnbu.edu.cn
@@ -1005,11 +1030,10 @@ export function AppShell({
                   </p>
                 )}
                 <button
-                  className={`${collapsed ? `${ICON_ITEM}` : `${ITEM} w-full`} cursor-pointer border-border bg-surface text-left shadow-arc-s active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-wait disabled:opacity-60`}
+                  className={`${collapsed ? `${ICON_ITEM} group/tip` : `${ITEM} w-full`} cursor-pointer border-border bg-surface text-left shadow-arc-s active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-wait disabled:opacity-60`}
                   type="button"
                   disabled={busy}
                   data-ui-guide="workspace.logout"
-                  title={collapsed ? t("logout") : undefined}
                   onClick={() => void signOut()}
                 >
                   <WorkspaceIcon name="logout" size={18} />
@@ -1018,6 +1042,7 @@ export function AppShell({
                   ) : (
                     t("logout")
                   )}
+                  {railTip(t("logout"))}
                 </button>
               </div>
             </div>
@@ -1028,6 +1053,59 @@ export function AppShell({
           tabIndex={-1}
           className={`relative mx-auto w-[min(100%,1320px)] min-w-0 px-[clamp(24px,4vw,64px)] pt-12 max-[900px]:px-6 max-[900px]:pt-8 max-[480px]:px-4 max-[480px]:pt-7 ${workspaceStyles.surface} ${pathname === "/teacher/chat" || pathname === "/student/chat" ? "pb-[max(24px,env(safe-area-inset-bottom))]" : "pb-20 max-[900px]:pb-16 max-[480px]:pb-12"}`}
         >
+          {(actions.back && actions.back.placement !== "page") ||
+          (actions.done && actions.done.placement !== "page") ? (
+            // Agents banners own theirs (placement "page"). The page header's own Back / Done, top-right (14 option A
+            // "New Debate" header, the Agents pattern). Same handlers.
+            <div
+              data-page-actions
+              className="relative z-10 float-right mb-[22px] ml-4 flex gap-2.5"
+            >
+              {(
+                [
+                  ["back", "Back"],
+                  ["done", "Done"],
+                ] as const
+              ).map(([name, label]) => {
+                const action = actions[name];
+                if (!action || action.placement === "page") return null;
+                const faded = Boolean(action.disabled);
+                const cls = `inline-flex items-center gap-1.5 rounded-[10px] border-[3px] border-border px-[18px] py-2 font-body text-sm font-bold text-ink no-underline shadow-[3px_3px_0_#111] hover:-translate-y-px active:translate-x-[3px] active:translate-y-[3px] active:shadow-none max-[480px]:px-3 max-[480px]:py-1.5 max-[480px]:text-[13px] ${name === "done" ? "bg-main" : "bg-surface"}`;
+                const content = (
+                  <>
+                    {action.busy ? (
+                      <span className="spinner" aria-hidden="true" />
+                    ) : null}
+                    <span>{label}</span>
+                  </>
+                );
+                return action.href && !faded ? (
+                  <Link
+                    key={name}
+                    className={cls}
+                    href={action.href}
+                    onClick={action.onClick}
+                    data-ui-guide={`workspace.${name}`}
+                  >
+                    {content}
+                  </Link>
+                ) : (
+                  <button
+                    key={name}
+                    className={`${cls} cursor-pointer disabled:cursor-not-allowed disabled:opacity-50`}
+                    type={action.form ? "submit" : "button"}
+                    form={action.form}
+                    disabled={faded}
+                    aria-busy={action.busy || undefined}
+                    onClick={action.onClick}
+                    data-ui-guide={`workspace.${name}`}
+                  >
+                    {content}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           <ViewTransition>{children}</ViewTransition>
         </main>
         <SecretDoor />

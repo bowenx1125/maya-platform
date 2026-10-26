@@ -117,8 +117,11 @@ describe("sidebar groups", () => {
     expect(
       nav().getByRole("link", { name: "Chat with Team" }).getAttribute("href"),
     ).toBe("/student/chat");
-    // Brainform has no page of its own for a student: a heading, not a link.
-    expect(document.querySelector('[data-tour="brain"]')).toBeNull();
+    // Brainform has no page of its own for a student: a heading, not a link,
+    // and the Guide's Brainform step points at that heading.
+    expect(
+      document.querySelector('[data-tour="brain"]')?.textContent?.trim(),
+    ).toBe("Brainform");
   });
 
   it("gives a teacher Knowledge in Brainform and Debates and Accounts in Classroom", () => {
@@ -320,7 +323,7 @@ describe("tour on a phone", () => {
 });
 
 describe("edge toggle", () => {
-  it("straddles the right edge at mid-screen; on a phone it stays at the top", () => {
+  it("straddles the right edge at its vertical middle (collapse-C)", () => {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "0");
     renderShell("student", "/student");
     const button = toggle();
@@ -332,10 +335,10 @@ describe("edge toggle", () => {
     expect(button.parentElement!.className).toMatch(/(^| )sticky( |$)/);
     expect(button.parentElement!.className).toContain("h-dvh");
     expect(button.className).toContain("absolute");
+    // collapse-C: the toggle rides the vertical middle of the edge.
     expect(button.className).toContain("top-[calc(50%-16px)]");
     // It sits clear of the rows (12px padding) and of the collapsed tiles.
     expect(button.className).toContain("-right-[22px]");
-    expect(button.className).toContain("max-[900px]:top-5");
     act(() => {
       fireEvent.click(button);
     });

@@ -11,7 +11,7 @@ import { USER_AVATAR_CHOICES, UserAvatar } from "./user-avatar";
 
 /** The profile module: a white card with a lime ring and a tape title. */
 const CARD =
-  "relative mb-0 rounded-xl border-[3px] border-ink bg-white px-6 pt-[34px] pb-6 font-body text-ink shadow-[0_0_0_3px_#A3E635,8px_8px_0_3px_#111] max-[640px]:px-4 [&>.section-card-header]:absolute [&>.section-card-header]:-top-5 [&>.section-card-header]:left-4 [&>.section-card-header]:m-0 [&>.section-card-header_h2]:-rotate-1 [&>.section-card-header_h2]:border-[3px] [&>.section-card-header_h2]:border-ink [&>.section-card-header_h2]:bg-white [&>.section-card-header_h2]:bg-[linear-gradient(90deg,#FFE14D_0_8px,transparent_8px_calc(100%-8px),#FFE14D_calc(100%-8px))] [&>.section-card-header_h2]:px-4 [&>.section-card-header_h2]:py-0.5 [&>.section-card-header_h2]:font-display [&>.section-card-header_h2]:text-[22px] [&>.section-card-header_h2]:font-extrabold [&>.section-card-header_h2]:tracking-normal [&>.section-card-header_h2]:text-ink";
+  "relative mb-0 rounded-xl border-[3px] border-ink bg-white px-6 pt-[52px] pb-5 font-body text-ink shadow-[0_0_0_3px_#A3E635,8px_8px_0_3px_#111] max-[640px]:px-4 [&>.section-card-header]:absolute [&>.section-card-header]:border-0 [&>.section-card-header]:p-0 [&>.section-card-header]:-top-5 [&>.section-card-header]:left-4 [&>.section-card-header]:m-0 [&>.section-card-header_h2]:-rotate-1 [&>.section-card-header_h2]:border-[3px] [&>.section-card-header_h2]:border-ink [&>.section-card-header_h2]:bg-white [&>.section-card-header_h2]:bg-[linear-gradient(90deg,#FFE14D_0_8px,transparent_8px_calc(100%-8px),#FFE14D_calc(100%-8px))] [&>.section-card-header_h2]:px-4 [&>.section-card-header_h2]:py-0.5 [&>.section-card-header_h2]:font-display [&>.section-card-header_h2]:text-[22px] [&>.section-card-header_h2]:font-extrabold [&>.section-card-header_h2]:tracking-normal [&>.section-card-header_h2]:text-ink";
 const PANEL = "grid min-w-0 content-start gap-4 py-1 pr-8 max-[640px]:pr-0";
 const HEADING = "m-0 font-display text-lg font-extrabold text-ink";
 const LABEL = "grid min-w-0 gap-1.5 text-[13px] font-bold text-ink";
@@ -327,7 +327,7 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
             </form>
           ) : null}
           <fieldset
-            className="m-0 grid grid-cols-[repeat(4,max-content)] gap-2 border-0 p-0"
+            className="m-0 grid grid-cols-[repeat(4,max-content)] gap-1.5 border-0 p-0"
             disabled={busy !== null}
           >
             <legend className="sr-only">{t("userAvatar")}</legend>
@@ -360,7 +360,7 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
         </section>
 
         <form
-          className={`${PANEL} border-0 border-l-[3px] border-dashed border-[#11111133] pl-8 max-[640px]:mt-5 max-[640px]:border-t-[3px] max-[640px]:border-l-0 max-[640px]:pt-5 max-[640px]:pl-0`}
+          className={`${PANEL} pl-8 max-[640px]:mt-6 max-[640px]:border-0 max-[640px]:border-t max-[640px]:border-solid max-[640px]:border-[#E9DAA9] max-[640px]:pt-6 max-[640px]:pl-0`}
           onSubmit={(event) => void savePassword(event)}
         >
           <h3 className={HEADING}>{t("changePassword")}</h3>

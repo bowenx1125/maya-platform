@@ -191,7 +191,7 @@ describe("PW3-E teacher information architecture", () => {
     ).toBe("page");
   });
 
-  it("renders the current page actions in the left sidebar", () => {
+  it("keeps New in the sidebar and puts Back and Done in the page header", () => {
     render(
       <AppShell role="teacher">
         <PageAction name="new" href="/teacher/debates/new" />
@@ -203,19 +203,20 @@ describe("PW3-E teacher information architecture", () => {
     expect(nav.getByRole("link", { name: "New" }).getAttribute("href")).toBe(
       "/teacher/debates/new",
     );
-    expect(nav.getByRole("link", { name: "Back" }).getAttribute("href")).toBe(
-      "/teacher",
-    );
-    expect(nav.getByRole("button", { name: "Done" })).toBeTruthy();
+    expect(
+      within(screen.getByRole("main"))
+        .getByRole("link", { name: "Back" })
+        .getAttribute("href"),
+    ).toBe("/teacher");
+    expect(
+      within(screen.getByRole("main")).getByRole("button", { name: "Done" }),
+    ).toBeTruthy();
     expect(
       within(screen.getByRole("main")).queryByRole("link", { name: "New" }),
     ).toBeNull();
-    expect(
-      within(screen.getByRole("main")).queryByRole("link", { name: "Back" }),
-    ).toBeNull();
-    expect(
-      within(screen.getByRole("main")).queryByRole("button", { name: "Done" }),
-    ).toBeNull();
+    // Back and Done live in the page header, never in the sidebar.
+    expect(nav.queryByRole("link", { name: "Back" })).toBeNull();
+    expect(nav.queryByRole("button", { name: "Done" })).toBeNull();
   });
 
   it("retains registered sidebar actions for Brainform and General Chats", () => {
@@ -225,9 +226,10 @@ describe("PW3-E teacher information architecture", () => {
       </AppShell>,
     );
     const nav = within(screen.getByRole("navigation"));
-    // Students have no Brainform entry since 2026-10-20 (RAG and Record
-    // moved into Studyform).
-    expect(document.querySelector('[data-tour="brain"]')).toBeNull();
+    // B-final sidebar: the student Brainform heading is the Guide's step.
+    expect(
+      document.querySelector('[data-tour="brain"]')?.textContent?.trim(),
+    ).toBe("Brainform");
     expect(nav.getByRole("link", { name: "New" }).getAttribute("href")).toBe(
       "/student/knowledge/new",
     );
@@ -330,9 +332,11 @@ describe("student shell navigation", () => {
     expect(
       nav.getByRole("link", { name: "Accounts" }).getAttribute("aria-current"),
     ).toBeNull();
-    expect(nav.getByRole("link", { name: "Back" }).getAttribute("href")).toBe(
-      "/teacher/roster",
-    );
+    expect(
+      within(screen.getByRole("main"))
+        .getByRole("link", { name: "Back" })
+        .getAttribute("href"),
+    ).toBe("/teacher/roster");
     expect(nav.queryByRole("link", { name: "Homeward" })).toBeNull();
     expect(leaveGroupAsTeacher).not.toHaveBeenCalled();
   });
@@ -352,7 +356,9 @@ describe("student shell navigation", () => {
         const nav = within(screen.getByRole("navigation"));
         await waitFor(() =>
           expect(
-            nav.getByRole("link", { name: "Back" }).getAttribute("href"),
+            within(screen.getByRole("main"))
+              .getByRole("link", { name: "Back" })
+              .getAttribute("href"),
           ).toBe("/teacher/roster"),
         );
         expect(
@@ -436,7 +442,9 @@ describe("student shell navigation", () => {
       "/student/agents?group_id=group-b",
       "/student/chat",
     ]);
-    expect(document.querySelector('[data-tour="brain"]')).toBeNull();
+    expect(
+      document.querySelector('[data-tour="brain"]')?.textContent?.trim(),
+    ).toBe("Brainform");
   });
 
   it("falls back to the only group on pages that name none", () => {

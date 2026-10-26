@@ -5,6 +5,7 @@ export type WorkspaceIconName =
   | "knowledge"
   | "brain"
   | "voice"
+  | "mic"
   | "chat"
   | "live"
   | "new"
@@ -18,6 +19,7 @@ export type WorkspaceIconName =
   | "chatTeam"
   | "mail"
   | "menu"
+  | "pin"
   | "chevronLeft"
   | "chevronRight";
 
@@ -31,6 +33,7 @@ const paths: Record<WorkspaceIconName, string> = {
   brain:
     "M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18ZM12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18ZM15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4",
   voice: "M4 9v6m4-9v12m4-15v18m4-15v12m4-9v6",
+  mic: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM5 11a7 7 0 0 0 14 0M12 18v3",
   chat: "M21 11a8 8 0 0 1-8 8H7l-5 3 2-6a8 8 0 0 1-1-5 8 8 0 0 1 8-8h2a8 8 0 0 1 8 8ZM8 10h8M8 14h5",
   live: "M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0ZM10 8l6 4-6 4z",
   new: "M12 5v14M5 12h14",
@@ -45,6 +48,7 @@ const paths: Record<WorkspaceIconName, string> = {
     "M17 9a6 6 0 0 1-6 6H7l-4 3 1-4a6 6 0 0 1 7-11 6 6 0 0 1 6 6ZM20 12a5 5 0 0 1 1 6l1 3-4-2h-4",
   mail: "M3 5h18v14H3zm0 0 9 7 9-7",
   menu: "M4 6h16M4 12h16M4 18h16",
+  pin: "M12 17v5M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V17h14v-1.8a2 2 0 0 0-1.1-1.8l-1.8-.9a2 2 0 0 1-1.1-1.8V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z",
   chevronLeft: "m15 5-7 7 7 7",
   chevronRight: "m9 5 7 7-7 7",
 };

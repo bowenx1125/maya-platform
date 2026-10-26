@@ -70,6 +70,7 @@ import {
   PageIntro,
   SectionCard,
   StatusBadge,
+  StickerBadge,
 } from "./ui";
 import {
   AGENT_BANNER,
@@ -1729,6 +1730,7 @@ export function AgentWorkbench({
                 <Notice
                   id="agent-submit-hint"
                   tone="error"
+                  badge={nameMissing ? 1 : undefined}
                   onClose={() => {
                     const field = nameMissing ? nameField.current : null;
                     setSubmitHint("");
@@ -1791,7 +1793,8 @@ export function AgentWorkbench({
                       void publish();
                     }}
                   >
-                    <label>
+                    <label className="relative">
+                      {nameMissing ? <StickerBadge n={1} /> : null}
                       <input
                         ref={nameField}
                         aria-label={t("agentName")}
@@ -1799,7 +1802,7 @@ export function AgentWorkbench({
                         aria-describedby={
                           nameMissing ? "agent-submit-hint" : undefined
                         }
-                        className="aria-invalid:border-[3px]! aria-invalid:border-err! aria-invalid:bg-err-bg!"
+                        className="aria-invalid:border-[3px]! aria-invalid:border-err! aria-invalid:bg-surface! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
                         value={draftName}
                         disabled={editingLocked}
                         maxLength={120}

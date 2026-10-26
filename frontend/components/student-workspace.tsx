@@ -298,7 +298,7 @@ export function StudentDashboard() {
           </section>
           {groups.map((overview, index) => (
             <section
-              className={`home-panel ${HOME_CARD_CLASS} shadow-[0_0_0_3px_#FF4D8D,8px_8px_0_3px_#111]`}
+              className={`home-panel ${HOME_CARD_CLASS} shadow-[0_0_0_3px_#FDBA74,8px_8px_0_3px_#111]`}
               key={overview.group.id}
               aria-labelledby={`group-${overview.group.id}`}
               data-tour={index === 0 ? "group" : undefined}
@@ -312,7 +312,7 @@ export function StudentDashboard() {
               <ul className="home-people-list m-0 grid list-none border-0 border-t-2 border-[#FFE14D] p-0">
                 {(overview.group.members ?? []).map((member) => (
                   <li
-                    className="home-person grid min-h-[52px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-0 border-b-2 border-dashed border-[#11111133] px-1.5 py-2.5 font-body"
+                    className="home-person grid min-h-[52px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-0 border-b-2 border-dashed border-[#11111133] px-1.5 py-2.5 font-body last:border-b-0"
                     data-role={member.role}
                     key={member.user_id}
                   >
@@ -325,10 +325,10 @@ export function StudentDashboard() {
                     <strong className="min-w-0 truncate text-sm font-semibold">
                       {member.display_name}
                     </strong>
-                    {/* Shown as Leader / Member; the words are roleLabel's. */}
+                    {/* roleLabel words, uppercased by CSS as the approved home mock draws them. */}
                     <small
                       className={
-                        "rounded border-2 border-ink px-2 py-px text-[11px] font-extrabold text-ink capitalize shadow-[2px_2px_0_#111] " +
+                        "rounded border-2 border-ink px-2 py-px font-body text-[11px] font-extrabold text-ink uppercase shadow-[2px_2px_0_#111] " +
                         (member.role === "leader"
                           ? "-rotate-3 bg-[#FF4D8D]"
                           : "rotate-3 bg-[#67E8F9]")

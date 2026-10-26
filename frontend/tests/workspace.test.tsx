@@ -157,7 +157,7 @@ function renderChat({
 
 async function chooseSocrates() {
   fireEvent.click(await screen.findByRole("button", { name: /Socrates/ }));
-  const done = within(screen.getByRole("navigation")).getByRole("button", {
+  const done = within(screen.getByRole("main")).getByRole("button", {
     name: "Done",
   });
   await waitFor(() => expect(done.hasAttribute("disabled")).toBe(false));
