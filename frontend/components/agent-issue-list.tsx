@@ -332,7 +332,7 @@ export function CreateChecklist({
   return createPortal(
     <div
       className={cn(
-        "notice agent-hint-bar agent-hint-bar-bubble relative w-full rounded-[18px] border-[3px] border-border pt-[13px] pr-[46px] pb-3 pl-4 max-[680px]:text-xs! max-[680px]:pt-[11px]! max-[680px]:pr-10! max-[680px]:pb-2.5! max-[680px]:pl-3! text-left font-body text-[13px] leading-[1.45] font-medium text-ink shadow-[4px_4px_0_#111]",
+        "notice agent-hint-bar agent-hint-bar-bubble relative! top-auto! m-0! block! w-full rounded-[18px] border-[3px]! border-border! pt-[13px]! pr-[46px]! pb-3! pl-4! text-left font-body text-[13px] leading-[1.45] font-medium text-ink shadow-[4px_4px_0_#111]! max-[680px]:pt-[11px]! max-[680px]:pr-10! max-[680px]:pb-2.5! max-[680px]:pl-3! max-[680px]:text-xs!",
         alert ? "notice-error bg-err-bg" : "notice-warning bg-warn-bg",
         "pointer-events-auto flex-none",
         NOTICE_TAIL_CLASS,
@@ -368,7 +368,7 @@ export function CreateChecklist({
       </ol>
       <button
         type="button"
-        className="notice-close absolute top-2 right-2.5 grid size-[22px] cursor-pointer place-items-center rounded-full border-2 border-border bg-surface text-ink focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
+        className="notice-close absolute! top-[9px] right-2.5 m-0! grid size-[26px] cursor-pointer place-items-center rounded-full border-2 border-border bg-surface text-ink focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
         aria-label={t("noticeDismiss")}
         onClick={() => setDismissed(attempt)}
       >
