@@ -1091,7 +1091,9 @@ export function AppShell({
                   <>
                     {action.busy ? (
                       <span className="spinner" aria-hidden="true" />
-                    ) : null}
+                    ) : (
+                      <WorkspaceIcon name={name} size={16} stroke={2.4} />
+                    )}
                     <span>{label}</span>
                   </>
                 );
@@ -1101,7 +1103,8 @@ export function AppShell({
                     className={cls}
                     href={action.href}
                     onClick={action.onClick}
-                    data-ui-guide={`workspace.${name}`}
+                    aria-describedby={action.describedBy}
+                    data-ui-guide={action.guide ?? `workspace.${name}`}
                   >
                     {content}
                   </Link>
@@ -1114,7 +1117,8 @@ export function AppShell({
                     disabled={faded}
                     aria-busy={action.busy || undefined}
                     onClick={action.onClick}
-                    data-ui-guide={`workspace.${name}`}
+                    aria-describedby={action.describedBy}
+                    data-ui-guide={action.guide ?? `workspace.${name}`}
                   >
                     {content}
                   </button>

@@ -226,3 +226,187 @@ export function AlbumTrayAnchor() {
     />
   );
 }
+
+/**
+ * Create screen (proposals/24-voices-req-label/p2-tab): record player
+ * b-disc-v2 with the H1 sleeve label, a flat pink edge strip instead of the
+ * mini disc. Decoration is aria-hidden; coordinates follow the mockup stage.
+ */
+const KNOB =
+  "absolute w-[30px] h-[30px] rounded-[50%] border-[3px] border-solid border-[#111] shadow-[2px_2px_0_#111]";
+const EQ_HEIGHTS = [30, 60, 45, 90, 70, 40, 85, 55, 25, 65];
+const EQ_COLORS = ["#FF4D8D", "#FFE14D", "#A3E635", "#67E8F9"];
+const ZIG = "M2 18 12 4 22 18 32 4 42 18 52 4 62 18";
+
+function CreateDeco({ hasFile }: { hasFile: boolean }) {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-0"
+      aria-hidden="true"
+    >
+      <span className="absolute top-0 left-0 h-[430px] w-[470px] rounded-[22px] border-4 border-solid border-[#111] bg-[#ff4d8d] shadow-[8px_8px_0_#111] before:absolute before:inset-[14px] before:rounded-[14px] before:border-[3px] before:border-dashed before:border-[rgb(17_17_17_/_0.35)] before:content-['']" />
+      <span className={`${KNOB} top-[360px] left-[400px] bg-[#67e8f9]`} />
+      <span className={`${KNOB} top-[375px] left-[30px] bg-[#a3e635]`} />
+      <span className="absolute top-[16px] left-[384px] h-[48px] w-[48px] rounded-[50%] border-4 border-solid border-[#111] bg-[#ffe14d]" />
+      <span
+        className={`absolute top-[30px] left-[400px] h-[230px] w-[16px] origin-[8px_8px] rounded-[8px] border-[3px] border-solid border-[#111] bg-[#e5e7eb] ${hasFile ? "[transform:rotate(34deg)]" : "[transform:rotate(18deg)]"}`}
+      />
+      <span className="absolute top-[330px] left-[870px] h-[110px] w-[110px] rounded-[50%] border-4 border-solid border-[#111] shadow-[5px_5px_0_#111] [background:radial-gradient(circle,#111_0_14%,#4b5563_15%_40%,#111_41%_46%,#9ca3af_47%_100%)]" />
+      <span className="absolute top-[390px] left-[560px] flex h-[70px] items-end gap-[5px]">
+        {EQ_HEIGHTS.map((height, index) => (
+          <i
+            key={index}
+            className="w-[12px] rounded-[3px] border-2 border-solid border-[#111]"
+            style={{
+              height: `${hasFile ? height : 12}%`,
+              background: EQ_COLORS[index % 4],
+            }}
+          />
+        ))}
+      </span>
+      <svg
+        className="absolute top-[10px] left-[1000px] [transform:rotate(14deg)]"
+        width="44"
+        height="44"
+        viewBox="0 0 24 24"
+      >
+        <path
+          d="M12 1l3 7.5 8 .8-6 5.4 1.8 8L12 18.6 5.2 22.7 7 14.7 1 9.3l8-.8z"
+          fill="#FFE14D"
+          stroke="#111"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <i className="absolute top-[20px] left-[520px] h-[24px] w-[24px] rounded-[50%] border-[3px] border-solid border-[#111] bg-[#67e8f9]" />
+      <i className="absolute top-[250px] left-[960px] h-[26px] w-[26px] rounded-[6px] border-[3px] border-solid border-[#111] bg-[#c4b5fd] [transform:rotate(18deg)]" />
+      <svg
+        className="absolute top-[350px] left-[700px] [transform:rotate(-6deg)]"
+        width="70"
+        height="22"
+        viewBox="0 0 70 22"
+      >
+        <path
+          d={ZIG}
+          fill="none"
+          stroke="#111"
+          strokeWidth="7"
+          strokeLinejoin="round"
+        />
+        <path
+          d={ZIG}
+          fill="none"
+          stroke="#67E8F9"
+          strokeWidth="3.5"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  );
+}
+
+export function VoiceAlbumCreate({
+  fileName,
+  input,
+  requirement,
+  consent,
+}: {
+  fileName: string | null;
+  /** The sr-only file input (aria-label + aria-describedby set by the caller). */
+  input: ReactNode;
+  requirement: string;
+  consent: string;
+}) {
+  const hasFile = Boolean(fileName);
+  return (
+    <div className="relative grid grid-cols-[auto_1fr] items-center gap-[56px] px-[30px] pt-[20px] pb-[30px] [&>*:not([aria-hidden])]:relative [&>*:not([aria-hidden])]:z-[1]">
+      <CreateDeco hasFile={hasFile} />
+      <label
+        className={`mt-[44px] ml-[44px] grid h-[340px] w-[340px] cursor-pointer place-items-center rounded-[50%] border-4 border-solid border-[#111] [background:repeating-radial-gradient(circle,#111_0_3px,#2a2a2a_3px_7px)] ${hasFile ? "shadow-[8px_8px_0_#111,0_0_0_10px_#a3e635]" : "shadow-[8px_8px_0_#111]"}`}
+      >
+        <span
+          className={`grid h-[150px] w-[150px] place-items-center rounded-[50%] border-4 border-solid border-[#111] p-[14px] text-center ${hasFile ? "bg-[#ff4d8d]" : "bg-[#ffe14d]"}`}
+        >
+          {fileName ? (
+            <b
+              className="[font:800_15px/1.25_var(--font-lexend,'Lexend')] [overflow-wrap:anywhere]"
+              aria-live="polite"
+            >
+              {fileName}
+            </b>
+          ) : (
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 20V8m-5 5 5-5 5 5M5 4h14" />
+            </svg>
+          )}
+        </span>
+        {input}
+      </label>
+      <div className="flex flex-col gap-[18px]">
+        <div className="relative mt-[6px] mb-[4px] ml-[18px] max-w-[520px] self-start rounded-[6px_22px_6px_6px] border-[3px] border-solid border-[#111] bg-[#fff8e7] py-[18px] pr-[22px] pl-[48px] shadow-[6px_6px_0_#111] [transform:rotate(-1.5deg)]">
+          <span
+            className="absolute top-[-3px] bottom-[-3px] left-[-3px] w-[24px] rounded-[6px_0_0_6px] border-[3px] border-solid border-[#111] bg-[#ff4d8d]"
+            aria-hidden="true"
+          />
+          <span
+            className="absolute top-[-13px] left-[46%] h-[22px] w-[84px] border-2 border-solid border-[#111] bg-[rgb(103_232_249_/_0.75)] [transform:rotate(-6deg)]"
+            aria-hidden="true"
+          />
+          <p
+            id="voice-sample-req"
+            className="[font:700_17px/1.45_var(--font-lexend,'Lexend')] text-[#111]"
+          >
+            {requirement}
+          </p>
+          <span
+            className="absolute right-[14px] bottom-[10px] flex h-[16px] items-end gap-[3px]"
+            aria-hidden="true"
+          >
+            {[6, 12, 9, 16, 7, 13].map((height, index) => (
+              <i
+                key={index}
+                className="w-[4px] rounded-[2px] bg-[#ff4d8d]"
+                style={{ height }}
+              />
+            ))}
+          </span>
+        </div>
+        <p
+          id="voice-consent-text"
+          className={`flex items-start gap-[12px] rounded-[14px] border-[3px] border-[#111] px-[22px] py-[20px] [font:800_22px/1.35_var(--font-bricolage,'Bricolage_Grotesque'),system-ui] ${hasFile ? "border-solid bg-white text-[#111] shadow-[6px_6px_0_#111]" : "border-dashed bg-transparent text-[#9ca3af]"}`}
+        >
+          <span
+            className={`mt-[2px] grid h-[30px] w-[30px] flex-none place-items-center rounded-[8px] border-[3px] border-solid border-[#111] text-[#111] ${hasFile ? "bg-[#67e8f9]" : "bg-[#e5e7eb]"}`}
+            aria-hidden="true"
+          >
+            {hasFile ? (
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m5 12 4 4L19 6" />
+              </svg>
+            ) : null}
+          </span>
+          <span>{consent}</span>
+        </p>
+      </div>
+    </div>
+  );
+}

@@ -31,6 +31,7 @@ import {
 import { IconClose, IconPlay, IconPlus, IconUpload } from "../quiet-icons";
 import { ModuleCard } from "../studyform-layout";
 import { WorkspaceIcon } from "../workspace-icon";
+import { WorkspaceAction } from "../workspace-actions";
 import { buttonVariants } from "../ui/button";
 import { AGENT_NEW_BUTTON, agentCard } from "../agent-chrome";
 import { cn } from "../../lib/utils";
@@ -40,6 +41,7 @@ import {
   AlbumRings,
   AlbumTrayAnchor,
   VoiceAlbumCard,
+  VoiceAlbumCreate,
   useVoiceAgents,
   voiceAlbum,
 } from "./voice-album";
@@ -1090,6 +1092,68 @@ export function VoiceLibrary({
       <span aria-hidden="true">{t("voiceCreateTitle")}</span>
     </button>
   );
+
+  if (albumList && creating) {
+    const titleId = id ? `${id}-title` : "voices-title";
+    return (
+      <div id={id} data-voice-album="v2" data-voice-create="p2-tab">
+        {/* Back / Done in the shared page header (icon + text). */}
+        <WorkspaceAction
+          name="back"
+          onClick={cancelCreate}
+          disabled={controlsDisabled}
+          guide="voice.cancelCreate"
+        />
+        <WorkspaceAction
+          name="done"
+          onClick={() => void submitEnrollment()}
+          disabled={!file || controlsDisabled || !canEnroll}
+          busy={busy}
+          describedBy="voice-sample-req voice-consent-text"
+        />
+        <section className={voiceAlbum.alb} aria-labelledby={titleId}>
+          <AlbumRings />
+          <div className={voiceAlbum.top}>
+            <h2 id={titleId} className={voiceAlbum.h2}>
+              {t("voices")}
+            </h2>
+            <span className={voiceAlbum.tape} aria-hidden="true" />
+          </div>
+          {failure ? (
+            <ErrorNotice
+              inline
+              error={failure.cause}
+              onRetry={
+                controlsDisabled || !failure.retry ? undefined : retryFailure
+              }
+            />
+          ) : null}
+          <VoiceAlbumCreate
+            fileName={file?.name ?? null}
+            requirement={t("voiceSampleFile")}
+            consent={t("voiceConsent")}
+            input={
+              <input
+                className="sr-only"
+                type="file"
+                disabled={controlsDisabled}
+                accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
+                onChange={(event) => {
+                  idempotency.abandon("voice-enroll");
+                  setFailure(null);
+                  setFile(event.target.files?.[0] ?? null);
+                  event.target.value = "";
+                }}
+                aria-label={t("voiceSampleFile")}
+                aria-describedby="voice-sample-req"
+              />
+            }
+          />
+          {failure ? <AlbumTrayAnchor /> : null}
+        </section>
+      </div>
+    );
+  }
 
   if (albumList && !creating) {
     const titleId = id ? `${id}-title` : "voices-title";
