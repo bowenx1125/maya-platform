@@ -213,7 +213,6 @@
   padding: 3px 8px;
   border: 2px solid #111;
   border-radius: 4px;
-  box-shadow: 2px 2px 0 #111;
   font: 600 12px var(--font-lexend, "Lexend");
 }
 .warn {
