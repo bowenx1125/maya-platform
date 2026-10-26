@@ -37,7 +37,7 @@ export function HomeHero({
         </h1>
         {children}
       </div>
-      <div className="home-hero-art relative isolate self-end w-full max-w-[490px] min-w-0 justify-self-center border-b-[8px] border-ink bg-[linear-gradient(transparent_82%,#A3E635_82%)] px-5 max-[880px]:hidden [&_.academy-mascots]:relative [&_.academy-mascots]:inset-auto [&_.academy-mascots]:z-[1] [&_.academy-mascots]:m-0 [&_.academy-mascots]:block [&_.academy-mascots]:h-auto [&_.academy-mascots]:max-h-[220px] [&_.academy-mascots]:w-full">
+      <div className="home-hero-art relative isolate self-end w-full max-w-[330px] min-w-0 justify-self-center border-b-[8px] border-ink bg-[linear-gradient(transparent_82%,#A3E635_82%)] px-5 max-[880px]:hidden [&_.academy-mascots]:relative [&_.academy-mascots]:inset-auto [&_.academy-mascots]:z-[1] [&_.academy-mascots]:m-0 [&_.academy-mascots]:block [&_.academy-mascots]:h-auto [&_.academy-mascots]:max-h-[220px] [&_.academy-mascots]:w-full">
         <span
           aria-hidden="true"
           className="pointer-events-none absolute top-[25%] right-[4%] z-0 grid aspect-square w-[16%] max-w-[76px] rotate-[10deg] place-items-center rounded-full border-[3px] border-ink bg-[repeating-conic-gradient(#16A34A_0_15deg,#15803D_15deg_30deg)] font-display text-[13px] font-extrabold whitespace-nowrap max-[1180px]:text-[10px] text-white shadow-[inset_0_0_0_6px_#fff,inset_0_0_0_9px_#FF4D8D,4px_4px_0_#111] select-none [text-shadow:1px_1px_0_#111]"
@@ -81,7 +81,7 @@ export const HOME_TAPE_TITLE =
 
 /** The home page: a column of modules on the page's blue. */
 export const HOME_CLASS =
-  "mayaform-home mx-auto grid w-full max-w-[1180px] gap-10 px-6 pt-6 pb-16 max-[640px]:gap-8 max-[640px]:px-3";
+  "mayaform-home mx-auto grid w-full max-w-[1100px] gap-10 px-14 pt-12 pb-[70px] max-[767px]:gap-7 max-[767px]:px-4 max-[767px]:pt-7 max-[767px]:pb-12";
 
 /** A home module: white card, neon ring, hard ink shadow, tape title on top. */
 export const HOME_CARD_CLASS =

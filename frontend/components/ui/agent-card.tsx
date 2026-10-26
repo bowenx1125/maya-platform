@@ -202,6 +202,7 @@ export function AgentCard({
   const tone = agentTone(id);
   const art = (
     <span
+      data-card-art
       className="relative flex h-[150px] items-end justify-center border-b-[3px] border-border"
       style={{
         backgroundColor: tone,
@@ -217,7 +218,7 @@ export function AgentCard({
   const titleClass =
     "block min-w-0 font-display text-[22px] font-extrabold leading-tight text-ink no-underline";
   const strip = (
-    <span className="relative z-[1] flex flex-col items-start gap-1.5 p-2.5">
+    <span data-card-strip className="relative z-[1] flex flex-col items-start gap-1.5 p-2.5">
       {caption ? (
         <span className="max-w-full truncate text-[11px] font-bold text-[#333]">
           {caption}
