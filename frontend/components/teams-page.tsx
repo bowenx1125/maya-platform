@@ -9,6 +9,7 @@ import { cn } from "../lib/utils";
 import { MascotFigure, MASCOT_IDS, type MascotId } from "./academy/mascots";
 import {
   AGENT_PAGE,
+  LIST_CARD_LIFT,
   STUDYFORM_BANNER,
   STUDYFORM_BANNER_TITLE,
   STUDYFORM_NEW_CLASS,
@@ -131,7 +132,7 @@ function TeamPolaroid({
   const isPublic = team.visibility === "public";
   return (
     <li
-      className={cn(POLAROID, "w-[200px] max-[767px]:w-[calc(50%-10px)]")}
+      className={cn(POLAROID, LIST_CARD_LIFT, "w-[200px] max-[767px]:w-[calc(50%-10px)]")}
       style={{ "--r": `${TILTS[index % TILTS.length]}deg` } as CSSProperties}
     >
       <Link href={href} className="block text-[#111] no-underline">
