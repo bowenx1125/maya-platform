@@ -3251,6 +3251,7 @@ function AgentChatScope({
                   {error && !sendRefusalHint(error) ? (
                     <ErrorNotice
                       error={error}
+                      transient
                       onRetry={
                         historyRefreshTarget
                           ? () => void openHistory(historyRefreshTarget)

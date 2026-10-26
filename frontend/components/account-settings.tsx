@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import { cachedCall, requestCacheIdentity } from "../lib/request-cache";
+import { PlatformApiError } from "../lib/api/platform";
 import { useT } from "../lib/i18n";
 import { useSession } from "./session-provider";
 import { ErrorNotice, SectionCard, StickerBadge } from "./ui";
@@ -212,6 +213,13 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
     }
   }
 
+  // U3: a wrong current password is a field error on that field, not the
+  // server "!".
+  const wrongCurrent =
+    !mismatch &&
+    error instanceof PlatformApiError &&
+    error.code === "password_incorrect";
+
   if (!user) return null;
 
   return (
@@ -220,7 +228,7 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
         <ErrorNotice
           id={mismatch ? "password-field-error" : undefined}
           error={error}
-          badge={mismatch ? 1 : undefined}
+          badge={mismatch || wrongCurrent ? 1 : undefined}
         />
       ) : null}
       <div className="account-settings-grid">
@@ -349,16 +357,21 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
           <h3>{t("changePassword")}</h3>
           <label>
             <span>{t("currentPassword")}</span>
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              minLength={5}
-              maxLength={128}
-              required
-              disabled={busy !== null}
-              onChange={(event) => setCurrentPassword(event.target.value)}
-            />
+            <span className="relative block">
+              {wrongCurrent ? <StickerBadge n={1} /> : null}
+              <input
+                aria-invalid={wrongCurrent || undefined}
+                className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                minLength={5}
+                maxLength={128}
+                required
+                disabled={busy !== null}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+              />
+            </span>
           </label>
           <label>
             <span>{t("newPassword")}</span>
