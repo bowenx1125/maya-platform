@@ -3293,7 +3293,7 @@
         }
       },
       "patch": {
-        "description": "CAS-update description without touching any versioned Agent data.",
+        "description": "CAS-update name and/or description without touching versioned Agent data.",
         "operationId": "updateAgentMetadata",
         "parameters": [
           {
@@ -3357,6 +3357,16 @@
               }
             },
             "description": "Metadata revision conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "agent_name_required or agent_name_too_long (max 120 characters)."
           }
         },
         "security": [
@@ -11424,6 +11434,17 @@
                 "type": "null"
               }
             ]
+          },
+          "student_count": {
+            "description": "Active students (role student, account active) in the course. Course teachers only; null for students.",
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -13035,6 +13056,14 @@
             "minimum": 0,
             "title": "Expected Metadata Revision",
             "type": "integer"
+          },
+          "name": {
+            "default": null,
+            "title": "Name",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "visibility": {
             "enum": [
@@ -16246,7 +16275,6 @@
             "type": "string"
           },
           "name": {
-            "minLength": 1,
             "title": "Name",
             "type": "string"
           },

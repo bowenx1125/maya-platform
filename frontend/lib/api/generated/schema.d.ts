@@ -2819,6 +2819,8 @@ export interface components {
             code: string;
             name: string;
             current_audio_debate_id?: components["schemas"]["Uuid"] | null;
+            /** @description Active students (role student, account active) in the course. Course teachers only; null for students. */
+            student_count?: number | null;
         };
         CourseDetail: components["schemas"]["Course"] & {
             members?: components["schemas"]["Member"][];
