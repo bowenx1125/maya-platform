@@ -228,7 +228,10 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
     >
       {error ? <ErrorNotice error={error} /> : null}
       <div className="grid grid-cols-2 max-[640px]:grid-cols-1">
-        <section className={PANEL} aria-labelledby="profile-avatar">
+        <section
+          className={`${PANEL} [&_.user-avatar]:!rounded-[8px] [&_.user-avatar]:!border-2 [&_.user-avatar]:!border-solid [&_.user-avatar]:!border-[#111] [&>div>.user-avatar]:!size-14 [&>div>.user-avatar]:!rounded-[10px] [&>div>.user-avatar]:!border-[3px]`}
+          aria-labelledby="profile-avatar"
+        >
           <div className="flex items-center gap-3.5">
             <UserAvatar
               avatar={avatar}
@@ -330,7 +333,7 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
             <legend className="sr-only">{t("userAvatar")}</legend>
             {USER_AVATAR_CHOICES.map((choice, index) => (
               <label
-                className="grid cursor-pointer rounded-[14px] border-[3px] border-transparent p-1 transition-[translate,border-color,background-color] duration-[280ms] ease-[cubic-bezier(0.34,1.4,0.64,1)] focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[#67E8F9] hover:-translate-y-0.5 hover:bg-[#FFF7CC] data-[selected=true]:border-ink data-[selected=true]:bg-[#FFE14D] data-[selected=true]:shadow-[3px_3px_0_#111] in-disabled:cursor-progress motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                className="grid cursor-pointer rounded-[14px] border-[3px] border-transparent p-1 transition-[translate,border-color,background-color] duration-[280ms] ease-[cubic-bezier(0.34,1.4,0.64,1)] focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[#67E8F9] hover:-translate-y-0.5 hover:bg-[#FFF7CC] [&_.user-avatar]:shadow-[2px_2px_0_#111] data-[selected=true]:[&_.user-avatar]:outline-[3px] data-[selected=true]:[&_.user-avatar]:outline-offset-2 data-[selected=true]:[&_.user-avatar]:outline-[#FF4D8D] data-[selected=true]:[&_.user-avatar]:outline-solid in-disabled:cursor-progress motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                 key={choice}
                 data-selected={avatar === choice ? "true" : undefined}
               >
