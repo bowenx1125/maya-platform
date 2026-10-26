@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Conversations */
+        /**
+         * List Conversations
+         * @description The caller's own non-withdrawn Chats in courses they belong to, newest first. Optional filters narrow the list; without them the list is unchanged. Invalid filter values return 422 conversation_filter_invalid.
+         */
         get: operations["listConversations"];
         put?: never;
         /** Create Conversation */
@@ -2819,6 +2822,8 @@ export interface components {
             code: string;
             name: string;
             current_audio_debate_id?: components["schemas"]["Uuid"] | null;
+            /** @description Active students (role student, account active) in the course. Course teachers only; null for students. */
+            student_count?: number | null;
         };
         CourseDetail: components["schemas"]["Course"] & {
             members?: components["schemas"]["Member"][];
@@ -3568,7 +3573,7 @@ export interface components {
             output_language: "en" | "zh";
             /**
              * @description New debates use the four-round teaching protocol with paragraph output.
-             * @default null
+             * @default segments_v2
              * @enum {string|null}
              */
             turn_protocol: "segments_v2" | null;
@@ -3791,10 +3796,10 @@ export interface components {
              */
             output_language: "en" | "zh";
             /**
-             * @default null
+             * @default segments_v2
              * @enum {string|null}
              */
-            turn_protocol: "segments_v2" | null;
+            turn_protocol: "legacy_v1" | "segments_v2" | null;
             /** @enum {string|null} */
             teaching_protocol?: "four_round_v1" | null;
             /** @default false */
@@ -6016,7 +6021,12 @@ export type $defs = Record<string, never>;
 export interface operations {
     listConversations: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description agent, or team (Team and Maya Team Chats). Omit for all. */
+                entry_kind?: "agent" | "team" | null;
+                /** @description Only Chats in this course. */
+                course_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6061,6 +6071,15 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid entry_kind or course_id (conversation_filter_invalid). */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

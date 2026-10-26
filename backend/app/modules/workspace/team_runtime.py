@@ -62,6 +62,7 @@ _POST_END_KEPT_FAILURES = frozenset(
         "tool_not_authorized",
         "forbidden",
         "provider_confirmation_required",
+        "provider_confirmation_unavailable",
         "assessment_action_required",
         "assessment_executor_write_required",
         "team_response_truncated",

@@ -412,6 +412,41 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
     )
     assert resaved.status_code == 200, resaved.text
     assert resaved.json()["revision"] == fresh.json()["revision"] + 1
+    assert created["turn_protocol"] == "segments_v2"
+    assert updated.json()["turn_protocol"] == "segments_v2"
+    assert resaved.json()["turn_protocol"] == "segments_v2"
+
+    # A legacy draft (no turn_protocol marker) reports its real protocol and
+    # is upgraded to segments_v2 by the next PATCH.
+    with database.session() as db:
+        row = db.get(Debate, debate_id)
+        rules = json.loads(row.rule_snapshot_json)
+        rules.pop("turn_protocol", None)
+        rules.pop("teaching_protocol", None)
+        row.rule_snapshot_json = json.dumps(rules, sort_keys=True, separators=(",", ":"))
+    legacy = client.get(f"/api/v1/debates/{debate_id}")
+    assert legacy.json()["turn_protocol"] == "legacy_v1"
+    upgraded = client.patch(
+        f"/api/v1/debates/{debate_id}",
+        headers=headers(csrf),
+        json={**update_body, "expected_revision": legacy.json()["revision"]},
+    )
+    assert upgraded.status_code == 200, upgraded.text
+    assert upgraded.json()["turn_protocol"] == "segments_v2"
+    with database.session() as db:
+        stored = json.loads(db.get(Debate, debate_id).rule_snapshot_json)
+        assert stored["turn_protocol"] == "segments_v2"
+
+
+def test_turn_protocol_defaults_are_segments_v2() -> None:
+    from app.modules.debates.generation.types import GenerationContext
+    from app.modules.debates.schemas import DebateRuleSnapshot
+    from app.modules.debates.setup.rules import canonical_rule_snapshot_json
+
+    assert DebateDraftRequest.model_fields["turn_protocol"].default == "segments_v2"
+    assert DebateRuleSnapshot.model_fields["turn_protocol"].default == "segments_v2"
+    assert json.loads(canonical_rule_snapshot_json())["turn_protocol"] == "segments_v2"
+    assert GenerationContext.__dataclass_fields__["turn_protocol"].default == "segments_v2"
 
 
 @pytest.mark.parametrize("round_count", [2, 3, 4, 5])

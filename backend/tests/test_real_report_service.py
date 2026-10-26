@@ -427,7 +427,7 @@ def test_real_report_auto_job_pauses_before_confirmation_and_transport(
 
     assert result.status == "generating"
     assert job.state == "interrupted"
-    assert job.safe_error_code == "provider_confirmation_required"
+    assert job.safe_error_code == "provider_confirmation_unavailable"
     assert provider.execute_calls == 0
 
 

@@ -641,7 +641,7 @@ def test_unconfirmed_publication_never_calls_injected_provider(tmp_path: Path) -
             manifest=manifest,
             provider=provider,
         )
-    assert raised.value.code == "provider_confirmation_required"
+    assert raised.value.code == "provider_confirmation_missing"
     assert provider.call_count == 0
     fixture.database.dispose()
 
@@ -932,7 +932,7 @@ def test_confirmation_checks_persisted_exact_pair(tmp_path: Path) -> None:
     fixture.database.dispose()
 
 
-def test_student_publish_route_requires_exact_teacher_confirmation_then_publishes_1024(
+def test_student_publish_route_auto_confirms_exact_disclosure_then_publishes_1024(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1020,73 +1020,26 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
         "acceptance_run_id": acceptance_run_id,
         "call_no": 1,
     }
-    first = client.post(
+    # Provider disclosures are always auto-confirmed: with the standing
+    # consent flags off the student's publish proceeds on the first request.
+    settings.provider_standing_consent = False
+    settings.demo_auto_confirm_provider = False
+    published = client.post(
         f"/api/v1/agent-versions/{version_id}/publish",
         headers=publish_headers,
         json=snapshot_publish_body,
     )
-    assert first.status_code == 409, first.text
-    first_body = first.json()
-    assert first_body["code"] == "provider_confirmation_required"
-    public_error = json.dumps(first_body, ensure_ascii=False).casefold()
-    assert "manifest_hash" not in public_error
-    assert "dashscope" not in public_error
-    assert REAL_EMBEDDING_MODEL not in public_error
-    assert "endpoint" not in public_error
-    assert transport.calls == []
-
-    _teacher, teacher_csrf = login(client, "maya")
-    pending = client.get(f"/api/v1/provider/data-call/pending/agent-versions/{version_id}")
-    assert pending.status_code == 200, pending.text
-    pending_body = pending.json()
-    assert pending_body["agent_version_id"] == version_id
-    assert len(pending_body["items"]) == 1
-    pending_item = pending_body["items"][0]
-    assert set(pending_item) == {
-        "manifest_hash",
-        "confirmation_revision",
-        "confirmed",
-    }
-    manifest_hash = pending_item["manifest_hash"]
-    assert isinstance(manifest_hash, str) and len(manifest_hash) == 64
-    assert pending_item["confirmed"] is False
-    pending_public = json.dumps(pending_body, ensure_ascii=False).casefold()
-    for forbidden in (
-        "dashscope",
-        "text-embedding",
-        "endpoint",
-        "policy_hash",
-        "workspace",
-    ):
-        assert forbidden not in pending_public
-    disclosure = client.get(
-        "/api/v1/provider/data-call/disclosure",
-        params={"manifest_hash": manifest_hash},
-    )
-    assert disclosure.status_code == 200, disclosure.text
-    disclosed = disclosure.json()
-    assert disclosed["manifest_hash"] == manifest_hash
-    confirmed = client.post(
-        "/api/v1/provider/data-call/disclosure/confirm",
-        headers=_headers(teacher_csrf),
-        json={
-            "policy_hash": policy.policy_hash,
-            "manifest_hash": manifest_hash,
-            "expected_revision": disclosed["confirmation_revision"],
-        },
-    )
-    assert confirmed.status_code == 200, confirmed.text
-
-    _student, retry_csrf = login(client, "bowen")
-    published = client.post(
-        f"/api/v1/agent-versions/{version_id}/publish",
-        headers=_headers(
-            retry_csrf,
-            **{"Idempotency-Key": "real-route-publish-version-001"},
-        ),
-        json=snapshot_publish_body,
-    )
     assert published.status_code == 200, published.text
+    with database.engine.connect() as connection:
+        manifest_hash = connection.execute(
+            select(ProviderOperation.export_manifest_hash).where(
+                ProviderOperation.acceptance_run_id == acceptance_run_id,
+                ProviderOperation.provider_operation == "embedding",
+            )
+        ).scalar_one()
+    confirmation = ProviderRepository(database).get_export_confirmation(manifest_hash)
+    assert confirmation is not None
+    assert confirmation.policy_hash == policy.policy_hash
     assert len(transport.calls) == 1
     payload = transport.calls[0]
     assert payload["model"] == REAL_EMBEDDING_MODEL

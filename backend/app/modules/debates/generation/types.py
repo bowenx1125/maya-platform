@@ -639,9 +639,9 @@ class GenerationContext:
     pending_question: PendingQuestion | None = None
     # The language this Debate was started in; see debates/output_language.py.
     output_language: str = "en"
-    # Omitted contexts retain the immutable legacy protocol.  New callers must
-    # opt in explicitly so old hashes and stored turns remain readable.
-    turn_protocol: Literal["legacy_v1", "segments_v2"] = "legacy_v1"
+    # Every debate is created as segments_v2. Callers reading a legacy row pass
+    # "legacy_v1" explicitly (see playback/generation_adapter.py).
+    turn_protocol: Literal["legacy_v1", "segments_v2"] = "segments_v2"
     round_count: int | None = None
     barrages: tuple[Mapping[str, object], ...] = ()
     teaching_protocol: str | None = None

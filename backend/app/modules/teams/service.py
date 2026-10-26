@@ -62,11 +62,12 @@ from app.modules.teams.schemas import (
     SaveTeamVersionRequest,
     SharedKnowledgeSetDTO,
     TeamDetail,
+    TeamFaceMember,
     TeamMemberDTO,
     TeamMemberInput,
     TeamSummary,
 )
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 LOGGER = logging.getLogger("maya.teams")
@@ -793,13 +794,39 @@ def _publication_state(db: Session, team: Team, version: TeamVersion) -> str:
     return "published" if published else "unpublished"
 
 
-def _team_summary(db: Session, team: Team, *, can_edit: bool) -> TeamSummary:
-    version = _version_for_seq(db, team)
-    count = db.scalar(
-        select(func.count(TeamVersionMember.id)).where(
-            TeamVersionMember.team_version_id == version.id
-        )
-    )
+def _can_delete_team(db: Session, user_id: str, team: Team) -> bool:
+    """Mirror of _get_team_for_owner, which guards DELETE /teams/{team_id}."""
+
+    if team.owner_user_id != user_id or team.deleted_at is not None:
+        return False
+    if course_member_role(db, user_id, team.course_id) is None:
+        return False
+    if team.group_id is None:
+        return True
+    group = db.get(Group, team.group_id)
+    if group is None or group.course_id != team.course_id:
+        return False
+    return scoped_group_role_for_user(db, user_id, team.group_id) == "student"
+
+
+def _team_summary(
+    db: Session,
+    team: Team,
+    *,
+    user_id: str,
+    owner_names: dict[str, str] | None = None,
+    version: TeamVersion | None = None,
+    members: list[TeamVersionMember] | None = None,
+) -> TeamSummary:
+    if version is None:
+        version = _version_for_seq(db, team)
+    if members is None:
+        members = _members_by_version(db, [version.id]).get(version.id, [])
+    if owner_names is not None:
+        owner_name = owner_names.get(team.owner_user_id)
+    else:
+        owner = db.get(User, team.owner_user_id) if team.owner_user_id else None
+        owner_name = owner.display_name if owner is not None else None
     return TeamSummary(
         id=_uid(team.id),
         course_id=_uid(team.course_id),
@@ -812,9 +839,48 @@ def _team_summary(db: Session, team: Team, *, can_edit: bool) -> TeamSummary:
         authorization_epoch=team.authorization_epoch,
         current_version_id=_uid(version.id),
         current_version_seq=version.version_seq,
-        member_count=int(count or 0),
-        can_edit=can_edit,
+        member_count=len(members),
+        can_edit=team.owner_user_id == user_id,
+        can_delete=_can_delete_team(db, user_id, team),
+        updated_at=team.updated_at,
+        last_edited_by_name=owner_name,
+        members=_face_members(members),
     )
+
+
+def _members_by_version(db: Session, version_ids: list[str]) -> dict[str, list[TeamVersionMember]]:
+    """All members of the given Team versions in one query, by position."""
+
+    grouped: dict[str, list[TeamVersionMember]] = {key: [] for key in version_ids}
+    if not version_ids:
+        return grouped
+    rows = db.scalars(
+        select(TeamVersionMember)
+        .where(TeamVersionMember.team_version_id.in_(version_ids))
+        .order_by(TeamVersionMember.team_version_id, TeamVersionMember.position)
+    ).all()
+    for row in rows:
+        grouped.setdefault(row.team_version_id, []).append(row)
+    return grouped
+
+
+def _face_members(members: list[TeamVersionMember]) -> list[TeamFaceMember]:
+    ordered = sorted(members, key=lambda row: (not row.is_leader, row.position))
+    faces: list[TeamFaceMember] = []
+    for row in ordered[:4]:
+        try:
+            avatar = json.loads(row.avatar_config_json or "{}")
+        except ValueError:
+            avatar = {}
+        theme = avatar.get("material_theme") if isinstance(avatar, dict) else None
+        faces.append(
+            TeamFaceMember(
+                agent_id=_uid(row.agent_id) if row.agent_id else None,
+                material_theme=theme if isinstance(theme, str) else None,
+                is_leader=bool(row.is_leader),
+            )
+        )
+    return faces
 
 
 def _shared_knowledge_set_dtos(db: Session, version_id: str) -> list[SharedKnowledgeSetDTO]:
@@ -833,11 +899,10 @@ def get_team_detail(db: Session, actor: AuthContext | str, team_id: str) -> Team
     if team is None or not can_view_team(db, user_id, team):
         raise not_found()
     version = _version_for_seq(db, team)
-    summary = _team_summary(db, team, can_edit=team.owner_user_id == user_id)
+    summary = _team_summary(db, team, user_id=user_id)
     return TeamDetail(
-        **summary.model_dump(),
+        **summary.model_dump(exclude={"members"}),
         created_at=team.created_at,
-        updated_at=team.updated_at,
         members=[_team_member_dto(row) for row in _member_rows(db, version.id)],
         shared_knowledge_set_ids=[
             _uid(_required_set_id(row.knowledge_set_id)) for row in _set_rows(db, version.id)
@@ -1193,12 +1258,25 @@ def list_course_teams(
         query = query.where(Team.group_id == group_id)
     rows = db.scalars(query.order_by(Team.updated_at.desc(), Team.id)).all()
     readable = can_view_team if group_id is not None else can_read_team
-    visible: list[TeamSummary] = []
-    for team in rows:
-        if not readable(db, user_id, team):
-            continue
-        visible.append(_team_summary(db, team, can_edit=team.owner_user_id == user_id))
-    return visible
+    shown = [team for team in rows if readable(db, user_id, team)]
+    owner_ids = {team.owner_user_id for team in shown if team.owner_user_id}
+    owner_names: dict[str, str] = {}
+    if owner_ids:
+        names = db.execute(select(User.id, User.display_name).where(User.id.in_(owner_ids)))
+        owner_names = {user_id: name for user_id, name in names.all()}
+    versions = {team.id: _version_for_seq(db, team) for team in shown}
+    members = _members_by_version(db, [version.id for version in versions.values()])
+    return [
+        _team_summary(
+            db,
+            team,
+            user_id=user_id,
+            owner_names=owner_names,
+            version=versions[team.id],
+            members=members.get(versions[team.id].id, []),
+        )
+        for team in shown
+    ]
 
 
 def list_maya_teams(

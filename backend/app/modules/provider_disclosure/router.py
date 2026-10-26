@@ -65,11 +65,6 @@ def _raise_domain_error(error: ProviderDisclosureError) -> None:
         raise forbidden()
     if error.code in {"provider_preflight_stale", "provider_confirmation_conflict"}:
         raise conflict("provider_preflight_stale", "Provider disclosure confirmation is stale.")
-    if error.code == "provider_confirmation_required":
-        raise conflict(
-            "provider_confirmation_required",
-            "Confirm the exact provider disclosure before any external request.",
-        )
     raise PlatformError(
         error.code if error.code.startswith("provider_") else "provider_preflight_blocked",
         "Provider preflight is unavailable until every account and privacy control is verified.",
@@ -393,7 +388,8 @@ def confirm_provider_data_call_disclosure(
     if (
         run is not None
         and run.state == "blocked"
-        and run.safe_error_code == "provider_confirmation_required"
+        and run.safe_error_code
+        in {"provider_confirmation_required", "provider_confirmation_unavailable"}
     ):
         job = db.get(Job, run.job_id)
         if job is not None and job.operation == GENERATION_OPERATION and job.state == "failed":

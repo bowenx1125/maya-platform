@@ -1,4 +1,4 @@
-"""Snapshot publication uses the same narrow Demo standing consent as turns."""
+"""Snapshot publication always auto-confirms, whatever the standing-consent flags say."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from app.core.errors import PlatformError
 from app.core.models import Agent, AgentVersion
 from app.modules.agents.router import _publish_real_embedding_snapshot
 from app.modules.knowledge.providers.product_publication import (
@@ -26,14 +25,16 @@ def _settings(fixture, policy, *, standing: bool) -> SimpleNamespace:
     return SimpleNamespace(
         demo_mode=True,
         demo_auto_confirm_provider=standing,
+        provider_standing_consent=standing,
         embedding_provider="dashscope",
         provider_policy_hash_for=lambda _kind: policy.policy_hash,
         resolved_data_root=fixture.data_root,
     )
 
 
+@pytest.mark.parametrize("standing", [True, False])
 def test_snapshot_publish_applies_standing_consent_then_rechecks_owner(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
+    tmp_path, monkeypatch: pytest.MonkeyPatch, standing: bool
 ) -> None:
     fixture = _make_fixture(tmp_path)
     policy = _policy()
@@ -66,7 +67,7 @@ def test_snapshot_publish_applies_standing_consent_then_rechecks_owner(
         with fixture.database.session() as db:
             _publish_real_embedding_snapshot(
                 db,
-                _settings(fixture, policy, standing=True),
+                _settings(fixture, policy, standing=standing),
                 version=version,
                 agent=agent,
                 expected_revision=1,
@@ -103,44 +104,5 @@ def test_snapshot_publish_applies_standing_consent_then_rechecks_owner(
                 ProviderRepository(fixture.database).get_export_confirmation(manifest.manifest_hash)
                 is not None
             )
-    finally:
-        fixture.database.dispose()
-
-
-def test_snapshot_publish_without_standing_consent_keeps_manual_confirmation_gate(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fixture = _make_fixture(tmp_path)
-    policy = _policy()
-    ProviderRepository(fixture.database).save_policy_snapshot(policy, snapshot_id=str(uuid4()))
-    with fixture.database.session() as db:
-        version = db.get(AgentVersion, fixture.agent_version_id)
-        assert version is not None
-        agent = db.get(Agent, version.agent_id)
-        assert agent is not None
-
-    import app.modules.agents.router as router
-
-    provider = _CountingRealProvider()
-    monkeypatch.setattr(router, "select_embedding_provider", lambda _settings: provider)
-    monkeypatch.setattr(router, "renew_idempotency_lease", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        router,
-        "run_confirmed_real_embedding_publication",
-        lambda *_args, **_kwargs: pytest.fail("manual confirmation must block provider work"),
-    )
-    try:
-        with fixture.database.session() as db:
-            with pytest.raises(PlatformError) as raised:
-                _publish_real_embedding_snapshot(
-                    db,
-                    _settings(fixture, policy, standing=False),
-                    version=version,
-                    agent=agent,
-                    expected_revision=1,
-                    record=SimpleNamespace(id=str(uuid4()), claim_token="claim"),
-                )
-        assert raised.value.code == "provider_confirmation_required"
-        assert provider.call_count == 0
     finally:
         fixture.database.dispose()

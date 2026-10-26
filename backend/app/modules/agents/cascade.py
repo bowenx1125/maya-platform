@@ -109,6 +109,43 @@ def affected_agents(
     return sorted(found.values(), key=lambda item: (item.name.casefold(), item.agent_id))
 
 
+def agents_using_documents(
+    db: Session, document_ids: Iterable[str], *, viewer_user_id: str
+) -> dict[str, list[AffectedAgent]]:
+    """Per document, the live Agents whose current version uses it.
+
+    One query for every document; only Agents the viewer may use are kept,
+    the same filter the per-document affected-agents endpoint applies.
+    """
+
+    docs = sorted({str(item) for item in document_ids})
+    found: dict[str, list[AffectedAgent]] = {doc: [] for doc in docs}
+    if not docs:
+        return found
+    rows = db.execute(
+        _live_current_versions(db)
+        .add_columns(AgentVersionDocument.document_id)
+        .join(
+            AgentVersionDocument,
+            AgentVersionDocument.agent_version_id == AgentVersion.id,
+        )
+        .where(AgentVersionDocument.document_id.in_(docs))
+    ).all()
+    from app.modules.knowledge.services import can_use_agent
+
+    usable: dict[str, bool] = {}
+    for agent, version, document_id in rows:
+        if agent.id not in usable:
+            usable[agent.id] = can_use_agent(db, viewer_user_id, agent)
+        if usable[agent.id]:
+            found[document_id].append(
+                AffectedAgent(agent.id, agent.name, agent.owner_user_id, version.version_seq)
+            )
+    for items in found.values():
+        items.sort(key=lambda item: (item.name.casefold(), item.agent_id))
+    return found
+
+
 def _owner_context(db: Session, agent: Agent) -> Any:
     from app.modules.auth.service import AuthContext
 

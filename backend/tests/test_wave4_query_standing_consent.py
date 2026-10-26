@@ -9,7 +9,6 @@ from typing import Any
 import pytest
 from app.core.config import Settings
 from app.core.db import Database
-from app.core.errors import PlatformError
 from app.core.models import Agent, AgentVersion, KnowledgeChunk, KnowledgeSnapshot
 from app.modules.debates.generation.mutual_learning_policy import (
     MUTUAL_LEARNING_RULE_SET_ID,
@@ -107,6 +106,7 @@ def _query_setup(
         settings.dashscope_region = "cn-beijing"
         settings.demo_mode = True
         settings.demo_auto_confirm_provider = standing_consent
+        settings.provider_standing_consent = standing_consent
 
         transport = _QueryTransport()
         adapter = DashScopeEmbeddingAdapter(config, transport)
@@ -143,14 +143,18 @@ def _query_setup(
     return database, settings, str(debate_id), turn_id, policy, transport
 
 
+# Provider disclosures are always auto-confirmed: with the standing-consent
+# flags off the debate query proceeds and writes the same ledger rows.
+@pytest.mark.parametrize("standing_consent", [True, False])
 def test_standing_query_consent_confirms_exact_owner_manifest_and_runs_once(
     app_factory: Any,
     monkeypatch: pytest.MonkeyPatch,
+    standing_consent: bool,
 ) -> None:
     database, settings, debate_id, turn_id, policy, transport = _query_setup(
         app_factory,
         monkeypatch,
-        standing_consent=True,
+        standing_consent=standing_consent,
     )
     generation_module = importlib.import_module("app.modules.debates.playback.generation_adapter")
     original_require = generation_module.require_exact_confirmation
@@ -196,43 +200,3 @@ def test_standing_query_consent_confirms_exact_owner_manifest_and_runs_once(
     )
     assert confirmation is not None
     assert confirmation.policy_hash == policy.policy_hash
-
-
-def test_manual_query_confirmation_path_still_parks_before_provider_call(
-    app_factory: Any,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    database, settings, debate_id, turn_id, _policy_value, transport = _query_setup(
-        app_factory,
-        monkeypatch,
-        standing_consent=False,
-    )
-    with database.session() as db:
-        debate = db.get(Debate, debate_id)
-        turn = db.get(DebateTurn, turn_id)
-        assert debate is not None and turn is not None
-        with pytest.raises(PlatformError) as raised:
-            SqlTurnPreparer(settings=settings, llm=MockLLMProvider())(
-                db,
-                debate,
-                turn,
-                attempt=1,
-                cancellation_generation=0,
-            )
-        assert raised.value.code == "provider_confirmation_required"
-    assert transport.calls == []
-    operations = tuple(
-        item
-        for item in ProviderRepository(database).operations(scope_id=debate_id)
-        if item.provider_operation == "embedding_query"
-    )
-    assert len(operations) == 1
-    assert (
-        operations[0].state,
-        operations[0].request_count,
-        operations[0].charged_request_count,
-    ) == ("prepared", 0, 0)
-    assert (
-        ProviderRepository(database).get_export_confirmation(operations[0].export_manifest_hash)
-        is None
-    )

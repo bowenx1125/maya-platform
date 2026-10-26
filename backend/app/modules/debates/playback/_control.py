@@ -581,6 +581,7 @@ class PlaybackControlMixin(PlaybackCore):
                     code
                     not in {
                         "provider_confirmation_required",
+                        "provider_confirmation_unavailable",
                         "provider_not_sent",
                         "preparation_timeout",
                     }

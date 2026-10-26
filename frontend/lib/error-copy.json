@@ -360,6 +360,7 @@
     "cleanup_path_outside_root": "cleanupFailed",
     "cleanup_path_symlink_refused": "cleanupFailed",
     "cleanup_schema_unavailable": "cleanupFailed",
+    "conversation_filter_invalid": "invalidInput",
     "cross_snapshot_evidence": "aiStepFailed",
     "data_root_invalid": "cleanupFailed",
     "data_root_required": "cleanupFailed",
