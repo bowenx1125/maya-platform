@@ -386,7 +386,7 @@ function ClassroomLiveSession({
   return (
     <div className={LIVE_ROOT}>
       <PageIntro title="Live" />
-      {error ? <ErrorNotice error={error} /> : null}
+      {error ? <ErrorNotice kind="bell" transient error={error} /> : null}
       {loading ? (
         <section className={cn(CABINET, "mt-2")} role="status">
           <Leds count={12} />
@@ -394,10 +394,7 @@ function ClassroomLiveSession({
             <div className={SCAN} aria-hidden="true" />
             <div className="grid justify-items-center gap-4">
               {/* The sign-in's four scholar blocks, still waiting their turn. */}
-              <span
-                className="inline-flex items-end gap-2"
-                aria-hidden="true"
-              >
+              <span className="inline-flex items-end gap-2" aria-hidden="true">
                 {LOADING_BLOCKS.map((block) => (
                   <i key={block} className={cn(LOADING_BLOCK, block)} />
                 ))}
