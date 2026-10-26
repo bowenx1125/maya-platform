@@ -1,5 +1,6 @@
 "use client";
 
+import { LIST_CARD_LIFT } from "../agent-chrome";
 import type { ReactNode } from "react";
 
 import type { AffectedAgent, KnowledgeDocument } from "../../lib/api/platform";
@@ -56,11 +57,11 @@ export const albumStyles = {
   count: "[font:800_16px_var(--font-lexend,'Lexend')]",
   pn: "!inline-flex !items-center !gap-[6px] !h-[44px] !py-0 !px-[18px] !bg-[#ff4d8d] !text-[#111] !border-[3px] !border-solid !border-[#111] !rounded-[10px] !shadow-[4px_4px_0_#111] ![font:800_15px_var(--font-lexend,'Lexend')] hover:!bg-[#ff4d8d]",
   grid: "grid grid-cols-[repeat(3,minmax(0,1fr))] gap-y-[34px] gap-x-[30px] m-0 p-0 list-none max-[960px]:grid-cols-[minmax(0,1fr)]",
-  card: "relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[14px] shadow-[6px_6px_0_#111] [&:nth-child(3n+1)]:[transform:rotate(-1.6deg)] [&:nth-child(3n+2)]:[transform:rotate(1.2deg)] [&:nth-child(3n)]:[transform:rotate(-0.6deg)] bg-[#67e8f9]",
+  card: `relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[14px] shadow-[6px_6px_0_#111] [&:nth-child(3n+1)]:[--r:-1.6deg] [&:nth-child(3n+2)]:[--r:1.2deg] [&:nth-child(3n)]:[--r:-0.6deg] bg-[#67e8f9] ${LIST_CARD_LIFT}`,
   cardFailed:
-    "relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[14px] shadow-[6px_6px_0_#111] [&:nth-child(3n+1)]:[transform:rotate(-1.6deg)] [&:nth-child(3n+2)]:[transform:rotate(1.2deg)] [&:nth-child(3n)]:[transform:rotate(-0.6deg)] bg-[#fca5a5]",
+    `relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[14px] shadow-[6px_6px_0_#111] [&:nth-child(3n+1)]:[--r:-1.6deg] [&:nth-child(3n+2)]:[--r:1.2deg] [&:nth-child(3n)]:[--r:-0.6deg] bg-[#fca5a5] ${LIST_CARD_LIFT}`,
   cardPending:
-    "relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[14px] shadow-[6px_6px_0_#111] [&:nth-child(3n+1)]:[transform:rotate(-1.6deg)] [&:nth-child(3n+2)]:[transform:rotate(1.2deg)] [&:nth-child(3n)]:[transform:rotate(-0.6deg)] bg-[#fde68a]",
+    `relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[14px] shadow-[6px_6px_0_#111] [&:nth-child(3n+1)]:[--r:-1.6deg] [&:nth-child(3n+2)]:[--r:1.2deg] [&:nth-child(3n)]:[--r:-0.6deg] bg-[#fde68a] ${LIST_CARD_LIFT}`,
   cardBig:
     "relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[14px] shadow-[6px_6px_0_#111] [&:nth-child(3n+1)]:[transform:rotate(-1.6deg)] [&:nth-child(3n+2)]:[transform:rotate(1.2deg)] [&:nth-child(3n)]:[transform:rotate(-0.6deg)] bg-[#67e8f9] [transform:rotate(-2deg)]",
   art: "relative grid place-items-center border-[3px] border-solid border-[#111] rounded-[8px] [background:linear-gradient(135deg,#fff_0%,#c7f9ff_30%,#fbcfe8_55%,#fff_70%,#bae6fd_100%)] h-[96px]",
