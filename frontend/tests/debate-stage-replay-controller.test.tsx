@@ -292,7 +292,7 @@ describe("terminal segments replay controller", () => {
     );
     const next = screen.getByRole("button", { name: "Next" });
     expect(next).toHaveProperty("disabled", true);
-    const panel = next.closest('[class*="controlsDock"]')!;
+    const panel = next.closest('[role="group"]')!;
     expect(
       Array.from(panel.querySelectorAll("button,a")).map(
         (node) => node.textContent,

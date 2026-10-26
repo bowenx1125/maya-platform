@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { cn } from "../../lib/utils";
 import styles from "./stage3d.module.css";
 
 export type BarrageBullet = {
@@ -24,6 +25,10 @@ export type BarrageLaneProps = {
 const LANE_COUNT = 4;
 /** On screen at once. Anything beyond this waits rather than stacking. */
 const MAX_ON_SCREEN = 12;
+/** A1 candy capsule: fixed 320 so lane lengths align. */
+const BULLET =
+  "inline-flex items-baseline gap-2 box-border w-[320px] min-w-[320px] max-w-[320px] pt-[6px] pr-[14px] pb-[6px] pl-2 border-2 border-solid border-[#111] rounded-full bg-white shadow-[3px_3px_0_#111] [color:var(--ink,#1d1d1f)] [font-size:0.9rem] leading-[1.55] whitespace-nowrap overflow-hidden text-ellipsis [&_b]:text-[#a63328] [&_b]:[font-size:0.78rem] [&_b]:font-semibold";
+
 /** A bullet a whole classroom can read while it crosses. */
 const MAX_TEXT = 56;
 const MAX_NICKNAME = 12;
@@ -111,7 +116,7 @@ export function BarrageLane({ bullets, paused, label }: BarrageLaneProps) {
       {reduced
         ? shown.map((bullet, index) => (
             <span
-              className={styles.bulletStatic}
+              className={cn(styles.bulletStatic, BULLET)}
               key={bullet.id}
               style={{ top: `${8 + index * 34}px` }}
             >
@@ -121,7 +126,7 @@ export function BarrageLane({ bullets, paused, label }: BarrageLaneProps) {
           ))
         : (shown as ActiveBullet[]).map((bullet) => (
             <span
-              className={styles.bullet}
+              className={cn(styles.bullet, BULLET)}
               key={bullet.id}
               onAnimationEnd={() =>
                 setActive((current) =>

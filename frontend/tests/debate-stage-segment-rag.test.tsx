@@ -225,7 +225,7 @@ it("shows current/total progress and connection color without separate connectio
   );
   const progress = screen.getByLabelText("Turn 4 of 12, disconnected");
   expect(progress.textContent).toBe("4/12");
-  expect(progress.closest('[class*="streamHeader"]')).not.toBeNull();
+  expect(progress.parentElement?.querySelector(":scope > h2")).not.toBeNull();
   expect(progress.getAttribute("data-connected")).toBe("false");
   expect(screen.queryByText("Connected")).toBeNull();
   expect(screen.queryByText("unconnected")).toBeNull();

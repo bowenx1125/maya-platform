@@ -303,7 +303,7 @@ export function SpeechStream({
       {turns.length === 0 ? (
         <p className={styles.streamEmpty}>{emptyMessage}</p>
       ) : (
-        <div className={styles.streamList} ref={listRef}>
+        <div className={styles.streamList} data-stream-list="" ref={listRef}>
           {turns.map((turn) => (
             <StreamItem
               styles={styles}

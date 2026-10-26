@@ -27,7 +27,19 @@ import {
 import { useT } from "../../../../../lib/i18n";
 import { localizeError } from "../../../../../lib/i18n";
 import { expectedTurnCount } from "../../../../../lib/debate-rounds";
-import styles from "./control.module.css";
+
+/* The immersive surface has no app shell, so the states before the stage
+   exists need a ground and a way back of their own. */
+const BOOT =
+  "grid content-center justify-items-start gap-[18px] w-[min(680px,calc(100%_-_40px))] min-h-screen mx-auto my-0";
+const BOOT_BACK =
+  "[color:var(--muted)] [font-size:0.88rem] hover:[color:var(--ink)]";
+const REPORT_DIALOG =
+  "w-[min(1040px,calc(100vw_-_40px))] max-h-[calc(100dvh_-_48px)] [padding:var(--workspace-inset)] border border-solid [border-color:var(--line)] rounded-[24px] [background:var(--paper,#fcfaf6)] [color:var(--ink)] shadow-[0_24px_80px_rgba(29,26,23,0.2)] backdrop:bg-[rgba(29,26,23,0.35)] backdrop:backdrop-blur-[4px] [&>section+section]:[margin-top:var(--workspace-gap)]";
+const REPORT_ACTIONS =
+  "flex justify-end [margin:0_0_var(--workspace-gap)]";
+const REPORT_CLOSE =
+  "inline-flex items-center justify-center w-[44px] h-[44px] min-h-[44px] p-0 rounded-[12px]";
 
 const INITIAL_PLAYBACK_AUTHORITY: PlaybackAuthorityState = {
   connection: "connecting",
@@ -463,8 +475,8 @@ export default function TeacherDebateControlPage() {
   return (
     <RouteGuard role="teacher">
       {!detail || !debateId ? (
-        <div className={styles.boot}>
-          <Link className={styles.bootBack} href="/teacher/debates">
+        <div className={BOOT}>
+          <Link className={BOOT_BACK} href="/teacher/debates">
             {t("debateBack")}
           </Link>
           {loading ? <LoadingCard /> : null}
@@ -594,13 +606,13 @@ export default function TeacherDebateControlPage() {
           {showSegmentsReport && reportOpen ? (
             <dialog
               ref={reportDialogRef}
-              className={styles.reportDialog}
+              className={REPORT_DIALOG}
               aria-label="Report"
               onClose={() => setReportOpen(false)}
             >
-              <form method="dialog" className={styles.reportActions}>
+              <form method="dialog" className={REPORT_ACTIONS}>
                 <button
-                  className={`secondary-action ${styles.reportClose}`}
+                  className={`secondary-action ${REPORT_CLOSE}`}
                   aria-label={"Close"}
                   type="submit"
                   autoFocus

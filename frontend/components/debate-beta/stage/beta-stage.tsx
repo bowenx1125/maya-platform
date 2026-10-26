@@ -35,13 +35,31 @@ import {
   type AvatarExpression,
   type AvatarState,
 } from "../../avatar";
-import styles from "./beta-stage.module.css";
 import { QrCode } from "../../interaction/qr-code";
 import { BarrageLane, type BarrageBullet } from "../../stage3d/barrage-lane";
 import { ScholarScene } from "../../stage3d/scholar-scene";
 import { bubbleProgressFrom } from "./bubble-progress";
 import type { StageCharacter } from "../../stage3d/scholar-stage";
-import stage3d from "../../stage3d/stage3d.module.css";
+import { cn } from "../../../lib/utils";
+import {
+  BETA_CONNECTION_OVERLAY,
+  BETA_DOCK,
+  BETA_END_PROMPT,
+  BETA_END_PROMPT_ACTIONS,
+  BETA_FAILURE_CARD,
+  BETA_JOIN_BODY,
+  BETA_JOIN_CARD,
+  BETA_JOIN_STICK,
+  BETA_NOTICES,
+  BETA_PANEL_ACTIONS,
+  BETA_PROVIDER_GATE_CARD,
+  BETA_RECONNECT_BUTTON,
+  BETA_STAGE,
+  BETA_STREAM_STYLES,
+  BETA_TOPIC,
+  BETA_TRANSCRIPT_DRAWER,
+  BETA_TURN_PROGRESS,
+} from "./beta-chrome";
 import { defaultBetaStageLabels, type BetaStageLabels } from "./beta-labels";
 import {
   phaseLabel,
@@ -755,7 +773,7 @@ export function BetaDebateStage({
     if (!transcriptOpen) return;
     transcriptRef.current?.focus();
     const list = transcriptRef.current?.querySelector<HTMLElement>(
-      `.${styles.streamList}`,
+      "[data-stream-list]",
     );
     if (list) list.scrollTop = list.scrollHeight;
   }, [transcriptOpen]);
@@ -3804,7 +3822,7 @@ export function BetaDebateStage({
     : 0;
   return (
     <section
-      className={`${styles.stage}${className ? ` ${className}` : ""}`}
+      className={cn(BETA_STAGE, className)}
       data-connection={connection}
       data-connection-reason={connectionIssue ?? "none"}
       data-last-sequence={lastSequence}
@@ -3814,9 +3832,9 @@ export function BetaDebateStage({
       aria-label={labels.stageTitle}
     >
       {!suppressConnectionUi && connectionRecovery ? (
-        <div className={styles.connectionOverlay} role="status">
+        <div className={BETA_CONNECTION_OVERLAY} role="status">
           <button
-            className={styles.reconnectButton}
+            className={BETA_RECONNECT_BUTTON}
             onClick={() => {
               if (connectionRecovery.kind === "sign-in") {
                 window.location.href = "/";
@@ -3846,15 +3864,15 @@ export function BetaDebateStage({
             />
             {joinUrl && joinCodeVisible ? (
               <div
-                className={`${stage3d.joinCard} ${styles.joinCard}`}
+                className={BETA_JOIN_CARD}
                 id="classroom-join-code"
               >
                 {/* A1 yellow ticket: stick header + body QR (count on stick). */}
-                <div className={styles.joinStick}>
+                <div className={BETA_JOIN_STICK}>
                   <span>{beta.joinLabel}</span>
                   <em>{beta.barrageCount(barrages.length)}</em>
                 </div>
-                <div className={styles.joinBody}>
+                <div className={BETA_JOIN_BODY}>
                   <QrCode label={beta.joinLabel} value={joinUrl} />
                 </div>
               </div>
@@ -3873,7 +3891,7 @@ export function BetaDebateStage({
       />
 
       <div
-        className={styles.controlsDock}
+        className={BETA_DOCK}
         role="group"
         aria-label={labels.stageTitle}
       >
@@ -3889,7 +3907,7 @@ export function BetaDebateStage({
           </button>
         ) : null}
         {headerActions ? (
-          <div className={styles.panelActions}>
+          <div className={BETA_PANEL_ACTIONS}>
             {typeof headerActions === "function" ? (
               headerActions(replayButton)
             ) : (
@@ -3925,11 +3943,11 @@ export function BetaDebateStage({
           onTimeUpdate={onAudioTimeUpdate}
         />
       </div>
-      <h1 className={styles.stageTopic}>{detailState.topic}</h1>
-      <div className={styles.notices}>
+      <h1 className={BETA_TOPIC}>{detailState.topic}</h1>
+      <div className={BETA_NOTICES}>
         {providerGate ? (
           <section
-            className={styles.providerGateCard}
+            className={BETA_PROVIDER_GATE_CARD}
             data-testid="provider-query-gate"
             aria-label={labels.providerGateTitle}
           >
@@ -3984,7 +4002,7 @@ export function BetaDebateStage({
         {controlError ? (
           <DismissibleAlert
             as="div"
-            className={styles.failureCard}
+            className={BETA_FAILURE_CARD}
             resetKey={controlError}
           >
             {controlError}
@@ -3993,7 +4011,7 @@ export function BetaDebateStage({
       </div>
       {blockedBy ? (
         <div
-          className={styles.endPrompt}
+          className={BETA_END_PROMPT}
           role="dialog"
           aria-modal="true"
           aria-labelledby="end-running-debate"
@@ -4003,7 +4021,7 @@ export function BetaDebateStage({
               ? `「${blockedBy.topic}」正在进行。要结束那场辩论吗？`
               : `“${blockedBy.topic}” is running. End that debate?`}
           </p>
-          <div className={styles.endPromptActions}>
+          <div className={BETA_END_PROMPT_ACTIONS}>
             <button
               className="secondary-action"
               type="button"
@@ -4039,7 +4057,7 @@ export function BetaDebateStage({
       <aside
         ref={transcriptRef}
         id="debate-transcript"
-        className={styles.transcriptDrawer}
+        className={BETA_TRANSCRIPT_DRAWER}
         hidden={!transcriptOpen}
         aria-label={labels.transcript}
         tabIndex={-1}
@@ -4070,7 +4088,7 @@ export function BetaDebateStage({
               : null
           }
           showTurnCount={false}
-          styles={styles}
+          styles={BETA_STREAM_STYLES}
           describe={(participantId) => {
             const owner = participantById.get(participantId);
             return {
@@ -4093,7 +4111,7 @@ export function BetaDebateStage({
           }}
           headerAction={
             <span
-              className={styles.turnProgress}
+              className={BETA_TURN_PROGRESS}
               data-connected={connection === "connected"}
               aria-label={`Turn ${currentTurnNumber} of ${totalTurns}, ${connection === "connected" ? "connected" : "disconnected"}`}
               role="status"
