@@ -302,7 +302,7 @@ describe("W1 teacher personal workspace", () => {
     );
   });
 
-  it("preserves the colleague Home without loading personal Agent lists", async () => {
+  it("shows the colleague Home with the teacher's own workspace Agents", async () => {
     const api = {
       courses: vi
         .fn()
