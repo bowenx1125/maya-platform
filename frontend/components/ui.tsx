@@ -187,7 +187,7 @@ export function Notice({
         "relative my-4 flex w-full items-start gap-2.5 rounded-[18px] border-[3px] border-border bg-surface py-3 pr-[42px] pl-3.5 text-left font-body text-sm leading-[1.45] font-medium text-ink shadow-[4px_4px_0_#111] max-[680px]:flex-wrap",
         // Status dot instead of an icon font; the colour carries the tone.
         sticker
-          ? "items-center pt-5 pb-[19px] pr-[46px] pl-4"
+          ? "items-center py-3 pr-[46px] pl-3.5"
           : "before:mt-1 before:size-3.5 before:flex-none before:rotate-[-8deg] before:rounded-full before:border-2 before:border-border before:bg-main before:shadow-[2px_2px_0_#111] before:content-['']",
         NOTICE_TONE[tone],
         fold.folded && "hidden",
