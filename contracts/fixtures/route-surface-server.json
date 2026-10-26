@@ -11434,6 +11434,17 @@
                 "type": "null"
               }
             ]
+          },
+          "student_count": {
+            "description": "Active students (role student, account active) in the course. Course teachers only; null for students.",
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
