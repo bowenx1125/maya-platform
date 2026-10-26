@@ -8,7 +8,6 @@ import type {
   OverviewEvent,
 } from "../lib/api/platform";
 import styles from "./knowledge/brainform-workspace.module.css";
-import overview from "./group-overview.module.css";
 import { useT } from "../lib/i18n";
 import { useSession } from "./session-provider";
 import { ModuleCard, ModuleGrid, ModuleList } from "./studyform-layout";
@@ -84,7 +83,7 @@ export function GroupOverview({ groupId }: { groupId: string }) {
                 <li className={styles.row} key={member.user_id}>
                   <button
                     type="button"
-                    className={`${styles.rowHit} ${overview.person}`}
+                    className={`${styles.rowHit} flex items-center gap-2.5`}
                     aria-expanded={open === key}
                     onClick={() => toggle(key)}
                   >
@@ -111,11 +110,11 @@ export function GroupOverview({ groupId }: { groupId: string }) {
                   {open === key ? (
                     <div className={styles.rowExtra}>
                       {work.length ? (
-                        <ul className={overview.work}>
+                        <ul className="my-0.5 mb-1.5 grid list-none gap-1.5 p-0 pl-[42px]">
                           {work.map((item) => (
-                            <li key={item.id}>
-                              <Link href={item.href}>{item.name}</Link>
-                              <small>
+                            <li key={item.id} className="flex min-w-0 items-baseline gap-2">
+                              <Link className="font-semibold text-(--ink,#292820) [overflow-wrap:anywhere]" href={item.href}>{item.name}</Link>
+                              <small className="text-[0.75rem] text-[#625e59]">
                                 {t(
                                   item.visibility === "public"
                                     ? "publicOption"
@@ -150,8 +149,8 @@ export function GroupOverview({ groupId }: { groupId: string }) {
                 key={`${event.kind}:${event.at}:${index}`}
               >
                 <span className={styles.rowCopy}>
-                  <span className={overview.event}>
-                    <strong>{event.display_name}</strong> {eventText(event, t)}
+                  <span className="leading-[1.4] text-(--ink,#292820) [overflow-wrap:anywhere]">
+                    <strong className="font-[650]">{event.display_name}</strong> {eventText(event, t)}
                   </span>
                   <span className={styles.rowMeta}>{when(event.at)}</span>
                 </span>

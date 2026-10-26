@@ -9,7 +9,6 @@ import {
   segmentEvidenceGrade,
 } from "../../lib/evidence-grading";
 import type { DebateParticipant, DebateTurn } from "../../lib/api";
-import styles from "./agent-scores.module.css";
 import panelStyles from "../report/report.module.css";
 
 function claimsOf(turn: DebateTurn): { support_mode: string }[] {
@@ -73,7 +72,7 @@ export function AgentScores({
       </div>
       <div className={panelStyles.content}>
         <div className={panelStyles.reportCard}>
-          <div aria-label="Evidence grading" className={styles.legend}>
+          <div aria-label="Evidence grading" className="mb-4 flex flex-wrap gap-1.5 text-[0.78rem] text-(--muted) [&_[data-grade]]:rounded-[7px] [&_[data-grade]]:px-2 [&_[data-grade]]:py-1 [&_[data-grade]]:font-semibold [&_[data-grade=direct]]:bg-[#e7f0e7] [&_[data-grade=direct]]:text-[#386e54] [&_[data-grade=indirect]]:bg-[#f2e4c2] [&_[data-grade=indirect]]:text-[#806127] [&_[data-grade=none]]:bg-[#eee8f0] [&_[data-grade=none]]:text-[#71667f]">
             {Object.entries(EVIDENCE_GRADE_LABELS).map(([grade, label]) => (
               <span key={grade} data-grade={grade}>
                 {label}
