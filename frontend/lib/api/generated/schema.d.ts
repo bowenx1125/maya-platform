@@ -3573,7 +3573,7 @@ export interface components {
             output_language: "en" | "zh";
             /**
              * @description New debates use the four-round teaching protocol with paragraph output.
-             * @default null
+             * @default segments_v2
              * @enum {string|null}
              */
             turn_protocol: "segments_v2" | null;
@@ -3796,10 +3796,10 @@ export interface components {
              */
             output_language: "en" | "zh";
             /**
-             * @default null
+             * @default segments_v2
              * @enum {string|null}
              */
-            turn_protocol: "segments_v2" | null;
+            turn_protocol: "legacy_v1" | "segments_v2" | null;
             /** @enum {string|null} */
             teaching_protocol?: "four_round_v1" | null;
             /** @default false */
