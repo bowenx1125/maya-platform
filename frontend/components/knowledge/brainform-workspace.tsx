@@ -3194,7 +3194,7 @@ function BrainformWorkspaceBody({
           ) : pane.kind === "rag-new" ? (
             <div className={album.blank}>
               <div className={album.in}>
-                <h2 className={album.nm} id="brainform-editor-heading">
+                <h2 className="sr-only" id="brainform-editor-heading">
                   {t("brainformRagCreateTitle")}
                 </h2>
                 {role !== "teacher" &&
@@ -3250,7 +3250,7 @@ function BrainformWorkspaceBody({
           ) : pane.kind === "rag-edit" && selectedDraft ? (
             <div className={album.blank}>
               <div className={album.in}>
-                <h2 className={album.nm} id="brainform-editor-heading">
+                <h2 className="sr-only" id="brainform-editor-heading">
                   {selectedDraft.filename}
                 </h2>
                 <KnowledgeFilenameField
