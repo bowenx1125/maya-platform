@@ -4,13 +4,20 @@ import type { ComponentProps } from "react";
 
 import { cn } from "../../lib/utils";
 
+/**
+ * DESIGN-RULES L28/L44-49 press motion for every pressable button: rest
+ * shadow 0 6px 0, hover lifts 2px, press sinks 6px and the shadow goes to 0
+ * (80ms press, 150ms ui, --ease). Reduced motion keeps only colour changes.
+ */
+export const PRESS_MOTION =
+  "shadow-[0_6px_0_#111] transition-[translate,box-shadow,background-color,color] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-0.5 active:translate-y-1.5 active:shadow-none active:duration-[80ms] motion-reduce:transition-colors motion-reduce:hover:translate-y-0 motion-reduce:active:translate-y-0 motion-reduce:active:shadow-[0_6px_0_#111]";
+
 export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius-base)] text-sm font-[700] font-[family-name:var(--arc-font-body)] cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default:
-          "text-[var(--main-foreground)] bg-[var(--main)] border-[3px] border-[var(--border)] shadow-[var(--shadow)] hover:translate-x-[var(--box-shadow-x)] hover:translate-y-[var(--box-shadow-y)] hover:shadow-none",
+        default: `text-[var(--main-foreground)] bg-[var(--main)] border-[3px] border-[var(--border)] ${PRESS_MOTION}`,
         noShadow:
           "text-[var(--main-foreground)] bg-[var(--main)] border-[3px] border-[var(--border)]",
         neutral:

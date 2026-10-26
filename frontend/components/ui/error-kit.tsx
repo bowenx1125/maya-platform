@@ -18,7 +18,7 @@ import { placeNoticeTray, revealNoticeTray } from "../notice-tray";
 
 /** The one shared round × (26px, 2px border, 2px hard shadow). */
 export const ROUND_X_CLASS =
-  "m-0 inline-grid size-[26px] min-h-0 flex-none cursor-pointer place-items-center rounded-full border-2 border-border bg-surface p-0 text-ink shadow-[2px_2px_0_#111] hover:bg-err hover:text-white focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main disabled:cursor-not-allowed disabled:opacity-50";
+  "m-0 inline-grid size-[26px] min-h-0 flex-none cursor-pointer place-items-center rounded-full border-2 border-border bg-surface p-0 text-ink transition-colors duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:bg-err hover:text-white focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main disabled:cursor-not-allowed disabled:opacity-50";
 
 export function RoundXIcon({ size = 13 }: { size?: number }) {
   return (
