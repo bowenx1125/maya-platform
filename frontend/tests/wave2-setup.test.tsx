@@ -985,7 +985,9 @@ describe("Wave 2 teacher debate setup", () => {
     expect(screen.queryByRole("textbox", { name: "中文规则" })).toBeNull();
     expect(screen.getByRole("heading", { name: "默认规则" })).toBeTruthy();
     expect(
-      navigation.getByRole("link", { name: "Back" }).getAttribute("href"),
+      within(screen.getByRole("main"))
+        .getByRole("link", { name: "Back" })
+        .getAttribute("href"),
     ).toBe("/teacher/debates");
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));

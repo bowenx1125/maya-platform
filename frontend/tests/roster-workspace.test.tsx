@@ -131,13 +131,13 @@ describe("teacher account management", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
 
     const sidebar = within(screen.getByRole("navigation"));
-    expect(sidebar.getByRole("button", { name: "Back" })).toBeTruthy();
-    expect(sidebar.getByRole("button", { name: "Done" })).toBeTruthy();
     expect(
-      within(screen.getByRole("main")).queryByRole("button", {
-        name: "Back",
-      }),
-    ).toBeNull();
+      within(screen.getByRole("main")).getByRole("button", { name: "Back" }),
+    ).toBeTruthy();
+    expect(
+      within(screen.getByRole("main")).getByRole("button", { name: "Done" }),
+    ).toBeTruthy();
+    expect(sidebar.queryByRole("button", { name: "Back" })).toBeNull();
     const nameField = screen.getByLabelText("Display name");
     fireEvent.change(nameField, { target: { value: "Ada Lovelace" } });
     fireEvent.click(await screen.findByRole("button", { name: "Done" }));

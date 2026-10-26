@@ -316,7 +316,7 @@ describe("tour on a phone", () => {
 });
 
 describe("edge toggle", () => {
-  it("straddles the right edge at the top beside Mayaform (toggle A)", () => {
+  it("straddles the right edge at its vertical middle (collapse-C)", () => {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "0");
     renderShell("student", "/student");
     const button = toggle();
@@ -328,13 +328,14 @@ describe("edge toggle", () => {
     expect(button.parentElement!.className).toMatch(/(^| )sticky( |$)/);
     expect(button.parentElement!.className).toContain("h-dvh");
     expect(button.className).toContain("absolute");
-    expect(button.className).toContain("top-[15px]");
+    // collapse-C: the toggle rides the vertical middle of the edge.
+    expect(button.className).toContain("top-[calc(50%-16px)]");
     // It sits clear of the rows (12px padding) and of the collapsed tiles.
     expect(button.className).toContain("-right-[22px]");
     act(() => {
       fireEvent.click(button);
     });
     expect(toggle().className).toContain("-right-[26px]");
-    expect(toggle().className).toContain("top-[15px]");
+    expect(toggle().className).toContain("top-[calc(50%-16px)]");
   });
 });
