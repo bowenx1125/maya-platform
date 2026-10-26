@@ -36,7 +36,9 @@ const CARD_CLASS =
 const CARD_TONES = ["#F2B79A", "#C9D3F0", "#C9D9A0"] as const;
 
 /** Deterministic tone per Agent id. */
-export function agentTone(id: string) {
+export function agentTone(id: string, index?: number) {
+  // A list passes its position so the tones cycle as the mocks draw them.
+  if (index !== undefined) return CARD_TONES[index % CARD_TONES.length];
   let hash = 0;
   for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return CARD_TONES[hash % CARD_TONES.length];
@@ -151,6 +153,7 @@ export function AgentCard({
   onDelete,
   deleteLabel,
   rename,
+  index,
 }: {
   id: string;
   name: string;
@@ -169,6 +172,8 @@ export function AgentCard({
   onDelete?: () => void;
   deleteLabel: string;
   rename?: AgentRename;
+  /** Position in the list; cycles the tone. */
+  index?: number;
 }) {
   // Read once so the field's ref callback is not mistaken for the object.
   const bindInput = rename?.bindInput;
@@ -200,7 +205,7 @@ export function AgentCard({
     }
   }
 
-  const tone = agentTone(id);
+  const tone = agentTone(id, index);
   const art = (
     <span
       data-card-art

@@ -866,7 +866,7 @@ export function AppShell({
               )}
             </button>
             <div
-              className={`flex h-full flex-col gap-5 overflow-y-auto pt-5 pb-4 ${collapsed ? "items-center px-2" : "px-3"}`}
+              className={`flex h-full flex-col gap-5 pt-5 pb-4 ${collapsed ? "items-center overflow-visible px-2" : "overflow-y-auto px-3"}`}
             >
               <nav
                 aria-label={`${teacherSurface ? t("teacher") : t("student")} ${t("navigation")}`}
@@ -994,13 +994,21 @@ export function AppShell({
                     <span className="sr-only">
                       Meet Problems? Send to t330034059@mail.bnbu.edu.cn
                     </span>
-                    {railTip("Meet Problems?")}
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none invisible absolute bottom-0 left-[calc(100%+6px)] z-20 grid w-[190px] gap-[3px] rounded-[6px] border-2 border-border bg-surface px-2.5 py-2 text-left font-body text-xs text-ink shadow-[3px_3px_0_#111] group-hover/tip:visible group-focus-visible/tip:visible"
+                    >
+                      <span className="font-bold">Meet Problems?</span>
+                      <span className="break-all underline">
+                        Send to t330034059@mail.bnbu.edu.cn
+                      </span>
+                    </span>
                   </a>
                 ) : (
                   <p className="m-0 grid gap-[3px] rounded-[6px] border-2 border-border bg-surface px-2.5 py-2 font-body text-xs text-ink shadow-[3px_3px_0_#111]">
                     <span className="font-bold text-ink">Meet Problems?</span>
                     <a
-                      className="font-normal [overflow-wrap:anywhere] text-ink underline"
+                      className="font-normal break-all text-ink underline"
                       href="mailto:t330034059@mail.bnbu.edu.cn"
                     >
                       Send to t330034059@mail.bnbu.edu.cn
