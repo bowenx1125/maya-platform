@@ -46,3 +46,9 @@ Current-state PNGs: current/1-list, 1b-conversation, 2-create (1440), 3-empty, 4
 Mixable parts: header (A banner / B plate / C HUD), history row style, create card style, empty art, new-conversation art.
 Backend fields needed: none (avatar = deterministic mascot from existing avatar_config/id). Nothing for API-CHANGES.md.
 Open questions: (1) Move "Check status" into the error sticker or keep separate? (2) On mobile, keep History above the conversation (current) or collapse it? (3) OK to add aria-hidden decoration (keycap numbers / P1)?
+
+## Gap fixes (2026-10-27)
+- Mockups re-rendered as `scheme-*/<state>-<w>-rs.png` with the REAL B-final app shell (sidebar / mobile top bar cloned from the running app, computed styles inlined, `src/real-shell/`; sidebar New removed). Old files untouched. Generator: `src/gen-real.mjs`.
+- New state `errfold` (6s collapse to red mascot "!" badge) for all schemes at 1440/390. Note: per U3 an error with an action button (Check status) never collapses; errfold shows the transient-error variant for review.
+- Copy/a11y audit (`src/audit-compare.mjs`, extraction logic from 00-global/audit-text.mjs): 0 missing across 36 mockups (`audit/RESULT.txt`). Fixes: composer attach is now a button with aria-label "Attach a file" + its title + hidden input `chat-attachment-input`; empty state header gets New (its copy says "press New"); hidden mobile top bar kept on desktop (real markup, "Expand sidebar"). Exclusions: mock data strings; create-state sidebar New (replaced by Back/Done by design).
+- Current 390 shots added: `current/2-create-390.png`, `current/4-new-empty-conv-390.png` (via mobile drawer).
