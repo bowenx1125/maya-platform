@@ -17,7 +17,7 @@ export default async function GroupPage({
   const query = await searchParams;
   return (
     <RouteGuard role="student">
-      <AppShell role="student">
+      <AppShell role="student" teamsPage={query.mode === "teams"}>
         <GroupWorkspace
           groupId={groupId}
           initialMode={query.mode}

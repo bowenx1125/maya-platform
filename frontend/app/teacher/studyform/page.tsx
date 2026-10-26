@@ -15,7 +15,7 @@ export default async function TeacherStudyformPage({
   const query = await searchParams;
   return (
     <RouteGuard role="teacher">
-      <AppShell role="teacher">
+      <AppShell role="teacher" teamsPage={query.mode === "teams"}>
         <TeacherStudyformWorkspace
           initialGroupId={query.group_id}
           initialMode={query.mode}

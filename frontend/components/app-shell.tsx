@@ -122,9 +122,12 @@ const ICON_ITEM =
 export function AppShell({
   children,
   role,
+  teamsPage = false,
 }: {
   children: ReactNode;
   role: "student" | "teacher";
+  /** The page renders the F1 Teams list (?mode=teams): light Teams. */
+  teamsPage?: boolean;
 }) {
   const t = useT();
   const { api, user, logout, refresh, identityGeneration } = useSession();
@@ -442,6 +445,11 @@ export function AppShell({
       : groupId
         ? `/student/groups/${groupId}`
         : "/student#student-groups";
+  // The sidebar's Teams item opens the F1 Teams page (?mode=teams) on
+  // Studyform, keeping the group_id the Studyform link carries.
+  const teamsHref = studyformHref.includes("#")
+    ? studyformHref
+    : `${studyformHref}${studyformHref.includes("?") ? "&" : "?"}mode=teams`;
   // The sidebar's Agents item opens the Agents page.
   const agentsHref = visit
     ? `/student/agents?group_id=${visit}`
@@ -625,7 +633,7 @@ export function AppShell({
         },
         {
           key: "teams",
-          href: studyformHref,
+          href: teamsHref,
           label: t("sidebarTeams"),
           icon: "team",
         },
@@ -709,7 +717,12 @@ export function AppShell({
   // The pink pill marks one row: Voices on its own page, otherwise the first
   // row that opens the active page; that row carries aria-current.
   const onVoices = Boolean(studentVoicesHref && pathname === studentVoicesHref);
-  let litKey: string | undefined = agentsArea ? "studyform:agents" : undefined;
+  // Teams stays lit on Studyform itself, as before its href moved.
+  let litKey: string | undefined = agentsArea
+    ? "studyform:agents"
+    : !onVoices && (teamsPage || activeHref === studyformHref)
+      ? "studyform:teams"
+      : undefined;
   for (const group of groups) {
     for (const item of group.items) {
       if (litKey) break;
