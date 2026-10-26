@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Lexend } from "next/font/google";
+import { Bricolage_Grotesque, Caveat, Lexend } from "next/font/google";
 import type { ReactNode } from "react";
 
 import { SessionProvider } from "../components/session-provider";
@@ -22,6 +22,14 @@ const body = Lexend({
   display: "swap",
 });
 
+// Handwriting for the Voices album "Made by" signature line.
+const hand = Caveat({
+  subsets: ["latin"],
+  weight: "700",
+  variable: "--font-caveat",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "Mayaform",
   description:
@@ -32,7 +40,7 @@ export default async function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en-US" className={`${display.variable} ${body.variable}`}>
+    <html lang="en-US" className={`${display.variable} ${body.variable} ${hand.variable}`}>
       <body>
         <SessionProvider>
           {children}

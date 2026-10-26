@@ -38,6 +38,7 @@ import styles from "./voice-library.module.css";
 import {
   AlbumMic,
   AlbumRings,
+  AlbumTrayAnchor,
   VoiceAlbumCard,
   useVoiceAgents,
   voiceAlbum,
@@ -1139,6 +1140,7 @@ export function VoiceLibrary({
               />
             </ul>
           )}
+          {failure ? <AlbumTrayAnchor /> : null}
         </section>
       </div>
     );

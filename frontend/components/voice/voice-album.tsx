@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { AffectedAgent, VoiceProfile } from "../../lib/api/platform";
 import { useT } from "../../lib/i18n";
 import { useSession } from "../session-provider";
+import { useNoticeTrayAbove } from "../ui";
 
 /**
  * Voice Sticker Album list (proposals/20-voices-album-v2, o1-album-v2), as
@@ -37,7 +38,7 @@ export const voiceAlbum = {
   none: "[font:italic_500_12px_var(--font-lexend,'Lexend')] text-[#777]",
   sig: "flex items-baseline gap-[6px] min-h-[24px] pb-[2px] [border-bottom:2px_solid_#111]",
   lbl: "[font:800_10px_var(--font-lexend,'Lexend')] tracking-[1.2px] uppercase text-[#555]",
-  sg: "[font:700_20px_'Caveat',cursive] text-[#0e7490]",
+  sg: "[font:700_20px_var(--font-caveat,'Caveat'),cursive] text-[#0e7490]",
   ft: "flex items-center gap-[10px]",
   ib: "inline-grid place-items-center flex-none w-[42px] h-[42px] p-0 border-2 border-solid border-[#111] rounded-[10px] shadow-[3px_3px_0_#111] text-[#111] cursor-pointer disabled:opacity-45 disabled:shadow-none disabled:cursor-not-allowed",
   play: "bg-[#a3e635]",
@@ -54,7 +55,7 @@ export const voiceAlbum = {
 export function AlbumRings() {
   return (
     <div className={voiceAlbum.rings} aria-hidden="true">
-      {Array.from({ length: 7 }, (_, index) => (
+      {Array.from({ length: 6 }, (_, index) => (
         <i key={index} />
       ))}
     </div>
@@ -207,5 +208,21 @@ export function VoiceAlbumCard({
       <div className={voiceAlbum.ft}>{footer}</div>
       {audio}
     </li>
+  );
+}
+
+/**
+ * Error state: lift the shared U3 tray (its own useNoticeTrayAbove) so it
+ * sits inside the album frame, above the bottom-right corner, as approved.
+ */
+export function AlbumTrayAnchor() {
+  const [anchor, setAnchor] = useState<HTMLSpanElement | null>(null);
+  useNoticeTrayAbove(anchor);
+  return (
+    <span
+      ref={setAnchor}
+      aria-hidden="true"
+      className="pointer-events-none absolute right-0 bottom-[41px] h-0 w-0"
+    />
   );
 }
