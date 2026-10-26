@@ -1,6 +1,7 @@
 "use client";
 
 import { StickerBadge } from "../ui";
+import Image from "next/image";
 import Link from "next/link";
 import { useRef, useState, type ReactNode } from "react";
 
@@ -414,8 +415,8 @@ export function AgentsEmpty({
   return (
     <div className="block [background:radial-gradient(ellipse_at_50%_100%,#FFE14D55_0_30%,transparent_31%)]">
       <div className="relative flex h-[470px] items-start justify-center pt-[18px] max-[767px]:h-[420px]">
-        <GhostSlot fan="left" mascot="scroll" />
-        <GhostSlot fan="right" mascot="tablet" />
+        <GhostSlot fan="left" art="/agents/ghost-m1.webp" />
+        <GhostSlot fan="right" art="/agents/ghost-m3.webp" />
         <div className="relative z-[2] box-border w-[250px] overflow-hidden rounded-[12px] border-[3px] border-[#111] bg-white shadow-[8px_8px_0_#111] max-[767px]:w-[220px]">
           <div className="flex h-[78px] items-center border-b-[3px] border-[#111] bg-[#FFE14D] px-3">
             <p className="m-0 text-left font-display text-2xl font-extrabold text-[#111]">
@@ -449,10 +450,11 @@ export function AgentsEmpty({
  */
 function GhostSlot({
   fan,
-  mascot,
+  art,
 }: {
   fan: "left" | "right";
-  mascot: MascotId;
+  /** The E2 mock's own silhouette art (proposals m1 / m3). */
+  art: string;
 }) {
   return (
     <div
@@ -465,11 +467,21 @@ function GhostSlot({
       )}
     >
       <div className="flex h-16 items-center border-0 border-b-[3px] border-dashed border-[#1133] px-3">
-        <i className="block h-3 w-1 rounded-[4px] bg-[#111]" />
+        <i
+          className={cn(
+            "block h-3 w-1 rounded-[4px] bg-[#111]",
+            // Per-breakpoint nudge so the tick lands where the E2 mock draws it.
+            fan === "left" &&
+              "translate-x-[5px] translate-y-[41px] max-[767px]:translate-x-[6px] max-[767px]:translate-y-[27px]",
+          )}
+        />
       </div>
       <div className="flex h-[150px] items-end justify-center border-0 border-b-[3px] border-dashed border-[#1133] [background:repeating-conic-gradient(from_0deg_at_50%_60%,#11111100_0_10deg,#1111110d_10deg_20deg)] max-[767px]:h-[120px]">
-        <MascotFigure
-          id={mascot}
+        <Image
+          src={art}
+          alt=""
+          width={256}
+          height={256}
           className="h-[132px] w-auto opacity-[.08] brightness-0 max-[767px]:h-[104px]"
         />
       </div>
@@ -478,7 +490,13 @@ function GhostSlot({
         <i className="block h-4 w-[50px] rounded-[5px] border-2 border-l-0 border-dashed border-[#1133]" />
       </div>
       <div className="mx-2.5 border-0 border-t-2 border-dashed border-[#1122] pt-[7px] pb-2.5">
-        <i className="block h-2 w-1 rounded-[4px] bg-[#111]" />
+        <i
+          className={cn(
+            "block h-2 w-1 rounded-[4px] bg-[#111]",
+            fan === "right" &&
+              "translate-x-[24px] translate-y-[60px] max-[767px]:translate-x-[24px] max-[767px]:translate-y-[46px]",
+          )}
+        />
       </div>
       <span className="absolute -top-[11px] -right-[11px] size-[26px] rounded-full border-[3px] border-dashed border-[#1144] bg-white" />
     </div>
