@@ -908,7 +908,7 @@ export function AppShell({
                         <div
                           id={headingId}
                           data-tour={group.headingTour}
-                          className="flex items-center gap-1.5 px-1 font-body text-[11px] font-extrabold tracking-[0.12em] text-ink uppercase"
+                          className="flex items-center gap-1.5 px-1 font-body text-[11px] font-extrabold tracking-[0.08em] text-ink uppercase"
                         >
                           <span
                             aria-hidden="true"
