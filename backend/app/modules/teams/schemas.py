@@ -66,6 +66,16 @@ class TeamMemberDTO(StrictModel):
     is_leader: bool
 
 
+class TeamFaceMember(StrictModel):
+    """One face on a Team card: the member's Agent and its frozen avatar theme."""
+
+    # Null once the Agent itself is deleted (the Team version keeps its snapshot).
+    agent_id: UUID | None
+    # avatar_config.material_theme of the Team version's member snapshot.
+    material_theme: str | None
+    is_leader: bool
+
+
 class TeamSummary(StrictModel):
     id: UUID
     course_id: UUID
@@ -87,6 +97,8 @@ class TeamSummary(StrictModel):
     # No per-edit author is stored; only the owner can edit, so this is the
     # owner's display name (null when the owner account is gone).
     last_edited_by_name: str | None
+    # Up to four members of the current version, Leader first, then by position.
+    members: list[TeamFaceMember] = Field(max_length=4)
 
 
 class SharedKnowledgeSetDTO(StrictModel):
@@ -96,7 +108,8 @@ class SharedKnowledgeSetDTO(StrictModel):
 
 class TeamDetail(TeamSummary):
     created_at: datetime
-    members: list[TeamMemberDTO]
+    # Detail keeps its full member list; the summary's card faces are not repeated.
+    members: list[TeamMemberDTO]  # type: ignore[assignment]
     shared_knowledge_set_ids: list[UUID]
     shared_knowledge_sets: list[SharedKnowledgeSetDTO] = Field(default_factory=list)
     publication_state: TeamPublicationState
