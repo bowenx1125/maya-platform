@@ -20,6 +20,8 @@ const detail = {
   current_version_seq: 2,
   member_count: 2,
   can_edit: true,
+  can_delete: true,
+  last_edited_by_name: "Maya",
   created_at: "2026-09-28T00:00:00Z",
   updated_at: "2026-09-28T00:00:00Z",
   members: [],
@@ -40,6 +42,9 @@ const summary = {
   current_version_seq: detail.current_version_seq,
   member_count: detail.member_count,
   can_edit: detail.can_edit,
+  can_delete: detail.can_delete,
+  updated_at: detail.updated_at,
+  last_edited_by_name: detail.last_edited_by_name,
 };
 
 afterEach(() => vi.restoreAllMocks());
