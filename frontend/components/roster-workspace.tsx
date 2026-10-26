@@ -2,18 +2,12 @@
 
 import { LIST_CARD_LIFT } from "./agent-chrome";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-
 import {
   type Group,
   type RosterEntry,
   type UpdateCourseMemberRequest,
 } from "../lib/api";
-import {
-  beginTeacherEnter,
-  endTeacherEnter,
-  teacherLeavesSettled,
-} from "../lib/teacher-visit";
+import { teacherLeavesSettled } from "../lib/teacher-visit";
 import { useT } from "../lib/i18n";
 import { PageAction } from "./page-action";
 import {
@@ -38,7 +32,6 @@ const POLAROID_COLORS = ["#FFE14D", "#A3E635", "#67E8F9"] as const;
 export function RosterWorkspace() {
   const t = useT();
   const { api, user } = useSession();
-  const router = useRouter();
   const [entries, setEntries] = useState<RosterEntry[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
@@ -133,33 +126,10 @@ export function RosterWorkspace() {
     [api, courseId],
   );
 
-  const enterGroup = useCallback(
-    async (group: Group) => {
-      setBusy(group.id);
-      setError(null);
-      beginTeacherEnter();
-      try {
-        // A roster that is already open may still be deleting the previous
-        // visit. Join only after that delete finishes, or it removes the row
-        // this click just created.
-        await teacherLeavesSettled();
-        // Joining is what opens the group's workspace, so the two are one
-        // action rather than a state to set and then act on. Join even when
-        // this roster lists the caller in the group: it may have loaded
-        // before that leave finished. Joining is idempotent.
-        await api.joinGroupAsTeacher(group.id);
-        // Refresh after the student route is current. Refreshing while this
-        // Accounts page is still open makes the shell treat the visit as over
-        // and delete it before the group can load.
-        router.push(`/student/groups/${group.id}`);
-      } catch (cause) {
-        endTeacherEnter();
-        setError(cause);
-        setBusy(null);
-      }
-    },
-    [api, router],
-  );
+  // Deferred (2026-10-27): group cards keep press motion but do not join or
+  // navigate. Sidebar has no Back/New/Done, so the return path from the
+  // group's Studyform is unclear until 徐伯闻 redesigns that flow.
+  const onGroupPress = useCallback((_group: Group) => {}, []);
 
   if (loading) return <LoadingCard />;
 
@@ -467,14 +437,13 @@ export function RosterWorkspace() {
                     className={styles.polar}
                     type="button"
                     id={`roster-group-${group.id}`}
-                    disabled={busy === group.id}
                     aria-label={t("enter")}
                     data-ui-guide="roster.openGroup"
                     style={{
                       background:
                         POLAROID_COLORS[index % POLAROID_COLORS.length],
                     }}
-                    onClick={() => void enterGroup(group)}
+                    onClick={() => onGroupPress(group)}
                   >
                     <span className={styles.polarTape} aria-hidden="true" />
                     <span className={styles.polarName}>{group.name}</span>
