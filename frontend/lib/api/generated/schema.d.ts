@@ -2822,6 +2822,8 @@ export interface components {
             code: string;
             name: string;
             current_audio_debate_id?: components["schemas"]["Uuid"] | null;
+            /** @description Active students (role student, account active) in the course. Course teachers only; null for students. */
+            student_count?: number | null;
         };
         CourseDetail: components["schemas"]["Course"] & {
             members?: components["schemas"]["Member"][];
@@ -3001,6 +3003,31 @@ export interface components {
              * @enum {string}
              */
             ownership_scope: "group" | "personal";
+            /**
+             * Last Edited At
+             * @description created_at of the latest content version (upload or replace); rename and reindex do not change it. Filled on the two library list endpoints; null elsewhere.
+             */
+            last_edited_at?: string | null;
+            /**
+             * Last Edited By User Id
+             * @description Who created the latest content version (upload or replace; the uploader when no version was recorded). Rename and reindex do not change it. Filled on the two library list endpoints; null elsewhere.
+             */
+            last_edited_by_user_id?: string | null;
+            /**
+             * Last Edited By Username
+             * @description Username of last_edited_by_user_id. Filled on the two library list endpoints; null elsewhere.
+             */
+            last_edited_by_username?: string | null;
+            /**
+             * Owner User Id
+             * @description The uploader.
+             */
+            owner_user_id?: string | null;
+            /**
+             * Owner Username
+             * @description The uploader's username. Filled on the two library list endpoints (GET /groups/{group_id}/knowledge-documents, GET /courses/{course_id}/workspace-documents); null elsewhere.
+             */
+            owner_username?: string | null;
             /** Safe Error Code */
             safe_error_code?: string | null;
             /** Source Filename */
@@ -3010,6 +3037,11 @@ export interface components {
              * @enum {string}
              */
             source_owner_role: "student" | "teacher";
+            /**
+             * Used By Agents
+             * @description Live Agents whose current published version uses this file, limited to Agents the caller may use (same filter as GET /knowledge-documents/{document_id}/affected-agents). Filled on the two library list endpoints; null elsewhere.
+             */
+            used_by_agents?: components["schemas"]["AffectedAgent"][] | null;
             /**
              * Visibility
              * @enum {string}
@@ -4933,6 +4965,16 @@ export interface components {
             /** Can Edit */
             can_edit: boolean;
             /**
+             * Can Delete
+             * @description Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group).
+             */
+            can_delete: boolean;
+            /**
+             * Last Edited By Name
+             * @description No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone.
+             */
+            last_edited_by_name: string | null;
+            /**
              * Created At
              * Format: date-time
              */
@@ -4997,6 +5039,24 @@ export interface components {
             /** Position */
             position: number;
         };
+        /**
+         * TeamFaceMember
+         * @description One face on a Team card: the member's Agent and its frozen avatar theme.
+         */
+        TeamFaceMember: {
+            /**
+             * Agent Id
+             * @description Null once the Agent itself is deleted; the Team version keeps its snapshot.
+             */
+            agent_id: string | null;
+            /**
+             * Material Theme
+             * @description avatar_config.material_theme of the Team version's member snapshot.
+             */
+            material_theme: string | null;
+            /** Is Leader */
+            is_leader: boolean;
+        };
         /** TeamSummary */
         TeamSummary: {
             /**
@@ -5043,6 +5103,26 @@ export interface components {
             member_count: number;
             /** Can Edit */
             can_edit: boolean;
+            /**
+             * Can Delete
+             * @description Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group).
+             */
+            can_delete: boolean;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Last Edited By Name
+             * @description No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone.
+             */
+            last_edited_by_name: string | null;
+            /**
+             * Members
+             * @description Up to four members of the current version, Leader first, then by position. Read-only card faces; TeamDetail.members keeps the full list.
+             */
+            members: components["schemas"]["TeamFaceMember"][];
         };
         /** PublishedAgentAuthor */
         PublishedAgentAuthor: {
