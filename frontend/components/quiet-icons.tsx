@@ -311,3 +311,54 @@ export function IconPlus({ size = 16 }: { size?: number }) {
     </svg>
   );
 }
+
+/** Trash can (Debates list Delete, final mockup F). */
+export function IconTrash({ size = 16 }: { size?: number }) {
+  return (
+    <OutlineIcon size={size}>
+      <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />
+    </OutlineIcon>
+  );
+}
+
+/** Globe: marks the 中文/English language switch. */
+export function IconGlobe({ size = 16 }: { size?: number }) {
+  return (
+    <OutlineIcon size={size}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+    </OutlineIcon>
+  );
+}
+
+/** Busy spinner: a faint ring with a turning arc. Decorative; the button
+ * carries aria-busy. Stops turning under reduced motion. */
+export function IconSpinner({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+      className="animate-spin motion-reduce:animate-none"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity=".25"
+        strokeWidth="3.2"
+      />
+      <path
+        d="M21 12a9 9 0 0 0-9-9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}

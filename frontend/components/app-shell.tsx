@@ -821,7 +821,7 @@ export function AppShell({
   return (
     <WorkspaceActionsContext.Provider value={actionRegistry}>
       <div
-        className={`grid min-h-dvh bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px] max-[900px]:grid-cols-1 ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[220px_minmax(0,1fr)]"}`}
+        className={`grid min-h-dvh bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px] max-[900px]:grid-cols-1 max-[900px]:content-start ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[220px_minmax(0,1fr)]"}`}
       >
         <div className="sticky top-0 z-30 hidden h-[50px] items-center justify-center border-b-[3px] border-border bg-sidebar px-3 max-[900px]:flex">
           <button

@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type FormEvent,
 } from "react";
 
@@ -39,7 +40,22 @@ import { useT } from "../../../lib/i18n";
 import { useSession } from "../../session-provider";
 import { DebateCleanupControls } from "../debate-cleanup-controls";
 import { DebateStatus } from "../debate-status";
-import { IconEnter, IconRecycle } from "../../quiet-icons";
+import {
+  IconPlay,
+  IconPlus,
+  IconRecycle,
+  IconSpinner,
+} from "../../quiet-icons";
+import { Button } from "../../ui/button";
+import { NewButton } from "../../ui/agent-card";
+import { cn } from "../../../lib/utils";
+import {
+  DEBATE_PAGE,
+  DEBATE_PRIMARY,
+  DEBATE_ROW_BUTTON,
+  DEBATE_TITLE,
+  RIBBON_COLORS,
+} from "../debate-chrome";
 
 import {
   EmptyCard,
@@ -163,107 +179,173 @@ export function TeacherDebateList({
     };
   }, [load]);
 
-  const newDebate = (
-    <PageAction name="new" href="/teacher/debates/new" disabled={!courseId} />
-  );
-
   return (
-    <div className={styles.pageStack}>
-      <PageIntro title={t("debatePreviewTitle")} />
+    <div className={DEBATE_PAGE}>
+      {/* The Debates title stays visible; New sits at the right of the
+        title row (owner: New is top-right, not in the sidebar). */}
+      <div className="mb-[22px] flex items-center gap-3">
+        <h1 className={DEBATE_TITLE}>{t("debatePreviewTitle")}</h1>
+        <span
+          className="relative h-0 flex-1 border-t-[3px] border-dotted border-[#111] after:absolute after:top-[-9px] after:right-0 after:size-[14px] after:rounded-full after:border-[2.5px] after:border-[#111] after:bg-[#A3E635] after:content-['']"
+          aria-hidden="true"
+        />
+        {courseId ? (
+          <NewButton
+            href="/teacher/debates/new"
+            label={t("newDebate")}
+            className={DEBATE_PRIMARY}
+          />
+        ) : (
+          <Button
+            type="button"
+            className={DEBATE_PRIMARY}
+            disabled
+            aria-label={t("newDebate")}
+          >
+            <IconPlus size={16} />
+            {t("newDebate")}
+          </Button>
+        )}
+      </div>
       {loading ? <LoadingCard /> : null}
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       {!loading && !error ? (
-        <SectionCard>
-          {debates.length > 0 ? newDebate : null}
-          {debates.length === 0 ? (
-            <div className={styles.emptyState}>
-              <strong>{t("debateNoDebates")}</strong>
-              {newDebate}
-            </div>
-          ) : (
-            <div className={styles.list}>
-              {debates.map((debate) => (
-                <div className={styles.debateRow} key={debate.id}>
-                  <Link
-                    className={styles.debateCard}
-                    href={`/teacher/debates/${debate.id}/control`}
-                  >
-                    <div>
-                      <h2>{debate.topic}</h2>
-                      <div className={styles.metaRow}>
-                        <span>
-                          {t("debateRounds", { count: debate.round_count })}
-                        </span>
-                        <span>
-                          {new Date(debate.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                    {/* A draft is not idle: it is warming its turns in the
-                      background, so the list says how far along it is rather
-                      than only that it is a draft. */}
-                    {/* A stall outranks both other readings, and a running
-                      debate can stall too: the lesson that stopped generating
-                      mid-round used to read Running with nothing to act on. */}
-                    <DebateStatus debate={debate} />
-                  </Link>
-                  <div className={styles.debateActions}>
-                    {["completed", "debate_finished"].includes(
-                      debate.status,
-                    ) ? (
-                      <ClassroomResetButton
-                        debateId={debate.id}
-                        onDone={() => load(true, true)}
-                      />
-                    ) : null}
-                    {/* The row itself opens Preview, so it has no button of
-                      its own; the remaining actions are icons. */}
-                    {!["failed", "stopped"].includes(debate.status) &&
-                    (debate.preview?.ready ||
-                      ["running", "completed", "debate_finished"].includes(
-                        debate.status,
-                      )) ? (
-                      <Link
-                        className={`icon-action ${styles.iconAction}`}
-                        href={`/teacher/debates-beta/${debate.id}/control`}
-                        aria-label="Immerse"
-                        title="Immerse"
-                      >
-                        <IconEnter size={18} />
-                      </Link>
-                    ) : (
-                      <button
-                        className={`icon-action ${styles.iconAction}`}
-                        type="button"
-                        aria-label="Immerse"
-                        title="Immerse"
-                        disabled
-                      >
-                        <IconEnter size={18} />
-                      </button>
-                    )}
-                    <DebateCleanupControls
-                      api={api}
-                      debateId={debate.id}
-                      loadDetail={() => api.debate(debate.id)}
-                      onVoiceDeleted={load}
-                      onAllDeleted={() => {
-                        loadSequence.current += 1;
-                        setDebates((rows) =>
-                          rows.filter((row) => row.id !== debate.id),
-                        );
-                      }}
-                      className={styles.listCleanup}
-                      iconClassName={styles.iconAction}
-                      audioRestoreNeeded={debate.audio_restore_needed}
-                    />
+        debates.length === 0 ? (
+          <DebateEmpty message={t("debateNoDebates")} />
+        ) : (
+          <div className="grid gap-3.5">
+            {debates.map((debate, index) => (
+              <div
+                className="relative grid grid-cols-[70px_1fr_150px] rounded-[18px] border-2 border-[#111] bg-white shadow-[0_4px_0_#111] transition-transform duration-[80ms] [grid-template-areas:'v_b_s'_'v_a_a'] hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0 max-[600px]:grid-cols-[52px_1fr] max-[600px]:[grid-template-areas:'v_b'_'v_s'_'a_a']"
+                data-testid="debate-row"
+                key={debate.id}
+              >
+                <span
+                  className="grid items-start justify-items-center self-start [grid-area:v] before:-mt-1.5 before:h-16 before:w-[34px] before:border-2 before:border-t-0 before:border-[#111] before:bg-(--c) before:[clip-path:polygon(0_0,100%_0,100%_100%,50%_78%,0_100%)] before:content-['']"
+                  style={
+                    {
+                      "--c": RIBBON_COLORS[index % RIBBON_COLORS.length],
+                    } as CSSProperties
+                  }
+                  aria-hidden="true"
+                />
+                <Link
+                  className="py-3.5 pr-4 text-inherit no-underline [grid-area:b]"
+                  href={`/teacher/debates/${debate.id}/control`}
+                >
+                  <h2 className="m-0 font-display text-lg leading-[normal] font-bold tracking-normal">
+                    {debate.topic}
+                  </h2>
+                  <div className="mt-2 flex gap-2 font-body text-xs leading-[normal] font-bold [&>span]:rounded-full [&>span]:border-2 [&>span]:border-[#111] [&>span]:bg-white [&>span]:px-2.5 [&>span]:py-px">
+                    <span>
+                      {t("debateRounds", { count: debate.round_count })}
+                    </span>
+                    <span>
+                      {new Date(debate.created_at).toLocaleDateString()}
+                    </span>
                   </div>
+                </Link>
+                {/* A draft is not idle: it is warming its turns in the
+                  background, so the list says how far along it is rather
+                  than only that it is a draft. A stall outranks both other
+                  readings, and a running debate can stall too: the lesson
+                  that stopped generating mid-round used to read Running
+                  with nothing to act on. */}
+                <div className="relative grid place-items-center border-0 border-l-[2.5px] border-dashed border-[#111] px-3 py-3.5 [grid-area:s] before:absolute before:top-[-11px] before:left-[-11px] before:size-[18px] before:rounded-full before:border-2 before:border-[#111] before:bg-[#DCEBFF] before:[clip-path:inset(50%_0_0_0)] before:content-[''] after:absolute after:bottom-[-11px] after:left-[-11px] after:size-[18px] after:rounded-full after:border-2 after:border-[#111] after:bg-[#DCEBFF] after:[clip-path:inset(0_0_50%_0)] after:content-[''] max-[600px]:justify-items-start max-[600px]:items-center max-[600px]:border-t-2 max-[600px]:border-l-0 max-[600px]:border-[#11111155] max-[600px]:px-0 max-[600px]:py-2 max-[600px]:before:hidden max-[600px]:after:hidden">
+                  <DebateStatus debate={debate} pill />
                 </div>
-              ))}
-            </div>
-          )}
-        </SectionCard>
+                <div className="mt-0.5 flex flex-wrap items-center gap-2 border-0 border-t-2 border-dashed border-[#11111155] pt-2.5 pr-4 pb-3 [grid-area:a] max-[600px]:px-3">
+                  {["completed", "debate_finished"].includes(debate.status) ? (
+                    <ClassroomResetButton
+                      debateId={debate.id}
+                      onDone={() => load(true, true)}
+                    />
+                  ) : null}
+                  {/* The row itself opens Preview, so it has no button of
+                    its own. */}
+                  {!["failed", "stopped"].includes(debate.status) &&
+                  (debate.preview?.ready ||
+                    ["running", "completed", "debate_finished"].includes(
+                      debate.status,
+                    )) ? (
+                    <Link
+                      className={DEBATE_ROW_BUTTON}
+                      href={`/teacher/debates-beta/${debate.id}/control`}
+                      aria-label="Immerse"
+                    >
+                      <IconPlay size={18} />
+                      <span>Immerse</span>
+                    </Link>
+                  ) : (
+                    <Button
+                      variant="noShadow"
+                      className={DEBATE_ROW_BUTTON}
+                      type="button"
+                      aria-label="Immerse"
+                      disabled
+                    >
+                      <IconPlay size={18} />
+                      <span>Immerse</span>
+                    </Button>
+                  )}
+                  <DebateCleanupControls
+                    api={api}
+                    debateId={debate.id}
+                    loadDetail={() => api.debate(debate.id)}
+                    onVoiceDeleted={load}
+                    onAllDeleted={() => {
+                      loadSequence.current += 1;
+                      setDebates((rows) =>
+                        rows.filter((row) => row.id !== debate.id),
+                      );
+                    }}
+                    className="contents"
+                    labelled
+                    iconClassName={DEBATE_ROW_BUTTON}
+                    dangerClassName="ml-auto text-[#B91C1C] max-[600px]:ml-0"
+                    audioRestoreNeeded={debate.audio_restore_needed}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       ) : null}
+    </div>
+  );
+}
+
+/** Empty list: a bracket of blank slots waiting on a smiling trophy. The
+ * New button stays in the title row, so the card holds none. */
+function DebateEmpty({ message }: { message: string }) {
+  const slot =
+    "h-[42px] rounded-full border-[2.5px] border-dashed border-[#11111166] bg-[color-mix(in_srgb,var(--c)_25%,#fff)]";
+  return (
+    <div className="mx-auto mt-5 max-w-[620px] rounded-[28px] border-2 border-[#111] bg-white px-6 pt-[30px] pb-[30px] text-center shadow-[0_5px_0_#111]">
+      <div
+        className="mb-[18px] grid grid-cols-[1fr_1fr_auto_1fr_1fr] items-center gap-3 max-[600px]:grid-cols-[1fr_auto_1fr]"
+        aria-hidden="true"
+      >
+        <i
+          className={cn(slot, "max-[600px]:hidden")}
+          style={{ "--c": "#FFE14D" } as CSSProperties}
+        />
+        <i className={slot} style={{ "--c": "#67E8F9" } as CSSProperties} />
+        <span className="grid size-[110px] place-items-center rounded-full border-[2.5px] border-[#111] bg-[#FFE14D] shadow-[4px_5px_0_#111]">
+          <span className="relative h-5 w-[60px]">
+            <span className="absolute top-0.5 left-0 h-[9px] w-5 rounded-b-[20px] border-4 border-t-0 border-[#111]" />
+            <span className="absolute top-0.5 right-0 h-[9px] w-5 rounded-b-[20px] border-4 border-t-0 border-[#111]" />
+          </span>
+        </span>
+        <i className={slot} style={{ "--c": "#A3E635" } as CSSProperties} />
+        <i
+          className={cn(slot, "max-[600px]:hidden")}
+          style={{ "--c": "#FF8FB5" } as CSSProperties}
+        />
+      </div>
+      <p className="mx-0 mt-1.5 mb-4 font-display text-xl leading-[normal] font-extrabold tracking-normal">
+        <strong>{message}</strong>
+      </p>
     </div>
   );
 }
@@ -336,16 +418,18 @@ function ClassroomResetButton({
       {error ? (
         <ErrorNotice error={error} onRetry={() => void reset()} />
       ) : null}
-      <button
-        className={`icon-action ${styles.iconAction}`}
+      <Button
+        variant="noShadow"
+        className={DEBATE_ROW_BUTTON}
         disabled={busy || resetCommitted}
         type="button"
         aria-label="Rebirth"
-        title="Rebirth"
+        aria-busy={busy || undefined}
         onClick={() => void reset()}
       >
-        <IconRecycle size={18} />
-      </button>
+        {busy ? <IconSpinner size={18} /> : <IconRecycle size={18} />}
+        <span>Rebirth</span>
+      </Button>
     </>
   );
 }
