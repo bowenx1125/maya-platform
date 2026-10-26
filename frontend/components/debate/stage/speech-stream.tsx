@@ -35,7 +35,12 @@ type SpeechStreamProps = {
   turns: StreamTurn[];
   labels: PlaybackStageLabels;
   /** Slot letter and Agent name for a participant id. */
-  describe: (participantId: string) => { slot: string; name: string };
+  describe: (participantId: string) => {
+    slot: string;
+    name: string;
+    /** Speaker colour index (0, 1, 2…) for styles that tint each stub. */
+    tone?: number;
+  };
   /** Phase caption for a turn, or null when the RuleSet has none. */
   phaseOf: (turn: StreamTurn) => string | null;
   emptyMessage: string;
@@ -150,7 +155,11 @@ function StreamItem({
   const who = describe(turn.participant_id);
   const phase = phaseOf(turn);
   return (
-    <article className={styles.streamItem}>
+    <article
+      className={styles.streamItem}
+      data-tone={who.tone}
+      data-live={progress !== null ? "" : undefined}
+    >
       <div className={styles.streamItemTop}>
         <span className={styles.streamWho}>
           {who.slot ? `${who.slot} · ` : ""}

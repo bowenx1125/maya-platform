@@ -3864,7 +3864,12 @@ export function BetaDebateStage({
             />
             {joinUrl && joinCodeVisible ? (
               <div
-                className={BETA_JOIN_CARD}
+                className={cn(
+                  BETA_JOIN_CARD,
+                  // V1: at phone width the transcript takes the top half, so
+                  // the QR ticket steps aside while it is open.
+                  transcriptOpen && "max-[600px]:hidden",
+                )}
                 id="classroom-join-code"
               >
                 {/* A1 yellow ticket: stick header + body QR (count on stick). */}
@@ -4094,6 +4099,13 @@ export function BetaDebateStage({
             return {
               slot: "",
               name: owner?.agent_name ?? participantId,
+              // V1 stubs: yellow / cyan / green by seat order.
+              tone: Math.max(
+                0,
+                detailState.participants.findIndex(
+                  (participant) => participant.id === participantId,
+                ),
+              ) % 3,
             };
           }}
           emptyMessage={labels.noPublishedSpeech ?? ""}
