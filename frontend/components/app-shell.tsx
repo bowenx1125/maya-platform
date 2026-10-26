@@ -762,7 +762,10 @@ export function AppShell({
     : collapsed
       ? t("sidebarExpand")
       : t("sidebarCollapse");
-  const mayaformLit = !agentsArea && activeHref === home;
+  // The Mayaform pill lights on home only, not on pages nested under it.
+  const teamsArea =
+    pathname === "/student/teams" || pathname === "/teacher/teams";
+  const mayaformLit = !agentsArea && !teamsArea && activeHref === home;
 
   function renderItem(group: SidebarGroup, item: SidebarItem, index: number) {
     const lit = litKey === `${group.key}:${item.key}`;

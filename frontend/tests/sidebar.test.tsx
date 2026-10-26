@@ -171,8 +171,12 @@ describe("sidebar groups", () => {
     // The Studyform grid lights no row; Teams lights on ?mode=teams only.
     expect(lit()).toEqual([]);
     studyform.unmount();
-    renderShell("student", "/student/agents");
+    const agents = renderShell("student", "/student/agents");
     expect(lit()).toEqual(["agents"]);
+    agents.unmount();
+    // Teams lights alone; the Mayaform pill stays on home.
+    renderShell("student", "/student/teams");
+    expect(lit()).toEqual(["teams"]);
   });
 });
 
