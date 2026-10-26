@@ -461,7 +461,11 @@ describe("M13 anonymous audience form", () => {
       name: /^Vote$/,
     });
     fireEvent.click(voteButton);
-    await screen.findByText("connection reset");
+    // Q1: an unknown vote failure shows the internal-error copy.
+    await screen.findByText(
+      "Something went wrong on the server. Please try again.",
+    );
+    expect(screen.queryByText("connection reset")).toBeNull();
     fireEvent.click(voteButton);
     await waitFor(() => expect(api.submitVote).toHaveBeenCalledTimes(2));
 
@@ -471,6 +475,43 @@ describe("M13 anonymous audience form", () => {
     expect(firstPayload?.client_submission_id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
+  });
+
+  it("shows the internal-error copy, not raw server text, when a vote fails (Q1)", async () => {
+    const api = audienceApi();
+    vi.mocked(api.submitVote).mockRejectedValueOnce(
+      new PlatformApiError(500, "boom"),
+    );
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    await screen.findByRole("heading", {
+      name: "Should classrooms use anonymous questions?",
+    });
+    fireEvent.change(screen.getByLabelText("Nickname"), {
+      target: { value: "Learner" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Vote$/ }));
+    expect(
+      await screen.findByText(
+        "Something went wrong on the server. Please try again.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("boom")).toBeNull();
+  });
+
+  it("always shows the invalid-link hint when the form cannot load (Q2)", async () => {
+    const api = audienceApi();
+    vi.mocked(api.getForm).mockRejectedValueOnce(
+      new PlatformApiError(404, "Not found", {
+        code: "interaction_not_found",
+      }),
+    );
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Collection unavailable");
+    expect(alert.textContent).toContain(
+      "This classroom link is invalid or has ended.",
+    );
+    expect(screen.queryByText("Not found")).toBeNull();
   });
 
   it("locks vote and barrage after Conclude rejects a submit", async () => {
