@@ -73,8 +73,10 @@ import {
   StickerBadge,
 } from "./ui";
 import {
-  AGENT_BANNER,
-  AGENT_BANNER_TITLE,
+  STUDYFORM_BANNER,
+  STUDYFORM_BANNER_FORM,
+  STUDYFORM_BANNER_FORM_TITLE,
+  STUDYFORM_BANNER_TITLE,
   AGENT_ICON_BUTTON,
   AGENT_NEW_BUTTON,
   AGENT_PAGE,
@@ -1610,7 +1612,7 @@ export function AgentWorkbench({
   return (
     <>
       <div className={AGENT_PAGE}>
-        <header className={AGENT_BANNER}>
+        <header className={cn(STUDYFORM_BANNER, STUDYFORM_BANNER_FORM)}>
           <PageAction
             name="back"
             placement="page"
@@ -1644,7 +1646,9 @@ export function AgentWorkbench({
               }
             }}
           />
-          <h1 className={AGENT_BANNER_TITLE}>
+          <h1
+            className={cn(STUDYFORM_BANNER_TITLE, STUDYFORM_BANNER_FORM_TITLE)}
+          >
             {unsavedCreate
               ? draftName.trim()
                 ? `${draftName.trim()} · ${version.version_label}`

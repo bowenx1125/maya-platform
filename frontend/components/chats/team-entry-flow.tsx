@@ -29,6 +29,24 @@ import { PageAction } from "../page-action";
 import { teamVersionLabel } from "../studyform-layout";
 import { useSession } from "../session-provider";
 import { Notice, SectionCard } from "../ui";
+import { cn } from "../../lib/utils";
+import {
+  clearTeamDraft,
+  readTeamDraft,
+  teamDraftKey,
+  writeTeamDraft,
+} from "../../lib/team-return";
+import {
+  AGENT_PAGE,
+  STUDYFORM_BANNER,
+  STUDYFORM_BANNER_FORM,
+  STUDYFORM_BANNER_FORM_TITLE,
+  STUDYFORM_BANNER_TITLE,
+} from "../agent-chrome";
+import { MascotFigure } from "../academy/mascots";
+import { agentMascot } from "../ui/agent-card";
+import { WorkspaceIcon } from "../workspace-icon";
+import Link from "next/link";
 import styles from "../agent-chat.module.css";
 
 type KnowledgeSetChoice = { id: string; name: string };
@@ -137,6 +155,7 @@ export function TeamEntryFlow({
   groupId = null,
   standalone = false,
   backHref,
+  agentCreateHref,
   initialRouteMode,
   initialTeamId,
   onSaved,
@@ -149,6 +168,8 @@ export function TeamEntryFlow({
   groupId?: string | null;
   standalone?: boolean;
   backHref?: string;
+  /** Create Agent page for the empty Members board ("Agents" button). */
+  agentCreateHref?: string;
   initialRouteMode?: string;
   initialTeamId?: string;
   onSaved?: (team: TeamDetailDto) => void;
@@ -198,6 +219,9 @@ export function TeamEntryFlow({
   const routedEdit = useRef("");
   const editScope = useRef<string | null>(null);
   const [mutationUnknown, setMutationUnknown] = useState(false);
+  // A Team form left for Create Agent (empty Members board) comes back here.
+  const draftKey = teamDraftKey(groupId ?? courseId, initialTeamId ?? null);
+  const restoredDraft = useRef("");
 
   if (formRoute.scopeKey !== actionScope) {
     const keepLoadedEdit =
@@ -346,6 +370,37 @@ export function TeamEntryFlow({
     user?.id,
   ]);
 
+  useEffect(() => {
+    if (!standalone || loading) return;
+    const ready =
+      initialRouteMode === "team-edit"
+        ? Boolean(initialTeamId) && editing?.id === initialTeamId
+        : formOpen;
+    const key = `${dataScope}:${draftKey}`;
+    if (!ready || restoredDraft.current === key) return;
+    restoredDraft.current = key;
+    const draft = readTeamDraft(draftKey);
+    if (!draft) return;
+    const timer = window.setTimeout(
+      () =>
+        setForm({
+          ...draft,
+          visibility: editing ? editing.visibility : draft.visibility,
+        }),
+      0,
+    );
+    return () => window.clearTimeout(timer);
+  }, [
+    dataScope,
+    draftKey,
+    editing,
+    formOpen,
+    initialRouteMode,
+    initialTeamId,
+    loading,
+    standalone,
+  ]);
+
   function syncManageRoute(modeValue: string, teamId?: string) {
     if (!standalone || typeof window === "undefined") return;
     // Older Maya Team links still open this same form.
@@ -397,6 +452,7 @@ export function TeamEntryFlow({
   }
 
   function closeForm() {
+    if (standalone) clearTeamDraft(draftKey);
     setEditing(null);
     setFormOpen(false);
     setForm(EMPTY_FORM);
@@ -578,6 +634,7 @@ export function TeamEntryFlow({
     }
     // Leave the form directly. A version list between Done and Studyform
     // only flashes the version that was just saved.
+    clearTeamDraft(draftKey);
     setSaved(true);
     syncManageRoute("teams");
     onSaved?.(savedTeam);
@@ -595,6 +652,9 @@ export function TeamEntryFlow({
           .sort((left, right) => left.position - right.position)
           .map((member) => ({
             versionId: member.agent_version_id,
+            agentId: member.agent_id,
+            theme: agents.find((agent) => agent.agent_id === member.agent_id)
+              ?.avatar_config?.material_theme,
             name: member.display_name,
             versionLabel: "",
             available: true,
@@ -606,6 +666,8 @@ export function TeamEntryFlow({
           )
           .map((agent) => ({
             versionId: agent.version_id,
+            agentId: agent.agent_id,
+            theme: agent.avatar_config?.material_theme,
             name: agent.name,
             versionLabel: agent.version_label,
             available: agent.available,
@@ -632,6 +694,359 @@ export function TeamEntryFlow({
           ? localizeError(error, "teamSaveFailed")
           : t("teamSaveFailed")
       : "");
+
+  const busy = readOnly || saving || mutationUnknown;
+  const teamsReturnHref = (() => {
+    const params = new URLSearchParams();
+    if (groupId) params.set("group_id", groupId);
+    params.set("mode", initialTeamId ? "team-edit" : "team-new");
+    if (initialTeamId) params.set("team_id", initialTeamId);
+    return `${pathname}?${params.toString()}`;
+  })();
+  const agentsHref = agentCreateHref
+    ? `${agentCreateHref}?return=${encodeURIComponent(teamsReturnHref)}`
+    : undefined;
+  const formReady = !loading && apiForTeams && (editing || formOpen);
+
+  if (
+    standalone &&
+    (formOpen ||
+      editing ||
+      initialRouteMode === "team-edit" ||
+      initialRouteMode === "team-new")
+  ) {
+    // Approved 13-teams-final E1 cork board with G2 "checked" stickers and the
+    // H2 Studyform banner (Back · title · Done).
+    const sectionHead = (label: string, guide?: string, guideText?: string) => (
+      <div className="mb-4 mt-[-42px] flex items-center gap-2.5">
+        <h2 className="m-0 inline-block -skew-x-12 -rotate-1 bg-[#111] px-3.5 py-[3px] font-display text-[15px] leading-normal font-extrabold tracking-[1px] text-white uppercase">
+          {label}
+        </h2>
+        {guide ? (
+          <span
+            className="inline-grid size-[22px] cursor-help place-items-center rounded-full border-2 border-[#111] bg-[#FFE14D] font-body text-xs font-extrabold text-[#111] shadow-[2px_2px_0_#111]"
+            data-ui-guide={guide}
+            data-ui-guide-text={guideText}
+            aria-hidden="true"
+          >
+            ?
+          </span>
+        ) : null}
+      </div>
+    );
+    const cardClass =
+      "relative mt-[22px] rounded-[6px] border-[3px] border-[#111] bg-white px-[22px] pt-7 pb-[22px] shadow-[0_0_0_3px_#67E8F9,7px_7px_0_3px_#111]";
+    const tilts = [-1.2, 0.8, -0.6, 1.2, -0.9];
+    return (
+      <section className={AGENT_PAGE} aria-label={title}>
+        <header className={cn(STUDYFORM_BANNER, STUDYFORM_BANNER_FORM)}>
+          <PageAction
+            name="back"
+            placement="page"
+            disabled={saving || mutationUnknown}
+            onClick={closeForm}
+          />
+          <h1
+            className={cn(STUDYFORM_BANNER_TITLE, STUDYFORM_BANNER_FORM_TITLE)}
+          >
+            {editing || initialRouteMode === "team-edit"
+              ? t("chatEditTeam")
+              : title}
+          </h1>
+          {readOnly ? null : (
+            <PageAction
+              name="done"
+              placement="page"
+              form={formId}
+              disabled={
+                !formReady || saving || (Boolean(editing) && !teamDirty)
+              }
+            />
+          )}
+        </header>
+        {loading ? <p role="status">{t("loading")}</p> : null}
+        {loadError && loadError !== dismissedError ? (
+          <Notice
+            inline
+            tone="error"
+            onClose={() => setDismissedError(loadError)}
+          >
+            {apiForTeams ? t("teamLoadFailed") : t("teamApiNotConnected")}
+          </Notice>
+        ) : null}
+        {saved ? (
+          <Notice inline tone="success" onClose={() => setSaved(false)}>
+            {variant === "maya"
+              ? t("mayaTeamPublished")
+              : t("teamSavedWaitingForChat")}
+          </Notice>
+        ) : null}
+        {teamListRefreshError ? (
+          <Notice
+            inline
+            tone="warning"
+            onClose={() => setTeamListRefreshError(false)}
+            action={
+              <button
+                className="inline-button"
+                type="button"
+                disabled={teamListRefreshing}
+                onClick={() => void refreshTeamList()}
+              >
+                {teamListRefreshing ? t("loading") : t("retryTeamList")}
+              </button>
+            }
+          >
+            {t("teamListRefreshFailed")}
+          </Notice>
+        ) : null}
+        {formReady ? (
+          <form
+            id={formId}
+            className="m-0 block p-0"
+            onSubmit={(event) => void saveTeam(event)}
+          >
+            {topFormError ? (
+              <Notice
+                inline
+                tone="error"
+                onClose={() => {
+                  setSubmitHint("");
+                  if (error) setDismissedError(error);
+                }}
+              >
+                {topFormError}
+              </Notice>
+            ) : null}
+            <div className="grid grid-cols-[1.05fr_1fr] items-start gap-7 max-[767px]:grid-cols-1">
+              <section
+                className="relative mt-[22px] min-h-[260px] rounded-[12px] border-[3px] border-[#111] bg-[#E8D5B5] px-5 py-7 shadow-[0_0_0_3px_#67E8F9,7px_7px_0_3px_#111] [background-image:radial-gradient(#0001_1px,transparent_1.5px)] [background-size:14px_14px] [&>div:first-child]:mt-[-44px]"
+              >
+                {sectionHead(
+                  t("teamMembers"),
+                  "chat.teamMembers",
+                  t("teamMembersHelp"),
+                )}
+                {memberChoices.length ? (
+                  <div
+                    className="flex flex-wrap gap-x-4 gap-y-[22px]"
+                    role="group"
+                    aria-label={t("teamMembers")}
+                  >
+                    {memberChoices.map((agent, index) => {
+                      const checked = form.memberVersionIds.includes(
+                        agent.versionId,
+                      );
+                      const isLeader =
+                        checked && form.leaderVersionId === agent.versionId;
+                      return (
+                        <div
+                          key={agent.versionId}
+                          className={cn(
+                            "relative flex w-[132px] flex-col items-center gap-2 rounded-[6px] border-[3px] border-[#111] px-1.5 py-2.5 max-[767px]:w-[calc(50%-8px)]",
+                            checked
+                              ? "translate-x-[-2px] translate-y-[-4px] rotate-0 bg-[#FFE14D] shadow-[6px_8px_0_#111]"
+                              : "bg-white shadow-[3px_3px_0_#111]",
+                          )}
+                          style={
+                            checked
+                              ? undefined
+                              : { rotate: `${tilts[index % tilts.length]}deg` }
+                          }
+                        >
+                          {isLeader ? (
+                            <span className="absolute -top-3 -left-2 z-[3] inline-block -rotate-3 rounded-[6px] border-2 border-[#111] bg-[#FF4D8D] px-2 py-px font-body text-[10px] leading-normal font-extrabold text-[#111] shadow-[2px_2px_0_#111]">
+                              {t("leader")}
+                            </span>
+                          ) : null}
+                          <label className="m-0 flex cursor-pointer flex-col items-center gap-1.5 text-center">
+                            <input
+                              type="checkbox"
+                              className="absolute top-2 left-2 m-0 size-[18px] flex-none accent-[#FF4D8D]"
+                              checked={checked}
+                              disabled={busy || agent.available === false}
+                              onChange={() => {
+                                setSubmitHint("");
+                                toggleMember(agent.versionId);
+                              }}
+                            />
+                            <span
+                              className={cn(
+                                "grid size-[60px] place-items-center overflow-hidden rounded-full border-2 border-[#111] bg-white",
+                                checked &&
+                                  "shadow-[0_0_0_3px_#fff,0_0_0_5px_#111]",
+                              )}
+                              aria-hidden="true"
+                            >
+                              <MascotFigure
+                                id={agentMascot(agent.agentId, agent.theme)}
+                                className="h-[120%] w-auto translate-y-[8%]"
+                              />
+                            </span>
+                            <strong className="font-body text-xs font-extrabold tracking-[-0.01em] [overflow-wrap:anywhere]">
+                              {agent.name}
+                              {agent.versionLabel
+                                ? ` · ${agent.versionLabel}`
+                                : ""}
+                            </strong>
+                          </label>
+                          <label className="m-0 inline-flex items-center gap-1.5 font-body text-xs font-bold has-[:disabled]:[&>span]:opacity-45">
+                            <input
+                              type="radio"
+                              className="m-0 size-[18px] flex-none accent-[#FF4D8D]"
+                              name={`${formId}-leader`}
+                              aria-label={t("teamSetLeader", {
+                                name: agent.name,
+                              })}
+                              checked={form.leaderVersionId === agent.versionId}
+                              disabled={busy || !checked}
+                              onChange={() => {
+                                setSubmitHint("");
+                                setForm((current) => ({
+                                  ...current,
+                                  leaderVersionId: agent.versionId,
+                                }));
+                              }}
+                            />
+                            <span>{t("leader")}</span>
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="grid justify-items-start gap-3.5 rounded-[8px] border-[3px] border-[#111] bg-white p-3.5">
+                    <p className="m-0 font-body text-[15px] font-semibold text-[#111]">
+                      {t("teamMembersNoAgents")}
+                    </p>
+                    {agentsHref ? (
+                      <Link
+                        href={agentsHref}
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] bg-[#A3E635] px-4 py-[7px] font-body text-sm font-extrabold text-[#111] no-underline shadow-[0_5px_0_#111] [&_svg]:size-4"
+                        onClick={() => writeTeamDraft(draftKey, form)}
+                      >
+                        <WorkspaceIcon name="agent" />
+                        {t("teamGoToAgents")}
+                      </Link>
+                    ) : null}
+                  </div>
+                )}
+              </section>
+              <div className="min-w-0">
+                <section className={cardClass}>
+                  {sectionHead(t("teamName"))}
+                  <input
+                    className="box-border w-full rounded-[10px] border-[3px] border-[#111] bg-white px-3.5 py-2.5 font-body text-lg font-semibold text-[#111]"
+                    aria-label={t("teamName")}
+                    value={form.name}
+                    maxLength={120}
+                    disabled={busy}
+                    onChange={(event) => {
+                      setSubmitHint("");
+                      setForm((current) => ({
+                        ...current,
+                        name: event.target.value,
+                      }));
+                    }}
+                  />
+                  {!editing ? (
+                    <div
+                      className="mt-3 inline-flex overflow-hidden rounded-[10px] border-[3px] border-[#111] bg-white shadow-[3px_3px_0_#111]"
+                      role="group"
+                      aria-label={t("agentVisibility")}
+                    >
+                      {(["private", "public"] as const).map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          className={cn(
+                            "m-0 min-h-0 cursor-pointer rounded-none border-0 bg-white px-4 py-1.5 font-body text-[13px] leading-normal font-extrabold text-[#111] shadow-none",
+                            option === "public" && "border-l-[3px] border-[#111]",
+                            form.visibility === option &&
+                              (option === "public"
+                                ? "bg-[#22C55E]"
+                                : "bg-[#E5E7EB]"),
+                          )}
+                          aria-pressed={form.visibility === option}
+                          disabled={saving || mutationUnknown}
+                          onClick={() => {
+                            setSubmitHint("");
+                            setForm((current) =>
+                              withTeamVisibility(current, option, agents),
+                            );
+                          }}
+                        >
+                          {t(
+                            option === "private"
+                              ? "privateOption"
+                              : "publicOption",
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </section>
+                <section className={cardClass}>
+                  {sectionHead(
+                    t("teamSharedKnowledge"),
+                    "chat.teamSharedKnowledge",
+                    t("teamSharedKnowledgeHelp"),
+                  )}
+                  {knowledgeChoices.length ? (
+                    <div
+                      role="group"
+                      aria-label={t("teamSharedKnowledge")}
+                    >
+                      {knowledgeChoices.map((set) => {
+                        const on = form.sharedSetIds.includes(set.id);
+                        return (
+                          <label
+                            key={set.id}
+                            className={cn(
+                              "relative mb-2.5 flex cursor-pointer items-center gap-2.5 rounded-[8px] border-2 border-[#111] px-3 py-2.5",
+                              on
+                                ? "translate-x-[-2px] translate-y-[-2px] bg-[#FFE14D] shadow-[5px_5px_0_#111]"
+                                : "bg-white shadow-[2px_2px_0_#111]",
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              className="m-0 size-[18px] flex-none accent-[#FF4D8D]"
+                              checked={on}
+                              disabled={busy}
+                              onChange={() =>
+                                setForm((current) => ({
+                                  ...current,
+                                  sharedSetIds: current.sharedSetIds.includes(
+                                    set.id,
+                                  )
+                                    ? current.sharedSetIds.filter(
+                                        (id) => id !== set.id,
+                                      )
+                                    : [...current.sharedSetIds, set.id],
+                                }))
+                              }
+                            />
+                            <strong className="font-body text-sm font-bold [overflow-wrap:anywhere]">
+                              {set.name}
+                            </strong>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="m-0 font-body text-sm font-medium text-[#4B5563]">
+                      {t("teamNoSharedKnowledge")}
+                    </p>
+                  )}
+                </section>
+              </div>
+            </div>
+          </form>
+        ) : null}
+      </section>
+    );
+  }
 
   return (
     <section
