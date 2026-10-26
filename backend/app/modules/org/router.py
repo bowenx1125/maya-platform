@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Header, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -45,7 +45,7 @@ from app.modules.voices.withdrawal import finish_withdrawn_voices
 router = APIRouter(tags=["Organization"])
 
 
-def _course_dto(course: Course) -> CourseDTO:
+def _course_dto(course: Course, *, student_count: int | None = None) -> CourseDTO:
     return CourseDTO(
         id=UUID(course.id),
         code=course.code,
@@ -53,7 +53,25 @@ def _course_dto(course: Course) -> CourseDTO:
         current_audio_debate_id=(
             UUID(course.current_audio_debate_id) if course.current_audio_debate_id else None
         ),
+        student_count=student_count,
     )
+
+
+def _active_student_counts(db: Session, course_ids: list[str]) -> dict[str, int]:
+    """Active students per course, in one GROUP BY query."""
+    if not course_ids:
+        return {}
+    rows = db.execute(
+        select(CourseMember.course_id, func.count(CourseMember.user_id))
+        .join(User, User.id == CourseMember.user_id)
+        .where(
+            CourseMember.course_id.in_(course_ids),
+            CourseMember.role == "student",
+            User.status == "active",
+        )
+        .group_by(CourseMember.course_id)
+    ).all()
+    return {course_id: int(count) for course_id, count in rows}
 
 
 def _group_dto(group: Group) -> GroupDTO:
@@ -156,13 +174,21 @@ def list_courses(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> list[CourseDTO]:
-    courses = db.scalars(
-        select(Course)
+    rows = db.execute(
+        select(Course, CourseMember.role)
         .join(CourseMember, CourseMember.course_id == Course.id)
         .where(CourseMember.user_id == context.user.id)
         .order_by(Course.code)
     ).all()
-    return [_course_dto(course) for course in courses]
+    taught = [course.id for course, role in rows if role == "teacher"]
+    counts = _active_student_counts(db, taught)
+    return [
+        _course_dto(
+            course,
+            student_count=counts.get(course.id, 0) if role == "teacher" else None,
+        )
+        for course, role in rows
+    ]
 
 
 @router.get(
