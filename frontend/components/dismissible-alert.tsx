@@ -9,6 +9,7 @@ import {
   KindSticker,
   MascotBadge,
   RoundX,
+  useRevealNotice,
   useTransientFold,
   type ErrorKind,
 } from "./ui/error-kit";
@@ -86,6 +87,7 @@ export function DismissibleAlert({
         : SAME_MOUNT;
   const t = useT();
   const fold = useTransientFold(transient && tray !== null, key);
+  useRevealNotice(tray, key);
   if (dismissed !== NOT_DISMISSED && Object.is(dismissed, key)) return null;
   function dismiss() {
     // Closing removes the focused ×; hand focus to the field this line
