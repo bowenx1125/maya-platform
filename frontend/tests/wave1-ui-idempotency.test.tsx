@@ -162,7 +162,9 @@ describe("Wave 1A UI idempotency wiring", () => {
     await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(3));
     expect(keys[2]).not.toBe(keys[1]);
     await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith("/student/groups/group-id"),
+      expect(router.replace).toHaveBeenCalledWith(
+        "/student/agents?group_id=group-id",
+      ),
     );
   });
 

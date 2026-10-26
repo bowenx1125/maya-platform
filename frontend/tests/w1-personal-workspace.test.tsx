@@ -156,7 +156,7 @@ describe("W1 teacher personal workspace", () => {
     render(
       <>
         <AppShell role="teacher">
-          <TeacherStudyformWorkspace />
+          <TeacherStudyformWorkspace view="agents" />
         </AppShell>
       </>,
     );
@@ -168,7 +168,7 @@ describe("W1 teacher personal workspace", () => {
     expect(api.publishedAgents).toHaveBeenCalledWith(courseId);
     expect(
       screen.getByRole("link", { name: "Agents" }).getAttribute("href"),
-    ).toBe("/teacher/studyform");
+    ).toBe("/teacher/agents");
   });
 
   it("shows the owner's private Agent on Studyform", async () => {
@@ -182,7 +182,7 @@ describe("W1 teacher personal workspace", () => {
     render(
       <>
         <AppShell role="teacher">
-          <TeacherStudyformWorkspace />
+          <TeacherStudyformWorkspace view="agents" />
         </AppShell>
       </>,
     );
@@ -291,7 +291,7 @@ describe("W1 teacher personal workspace", () => {
     render(
       <>
         <AppShell role="teacher">
-          <TeacherStudyformWorkspace />
+          <TeacherStudyformWorkspace view="agents" />
         </AppShell>
       </>,
     );
@@ -491,7 +491,9 @@ describe("W1 teacher personal workspace", () => {
     expect(api.voiceProfiles).not.toHaveBeenCalled();
     // Owner request (2026-10-20): teacher Studyform holds six cards,
     // Agents / Teams / Record over RAG / Knowledge / Voices.
-    for (const name of ["Agents", "Teams", "Record", "RAG", "Knowledge"])
+    // Agents has its own page now (2026-10-26).
+    expect(screen.queryByRole("heading", { name: "Agents" })).toBeNull();
+    for (const name of ["Teams", "Record", "RAG", "Knowledge"])
       expect(await screen.findByRole("heading", { name })).toBeTruthy();
     expect(document.querySelector('[data-tour="brain"]')).toBeNull();
     // The embedded Brainform cards read groups for RAG; Voices does not.

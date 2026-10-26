@@ -106,7 +106,7 @@ describe("PW3-E teacher information architecture", () => {
     ]);
     expect(navHrefs()).toEqual([
       "/teacher",
-      "/teacher/studyform",
+      "/teacher/agents",
       "/teacher/chat",
       "/teacher/debates",
       "/teacher/roster",
@@ -316,8 +316,11 @@ describe("student shell navigation", () => {
     expect(home.getAttribute("aria-current")).toBeNull();
     // Inside the visit the sidebar is the group's, as its members see it.
     const studyform = nav.getByRole("link", { name: "Agents" });
-    expect(studyform.getAttribute("href")).toBe("/student/groups/group-b");
-    expect(studyform.getAttribute("aria-current")).toBe("page");
+    expect(studyform.getAttribute("href")).toBe(
+      "/student/agents?group_id=group-b",
+    );
+    // Studyform lights Teams; Agents is its own page.
+    expect(studyform.getAttribute("aria-current")).toBeNull();
     expect(nav.getByRole("link", { name: "RAG" }).getAttribute("href")).toBe(
       "/teacher/knowledge?group_id=group-b",
     );
@@ -357,7 +360,7 @@ describe("student shell navigation", () => {
         ).toBe("page");
         expect(
           nav.getByRole("link", { name: "Agents" }).getAttribute("href"),
-        ).toBe("/student/groups/group-b");
+        ).toBe("/student/agents?group_id=group-b");
         await waitFor(() =>
           expect(leaveGroupAsTeacher).toHaveBeenCalledWith("group-a"),
         );
@@ -379,7 +382,9 @@ describe("student shell navigation", () => {
     renderStudentShell("/student/agents/agent-b");
     const nav = within(screen.getByRole("navigation"));
     const studyform = nav.getByRole("link", { name: "Agents" });
-    expect(studyform.getAttribute("href")).toBe("/student/groups/group-b");
+    expect(studyform.getAttribute("href")).toBe(
+      "/student/agents?group_id=group-b",
+    );
     expect(studyform.getAttribute("aria-current")).toBe("page");
     expect(nav.getByRole("link", { name: "RAG" }).getAttribute("href")).toBe(
       "/teacher/knowledge?group_id=group-b",
@@ -428,7 +433,7 @@ describe("student shell navigation", () => {
     renderStudentShell("/student/groups/group-b/knowledge");
     expect(navHrefs()).toEqual([
       "/student",
-      "/student/groups/group-b",
+      "/student/agents?group_id=group-b",
       "/student/chat",
     ]);
     expect(document.querySelector('[data-tour="brain"]')).toBeNull();
@@ -446,7 +451,7 @@ describe("student shell navigation", () => {
       within(screen.getByRole("navigation"))
         .getByRole("link", { name: "Agents" })
         .getAttribute("href"),
-    ).toBe("/student/groups/group-a");
+    ).toBe("/student/agents?group_id=group-a");
     expect(session.api.agent).not.toHaveBeenCalled();
   });
 
@@ -481,10 +486,12 @@ describe("student shell navigation", () => {
     await waitFor(() =>
       expect(
         nav.getByRole("link", { name: "Agents" }).getAttribute("href"),
-      ).toBe("/student/groups/group-b"),
+      ).toBe("/student/agents?group_id=group-b"),
     );
     const studyform = nav.getByRole("link", { name: "Agents" });
-    expect(studyform.getAttribute("href")).toBe("/student/groups/group-b");
+    expect(studyform.getAttribute("href")).toBe(
+      "/student/agents?group_id=group-b",
+    );
     expect(studyform.getAttribute("aria-current")).toBe("page");
     // Sidebar (DESIGN-RULES §7): Voices is a Brainform row on the group.
     expect(nav.getByRole("link", { name: "Voices" }).getAttribute("href")).toBe(

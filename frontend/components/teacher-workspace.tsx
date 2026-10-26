@@ -11,6 +11,7 @@ import {
 } from "./home/home-hero";
 import {
   AgentCard,
+  AGENTS_NEW_CLASS,
   AgentsEmpty,
   NewButton,
   agentMascot,
@@ -63,6 +64,7 @@ import {
   teamVersionLabel,
 } from "./studyform-layout";
 import { VoiceLibrary } from "./voice/voice-library";
+import { AgentsPage } from "./agents-page";
 import { EmptyCard, ErrorNotice, LoadingCard, PageIntro } from "./ui";
 
 export function TeacherDashboard() {
@@ -225,7 +227,10 @@ export function TeacherStudyformWorkspace({
   initialMode,
   initialTeamId,
   initialDocumentId,
+  view,
 }: {
+  /** "agents": the Agents page alone (the sidebar's Agents item). */
+  view?: "agents";
   initialGroupId?: string;
   initialMode?: string;
   initialTeamId?: string;
@@ -434,30 +439,29 @@ export function TeacherStudyformWorkspace({
       </>
     );
 
-  return (
-    <>
-      <PageIntro title={t("studyform")} />
-      {error ? <ErrorNotice error={error} /> : null}
-      <ModuleGrid variant="teacherStudyform" paneOpen={brainformPane}>
-        <ModuleCard
+  if (view === "agents")
+    return (
+      <>
+        {error ? <ErrorNotice error={error} /> : null}
+        <AgentsPage
           title={t("agents")}
-          labelledBy="studyform-agents"
-          empty={
-            personalAgents.length || ownedAgents.length
-              ? undefined
-              : t("noPersonalAgents")
-          }
           action={
             // With no Agents yet, New sits inside the empty card instead.
             teacherCourseId && (personalAgents.length || ownedAgents.length) ? (
-              <NewButton href="/teacher/agents/new" label={t("newAgent")} />
+              <NewButton
+                href="/teacher/agents/new"
+                label={t("newAgent")}
+                className={AGENTS_NEW_CLASS}
+              />
             ) : null
           }
         >
           {personalAgents.length || ownedAgents.length ? (
-            <ModuleTiles>
+            <ModuleTiles variant="list">
               {personalAgents.map((item) => (
                 <VersionTile
+                  variant="list"
+                  editedBy={item.agent.last_edited_by_name}
                   key={item.agent.id}
                   name={item.agent.name}
                   href={`/teacher/agents/${item.agent.id}`}
@@ -485,6 +489,8 @@ export function TeacherStudyformWorkspace({
                     ?.version_label ?? "V1.0";
                 return (
                   <VersionTile
+                    variant="list"
+                    editedBy={agent.last_edited_by_name}
                     key={agent.id}
                     name={agent.name}
                     href={`/teacher/agents/${agent.id}`}
@@ -510,7 +516,15 @@ export function TeacherStudyformWorkspace({
               newLabel={t("newAgent")}
             />
           )}
-        </ModuleCard>
+        </AgentsPage>
+      </>
+    );
+
+  return (
+    <>
+      <PageIntro title={t("studyform")} />
+      {error ? <ErrorNotice error={error} /> : null}
+      <ModuleGrid variant="teacherStudyform" paneOpen={brainformPane}>
         <ModuleCard
           title={t("chatTargetTeams")}
           labelledBy="studyform-teams"
@@ -735,7 +749,7 @@ export function TeacherAgentDetail({
       <AgentWorkbench
         key={`${actorScope}:${editorVersion.id}`}
         actorScopeKey={actorScope}
-        backHref="/teacher/studyform"
+        backHref="/teacher/agents"
         knowledgeHref={knowledgeHref}
         generationFlow={generationFlow}
         publishOnDone
@@ -759,7 +773,7 @@ export function TeacherAgentDetail({
     <AgentReadOnly
       agent={currentAgent}
       version={selectedVersion}
-      backHref="/teacher/studyform"
+      backHref="/teacher/agents"
     />
   );
 }

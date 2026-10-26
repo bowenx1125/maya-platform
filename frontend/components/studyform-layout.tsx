@@ -76,8 +76,25 @@ export function ModuleList({ children }: { children: ReactNode }) {
   return <ul className={styles.list}>{children}</ul>;
 }
 
-export function ModuleTiles({ children }: { children: ReactNode }) {
-  return <ul className={AGENT_GRID_CLASS}>{children}</ul>;
+export function ModuleTiles({
+  children,
+  variant,
+}: {
+  children: ReactNode;
+  /** "list": the Agents page grid of 186px card A columns. */
+  variant?: "list";
+}) {
+  return (
+    <ul
+      className={
+        variant === "list"
+          ? "m-0 grid list-none items-center grid-cols-[repeat(auto-fill,186px)] gap-x-[26px] gap-y-[30px] p-0 max-[767px]:grid-cols-2 max-[767px]:gap-x-[18px] max-[767px]:gap-y-[22px]"
+          : AGENT_GRID_CLASS
+      }
+    >
+      {children}
+    </ul>
+  );
 }
 
 /**
@@ -109,7 +126,10 @@ export function VersionTile({
   editedBy,
   materialTheme,
   rename,
+  variant,
 }: {
+  /** "list": card A of the Agents page. */
+  variant?: "list";
   /** Picks the mascot when there is no avatar theme (defaults to href). */
   id?: string;
   name: string;
@@ -151,6 +171,7 @@ export function VersionTile({
       onDelete={onDelete}
       deleteLabel={deleteLabel}
       rename={rename}
+      variant={variant}
     />
   );
 }
@@ -162,7 +183,10 @@ export function ModuleUpload({
   accept,
   disabled,
   onFile,
+  className,
 }: {
+  /** Replaces the default button look (the Agent card's "+ New"). */
+  className?: string;
   label: string;
   /** Visible text next to the +. Defaults to label; Brainform passes "New". */
   caption?: string;
@@ -173,8 +197,11 @@ export function ModuleUpload({
   return (
     <label
       className={cn(
-        buttonVariants({ variant: "default" }),
-        "m-0 gap-1.5 font-display text-base font-extrabold",
+        className ??
+          cn(
+            buttonVariants({ variant: "default" }),
+            "m-0 gap-1.5 font-display text-base font-extrabold",
+          ),
         disabled && "pointer-events-none opacity-50",
       )}
       aria-disabled={disabled || undefined}

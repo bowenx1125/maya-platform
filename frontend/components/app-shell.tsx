@@ -182,8 +182,14 @@ export function AppShell({
     scope: string;
     groupId: string | null;
   } | null>(null);
-  const [, routeGroupId] =
+  const [, groupRouteId] =
     pathname.match(/^\/(?:student|teacher)\/groups\/([^/]+)/) ?? [];
+  // The Agents page names its group in ?group_id.
+  const routeGroupId =
+    groupRouteId ??
+    (pathname === "/student/agents"
+      ? (new URLSearchParams(locationSearch).get("group_id") ?? undefined)
+      : undefined);
   const [agentRoute, agentRouteKind, agentRouteId] =
     pathname.match(/^\/student\/(agents|agent-versions)\/([^/]+)/) ?? [];
   const lookUpAgentGroup =
@@ -360,6 +366,7 @@ export function AppShell({
   const visitingGroup =
     teacherSurface &&
     (pathname.startsWith("/student/groups/") ||
+      pathname === "/student/agents" ||
       Boolean(agentRoute) ||
       visitPage);
   const visitGroupId =
@@ -433,6 +440,21 @@ export function AppShell({
       : groupId
         ? `/student/groups/${groupId}`
         : "/student#student-groups";
+  // The sidebar's Agents item opens the Agents page.
+  const agentsHref = visit
+    ? `/student/agents?group_id=${visit}`
+    : teacherSurface
+      ? `/teacher/agents${routeGroupId && !visitingGroup ? `?group_id=${encodeURIComponent(routeGroupId)}` : ""}`
+      : groupId
+        ? `/student/agents?group_id=${encodeURIComponent(groupId)}`
+        : "/student#student-groups";
+  // The list, an Agent, and New all light Agents.
+  const agentsArea =
+    pathname === "/student/agents" ||
+    pathname === "/teacher/agents" ||
+    pathname.startsWith("/teacher/agents/") ||
+    Boolean(agentRoute) ||
+    /^\/student\/groups\/[^/]+\/agents\/new$/.test(pathname);
   const links: {
     href: string;
     label: string;
@@ -595,7 +617,7 @@ export function AppShell({
       items: [
         {
           key: "agents",
-          href: studyformHref,
+          href: agentsHref,
           label: t("agents"),
           icon: "agent",
         },
@@ -683,7 +705,7 @@ export function AppShell({
   // The pink pill marks one row: Voices on its own page, otherwise the first
   // row that opens the active page; that row carries aria-current.
   const onVoices = Boolean(studentVoicesHref && pathname === studentVoicesHref);
-  let litKey: string | undefined;
+  let litKey: string | undefined = agentsArea ? "studyform:agents" : undefined;
   for (const group of groups) {
     for (const item of group.items) {
       if (litKey) break;
@@ -711,7 +733,7 @@ export function AppShell({
     : collapsed
       ? t("sidebarExpand")
       : t("sidebarCollapse");
-  const mayaformLit = activeHref === home;
+  const mayaformLit = !agentsArea && activeHref === home;
 
   function renderItem(group: SidebarGroup, item: SidebarItem, index: number) {
     const lit = litKey === `${group.key}:${item.key}`;
@@ -782,7 +804,7 @@ export function AppShell({
   return (
     <WorkspaceActionsContext.Provider value={actionRegistry}>
       <div
-        className={`grid min-h-dvh max-[900px]:grid-cols-1 ${pathname === "/student" || pathname === "/teacher" ? "bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px]" : ""} ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[248px_minmax(0,1fr)]"}`}
+        className={`grid min-h-dvh max-[900px]:grid-cols-1 ${pathname === "/student" || pathname === "/teacher" || agentsArea ? "bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px]" : ""} ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[248px_minmax(0,1fr)]"}`}
       >
         <div className="sticky top-0 z-30 hidden h-14 items-center gap-3 border-b-[3px] border-border bg-sidebar px-4 max-[900px]:flex">
           <button
@@ -909,7 +931,7 @@ export function AppShell({
                 // New stays in the sidebar once a page registers it, faded when
                 // it cannot run. Back and Done exist only while their owning
                 // screen needs them, and remain disabled during busy work.
-                if (!action) return null;
+                if (!action || action.placement === "page") return null;
                 const faded = Boolean(action.disabled);
                 const content = (
                   <>

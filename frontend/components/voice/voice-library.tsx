@@ -32,6 +32,7 @@ import { IconClose, IconPlay, IconPlus, IconUpload } from "../quiet-icons";
 import { ModuleCard } from "../studyform-layout";
 import { WorkspaceIcon } from "../workspace-icon";
 import { buttonVariants } from "../ui/button";
+import { AGENT_NEW_BUTTON, agentCard } from "../agent-chrome";
 import { cn } from "../../lib/utils";
 import styles from "./voice-library.module.css";
 
@@ -137,10 +138,10 @@ function VoiceEqualizer() {
       className="ml-1 inline-flex h-[18px] w-[26px] shrink-0 items-end gap-[3px]"
       aria-hidden="true"
     >
-      <i className="inline-block w-1 rounded-sm bg-ink" style={{ height: "45%" }} />
-      <i className="inline-block w-1 rounded-sm bg-ink" style={{ height: "100%" }} />
-      <i className="inline-block w-1 rounded-sm bg-ink" style={{ height: "65%" }} />
-      <i className="inline-block w-1 rounded-sm bg-ink" style={{ height: "85%" }} />
+      <i className="inline-block w-1 bg-ink" style={{ height: "45%" }} />
+      <i className="inline-block w-1 bg-ink" style={{ height: "100%" }} />
+      <i className="inline-block w-1 bg-ink" style={{ height: "65%" }} />
+      <i className="inline-block w-1 bg-ink" style={{ height: "85%" }} />
     </span>
   );
 }
@@ -675,7 +676,8 @@ export function VoiceLibrary({
   const arcadePicker = Boolean(onSelect);
   function arcadeRow(selected: boolean) {
     return cn(
-      "flex min-h-[60px] min-w-0 flex-wrap items-center gap-3 rounded-[12px] border-[3px] border-border bg-surface px-3 py-2 shadow-[4px_4px_0_#111]",
+      "flex min-h-[60px] min-w-0 flex-wrap items-center gap-3 rounded-[12px] border-[3px] border-[#111] bg-white px-3 py-2 shadow-[4px_4px_0_#111]",
+      profiles.length === 0 && "min-h-[44px] py-1",
       selected && "bg-[#A3E635]",
     );
   }
@@ -691,7 +693,7 @@ export function VoiceLibrary({
     );
   }
   function arcadeName() {
-    return "min-w-[6em] flex-1 wrap-anywhere break-words text-[15px] font-bold leading-snug whitespace-normal";
+    return "min-w-[6em] wrap-anywhere break-words font-body text-[15px] font-extrabold leading-[1.3] whitespace-normal";
   }
   const selectedListed = profiles.some(
     (profile) => profile.id === selectedId && profile.status === "ready",
@@ -703,7 +705,9 @@ export function VoiceLibrary({
     onSelect && !loading ? (
       <>
         <li
-          className={arcadePicker ? arcadeRow(selectedId === null) : styles.voiceRow}
+          className={
+            arcadePicker ? arcadeRow(selectedId === null) : styles.voiceRow
+          }
           data-choice="none"
           data-selected={selectedId === null ? "true" : undefined}
         >
@@ -728,7 +732,9 @@ export function VoiceLibrary({
             data-choice="current"
             data-selected="true"
           >
-            <label className={arcadePicker ? arcadeChoice() : styles.voiceChoice}>
+            <label
+              className={arcadePicker ? arcadeChoice() : styles.voiceChoice}
+            >
               <input
                 className={arcadePicker ? arcadeRadio() : styles.radio}
                 type="radio"
@@ -751,9 +757,7 @@ export function VoiceLibrary({
     profiles.length > 0 || pickerRows ? (
       <ul
         className={
-          arcadePicker
-            ? "m-0 grid list-none gap-3 p-0"
-            : styles.voiceList
+          arcadePicker ? "m-0 grid list-none gap-3 p-0" : styles.voiceList
         }
         role={onSelect ? "radiogroup" : undefined}
         aria-label={onSelect ? t("voices") : undefined}
@@ -814,7 +818,9 @@ export function VoiceLibrary({
                   }}
                 />
               ) : onSelect ? (
-                <label className={arcadePicker ? arcadeChoice() : styles.voiceChoice}>
+                <label
+                  className={arcadePicker ? arcadeChoice() : styles.voiceChoice}
+                >
                   <input
                     className={arcadePicker ? arcadeRadio() : styles.radio}
                     type="radio"
@@ -823,7 +829,9 @@ export function VoiceLibrary({
                     disabled={controlsDisabled || profile.status !== "ready"}
                     onChange={() => onSelect(profile.id)}
                   />
-                  <span className={arcadePicker ? arcadeName() : styles.voiceName}>
+                  <span
+                    className={arcadePicker ? arcadeName() : styles.voiceName}
+                  >
                     {name}
                   </span>
                   {arcadePicker && selectedId === profile.id ? (
@@ -858,13 +866,16 @@ export function VoiceLibrary({
               <div
                 className={
                   arcadePicker
-                    ? "ml-auto flex shrink-0 items-center gap-1"
+                    ? "ml-auto flex shrink-0 items-center gap-2.5"
                     : styles.voiceActions
                 }
               >
                 {manageable || profile.status === "ready" ? (
                   <button
-                    className={cn(buttonVariants({ variant: "neutral", size: "icon" }), "min-h-0 rounded-[10px] p-0")}
+                    className={cn(
+                      buttonVariants({ variant: "neutral", size: "icon" }),
+                      "min-h-0 rounded-[10px] p-0",
+                    )}
                     aria-label={t("voicePreview")}
                     data-ui-guide="voice.preview"
                     type="button"
@@ -881,7 +892,10 @@ export function VoiceLibrary({
                     row's delete runs, × stays visible as a disabled spinner. */}
                 {manageable ? (
                   <button
-                    className={cn(buttonVariants({ variant: "neutral", size: "icon" }), "min-h-0 rounded-[10px] p-0")}
+                    className={cn(
+                      buttonVariants({ variant: "neutral", size: "icon" }),
+                      "min-h-0 rounded-[10px] p-0",
+                    )}
                     aria-label={t("voiceDeleteNamed", { name })}
                     aria-busy={deletingId === profile.id || undefined}
                     data-ui-guide="voice.delete"
@@ -936,7 +950,10 @@ export function VoiceLibrary({
   const createAction = listenOnly ? null : creating ? (
     // Top-right, where New was: back to the list, nothing is uploaded.
     <button
-      className={cn(buttonVariants({ variant: "neutral", size: "icon" }), "min-h-0 rounded-[10px] p-0")}
+      className={cn(
+        buttonVariants({ variant: "neutral", size: "icon" }),
+        "min-h-0 rounded-[10px] p-0",
+      )}
       type="button"
       aria-label={t("cancel")}
       title={t("cancel")}
@@ -952,10 +969,14 @@ export function VoiceLibrary({
       aria-label={t("voiceCreateTitle")}
       disabled={controlsDisabled || !canEnroll}
       onClick={() => setCreating(true)}
-      className={cn(
-        buttonVariants({ variant: "default" }),
-        "gap-1.5 font-display text-base font-extrabold",
-      )}
+      className={
+        arcadePicker
+          ? AGENT_NEW_BUTTON
+          : cn(
+              buttonVariants({ variant: "default" }),
+              "gap-1.5 font-display text-base font-extrabold",
+            )
+      }
     >
       <IconPlus size={16} />
       <span aria-hidden="true">{t("voiceCreateTitle")}</span>
@@ -979,11 +1000,7 @@ export function VoiceLibrary({
         <SectionCard
           title={t("voices")}
           action={createAction}
-          className={cn(
-            "arc-vo mb-0 border-[3px] border-border bg-surface shadow-[8px_8px_0_#111] [&_.section-card-header]:-mx-[22px] [&_.section-card-header]:-mt-[30px] [&_.section-card-header]:mb-[18px] [&_.section-card-header]:border-b-[3px] [&_.section-card-header]:border-border [&_.section-card-header]:bg-[radial-gradient(#1112_1.5px,transparent_1.6px)] [&_.section-card-header]:bg-size-[9px_9px] [&_.section-card-header]:px-[22px] [&_.section-card-header]:py-3.5 [&_.section-card-header_h2]:font-display [&_.section-card-header_h2]:text-[22px] [&_.section-card-header_h2]:font-extrabold [&_.section-card-header_h2]:tracking-normal",
-            profiles.length === 0 &&
-              "arc-cmp !px-[18px] !pt-[26px] !pb-4 !shadow-[5px_5px_0_#111]",
-          )}
+          className={cn(agentCard("voices", profiles.length === 0), "mb-0")}
         >
           {body ?? <p className="muted-copy">{t("voiceNone")}</p>}
         </SectionCard>

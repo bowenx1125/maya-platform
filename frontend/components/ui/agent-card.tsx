@@ -42,6 +42,16 @@ export function agentTone(id: string) {
   return CARD_TONES[hash % CARD_TONES.length];
 }
 
+/** Card A on the Agents page (r2-list.mjs .tcA): one frame, 186px wide. */
+const CARD_A_CLASS =
+  "group/card relative block w-[186px] list-none p-0 font-body text-ink max-[767px]:w-auto";
+const FRAME_A_CLASS =
+  "flex flex-col overflow-hidden rounded-[12px] border-[3px] border-[#111] bg-white shadow-[5px_5px_0_#111]";
+const BAND_A_CLASS =
+  "relative z-[1] box-border flex h-16 items-center border-b-[3px] border-[#111] pr-[30px] pl-[27px]";
+const TITLE_A_CLASS =
+  "line-clamp-2 min-w-0 wrap-break-word text-left font-display text-[17px] leading-[1.15] font-extrabold text-[#111] no-underline";
+
 const FRAME_CLASS =
   "flex flex-1 flex-col overflow-hidden rounded-[9px] border-[3px] border-border bg-surface";
 const BAND_CLASS =
@@ -83,12 +93,16 @@ function VersionStrip({
   pending,
   visibility,
   visibilityLabel,
+  list = false,
 }: {
   label: string;
   pending: boolean;
   visibility?: "private" | "public";
   visibilityLabel?: string;
+  /** Card A: 1px 8px cells. */
+  list?: boolean;
 }) {
+  const cell = list ? "px-2 py-px leading-[normal]" : "px-2.5 py-1";
   return (
     <span
       className="relative z-[1] inline-flex w-fit overflow-hidden rounded-md border-2 border-border text-[11px] font-extrabold leading-none shadow-[2px_2px_0_#111]"
@@ -97,7 +111,8 @@ function VersionStrip({
     >
       <span
         className={cn(
-          "bg-surface px-2.5 py-1",
+          "bg-surface",
+          cell,
           pending && "bg-warn-bg",
           visibilityLabel && "border-r-2 border-border",
         )}
@@ -107,7 +122,7 @@ function VersionStrip({
       {visibilityLabel ? (
         <span
           className={cn(
-            "px-2.5 py-1",
+            cell,
             visibility === "public" ? "bg-[#22C55E]" : "bg-[#E5E7EB]",
           )}
         >
@@ -154,7 +169,10 @@ export function AgentCard({
   onDelete,
   deleteLabel,
   rename,
+  variant,
 }: {
+  /** "list": card A of the Agents page. */
+  variant?: "list";
   id: string;
   name: string;
   href: string;
@@ -204,9 +222,13 @@ export function AgentCard({
   }
 
   const tone = agentTone(id);
+  const listCard = variant === "list";
   const art = (
     <span
-      className="relative flex h-[150px] items-end justify-center border-b-[3px] border-border"
+      className={cn(
+        "relative flex h-[150px] items-end justify-center border-b-[3px] border-border",
+        listCard && "border-[#111] max-[767px]:h-[120px]",
+      )}
       style={{
         backgroundColor: tone,
         backgroundImage:
@@ -214,14 +236,23 @@ export function AgentCard({
       }}
       aria-hidden="true"
     >
-      <MascotFigure id={mascot} className="h-[132px] w-auto" />
+      <MascotFigure
+        id={mascot}
+        className={cn("h-[132px] w-auto", listCard && "max-[767px]:h-[104px]")}
+      />
     </span>
   );
-  const title = <FitTitle text={name} />;
-  const titleClass =
-    "block min-w-0 font-display text-[22px] font-extrabold leading-tight text-ink no-underline";
+  const title = listCard ? name : <FitTitle text={name} />;
+  const titleClass = listCard
+    ? TITLE_A_CLASS
+    : "block min-w-0 font-display text-[22px] font-extrabold leading-tight text-ink no-underline";
   const strip = (
-    <span className="relative z-[1] flex flex-col items-start gap-1.5 p-2.5">
+    <span
+      className={cn(
+        "relative z-[1] flex flex-col items-start gap-1.5 p-2.5",
+        listCard && "flex-row items-center gap-[5px] px-2.5 py-2",
+      )}
+    >
       {caption ? (
         <span className="max-w-full truncate text-[11px] font-bold text-[#333]">
           {caption}
@@ -232,20 +263,29 @@ export function AgentCard({
         pending={pending}
         visibility={visibility}
         visibilityLabel={visibilityLabel}
+        list={listCard}
       />
     </span>
   );
   const foot = footer ? (
     <span
       data-card-footer
-      className="pointer-events-none relative z-[1] mt-auto border-t-2 border-dashed border-[#11111144] px-2.5 py-1.5 text-[11px] font-medium text-[#333]"
+      className={
+        listCard
+          ? "pointer-events-none relative z-[1] mx-2.5 block border-0 border-t-2 border-dashed border-[#1116] pt-[7px] pb-[9px] text-left text-[11px] font-medium text-[#111]"
+          : "pointer-events-none relative z-[1] mt-auto border-t-2 border-dashed border-[#11111144] px-2.5 py-1.5 text-[11px] font-medium text-[#333]"
+      }
     >
       {footer}
     </span>
   ) : null;
 
   return (
-    <li className={CARD_CLASS} data-agent-card={id} data-tone={tone}>
+    <li
+      className={listCard ? CARD_A_CLASS : CARD_CLASS}
+      data-agent-card={id}
+      data-tone={tone}
+    >
       {rename ? (
         <>
           {/* Covers the card so anywhere opens it; the title stays above. */}
@@ -256,8 +296,20 @@ export function AgentCard({
             data-ui-guide={guideText ? "agent.lastEdited" : undefined}
             data-ui-guide-text={guideText}
           />
-          <span className={cn(FRAME_CLASS, "pointer-events-none")}>
-            <span data-card-band className={cn(BAND_CLASS, "pointer-events-auto")} style={{ backgroundColor: tone }}>
+          <span
+            className={cn(
+              listCard ? FRAME_A_CLASS : FRAME_CLASS,
+              "pointer-events-none",
+            )}
+          >
+            <span
+              data-card-band
+              className={cn(
+                listCard ? BAND_A_CLASS : BAND_CLASS,
+                "pointer-events-auto",
+              )}
+              style={{ backgroundColor: tone }}
+            >
               {editing ? (
                 <input
                   ref={bindInput}
@@ -314,13 +366,17 @@ export function AgentCard({
           href={href}
           aria-label={name}
           className={cn(
-            FRAME_CLASS,
+            listCard ? FRAME_A_CLASS : FRAME_CLASS,
             "text-ink no-underline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main",
           )}
           data-ui-guide={guideText ? "agent.lastEdited" : undefined}
           data-ui-guide-text={guideText}
         >
-          <span data-card-band className={BAND_CLASS} style={{ backgroundColor: tone }}>
+          <span
+            data-card-band
+            className={listCard ? BAND_A_CLASS : BAND_CLASS}
+            style={{ backgroundColor: tone }}
+          >
             <span className={titleClass}>{title}</span>
           </span>
           {art}
@@ -335,10 +391,10 @@ export function AgentCard({
   );
 }
 
-/** Sunburst behind the empty card's mascot. */
 /**
- * E2 Spotlight empty state: an enlarged yellow card A on a sunburst holds the
- * existing empty copy and "+ New"; two dashed card-A ghosts fan out behind.
+ * E2 Spotlight empty state (r2-list.mjs .eE2): a 250px yellow card A holds
+ * the existing empty copy and "+ New"; two dashed card-A ghosts fan out
+ * behind at ±170px, ±8deg, over a pale sun.
  */
 export function AgentsEmpty({
   title,
@@ -352,93 +408,79 @@ export function AgentsEmpty({
   ghosts?: number;
 }) {
   return (
-    <div className="relative isolate grid min-h-[360px] place-items-center overflow-hidden px-4 pt-8 pb-10 max-[680px]:min-h-[320px]">
-      <span
-        aria-hidden="true"
-        className="absolute bottom-0 left-1/2 -z-10 h-[150px] w-[300px] -translate-x-1/2 rounded-t-full bg-[#FFF3B0]"
-      />
-      <ul className="relative m-0 grid list-none place-items-center p-0">
-        <GhostSlot fan="left" />
-        <GhostSlot fan="right" />
-        <li className="relative z-[2] flex w-[188px] flex-col overflow-hidden rounded-[12px] border-[3px] border-border bg-surface font-body text-ink shadow-[6px_6px_0_#111] [grid-area:1/1]">
-          <p className="m-0 flex min-h-16 items-center border-b-[3px] border-border bg-[#FFE14D] px-3 font-display text-xl font-extrabold">
-            {title}
-          </p>
-          <div className="relative h-[160px] overflow-hidden border-b-[3px] border-border bg-[#FFE7A3]">
-            <EmptyRays />
+    <div className="block [background:radial-gradient(ellipse_at_50%_100%,#FFE14D55_0_30%,transparent_31%)]">
+      <div className="relative flex h-[470px] items-start justify-center pt-[18px] max-[767px]:h-[420px]">
+        <GhostSlot fan="left" mascot="wave" />
+        <GhostSlot fan="right" mascot="tablet" />
+        <div className="relative z-[2] box-border w-[250px] overflow-hidden rounded-[12px] border-[3px] border-[#111] bg-white shadow-[8px_8px_0_#111] max-[767px]:w-[220px]">
+          <div className="flex h-[78px] items-center border-b-[3px] border-[#111] bg-[#FFE14D] px-3">
+            <p className="m-0 text-left font-display text-2xl font-extrabold text-[#111]">
+              {title}
+            </p>
           </div>
-          <div className="grid min-h-[60px] place-items-center p-3">
+          <div className="grid h-[220px] place-items-center bg-[#FF4D8D33] [background-image:radial-gradient(circle_at_50%_50%,#fff9_0_30%,transparent_31%),repeating-conic-gradient(from_0deg_at_50%_50%,#FFE14D88_0_10deg,transparent_10deg_20deg)] max-[767px]:h-[120px]" />
+          <div className="flex justify-center border-t-[3px] border-[#111] p-4">
             {newHref ? (
               <Link
                 href={newHref}
                 aria-label={newLabel}
                 data-tour="new"
                 data-tour-empty="true"
-                className={cn(
-                  buttonVariants({ variant: "default", size: "sm" }),
-                  "gap-1.5 font-display text-base font-extrabold no-underline",
-                )}
+                className={AGENTS_NEW_CLASS}
               >
-                <IconPlus size={14} />
+                <IconPlus size={16} />
                 {newLabel}
               </Link>
             ) : null}
           </div>
-        </li>
-      </ul>
+        </div>
+      </div>
     </div>
   );
 }
 
-/** Pink-and-yellow rays with a pale sun, behind the empty card's art. */
-function EmptyRays() {
+/** A dashed card-A ghost fanned behind the spotlight card. */
+function GhostSlot({
+  fan,
+  mascot,
+}: {
+  fan: "left" | "right";
+  mascot: MascotId;
+}) {
   return (
-    <svg
-      viewBox="0 0 200 200"
-      className="absolute inset-0 size-full"
+    <div
       aria-hidden="true"
-      preserveAspectRatio="xMidYMid slice"
+      className={cn(
+        "absolute top-11 box-border w-[186px] rounded-[12px] border-[3px] border-dashed border-[#1155] bg-white max-[767px]:w-[150px]",
+        fan === "left"
+          ? "translate-x-[-170px] rotate-[-8deg] max-[767px]:translate-x-[-90px]"
+          : "translate-x-[170px] rotate-[8deg] max-[767px]:translate-x-[90px]",
+      )}
     >
-      {Array.from({ length: 18 }, (_, index) => (
-        <path
-          key={index}
-          d="M100 100 L93 -60 L107 -60 Z"
-          fill="#FFD6E5"
-          transform={`rotate(${index * 20} 100 100)`}
+      <div className="flex h-16 items-center border-b-[3px] border-dashed border-[#1133] px-3">
+        <i className="block h-3 w-[58%] rounded-[4px] bg-[#1112]" />
+      </div>
+      <div className="flex h-[150px] items-end justify-center border-b-[3px] border-dashed border-[#1133] [background:repeating-conic-gradient(from_0deg_at_50%_60%,#11111100_0_10deg,#1111110d_10deg_20deg)] max-[767px]:h-[120px]">
+        <MascotFigure
+          id={mascot}
+          className="h-[132px] w-auto opacity-[.08] brightness-0 max-[767px]:h-[104px]"
         />
-      ))}
-      <circle cx="100" cy="100" r="34" fill="#ffffffaa" />
-    </svg>
+      </div>
+      <div className="mx-2.5 my-2 flex">
+        <i className="block h-4 w-[38px] rounded-[5px] border-2 border-dashed border-[#1133]" />
+        <i className="block h-4 w-[50px] rounded-[5px] border-2 border-l-0 border-dashed border-[#1133]" />
+      </div>
+      <div className="mx-2.5 border-t-2 border-dashed border-[#1122] pt-[7px] pb-2.5">
+        <i className="block h-2 w-[70%] rounded-[4px] bg-[#1111]" />
+      </div>
+      <span className="absolute -top-[11px] -right-[11px] size-[26px] rounded-full border-[3px] border-dashed border-[#1144] bg-white" />
+    </div>
   );
 }
 
-/** A dashed card-A ghost fanned behind the spotlight card. */
-function GhostSlot({ fan }: { fan: "left" | "right" }) {
-  return (
-    <li
-      aria-hidden="true"
-      className={cn(
-        "relative flex h-[200px] w-[150px] flex-col rounded-[12px] border-[3px] border-dashed border-[#11111133] bg-[#ffffffb3] p-1.5 [grid-area:1/1]",
-        fan === "left"
-          ? "-translate-x-[130px] -rotate-[8deg] max-[680px]:-translate-x-[70px]"
-          : "translate-x-[130px] rotate-[8deg] max-[680px]:translate-x-[70px]",
-      )}
-    >
-      <span className="flex flex-1 flex-col rounded-[8px] border-2 border-dashed border-[#11111144]">
-        <span className="flex h-10 items-center border-b-2 border-dashed border-[#11111133] px-2">
-          <span className="block h-2.5 w-3/5 rounded-full bg-[#0000000f]" />
-        </span>
-        <span className="flex flex-1 items-end justify-center border-b-2 border-dashed border-[#11111133]">
-          <span className="block h-[70px] w-[54px] rounded-t-full bg-[#0000000f]" />
-        </span>
-        <span className="block px-2 py-2">
-          <span className="block h-2 w-[70%] rounded-full bg-[#0000000f]" />
-        </span>
-      </span>
-      <span className="absolute -top-3 -right-3 size-7 rounded-[8px] border-2 border-dashed border-[#11111133] bg-surface" />
-    </li>
-  );
-}
+/** "+ New" on the Agents page (R2 .newbtn: shared Button default). */
+export const AGENTS_NEW_CLASS =
+  "box-border inline-flex h-10 items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] bg-[#FF4D8D] px-4 font-body text-sm leading-none font-bold text-[#111] no-underline shadow-[6px_6px_0_#111] [&_svg]:size-4 [&_svg]:stroke-3";
 
 /** Header New: the page's New button next to the page title ("+ New"). */
 export function NewButton({

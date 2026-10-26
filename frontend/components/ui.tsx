@@ -114,12 +114,17 @@ export function useNoticeTrayAbove(target: HTMLElement | null) {
     };
     place();
     const observer =
-      typeof ResizeObserver === "function" ? new ResizeObserver(schedule) : null;
+      typeof ResizeObserver === "function"
+        ? new ResizeObserver(schedule)
+        : null;
     observer?.observe(target);
     observer?.observe(document.body);
     const view = window.visualViewport;
     window.addEventListener("resize", schedule);
-    window.addEventListener("scroll", schedule, { capture: true, passive: true });
+    window.addEventListener("scroll", schedule, {
+      capture: true,
+      passive: true,
+    });
     view?.addEventListener("resize", schedule);
     view?.addEventListener("scroll", schedule);
     return () => {

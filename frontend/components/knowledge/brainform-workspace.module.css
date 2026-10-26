@@ -669,7 +669,9 @@
     overflow: visible;
   }
 
-  .studyformGrid > [aria-labelledby="studyform-agents"] > :not(.sectionHeading) {
+  .studyformGrid
+    > [aria-labelledby="studyform-agents"]
+    > :not(.sectionHeading) {
     overflow: visible;
     padding-bottom: 8px;
   }

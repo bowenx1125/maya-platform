@@ -96,7 +96,10 @@ export function KnowledgeCheckOverlay({
       >
         <button
           ref={closeRef}
-          className={cn(buttonVariants({ variant: "neutral", size: "icon" }), "knowledge-check-close absolute top-3 right-3 z-[2] min-h-0 rounded-[10px] p-0")}
+          className={cn(
+            buttonVariants({ variant: "neutral", size: "icon" }),
+            "knowledge-check-close absolute top-3 right-3 z-[2] min-h-0 rounded-[10px] p-0",
+          )}
           type="button"
           aria-label={t("knowledgeCheckClose")}
           onClick={onClose}

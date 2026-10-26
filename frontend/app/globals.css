@@ -583,14 +583,6 @@ details > summary {
   line-height: 1.5;
 }
 
-.studyform-module-note {
-  max-width: 62ch;
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.92rem;
-  line-height: 1.6;
-}
-
 .rag-metrics > div {
   padding: 13px 12px;
   border-radius: 13px;
@@ -627,7 +619,6 @@ details > summary {
 .brainform-source-group + .brainform-source-group {
   margin-top: 20px;
   padding-top: 18px;
-  border-top: 1px solid var(--line);
 }
 
 .brainform-source-group h3 {
@@ -716,52 +707,6 @@ button.agent-tile-name {
   font-size: 0.86rem;
 }
 
-.agent-pill-action {
-  position: relative;
-  border: 0;
-  cursor: pointer;
-  font: inherit;
-  line-height: 1.2;
-  transition: opacity 160ms ease;
-}
-
-.agent-pill-action:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.agent-pill-action .agent-pill-x {
-  display: none;
-  align-items: center;
-  justify-content: center;
-}
-
-.agent-pill-action:hover .agent-pill-label,
-.agent-pill-action:focus-visible .agent-pill-label {
-  display: none;
-}
-
-.agent-pill-action:hover .agent-pill-x,
-.agent-pill-action:focus-visible .agent-pill-x {
-  display: inline-flex;
-}
-
-/* Hovered, the mark turns into Delete: the diamond gives way to the cross. */
-.agent-pill-action:hover,
-.agent-pill-action:focus-visible {
-  color: var(--red);
-}
-
-.agent-pill-action:hover::before,
-.agent-pill-action:focus-visible::before {
-  display: none;
-}
-
-.agent-pill-action:focus-visible {
-  outline: 2px solid var(--accent, #76591f);
-  outline-offset: 2px;
-}
-
 .agent-tile-name {
   min-width: 0;
   max-width: 100%;
@@ -776,33 +721,6 @@ button.agent-tile-name {
   font-weight: 650;
   line-height: 1.25;
   letter-spacing: -0.01em;
-}
-
-.agent-tile-group {
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted);
-  font-size: 0.72rem;
-  line-height: 1.3;
-}
-
-.agent-tile-author {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  max-width: 100%;
-  color: var(--muted);
-  font-size: 0.7rem;
-}
-
-.agent-tile-author > span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .knowledge-tile {
@@ -1711,11 +1629,6 @@ dd {
 .agent-pill[data-visibility="private"] {
   background: #f0edf2;
   color: var(--muted);
-}
-
-.agent-pill-action[data-visibility]:hover,
-.agent-pill-action[data-visibility]:focus-visible {
-  color: var(--red);
 }
 
 /* The group's members, alphabetical, under the group's own name. */

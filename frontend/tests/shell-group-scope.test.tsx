@@ -81,7 +81,7 @@ describe("group navigation scope", () => {
     // Studyform, Brainform and Chatform stay in the visited group.
     expect(
       screen.getByRole("link", { name: "Agents" }).getAttribute("href"),
-    ).toBe("/student/groups/group-b");
+    ).toBe("/student/agents?group_id=group-b");
     expect(links()).toContain("/teacher/knowledge?group_id=group-b");
     expect(links()).toContain("/teacher/chat?group_id=group-b");
     expect(

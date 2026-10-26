@@ -711,8 +711,8 @@ describe("Studyform Team cards", () => {
     );
 
     const headings = await screen.findAllByRole("heading", { level: 2 });
+    // Agents left Studyform for its own page.
     expect(headings.map((heading) => heading.textContent)).toEqual([
-      "Agents",
       "Teams",
       "Voices",
       "RAG",
@@ -734,7 +734,7 @@ describe("Studyform Team cards", () => {
       screen
         .getAllByRole("link", { name: "New" })
         .map((link) => link.getAttribute("href")),
-    ).toEqual(["/teacher/agents/new", "/teacher/studyform?mode=team-new"]);
+    ).toEqual(["/teacher/studyform?mode=team-new"]);
   });
 
   it("lets a student create a private Team beside Agents and Voices", async () => {
@@ -761,8 +761,8 @@ describe("Studyform Team cards", () => {
     );
 
     const headings = await screen.findAllByRole("heading", { level: 2 });
+    // Agents left Studyform for its own page.
     expect(headings.map((heading) => heading.textContent)).toEqual([
-      "Agents",
       "Teams",
       "Voices",
     ]);
@@ -778,10 +778,7 @@ describe("Studyform Team cards", () => {
       screen
         .getAllByRole("link", { name: "New" })
         .map((link) => link.getAttribute("href")),
-    ).toEqual([
-      "/student/groups/group-1/agents/new",
-      "/student/groups/group-1?mode=team-new",
-    ]);
+    ).toEqual(["/student/groups/group-1?mode=team-new"]);
   });
 
   it("shows a visiting teacher the group's Teams read-only, without creating one", async () => {
@@ -800,7 +797,7 @@ describe("Studyform Team cards", () => {
       </>,
     );
 
-    await screen.findByRole("heading", { name: "Agents" });
+    await screen.findByRole("heading", { name: "Teams" });
     // The group's Teams are listed for the teacher to look at, asked for by
     // group so its members' private Teams come too.
     expect(screen.getByRole("heading", { name: "Teams" })).toBeTruthy();

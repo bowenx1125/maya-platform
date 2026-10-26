@@ -52,10 +52,7 @@ import {
 import { buildAgentTemplate } from "./agent-template";
 import { PageAction } from "./page-action";
 import { ModuleUpload } from "./studyform-layout";
-import {
-  IconDownload,
-  IconUpload,
-} from "./quiet-icons";
+import { IconDownload, IconUpload } from "./quiet-icons";
 import { VoiceLibrary } from "./voice/voice-library";
 import {
   downloadText,
@@ -74,17 +71,50 @@ import {
   SectionCard,
   StatusBadge,
 } from "./ui";
+import {
+  AGENT_BANNER,
+  AGENT_BANNER_TITLE,
+  AGENT_ICON_BUTTON,
+  AGENT_NEW_BUTTON,
+  AGENT_PAGE,
+  agentCard,
+} from "./agent-chrome";
 
-
-/** Arcade SectionCard chrome for Create/Edit (O2). */
-const ARC_WB_CARD =
-  "mb-0 border-[3px] border-border bg-surface p-[30px_22px] shadow-[8px_8px_0_#111] [&_.section-card-header]:-mx-[22px] [&_.section-card-header]:-mt-[30px] [&_.section-card-header]:mb-[18px] [&_.section-card-header]:border-b-[3px] [&_.section-card-header]:border-border [&_.section-card-header]:bg-[radial-gradient(#1112_1.5px,transparent_1.6px)] [&_.section-card-header]:[background-size:9px_9px] [&_.section-card-header]:px-[22px] [&_.section-card-header]:py-3.5 [&_.section-card-header_h2]:font-display [&_.section-card-header_h2]:text-[22px] [&_.section-card-header_h2]:font-extrabold [&_.section-card-header_h2]:tracking-normal";
-const ARC_WB_CARD_CMP =
-  "arc-cmp !px-[18px] !pt-[26px] !pb-4 !shadow-[5px_5px_0_#111]";
-const ARC_AVATAR_CARD =
-  "c-av mb-0 border-[3px] border-border bg-surface p-[30px_22px] shadow-[8px_8px_0_#111] [background-image:radial-gradient(ellipse_at_50%_46%,#FFE14D_0_20%,transparent_21%),repeating-conic-gradient(from_0deg_at_50%_32%,#FDBA74_0_9deg,#FFE7CC_9deg_18deg)] [&_.section-card-header]:-mx-[22px] [&_.section-card-header]:-mt-[30px] [&_.section-card-header]:mb-[18px] [&_.section-card-header]:border-b-[3px] [&_.section-card-header]:border-border [&_.section-card-header]:bg-surface/80 [&_.section-card-header]:px-[22px] [&_.section-card-header]:py-3.5 [&_.section-card-header_h2]:font-display [&_.section-card-header_h2]:text-[22px] [&_.section-card-header_h2]:font-extrabold";
-const ARC_ICON_BTN =
-  "inline-flex size-10 min-h-0 items-center justify-center rounded-[10px] border-2 border-border bg-[var(--secondary-background)] p-0 text-[var(--foreground)] shadow-[3px_3px_0_0_var(--border)] hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
+/** Create/Edit (O2, option A) card contents, ported from fin.mjs WB/R2/CMP. */
+const NAME_CARD = cn(
+  agentCard("name"),
+  "[&_.stack-form]:grid [&_.stack-form]:gap-3.5 [&_.stack-form_label]:block",
+  "[&_input[aria-label]]:box-border [&_input[aria-label]]:w-full [&_input[aria-label]]:rounded-[10px] [&_input[aria-label]]:border-[3px] [&_input[aria-label]]:border-[#111] [&_input[aria-label]]:bg-white [&_input[aria-label]]:px-3.5 [&_input[aria-label]]:py-2.5 [&_input[aria-label]]:font-body [&_input[aria-label]]:text-lg [&_input[aria-label]]:font-semibold",
+  "[&_.visibility-toggle]:inline-flex [&_.visibility-toggle]:gap-0 [&_.visibility-toggle]:overflow-hidden [&_.visibility-toggle]:rounded-[10px] [&_.visibility-toggle]:border-[3px] [&_.visibility-toggle]:border-[#111] [&_.visibility-toggle]:bg-white [&_.visibility-toggle]:p-0 [&_.visibility-toggle]:shadow-[3px_3px_0_#111]",
+  "[&_.visibility-toggle_button]:rounded-none [&_.visibility-toggle_button]:border-0 [&_.visibility-toggle_button]:bg-white [&_.visibility-toggle_button]:px-4 [&_.visibility-toggle_button]:py-1.5 [&_.visibility-toggle_button]:font-body [&_.visibility-toggle_button]:text-[13px] [&_.visibility-toggle_button]:font-extrabold [&_.visibility-toggle_button]:text-[#111] [&_.visibility-toggle_button]:shadow-none [&_.visibility-toggle_button+button]:border-l-[3px] [&_.visibility-toggle_button+button]:border-[#111] [&_.visibility-toggle_button[aria-pressed=true]]:bg-[#E5E7EB] [&_.visibility-toggle_button[aria-pressed=true]:last-child]:bg-[#22C55E]",
+);
+const MARKDOWN_CARD = cn(
+  agentCard("markdown"),
+  "[&_textarea.markdown-editor]:box-border [&_textarea.markdown-editor]:min-h-[240px] [&_textarea.markdown-editor]:w-full [&_textarea.markdown-editor]:rounded-[10px] [&_textarea.markdown-editor]:border-[3px] [&_textarea.markdown-editor]:border-[#111] [&_textarea.markdown-editor]:bg-white [&_textarea.markdown-editor]:font-mono [&_textarea.markdown-editor]:text-sm [&_textarea.markdown-editor]:leading-normal [&_textarea.markdown-editor]:font-medium",
+  "[&_.editor-footer]:mt-2 [&_.editor-footer]:font-body [&_.editor-footer]:text-xs [&_.editor-footer]:font-bold",
+  "[&_.button-row]:flex [&_.button-row]:items-center [&_.button-row]:gap-2.5",
+);
+const BRAINFORM_ROWS =
+  "[&_.brainform-source-group_h3]:font-display [&_.brainform-source-group_h3]:text-base [&_.brainform-source-group_h3]:font-extrabold [&_.brainform-source-group_h3]:tracking-normal [&_.brainform-source-group_h3]:text-[#111] " +
+  "[&_.document-row]:mb-2 [&_.document-row]:rounded-[10px] [&_.document-row]:border-2 [&_.document-row]:border-[#111] [&_.document-row]:bg-white [&_.document-row]:shadow-[2px_2px_0_#111] " +
+  "[&_.document-row_:is(span,strong,p)]:min-w-[6em] [&_.document-row_:is(span,strong,p)]:overflow-visible [&_.document-row_:is(span,strong,p)]:text-clip [&_.document-row_:is(span,strong,p)]:break-normal [&_.document-row_:is(span,strong,p)]:wrap-break-word [&_.document-row_:is(span,strong,p)]:whitespace-normal " +
+  "[&_.row-actions]:flex [&_.row-actions]:items-center [&_.row-actions]:gap-2.5";
+const BRAINFORM_COMPACT =
+  "[&_.brainform-source-group]:m-0 [&_.brainform-source-group]:flex [&_.brainform-source-group]:items-baseline [&_.brainform-source-group]:gap-2.5 [&_.brainform-source-group]:border-t-2 [&_.brainform-source-group]:border-dashed [&_.brainform-source-group]:border-[#1114] [&_.brainform-source-group]:px-0.5 [&_.brainform-source-group]:py-2 " +
+  "[&_.brainform-source-group_h3]:m-0 [&_.brainform-source-group_h3]:min-w-[84px] [&_.brainform-source-group_h3]:text-sm " +
+  "[&_.brainform-source-group_p]:m-0 [&_.brainform-source-group_p]:font-body [&_.brainform-source-group_p]:text-[13px] [&_.brainform-source-group_p]:font-medium [&_.brainform-source-group_p]:text-[#1119]";
+const AVATAR_CARD = cn(
+  agentCard("avatar"),
+  "[background:radial-gradient(ellipse_at_50%_46%,#FFE14D_0_20%,transparent_21%),repeating-conic-gradient(from_0deg_at_50%_32%,#FDBA74_0_9deg,#FFE7CC_9deg_18deg)]",
+  "[&_[class*=canvasFrame]]:border-0 [&_[class*=canvasFrame]]:bg-none [&_[class*=canvasFrame]]:bg-transparent [&_canvas]:drop-shadow-[0_8px_0_#1113]",
+  "[&_[class*=controlGrid]]:rounded-[12px] [&_[class*=controlGrid]]:border-[3px] [&_[class*=controlGrid]]:border-[#111] [&_[class*=controlGrid]]:bg-white [&_[class*=controlGrid]]:p-3 [&_[class*=controlGrid]]:shadow-[4px_4px_0_#111]",
+  "[&_select]:h-10 [&_select]:rounded-[8px] [&_select]:border-2 [&_select]:border-[#111] [&_select]:bg-white",
+  "[&_:is([class*=buttonRow],[class*=templateGrid])_button]:rounded-[10px] [&_:is([class*=buttonRow],[class*=templateGrid])_button]:border-2 [&_:is([class*=buttonRow],[class*=templateGrid])_button]:border-[#111] [&_:is([class*=buttonRow],[class*=templateGrid])_button]:bg-white [&_:is([class*=buttonRow],[class*=templateGrid])_button]:font-body [&_:is([class*=buttonRow],[class*=templateGrid])_button]:text-[13px] [&_:is([class*=buttonRow],[class*=templateGrid])_button]:font-bold [&_:is([class*=buttonRow],[class*=templateGrid])_button]:shadow-[3px_3px_0_#111]",
+  "[&_:is([aria-pressed=true],[aria-checked=true])]:bg-[#A3E635]",
+  "max-[767px]:[&_[class*=canvasFrame]]:max-h-[300px]",
+);
+const TEMPLATE_BUTTON =
+  "inline-flex h-10 box-border cursor-pointer items-center rounded-[10px] border-2 border-[#111] bg-white px-3.5 font-body text-sm font-bold text-[#111] no-underline shadow-[3px_3px_0_#111] disabled:cursor-not-allowed disabled:opacity-50";
 
 export function AgentOverview({ agentId }: { agentId: string }) {
   const t = useT();
@@ -150,7 +180,7 @@ export function AgentOverview({ agentId }: { agentId: string }) {
     try {
       await api.deleteAgent(agentId, { idempotency: handle });
       mutationStore.finish(intent, handle);
-      router.replace("/student/groups/" + agent.group_id);
+      router.replace(`/student/agents?group_id=${agent.group_id}`);
     } catch (cause) {
       if (isAmbiguousMutationFailure(cause)) setRetryAction("delete");
       else mutationStore.abandon(intent, handle);
@@ -187,7 +217,7 @@ export function AgentOverview({ agentId }: { agentId: string }) {
     );
   const editorVersion = current ?? draft;
   const entryBack = agent.group_id
-    ? `/student/groups/${agent.group_id}`
+    ? `/student/agents?group_id=${agent.group_id}`
     : "/student";
   if (editorVersion && agent.can_edit === true) {
     return (
@@ -238,11 +268,14 @@ export function AgentOverview({ agentId }: { agentId: string }) {
           version={visible}
           agent={agent}
           actions={actions}
-          backHref={`/student/groups/${agent.group_id}`}
+          backHref={`/student/agents?group_id=${agent.group_id}`}
         />
       ) : (
         <SectionCard action={actions}>
-          <PageAction name="back" href={`/student/groups/${agent.group_id}`} />
+          <PageAction
+            name="back"
+            href={`/student/agents?group_id=${agent.group_id}`}
+          />
           <EmptyCard title={t("noVersions")} />
         </SectionCard>
       )}
@@ -1320,8 +1353,8 @@ export function AgentWorkbench({
         setNotice("publishedNotice");
         router.replace(
           activeAgent.group_id
-            ? `/student/groups/${activeAgent.group_id}`
-            : "/teacher/studyform",
+            ? `/student/agents?group_id=${activeAgent.group_id}`
+            : "/teacher/agents",
         );
       } catch (cause) {
         if (!isCurrentScope(requestScope)) return;
@@ -1497,8 +1530,8 @@ export function AgentWorkbench({
         publishOnDone
           ? (backHref ??
               (currentAgent.group_id
-                ? `/student/groups/${currentAgent.group_id}`
-                : "/teacher/studyform"))
+                ? `/student/agents?group_id=${currentAgent.group_id}`
+                : "/teacher/agents"))
           : currentAgent.ownership_scope === "personal"
             ? `/teacher/agents/${currentAgent.id}`
             : `/student/agents/${currentAgent.id}`,
@@ -1572,558 +1605,591 @@ export function AgentWorkbench({
 
   return (
     <>
-      <header className="mb-8 rounded-[16px] border-[3px] border-border bg-[#FFF7CC] px-7 py-6 shadow-[0_0_0_3px_#FDBA74,8px_8px_0_3px_#111] [background-image:repeating-conic-gradient(from_0deg_at_92%_100%,#FFE14D55_0_8deg,transparent_8deg_16deg)]">
-        <h1 className="m-0 font-display text-[clamp(1.6rem,2.4vw,2.1rem)] font-extrabold leading-tight tracking-tight text-ink">
-          {unsavedCreate
-            ? draftName.trim()
-              ? `${draftName.trim()} · ${version.version_label}`
-              : t("newAgent")
-            : `${agent.name} · ${version.version_label}`}
-        </h1>
-      </header>
-      {!unsavedCreate && !agentIssuesDismissed ? (
-        <AgentHintBar
-          title={t("agentIssuesTitle")}
-          issues={agentIssues}
-          onCheck={generationFlow ? undefined : (item) => void checkIssue(item)}
-          checking={checkingIssue}
-          onDismiss={() => setAgentIssuesDismissed(true)}
-        />
-      ) : null}
-      {generationFlow ? (
-        <Notice tone="info">{t("aiKnowledgeFlowIntro")}</Notice>
-      ) : null}
-      {conflict ? <DraftConflictNotice /> : null}
-      {error &&
-      !conflict &&
-      error !== knowledgeUploadError &&
-      !unsavedCreate ? (
-        <>
-          <ErrorNotice
-            error={error}
-            onRetry={
-              retryAction === "uploadKnowledge" && pendingKnowledgeUpload
-                ? () => void uploadKnowledge(pendingKnowledgeUpload.file)
-                : retryAction === "bindKnowledge" && pendingKnowledgeSetIds
-                  ? () => void saveKnowledgeSetSelection(pendingKnowledgeSetIds)
-                  : retryAction === "publish"
-                    ? () => {
-                        void publish(true);
-                      }
-                    : () => void load(true)
-            }
+      <div className={AGENT_PAGE}>
+        <header className={AGENT_BANNER}>
+          <PageAction
+            name="back"
+            placement="page"
+            href={backHref ?? `/student/agents/${agent.id}`}
+            disabled={editingLocked}
+            onClick={(event) => {
+              if (localDirty && !window.confirm(t("discardDraftConfirm"))) {
+                event.preventDefault();
+                return;
+              }
+              const created = createdAgentRef.current;
+              if (
+                unsavedCreate &&
+                created?.id &&
+                !created.current_published_version_id
+              ) {
+                event.preventDefault();
+                const href =
+                  backHref ??
+                  (created.group_id
+                    ? `/student/agents?group_id=${created.group_id}`
+                    : "/teacher/agents");
+                void (async () => {
+                  try {
+                    await api.deleteAgent(created.id);
+                    router.push(href);
+                  } catch (cause) {
+                    setError(cause);
+                  }
+                })();
+              }
+            }}
           />
-        </>
-      ) : null}
-      {generationSourcePrompt ? (
-        <Notice
-          tone="warning"
-          title={t("aiKnowledgeSourcesRequired")}
-          onClose={() => setGenerationSourcePrompt(false)}
-        >
-          {t("aiKnowledgeSourcesRequiredHelp")}
-        </Notice>
-      ) : null}
-      {notice ? (
-        <Notice
-          tone="success"
-          title={t("done")}
-          onClose={() => setNotice(null)}
-        >
-          {t(notice)}
-        </Notice>
-      ) : null}
-      <div className="grid gap-8">
-        <div className="grid grid-cols-1 items-start gap-x-9 gap-y-11 min-[768px]:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
-          <div className="col-span-full grid gap-4 empty:hidden">
-          {unsavedCreate && submitHint ? (
-            // The mascot tray says it; the field it is about is marked and
-            // gets focus back once the notice is dismissed.
-            <Notice
-              id="agent-submit-hint"
-              tone="error"
-              onClose={() => {
-                const field = nameMissing ? nameField.current : null;
-                setSubmitHint("");
-                field?.focus();
-              }}
-            >
-              {submitHint}
-            </Notice>
-          ) : null}
-          {unsavedCreate &&
-          error &&
-          !conflict &&
-          error !== knowledgeUploadError ? (
+          <h1 className={AGENT_BANNER_TITLE}>
+            {unsavedCreate
+              ? draftName.trim()
+                ? `${draftName.trim()} · ${version.version_label}`
+                : t("newAgent")
+              : `${agent.name} · ${version.version_label}`}
+          </h1>
+          <PageAction
+            name="done"
+            placement="page"
+            disabled={
+              editingLocked ||
+              (publishOnDone &&
+                !unsavedCreate &&
+                !generationFlow &&
+                !localDirty &&
+                retryAction !== "publish") ||
+              (!publishOnDone &&
+                !unsavedCreate &&
+                !localDirty &&
+                blockers.length > 0)
+            }
+            onClick={() => void publish()}
+          />
+        </header>
+        {!unsavedCreate && !agentIssuesDismissed ? (
+          <AgentHintBar
+            title={t("agentIssuesTitle")}
+            issues={agentIssues}
+            onCheck={
+              generationFlow ? undefined : (item) => void checkIssue(item)
+            }
+            checking={checkingIssue}
+            onDismiss={() => setAgentIssuesDismissed(true)}
+          />
+        ) : null}
+        {generationFlow ? (
+          <Notice tone="info">{t("aiKnowledgeFlowIntro")}</Notice>
+        ) : null}
+        {conflict ? <DraftConflictNotice /> : null}
+        {error &&
+        !conflict &&
+        error !== knowledgeUploadError &&
+        !unsavedCreate ? (
+          <>
             <ErrorNotice
-              inline
               error={error}
               onRetry={
-                retryAction === "publish"
-                  ? () => {
-                      void publish(true);
-                    }
-                  : undefined
+                retryAction === "uploadKnowledge" && pendingKnowledgeUpload
+                  ? () => void uploadKnowledge(pendingKnowledgeUpload.file)
+                  : retryAction === "bindKnowledge" && pendingKnowledgeSetIds
+                    ? () =>
+                        void saveKnowledgeSetSelection(pendingKnowledgeSetIds)
+                    : retryAction === "publish"
+                      ? () => {
+                          void publish(true);
+                        }
+                      : () => void load(true)
               }
             />
-          ) : null}
-          </div>
-          <div className="stage sticky top-5 grid gap-11 self-start max-[767px]:static max-[767px]:order-2">
-            {avatarConfig ? (
-              <SectionCard title={t("avatarDesign")} className={ARC_AVATAR_CARD}>
-                {avatarTemplatesError ? (
-                  <ErrorNotice
-                    inline
-                    error={avatarTemplatesError}
-                    onRetry={() => void loadAvatarTemplates()}
-                  />
-                ) : null}
-                {avatarTemplatesLoading ? <LoadingCard /> : null}
-                <AvatarEditor
-                  templates={avatarTemplates}
-                  value={avatarConfig}
-                  onChange={setAvatarConfig}
-                  fallbackLabel={agent.name}
-                  disabled={
-                    editingLocked ||
-                    avatarTemplatesLoading ||
-                    Boolean(avatarTemplatesError)
-                  }
-                />
-              </SectionCard>
-            ) : null}
-          </div>
-          <div className="stats grid min-w-0 gap-11 max-[767px]:order-1">
-          {unsavedCreate ? (
-            <SectionCard title={t("agentName")} className={ARC_WB_CARD}>
-              <form
-                id="create-agent-form"
-                className="stack-form wide-form quiet-create"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void publish();
-                }}
-              >
-                <label>
-                  <input
-                    ref={nameField}
-                    aria-label={t("agentName")}
-                    aria-invalid={nameMissing || undefined}
-                    aria-describedby={
-                      nameMissing ? "agent-submit-hint" : undefined
-                    }
-                    className="aria-invalid:border-[3px]! aria-invalid:border-err! aria-invalid:bg-err-bg!"
-                    value={draftName}
-                    disabled={editingLocked}
-                    maxLength={120}
-                    onChange={(event) => {
-                      setSubmitHint("");
-                      unsavedCreate.onIdentityEdit?.();
-                      setDraftName(event.target.value);
-                    }}
-                  />
-                </label>
-                <div className="agent-identity">
-                  <div
-                    className="visibility-toggle"
-                    role="group"
-                    aria-label={t("agentVisibility")}
-                    data-ui-guide="agent.visibility"
-                  >
-                    {(["private", "public"] as const).map((option) => (
-                      <button
-                        key={option}
-                        type="button"
-                        aria-pressed={draftVisibility === option}
-                        disabled={editingLocked}
-                        onClick={() => {
-                          unsavedCreate.onIdentityEdit?.();
-                          setDraftVisibility(option);
-                        }}
-                      >
-                        {t(
-                          option === "private"
-                            ? "privateOption"
-                            : "publicOption",
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </form>
-            </SectionCard>
-          ) : null}
-          <SectionCard
-            title={t("agentMd")}
-            guide="agent.markdown"
-            className={ARC_WB_CARD}
-            action={
-              <div className="button-row">
-                <button
-                  className="text-link"
-                  type="button"
-                  disabled={editingLocked}
-                  onClick={() => {
-                    abandonUploadIntent();
-                    abandonPublishIntent();
-                    setAgentMd(
-                      buildAgentTemplate(draftName.trim() || agent.name),
-                    );
+          </>
+        ) : null}
+        {generationSourcePrompt ? (
+          <Notice
+            tone="warning"
+            title={t("aiKnowledgeSourcesRequired")}
+            onClose={() => setGenerationSourcePrompt(false)}
+          >
+            {t("aiKnowledgeSourcesRequiredHelp")}
+          </Notice>
+        ) : null}
+        {notice ? (
+          <Notice
+            tone="success"
+            title={t("done")}
+            onClose={() => setNotice(null)}
+          >
+            {t(notice)}
+          </Notice>
+        ) : null}
+        <div className="grid gap-8">
+          <div className="grid grid-cols-1 items-start gap-x-9 gap-y-11 min-[768px]:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
+            <div className="col-span-full grid gap-4 empty:hidden">
+              {unsavedCreate && submitHint ? (
+                // The mascot tray says it; the field it is about is marked and
+                // gets focus back once the notice is dismissed.
+                <Notice
+                  id="agent-submit-hint"
+                  tone="error"
+                  onClose={() => {
+                    const field = nameMissing ? nameField.current : null;
+                    setSubmitHint("");
+                    field?.focus();
                   }}
                 >
-                  {t("insertOutline")}
-                </button>
-                <button
-                  className={ARC_ICON_BTN}
-                  type="button"
-                  disabled={editingLocked || !agentMd}
-                  aria-label={`${t("download")} AGENT.md`}
-                  data-ui-guide="agent.download"
-                  onClick={() => downloadText(agentMd, "AGENT.md")}
-                >
-                  <IconDownload />
-                </button>
-                <label
-                  className={ARC_ICON_BTN}
-                  data-ui-guide="agent.uploadMarkdown"
-                >
-                  <IconUpload />
-                  <input
-                    className="sr-only"
-                    type="file"
-                    accept=".md,text/markdown"
-                    aria-label={t("uploadMd")}
-                    disabled={editingLocked}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void uploadAgentMd(file);
-                      event.currentTarget.value = "";
-                    }}
-                  />
-                </label>
-              </div>
-            }
-          >
-            <textarea
-              className="markdown-editor"
-              aria-label={`${t("agentMd")} ${t("editor")}`}
-              value={agentMd}
-              disabled={editingLocked}
-              onChange={(event) => {
-                setSubmitHint("");
-                abandonUploadIntent();
-                abandonPublishIntent();
-                setAgentMd(event.target.value);
-              }}
-            />
-            <div className="editor-footer">
-              <span>
-                {agentMd.length.toLocaleString()} {t("characters")}
-              </span>
-            </div>
-          </SectionCard>
-          <div
-            className={cn(
-              "duo grid min-w-0 gap-11",
-              duoEmpty &&
-                "grid-cols-2 gap-7 max-[767px]:grid-cols-1",
-            )}
-          >
-          <SectionCard
-            title={t("brainform")}
-            guide="agent.brainform"
-            className={cn(ARC_WB_CARD, "c-bf", brainformEmpty && ARC_WB_CARD_CMP)}
-            action={
-              // RAG is added only here, inside its Agent, and takes the
-              // Agent's Private or Public.
-              <ModuleUpload
-                label={t("uploadRag")}
-                caption={t("newAgent")}
-                accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                disabled={editingLocked}
-                onFile={(file) => void uploadKnowledge(file)}
-              />
-            }
-          >
-            {knowledgeCheck.error ? (
-              <ErrorNotice inline error={knowledgeCheck.error} />
-            ) : null}
-            <KnowledgeCheckOverlay
-              check={knowledgeCheck.check}
-              onClose={knowledgeCheck.closeCheck}
-            />
-            <div className="brainform-source-group">
-              <h3>{t("rag")}</h3>
-              {saving && pendingKnowledgeUpload ? (
-                <p className="muted-copy" role="status" aria-live="polite">
-                  <span className="spinner" aria-hidden="true" />
-                  {t(
-                    /\.(pdf|docx)$/i.test(pendingKnowledgeUpload.file.name)
-                      ? "knowledgeImportPending"
-                      : "knowledgeUploadPending",
-                  )}
-                </p>
+                  {submitHint}
+                </Notice>
               ) : null}
-              {knowledgePreviewRefreshing ? (
-                <p className="muted-copy" role="status" aria-live="polite">
-                  <span className="spinner" aria-hidden="true" />
-                  {t("knowledgePreviewRefreshing")}
-                </p>
-              ) : null}
-              {knowledgeUploadError && error === knowledgeUploadError ? (
+              {unsavedCreate &&
+              error &&
+              !conflict &&
+              error !== knowledgeUploadError ? (
                 <ErrorNotice
-                  error={knowledgeUploadError}
+                  inline
+                  error={error}
                   onRetry={
-                    retryAction === "uploadKnowledge" && pendingKnowledgeUpload
-                      ? () => void uploadKnowledge(pendingKnowledgeUpload.file)
+                    retryAction === "publish"
+                      ? () => {
+                          void publish(true);
+                        }
                       : undefined
                   }
                 />
               ) : null}
-              {knowledgePreviewRefreshFailed ? (
-                <Notice
-                  tone="warning"
-                  title={t("knowledgePreviewRefreshFailed")}
-                  onClose={() => setKnowledgePreviewRefreshFailed(false)}
-                  action={
-                    <button
-                      className="inline-button"
-                      type="button"
-                      disabled={editingLocked || knowledgePreviewRefreshing}
-                      onClick={() => void refreshKnowledgePreview()}
-                    >
-                      {t("retry")}
-                    </button>
-                  }
-                />
-              ) : null}
-              {documents.length === 0 &&
-              stagedRag.length === 0 &&
-              !queuedCreateRag ? (
-                <p className="muted-copy">{t("noGroupMarkdown")}</p>
-              ) : (
-                <div className="document-list">
-                  {queuedCreateRag ? (
-                    <div className="document-row">
-                      <label className="document-select">
-                        <input
-                          type="checkbox"
-                          checked
-                          disabled={editingLocked}
-                          onChange={() => setPendingKnowledgeUpload(null)}
-                        />
-                        <span className="document-main">
-                          <strong>{queuedCreateRag.file.name}</strong>
-                        </span>
-                      </label>
-                    </div>
+            </div>
+            <div className="stage sticky top-5 grid gap-11 self-start max-[767px]:static max-[767px]:order-2">
+              {avatarConfig ? (
+                <SectionCard title={t("avatarDesign")} className={AVATAR_CARD}>
+                  {avatarTemplatesError ? (
+                    <ErrorNotice
+                      inline
+                      error={avatarTemplatesError}
+                      onRetry={() => void loadAvatarTemplates()}
+                    />
                   ) : null}
-                  {stagedRag.map((item) => (
-                    <div className="document-row" key={item.signature}>
-                      <label className="document-select">
-                        <input
-                          type="checkbox"
-                          checked
-                          disabled={editingLocked}
-                          onChange={() =>
-                            setStagedRag((current) =>
-                              current.filter(
-                                (staged) => staged.signature !== item.signature,
-                              ),
-                            )
-                          }
-                        />
-                        <span className="document-main">
-                          <strong>{item.file.name}</strong>
-                        </span>
-                      </label>
+                  {avatarTemplatesLoading ? <LoadingCard /> : null}
+                  <AvatarEditor
+                    templates={avatarTemplates}
+                    value={avatarConfig}
+                    onChange={setAvatarConfig}
+                    fallbackLabel={agent.name}
+                    disabled={
+                      editingLocked ||
+                      avatarTemplatesLoading ||
+                      Boolean(avatarTemplatesError)
+                    }
+                  />
+                </SectionCard>
+              ) : null}
+            </div>
+            <div className="stats grid min-w-0 gap-11 max-[767px]:order-1">
+              {unsavedCreate ? (
+                <SectionCard title={t("agentName")} className={NAME_CARD}>
+                  <form
+                    id="create-agent-form"
+                    className="stack-form wide-form quiet-create"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void publish();
+                    }}
+                  >
+                    <label>
+                      <input
+                        ref={nameField}
+                        aria-label={t("agentName")}
+                        aria-invalid={nameMissing || undefined}
+                        aria-describedby={
+                          nameMissing ? "agent-submit-hint" : undefined
+                        }
+                        className="aria-invalid:border-[3px]! aria-invalid:border-err! aria-invalid:bg-err-bg!"
+                        value={draftName}
+                        disabled={editingLocked}
+                        maxLength={120}
+                        onChange={(event) => {
+                          setSubmitHint("");
+                          unsavedCreate.onIdentityEdit?.();
+                          setDraftName(event.target.value);
+                        }}
+                      />
+                    </label>
+                    <div className="agent-identity">
+                      <div
+                        className="visibility-toggle"
+                        role="group"
+                        aria-label={t("agentVisibility")}
+                        data-ui-guide="agent.visibility"
+                      >
+                        {(["private", "public"] as const).map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            aria-pressed={draftVisibility === option}
+                            disabled={editingLocked}
+                            onClick={() => {
+                              unsavedCreate.onIdentityEdit?.();
+                              setDraftVisibility(option);
+                            }}
+                          >
+                            {t(
+                              option === "private"
+                                ? "privateOption"
+                                : "publicOption",
+                            )}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  ))}
-                  {documents.map((document) => (
-                    <div
-                      className={`document-row ${document.workspace_state === "hidden" ? "is-hidden" : ""}`}
-                      key={document.id}
+                  </form>
+                </SectionCard>
+              ) : null}
+              <SectionCard
+                title={t("agentMd")}
+                guide="agent.markdown"
+                className={MARKDOWN_CARD}
+                action={
+                  <div className="button-row">
+                    <button
+                      className={TEMPLATE_BUTTON}
+                      type="button"
+                      disabled={editingLocked}
+                      onClick={() => {
+                        abandonUploadIntent();
+                        abandonPublishIntent();
+                        setAgentMd(
+                          buildAgentTemplate(draftName.trim() || agent.name),
+                        );
+                      }}
                     >
-                      <label className="document-select">
-                        <input
-                          type="checkbox"
-                          checked={selectedDocumentIds.includes(document.id)}
-                          disabled={
-                            editingLocked ||
-                            knowledgePreviewRefreshing ||
-                            document.workspace_state === "hidden"
-                          }
-                          onChange={(event) =>
-                            void toggleDocument(
-                              document.id,
-                              event.target.checked,
-                            )
-                          }
-                        />
-                        <span className="document-main">
-                          <strong>{document.source_filename}</strong>
-                        </span>
-                      </label>
-                      <div className="row-actions">
-                        {document.index_status === "ready" ? null : (
-                          <StatusBadge
-                            status={document.index_status}
-                            tone={
-                              document.index_status === "failed"
-                                ? "bad"
-                                : "warn"
-                            }
-                          />
+                      {t("insertOutline")}
+                    </button>
+                    <button
+                      className={AGENT_ICON_BUTTON}
+                      type="button"
+                      disabled={editingLocked || !agentMd}
+                      aria-label={`${t("download")} AGENT.md`}
+                      data-ui-guide="agent.download"
+                      onClick={() => downloadText(agentMd, "AGENT.md")}
+                    >
+                      <IconDownload />
+                    </button>
+                    <label
+                      className={AGENT_ICON_BUTTON}
+                      data-ui-guide="agent.uploadMarkdown"
+                    >
+                      <IconUpload />
+                      <input
+                        className="sr-only"
+                        type="file"
+                        accept=".md,text/markdown"
+                        aria-label={t("uploadMd")}
+                        disabled={editingLocked}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) void uploadAgentMd(file);
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+                }
+              >
+                <textarea
+                  className="markdown-editor"
+                  aria-label={`${t("agentMd")} ${t("editor")}`}
+                  value={agentMd}
+                  disabled={editingLocked}
+                  onChange={(event) => {
+                    setSubmitHint("");
+                    abandonUploadIntent();
+                    abandonPublishIntent();
+                    setAgentMd(event.target.value);
+                  }}
+                />
+                <div className="editor-footer">
+                  <span>
+                    {agentMd.length.toLocaleString()} {t("characters")}
+                  </span>
+                </div>
+              </SectionCard>
+              <div
+                className={cn(
+                  "duo grid min-w-0 gap-11",
+                  duoEmpty && "grid-cols-2 gap-7 max-[767px]:grid-cols-1",
+                )}
+              >
+                <SectionCard
+                  title={t("brainform")}
+                  guide="agent.brainform"
+                  className={cn(
+                    agentCard("brainform", brainformEmpty),
+                    BRAINFORM_ROWS,
+                    brainformEmpty && BRAINFORM_COMPACT,
+                    "[&_label[data-ui-guide='agent.uploadRag']]:shadow-[6px_6px_0_#111]",
+                  )}
+                  action={
+                    // RAG is added only here, inside its Agent, and takes the
+                    // Agent's Private or Public.
+                    <ModuleUpload
+                      className={AGENT_NEW_BUTTON}
+                      label={t("uploadRag")}
+                      caption={t("newAgent")}
+                      accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      disabled={editingLocked}
+                      onFile={(file) => void uploadKnowledge(file)}
+                    />
+                  }
+                >
+                  {knowledgeCheck.error ? (
+                    <ErrorNotice inline error={knowledgeCheck.error} />
+                  ) : null}
+                  <KnowledgeCheckOverlay
+                    check={knowledgeCheck.check}
+                    onClose={knowledgeCheck.closeCheck}
+                  />
+                  <div className="brainform-source-group">
+                    <h3>{t("rag")}</h3>
+                    {saving && pendingKnowledgeUpload ? (
+                      <p
+                        className="muted-copy"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        <span className="spinner" aria-hidden="true" />
+                        {t(
+                          /\.(pdf|docx)$/i.test(
+                            pendingKnowledgeUpload.file.name,
+                          )
+                            ? "knowledgeImportPending"
+                            : "knowledgeUploadPending",
                         )}
-                        <KnowledgeRowActions
-                          name={document.source_filename}
-                          disabled={
-                            knowledgeCheckDisabled ||
-                            document.workspace_state === "hidden"
-                          }
-                          onView={() =>
-                            void knowledgeCheck.viewMarkdown(
-                              document.source_filename,
-                              loadDocumentMarkdown(api, document),
-                            )
-                          }
-                          onDownload={() =>
-                            void knowledgeCheck.downloadMarkdown(
-                              document.source_filename,
-                              loadDocumentMarkdown(api, document),
-                            )
-                          }
-                        />
+                      </p>
+                    ) : null}
+                    {knowledgePreviewRefreshing ? (
+                      <p
+                        className="muted-copy"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        <span className="spinner" aria-hidden="true" />
+                        {t("knowledgePreviewRefreshing")}
+                      </p>
+                    ) : null}
+                    {knowledgeUploadError && error === knowledgeUploadError ? (
+                      <ErrorNotice
+                        error={knowledgeUploadError}
+                        onRetry={
+                          retryAction === "uploadKnowledge" &&
+                          pendingKnowledgeUpload
+                            ? () =>
+                                void uploadKnowledge(
+                                  pendingKnowledgeUpload.file,
+                                )
+                            : undefined
+                        }
+                      />
+                    ) : null}
+                    {knowledgePreviewRefreshFailed ? (
+                      <Notice
+                        tone="warning"
+                        title={t("knowledgePreviewRefreshFailed")}
+                        onClose={() => setKnowledgePreviewRefreshFailed(false)}
+                        action={
+                          <button
+                            className="inline-button"
+                            type="button"
+                            disabled={
+                              editingLocked || knowledgePreviewRefreshing
+                            }
+                            onClick={() => void refreshKnowledgePreview()}
+                          >
+                            {t("retry")}
+                          </button>
+                        }
+                      />
+                    ) : null}
+                    {documents.length === 0 &&
+                    stagedRag.length === 0 &&
+                    !queuedCreateRag ? (
+                      <p className="muted-copy">{t("noGroupMarkdown")}</p>
+                    ) : (
+                      <div className="document-list">
+                        {queuedCreateRag ? (
+                          <div className="document-row">
+                            <label className="document-select">
+                              <input
+                                type="checkbox"
+                                checked
+                                disabled={editingLocked}
+                                onChange={() => setPendingKnowledgeUpload(null)}
+                              />
+                              <span className="document-main">
+                                <strong>{queuedCreateRag.file.name}</strong>
+                              </span>
+                            </label>
+                          </div>
+                        ) : null}
+                        {stagedRag.map((item) => (
+                          <div className="document-row" key={item.signature}>
+                            <label className="document-select">
+                              <input
+                                type="checkbox"
+                                checked
+                                disabled={editingLocked}
+                                onChange={() =>
+                                  setStagedRag((current) =>
+                                    current.filter(
+                                      (staged) =>
+                                        staged.signature !== item.signature,
+                                    ),
+                                  )
+                                }
+                              />
+                              <span className="document-main">
+                                <strong>{item.file.name}</strong>
+                              </span>
+                            </label>
+                          </div>
+                        ))}
+                        {documents.map((document) => (
+                          <div
+                            className={`document-row ${document.workspace_state === "hidden" ? "is-hidden" : ""}`}
+                            key={document.id}
+                          >
+                            <label className="document-select">
+                              <input
+                                type="checkbox"
+                                checked={selectedDocumentIds.includes(
+                                  document.id,
+                                )}
+                                disabled={
+                                  editingLocked ||
+                                  knowledgePreviewRefreshing ||
+                                  document.workspace_state === "hidden"
+                                }
+                                onChange={(event) =>
+                                  void toggleDocument(
+                                    document.id,
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                              <span className="document-main">
+                                <strong>{document.source_filename}</strong>
+                              </span>
+                            </label>
+                            <div className="row-actions">
+                              {document.index_status === "ready" ? null : (
+                                <StatusBadge
+                                  status={document.index_status}
+                                  tone={
+                                    document.index_status === "failed"
+                                      ? "bad"
+                                      : "warn"
+                                  }
+                                />
+                              )}
+                              <KnowledgeRowActions
+                                name={document.source_filename}
+                                disabled={
+                                  knowledgeCheckDisabled ||
+                                  document.workspace_state === "hidden"
+                                }
+                                onView={() =>
+                                  void knowledgeCheck.viewMarkdown(
+                                    document.source_filename,
+                                    loadDocumentMarkdown(api, document),
+                                  )
+                                }
+                                onDownload={() =>
+                                  void knowledgeCheck.downloadMarkdown(
+                                    document.source_filename,
+                                    loadDocumentMarkdown(api, document),
+                                  )
+                                }
+                              />
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="brainform-source-group">
-              <h3>{t("brainformKnowledgeHeading")}</h3>
-              {knowledgeSets.length === 0 ? (
-                <p className="muted-copy">{t("brainformKnowledgeEmpty")}</p>
-              ) : (
-                <div className="document-list">
-                  {knowledgeSets.map((set) => (
-                    <div className="document-row" key={set.id}>
-                      <label className="document-select">
-                        <input
-                          type="checkbox"
-                          checked={selectedKnowledgeSetIds.includes(set.id)}
-                          disabled={
-                            editingLocked ||
-                            knowledgeBindingSaving ||
-                            !set.can_edit
-                          }
-                          onChange={(event) => {
-                            const nextIds = event.target.checked
-                              ? [...selectedKnowledgeSetIds, set.id]
-                              : selectedKnowledgeSetIds.filter(
-                                  (id) => id !== set.id,
-                                );
-                            void saveKnowledgeSetSelection(nextIds);
-                          }}
-                        />
-                        <span className="document-main">
-                          <strong>{set.display_name}</strong>
-                        </span>
-                      </label>
-                      <div className="row-actions">
-                        <KnowledgeRowActions
-                          name={set.display_name}
-                          disabled={knowledgeCheckDisabled}
-                          onView={() =>
-                            void knowledgeCheck.viewMarkdown(
-                              set.display_name,
-                              loadSetMarkdown(api, set.id),
-                            )
-                          }
-                          onDownload={() =>
-                            void knowledgeCheck.downloadMarkdown(
-                              `${set.display_name}.md`,
-                              loadSetMarkdown(api, set.id),
-                            )
-                          }
-                        />
+                    )}
+                  </div>
+                  <div className="brainform-source-group">
+                    <h3>{t("brainformKnowledgeHeading")}</h3>
+                    {knowledgeSets.length === 0 ? (
+                      <p className="muted-copy">
+                        {t("brainformKnowledgeEmpty")}
+                      </p>
+                    ) : (
+                      <div className="document-list">
+                        {knowledgeSets.map((set) => (
+                          <div className="document-row" key={set.id}>
+                            <label className="document-select">
+                              <input
+                                type="checkbox"
+                                checked={selectedKnowledgeSetIds.includes(
+                                  set.id,
+                                )}
+                                disabled={
+                                  editingLocked ||
+                                  knowledgeBindingSaving ||
+                                  !set.can_edit
+                                }
+                                onChange={(event) => {
+                                  const nextIds = event.target.checked
+                                    ? [...selectedKnowledgeSetIds, set.id]
+                                    : selectedKnowledgeSetIds.filter(
+                                        (id) => id !== set.id,
+                                      );
+                                  void saveKnowledgeSetSelection(nextIds);
+                                }}
+                              />
+                              <span className="document-main">
+                                <strong>{set.display_name}</strong>
+                              </span>
+                            </label>
+                            <div className="row-actions">
+                              <KnowledgeRowActions
+                                name={set.display_name}
+                                disabled={knowledgeCheckDisabled}
+                                onView={() =>
+                                  void knowledgeCheck.viewMarkdown(
+                                    set.display_name,
+                                    loadSetMarkdown(api, set.id),
+                                  )
+                                }
+                                onDownload={() =>
+                                  void knowledgeCheck.downloadMarkdown(
+                                    `${set.display_name}.md`,
+                                    loadSetMarkdown(api, set.id),
+                                  )
+                                }
+                              />
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    )}
+                  </div>
+                </SectionCard>
+                <VoiceLibrary
+                  groupId={agent.group_id}
+                  courseId={agent.group_id ? null : agent.course_id}
+                  membershipGroupIds={
+                    agent.group_id
+                      ? []
+                      : (user?.groups ?? []).map((group) => group.group_id)
+                  }
+                  embedded
+                  selectedId={voiceProfileId}
+                  disabled={editingLocked}
+                  // A teacher's personal Agent picks from that teacher's own
+                  // voices, as on main (owner decision 2026-10-12). None is a
+                  // choice of its own, so the picker never toggles to empty.
+                  onSelect={setVoiceProfileId}
+                  onProfilesChange={setVoiceProfiles}
+                />
+              </div>
             </div>
-          </SectionCard>
-            <VoiceLibrary
-              groupId={agent.group_id}
-              courseId={agent.group_id ? null : agent.course_id}
-              membershipGroupIds={
-                agent.group_id
-                  ? []
-                  : (user?.groups ?? []).map((group) => group.group_id)
-              }
-              embedded
-              selectedId={voiceProfileId}
-              disabled={editingLocked}
-              // A teacher's personal Agent picks from that teacher's own
-              // voices, as on main (owner decision 2026-10-12). None is a
-              // choice of its own, so the picker never toggles to empty.
-              onSelect={setVoiceProfileId}
-              onProfilesChange={setVoiceProfiles}
-            />
-          </div>
           </div>
         </div>
-      </div>
-      <div className="button-row">
-        <PageAction
-          name="back"
-          href={backHref ?? `/student/agents/${agent.id}`}
-          disabled={editingLocked}
-          onClick={(event) => {
-            if (localDirty && !window.confirm(t("discardDraftConfirm"))) {
-              event.preventDefault();
-              return;
-            }
-            const created = createdAgentRef.current;
-            if (
-              unsavedCreate &&
-              created?.id &&
-              !created.current_published_version_id
-            ) {
-              event.preventDefault();
-              const href =
-                backHref ??
-                (created.group_id
-                  ? `/student/groups/${created.group_id}`
-                  : "/teacher/studyform");
-              void (async () => {
-                try {
-                  await api.deleteAgent(created.id);
-                  router.push(href);
-                } catch (cause) {
-                  setError(cause);
-                }
-              })();
-            }
-          }}
-        />
-        <PageAction
-          name="done"
-          disabled={
-            editingLocked ||
-            (publishOnDone &&
-              !unsavedCreate &&
-              !generationFlow &&
-              !localDirty &&
-              retryAction !== "publish") ||
-            (!publishOnDone &&
-              !unsavedCreate &&
-              !localDirty &&
-              blockers.length > 0)
-          }
-          onClick={() => void publish()}
-        />
       </div>
     </>
   );
@@ -2401,7 +2467,7 @@ function ReadOnlyVersion({
       <PageIntro title={`${agent.name} · ${version.version_label}`} />
       <PageAction
         name="back"
-        href={backHref ?? `/student/groups/${agent.group_id}`}
+        href={backHref ?? `/student/agents?group_id=${agent.group_id}`}
       />
       <div className="workbench-grid">
         <div className="workbench-main">

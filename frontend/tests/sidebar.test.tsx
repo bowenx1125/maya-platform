@@ -133,7 +133,10 @@ describe("sidebar groups", () => {
     ]);
     expect(groupRows("Classroom")).toEqual(["Debates", "Accounts"]);
     expect(nav().queryByText("Live")).toBeNull();
-    for (const name of ["Agents", "RAG", "Voices", "Knowledge"])
+    expect(
+      nav().getByRole("link", { name: "Agents" }).getAttribute("href"),
+    ).toBe("/teacher/agents");
+    for (const name of ["RAG", "Voices", "Knowledge"])
       expect(nav().getByRole("link", { name }).getAttribute("href")).toBe(
         "/teacher/studyform",
       );
@@ -161,7 +164,11 @@ describe("sidebar groups", () => {
       );
     expect(lit()).toEqual(["voices"]);
     view.unmount();
-    renderShell("student", "/student/groups/group-a");
+    const studyform = renderShell("student", "/student/groups/group-a");
+    // Agents has its own page now; Studyform lights its first row, Teams.
+    expect(lit()).toEqual(["teams"]);
+    studyform.unmount();
+    renderShell("student", "/student/agents");
     expect(lit()).toEqual(["agents"]);
   });
 });
@@ -239,7 +246,7 @@ describe("Live", () => {
 describe("group headings", () => {
   it("are plain labels, and the first row of each group carries its tour place", () => {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "0");
-    renderShell("student", "/student/groups/group-a");
+    renderShell("student", "/student/agents");
     const groups = screen
       .getAllByRole("group")
       .filter((group) => group.hasAttribute("aria-labelledby"));
