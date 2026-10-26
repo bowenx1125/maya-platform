@@ -2999,6 +2999,21 @@ export interface components {
              */
             ownership_scope: "group" | "personal";
             /**
+             * Last Edited At
+             * @description created_at of the latest content version (upload or replace); rename and reindex do not change it. Filled on the two library list endpoints; null elsewhere.
+             */
+            last_edited_at?: string | null;
+            /**
+             * Last Edited By User Id
+             * @description Who created the latest content version (upload or replace; the uploader when no version was recorded). Rename and reindex do not change it. Filled on the two library list endpoints; null elsewhere.
+             */
+            last_edited_by_user_id?: string | null;
+            /**
+             * Last Edited By Username
+             * @description Username of last_edited_by_user_id. Filled on the two library list endpoints; null elsewhere.
+             */
+            last_edited_by_username?: string | null;
+            /**
              * Owner User Id
              * @description The uploader.
              */
