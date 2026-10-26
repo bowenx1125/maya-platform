@@ -161,7 +161,11 @@ describe("audience form under load", () => {
     await advance(120_000);
     expect(api.submitVote).toHaveBeenCalledTimes(12);
     expect(screen.queryByText("It's busy right now, retrying…")).toBeNull();
-    expect(screen.getByText("busy")).toBeTruthy();
+    // Q1: a 5xx vote failure shows the internal-error copy, not "busy".
+    expect(
+      screen.getByText("Something went wrong on the server. Please try again."),
+    ).toBeTruthy();
+    expect(screen.queryByText("busy")).toBeNull();
     expect(
       (screen.getByRole("button", { name: /^Vote$/ }) as HTMLButtonElement)
         .disabled,
