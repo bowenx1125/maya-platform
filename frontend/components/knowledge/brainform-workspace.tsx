@@ -48,7 +48,7 @@ import { useT } from "../../lib/i18n";
 import { useSession } from "../session-provider";
 import { WorkspaceAction } from "../workspace-actions";
 import { ModulePlus } from "../studyform-layout";
-import { ErrorNotice, LoadingCard } from "../ui";
+import { ErrorNotice, isNotFound, LoadingCard } from "../ui";
 import { ReportMarkdown } from "../report/report-markdown";
 import {
   RecordDetail,
@@ -817,7 +817,13 @@ function BrainformWorkspaceBody({
           [initialGroupId],
           () => api.knowledge(initialGroupId),
           refresh,
-        );
+        ).catch((cause: unknown) => {
+          // A teacher who has not Entered the group gets a 404 here. That is
+          // not a deleted item: say they are not in the group.
+          if (role === "teacher" && isNotFound(cause))
+            throw new Error(t("groupNotFound"));
+          throw cause;
+        });
         // A group refusal can finish this loader before its file read settles.
         startedReads.push(documents);
         const group = await read(

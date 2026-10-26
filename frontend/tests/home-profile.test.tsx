@@ -36,6 +36,8 @@ vi.mock("../components/session-provider", () => ({
 import { AccountSettings } from "../components/account-settings";
 import { PlatformApiError } from "../lib/api/platform";
 import { HomeGuide } from "../components/home-guide";
+import { courseChatCount } from "../components/student-workspace";
+import type { ConversationSession } from "../lib/api";
 import { USER_AVATAR_CHOICES } from "../components/user-avatar";
 
 afterEach(() => {
@@ -53,12 +55,7 @@ describe("home guide", () => {
         steps={[
           { label: "Meet your group", complete: true, href: "/a" },
           { label: "Build an Agent", complete: false, href: "/b" },
-          {
-            label: "Create a voice",
-            complete: false,
-            href: "/c",
-            optional: true,
-          },
+          { label: "Create a voice", complete: false, href: "/c" },
         ]}
       />,
     );
@@ -75,6 +72,20 @@ describe("home guide", () => {
     ).toBeTruthy();
     expect(document.querySelectorAll(".home-guide-state")).toHaveLength(1);
     expect(document.body.textContent).not.toContain("✓");
+  });
+});
+
+describe("course chat count", () => {
+  it("counts only chats in the current course", () => {
+    const chats = [
+      { id: "a", agent: { course_id: "c1" } },
+      { id: "b", agent: { course_id: "c2" } },
+      { id: "t", team: { course_id: "c1" } },
+      { id: "u", team: { course_id: "c3" } },
+    ] as unknown as ConversationSession[];
+    expect(courseChatCount(chats, "c1")).toBe(2);
+    expect(courseChatCount(chats, "c9")).toBe(0);
+    expect(courseChatCount(chats, undefined)).toBe(0);
   });
 });
 

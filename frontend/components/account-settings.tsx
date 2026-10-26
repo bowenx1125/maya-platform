@@ -10,6 +10,20 @@ import { useSession } from "./session-provider";
 import { ErrorNotice, SectionCard, StickerBadge } from "./ui";
 import { USER_AVATAR_CHOICES, UserAvatar } from "./user-avatar";
 
+/** The profile module: a white card with a lime ring and a tape title. */
+const CARD =
+  "relative mb-0 rounded-xl border-[3px] border-ink bg-white px-6 pt-[52px] pb-5 font-body text-ink shadow-[0_0_0_3px_#A3E635,8px_8px_0_3px_#111] max-[640px]:px-4 [&>.section-card-header]:absolute [&>.section-card-header]:border-0 [&>.section-card-header]:p-0 [&>.section-card-header]:-top-5 [&>.section-card-header]:left-4 [&>.section-card-header]:m-0 [&>.section-card-header_h2]:-rotate-1 [&>.section-card-header_h2]:border-[3px] [&>.section-card-header_h2]:border-ink [&>.section-card-header_h2]:bg-white [&>.section-card-header_h2]:bg-[linear-gradient(90deg,#FFE14D_0_8px,transparent_8px_calc(100%-8px),#FFE14D_calc(100%-8px))] [&>.section-card-header_h2]:px-4 [&>.section-card-header_h2]:py-0.5 [&>.section-card-header_h2]:font-display [&>.section-card-header_h2]:text-[22px] [&>.section-card-header_h2]:font-extrabold [&>.section-card-header_h2]:tracking-normal [&>.section-card-header_h2]:text-ink";
+const PANEL = "grid min-w-0 content-start gap-4 py-1 pr-8 max-[640px]:pr-0";
+const HEADING = "m-0 font-display text-lg font-extrabold text-ink";
+const LABEL = "grid min-w-0 gap-1.5 text-[13px] font-bold text-ink";
+const FIELD =
+  "min-h-[46px] max-[640px]:min-h-[51px] w-full rounded-lg border-[3px] border-ink bg-white px-3 py-2 font-body text-sm text-ink focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#67E8F9] disabled:opacity-60";
+const SAVED =
+  "rotate-[-3deg] rounded border-2 border-ink bg-[#A3E635] px-2 py-px text-xs font-extrabold text-ink shadow-[2px_2px_0_#111]";
+/** Save as an arcade key: pink, inked, pressing down 6px into its shadow. */
+const PRESS =
+  "min-h-10 rounded-lg border-[3px] border-ink bg-[#FF4D8D] px-5 font-display text-base font-extrabold text-ink shadow-[0_6px_0_#111] transition-[translate,box-shadow] duration-[120ms] hover:bg-[#FF4D8D] active:translate-y-1.5 active:shadow-[0_0_0_#111] disabled:opacity-60 motion-reduce:transition-none motion-reduce:active:translate-y-0";
+
 export function AccountSettings({ onSaved }: { onSaved?: () => void }) {
   const { user, identityGeneration } = useSession();
   return user ? (
@@ -223,7 +237,10 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
   if (!user) return null;
 
   return (
-    <SectionCard title={t("profile")} className="account-settings-card">
+    <SectionCard
+      title={t("profile")}
+      className={`account-settings-card ${CARD}`}
+    >
       {error ? (
         <ErrorNotice
           id={mismatch ? "password-field-error" : undefined}
@@ -231,32 +248,40 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
           badge={mismatch || wrongCurrent ? 1 : undefined}
         />
       ) : null}
-      <div className="account-settings-grid">
-        <section className="profile-panel" aria-labelledby="profile-avatar">
-          <div className="profile-panel-heading">
+      <div className="grid grid-cols-2 max-[640px]:grid-cols-1">
+        <section
+          className={`${PANEL} [&_.user-avatar]:!rounded-[8px] [&_.user-avatar]:!border-2 [&_.user-avatar]:!border-solid [&_.user-avatar]:!border-[#111] [&>div>.user-avatar]:!size-14 [&>div>.user-avatar]:!rounded-[10px] [&>div>.user-avatar]:!border-[3px]`}
+          aria-labelledby="profile-avatar"
+        >
+          <div className="flex items-center gap-3.5">
             <UserAvatar
               avatar={avatar}
               name={user.display_name}
               userId={user.id}
               size="lg"
             />
-            <div>
-              <h3 id="profile-avatar">{t("userAvatar")}</h3>
-              <span>{user.display_name}</span>
+            <div className="grid min-w-0">
+              <h3 id="profile-avatar" className={HEADING}>
+                {t("userAvatar")}
+              </h3>
+              <span className="text-[13px] font-semibold text-[#4B5563]">
+                {user.display_name}
+              </span>
             </div>
             {saved === "avatar" ? (
-              <span className="profile-saved" role="status">
+              <span className={SAVED} role="status">
                 {t("saved")}
               </span>
             ) : null}
           </div>
           <form
-            className="profile-name"
+            className="flex items-end gap-3"
             onSubmit={(event) => void saveName(event)}
           >
-            <label>
+            <label className={`${LABEL} flex-1`}>
               <span>{t("displayNameLabel")}</span>
               <input
+                className={FIELD}
                 value={name}
                 maxLength={200}
                 required
@@ -272,26 +297,27 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
                 stays as quiet as the avatar picker until then. */}
             {nameChanged ? (
               <button
-                className="primary-action"
+                className={`primary-action ${PRESS}`}
                 type="submit"
                 disabled={busy !== null}
               >
                 {t("save")}
               </button>
             ) : saved === "name" ? (
-              <span className="profile-saved" role="status">
+              <span className={SAVED} role="status">
                 {t("saved")}
               </span>
             ) : null}
           </form>
           {groupNames.length > 1 ? (
             <form
-              className="profile-name"
+              className="flex items-end gap-3"
               onSubmit={(event) => void saveGroup(event)}
             >
-              <label>
+              <label className={`${LABEL} flex-1`}>
                 <span>{t("groupNameLabel")}</span>
                 <select
+                  className={FIELD}
                   value={groupChoice}
                   disabled={busy !== null}
                   onChange={(event) => {
@@ -308,23 +334,27 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
               </label>
               {groupChanged ? (
                 <button
-                  className="primary-action"
+                  className={`primary-action ${PRESS}`}
                   type="submit"
                   disabled={busy !== null}
                 >
                   {t("save")}
                 </button>
               ) : saved === "group" ? (
-                <span className="profile-saved" role="status">
+                <span className={SAVED} role="status">
                   {t("saved")}
                 </span>
               ) : null}
             </form>
           ) : null}
-          <fieldset className="avatar-picker" disabled={busy !== null}>
+          <fieldset
+            className="m-0 grid grid-cols-[repeat(4,max-content)] gap-1.5 border-0 p-0"
+            disabled={busy !== null}
+          >
             <legend className="sr-only">{t("userAvatar")}</legend>
             {USER_AVATAR_CHOICES.map((choice, index) => (
               <label
+                className="grid cursor-pointer rounded-[14px] border-[3px] border-transparent p-1 transition-[translate,border-color,background-color] duration-[280ms] ease-[cubic-bezier(0.34,1.4,0.64,1)] focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[#67E8F9] hover:-translate-y-0.5 hover:bg-[#FFF7CC] [&_.user-avatar]:shadow-[2px_2px_0_#111] data-[selected=true]:[&_.user-avatar]:outline-[3px] data-[selected=true]:[&_.user-avatar]:outline-offset-2 data-[selected=true]:[&_.user-avatar]:outline-[#FF4D8D] data-[selected=true]:[&_.user-avatar]:outline-solid in-disabled:cursor-progress motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                 key={choice}
                 data-selected={avatar === choice ? "true" : undefined}
               >
@@ -351,17 +381,17 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
         </section>
 
         <form
-          className="profile-panel password-panel"
+          className={`${PANEL} pl-8 max-[640px]:mt-6 max-[640px]:border-0 max-[640px]:border-t max-[640px]:border-solid max-[640px]:border-[#E9DAA9] max-[640px]:pt-6 max-[640px]:pl-0`}
           onSubmit={(event) => void savePassword(event)}
         >
-          <h3>{t("changePassword")}</h3>
-          <label>
+          <h3 className={HEADING}>{t("changePassword")}</h3>
+          <label className={LABEL}>
             <span>{t("currentPassword")}</span>
             <span className="relative block">
               {wrongCurrent ? <StickerBadge n={1} /> : null}
               <input
                 aria-invalid={wrongCurrent || undefined}
-                className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
+                className={`${FIELD} aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!`}
                 type="password"
                 autoComplete="current-password"
                 value={currentPassword}
@@ -373,9 +403,10 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
               />
             </span>
           </label>
-          <label>
+          <label className={LABEL}>
             <span>{t("newPassword")}</span>
             <input
+              className={FIELD}
               type="password"
               autoComplete="new-password"
               value={newPassword}
@@ -386,14 +417,14 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
               onChange={(event) => setNewPassword(event.target.value)}
             />
           </label>
-          <label>
+          <label className={LABEL}>
             <span>{t("registerConfirmPassword")}</span>
             <span className="relative block">
               {mismatch ? <StickerBadge n={1} /> : null}
               <input
                 aria-invalid={mismatch || undefined}
                 aria-describedby={mismatch ? "password-field-error" : undefined}
-                className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
+                className={`${FIELD} aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!`}
                 type="password"
                 autoComplete="new-password"
                 value={confirmPassword}
@@ -405,16 +436,16 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
               />
             </span>
           </label>
-          <div className="profile-action-row">
+          <div className="flex min-h-[30px] items-center gap-3">
             <button
-              className="primary-action"
+              className={`primary-action ${PRESS}`}
               type="submit"
               disabled={busy !== null}
             >
               {t("save")}
             </button>
             {saved === "password" ? (
-              <span className="profile-saved" role="status">
+              <span className={SAVED} role="status">
                 {t("saved")}
               </span>
             ) : null}

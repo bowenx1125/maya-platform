@@ -287,7 +287,7 @@ function isFileError(error: unknown) {
 }
 
 /** A missing record, as opposed to one the server named a reason for. */
-function isNotFound(error: unknown) {
+export function isNotFound(error: unknown) {
   if (!error || typeof error !== "object") return false;
   const { code, status } = error as { code?: unknown; status?: unknown };
   return code === "not_found" || (typeof code !== "string" && status === 404);

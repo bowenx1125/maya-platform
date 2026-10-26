@@ -74,6 +74,13 @@
       translate: -6px 0;
     }
   }
+  /* The home guide's progress cells fill once, left to right. */
+  --animate-hud-fill: hud-fill 400ms ease-out both;
+  @keyframes hud-fill {
+    from {
+      scale: 0 1;
+    }
+  }
   --color-main: var(--arc-main);
   --color-main-fg: var(--arc-main-fg);
   --color-ink: var(--arc-ink);
