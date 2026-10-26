@@ -39,6 +39,14 @@ import { AppShell } from "../components/app-shell";
 import { PageAction } from "../components/page-action";
 import { WorkspaceAction } from "../components/workspace-actions";
 
+/** Back, Done and New all sit in the page header (data-page-actions). */
+function pageActions() {
+  return within(
+    (document.querySelector("[data-page-actions]") as HTMLElement | null) ??
+      document.createElement("div"),
+  );
+}
+
 function renderTeacherShell(pathname: string) {
   navigation.pathname = pathname;
   return render(
@@ -191,7 +199,7 @@ describe("PW3-E teacher information architecture", () => {
     ).toBe("page");
   });
 
-  it("keeps New in the sidebar and puts Back and Done in the page header", () => {
+  it("puts Back, Done and New in the page header, none in the sidebar", () => {
     render(
       <AppShell role="teacher">
         <PageAction name="new" href="/teacher/debates/new" />
@@ -200,9 +208,9 @@ describe("PW3-E teacher information architecture", () => {
       </AppShell>,
     );
     const nav = within(screen.getByRole("navigation"));
-    expect(nav.getByRole("link", { name: "New" }).getAttribute("href")).toBe(
-      "/teacher/debates/new",
-    );
+    expect(
+      pageActions().getByRole("link", { name: "New" }).getAttribute("href"),
+    ).toBe("/teacher/debates/new");
     expect(
       within(screen.getByRole("main"))
         .getByRole("link", { name: "Back" })
@@ -212,8 +220,10 @@ describe("PW3-E teacher information architecture", () => {
       within(screen.getByRole("main")).getByRole("button", { name: "Done" }),
     ).toBeTruthy();
     expect(
-      within(screen.getByRole("main")).queryByRole("link", { name: "New" }),
-    ).toBeNull();
+      within(screen.getByRole("main"))
+        .queryAllByRole("link", { name: "New" })
+        .filter((el) => !el.closest("[data-page-actions]")),
+    ).toHaveLength(0);
     // Back and Done live in the page header, never in the sidebar.
     expect(nav.queryByRole("link", { name: "Back" })).toBeNull();
     expect(nav.queryByRole("button", { name: "Done" })).toBeNull();
@@ -230,9 +240,9 @@ describe("PW3-E teacher information architecture", () => {
     expect(
       document.querySelector('[data-tour="brain"]')?.textContent?.trim(),
     ).toBe("Brainform");
-    expect(nav.getByRole("link", { name: "New" }).getAttribute("href")).toBe(
-      "/student/knowledge/new",
-    );
+    expect(
+      pageActions().getByRole("link", { name: "New" }).getAttribute("href"),
+    ).toBe("/student/knowledge/new");
   });
 
   it("makes a routed action that cannot run a disabled button, not a live link", () => {
@@ -242,9 +252,10 @@ describe("PW3-E teacher information architecture", () => {
       </AppShell>,
     );
     const nav = within(screen.getByRole("navigation"));
-    expect(nav.queryByRole("link", { name: "New" })).toBeNull();
+    expect(pageActions().queryByRole("link", { name: "New" })).toBeNull();
     expect(
-      (nav.getByRole("button", { name: "New" }) as HTMLButtonElement).disabled,
+      (pageActions().getByRole("button", { name: "New" }) as HTMLButtonElement)
+        .disabled,
     ).toBe(true);
   });
 
