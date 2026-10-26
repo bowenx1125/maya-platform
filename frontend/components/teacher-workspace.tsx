@@ -73,6 +73,7 @@ export function TeacherDashboard() {
     workspaceScopeRef.current = workspaceScope;
   }, [workspaceScope]);
   const [published, setPublished] = useState<PublishedAgentSummary[]>([]);
+  const [owned, setOwned] = useState<AgentSummary[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [students, setStudents] = useState<number | null>(null);
   const [loadedScope, setLoadedScope] = useState<string | null>(null);
@@ -102,12 +103,19 @@ export function TeacherDashboard() {
         });
     }
     try {
-      const [nextPublished, nextGroups] = await Promise.all([
+      const [nextPublished, nextGroups, nextOwned] = await Promise.all([
         courseId ? api.publishedAgents(courseId) : Promise.resolve([]),
         courseId ? api.groups(courseId) : Promise.resolve([]),
+        // The teacher's own agents (as on Studyform): GET
+        // /courses/{C}/workspace-agents, minus the ones already published.
+        courseId && typeof api.workspaceAgents === "function"
+          ? api.workspaceAgents(courseId)
+          : Promise.resolve([] as AgentSummary[]),
       ]);
       if (workspaceScopeRef.current !== requestScope) return;
+      const publishedIds = new Set(nextPublished.map((item) => item.agent.id));
       setPublished(nextPublished);
+      setOwned(nextOwned.filter((agent) => !publishedIds.has(agent.id)));
       setGroups(nextGroups);
     } catch (cause) {
       if (workspaceScopeRef.current === requestScope) setError(cause);
@@ -148,7 +156,7 @@ export function TeacherDashboard() {
         </div>
       </HomeHero>
       {error ? <ErrorNotice error={error} /> : null}
-      {published.length === 0 ? (
+      {published.length + owned.length === 0 ? (
         <EmptyCard title={t("noPublishedAgents")} />
       ) : (
         <section
@@ -156,7 +164,7 @@ export function TeacherDashboard() {
           aria-labelledby="teacher-agents-title"
         >
           <h2 id="teacher-agents-title" className={HOME_TAPE_TITLE}>
-            {t("agents")} · {published.length}
+            {t("agents")} · {published.length + owned.length}
           </h2>
           <HomeAgentRow>
             {published.map((item) => (
@@ -167,6 +175,24 @@ export function TeacherDashboard() {
                 }
                 item={item}
                 key={item.agent.id}
+              />
+            ))}
+            {owned.map((agent) => (
+              <AgentCard
+                key={agent.id}
+                id={agent.id}
+                name={agent.name}
+                href={`/teacher/agents/${agent.id}`}
+                // Same fallback as Studyform's tile: a draft reads V1.0.
+                label="V1.0"
+                pending={false}
+                mascot={agentMascot(agent.id, undefined)}
+                guideText={agentLastEditedTitle(t, agent)}
+                deleteLabel={t("deleteAgent")}
+                caption={
+                  groups.find((group) => group.id === agent.group_id)?.name ||
+                  undefined
+                }
               />
             ))}
           </HomeAgentRow>

@@ -322,7 +322,9 @@ describe("W1 teacher personal workspace", () => {
     );
 
     await screen.findByRole("heading", { name: /Welcome/ });
-    expect(api.workspaceAgents).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(api.workspaceAgents).toHaveBeenCalledWith(courseId),
+    );
     expect(screen.queryByText("Personal Agents · 0")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Guide" })).toBeNull();
   });
