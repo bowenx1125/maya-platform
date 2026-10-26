@@ -2635,7 +2635,7 @@ def _pause_real_report_job(db: Session, revision_id: str) -> None:
         raise ReportProviderError("report_job_missing")
     job.state = "interrupted"
     job.attempt = max(int(job.attempt or 0), 1)
-    job.safe_error_code = "provider_confirmation_required"
+    job.safe_error_code = "provider_confirmation_unavailable"
     job.updated_at = utc_now()
 
 
@@ -2648,7 +2648,10 @@ def _resume_real_report_job(db: Session, revision_id: str) -> None:
     )
     if job is None:
         raise ReportProviderError("report_job_missing")
-    if job.state == "interrupted" and job.safe_error_code == "provider_confirmation_required":
+    if job.state == "interrupted" and job.safe_error_code in {
+        "provider_confirmation_required",  # legacy rows parked before auto-confirm
+        "provider_confirmation_unavailable",
+    }:
         job.state = "pending"
         job.safe_error_code = None
         job.updated_at = utc_now()

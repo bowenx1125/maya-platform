@@ -771,7 +771,7 @@ def dispatch_team_model(
     db.commit()
     confirmation = repository.get_export_confirmation(manifest.manifest_hash)
     if confirmation is None:
-        raise TeamDispatchError("provider_confirmation_required")
+        raise TeamDispatchError("provider_confirmation_unavailable")
     try:
         validate_provider_preflight(
             policy,

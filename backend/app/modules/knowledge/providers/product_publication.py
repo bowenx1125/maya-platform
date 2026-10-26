@@ -582,7 +582,7 @@ def require_exact_confirmation(
     if manifest_row is None or str(manifest_row["manifest_hash"]) != manifest.manifest_hash:
         raise _product_error(
             "exact provider confirmation is required",
-            "provider_confirmation_required",
+            "provider_confirmation_missing",
         )
     if str(manifest_row["policy_snapshot_id"]) != str(policy_row["id"]):
         raise _product_error("provider manifest policy changed", "policy_drift")
@@ -600,7 +600,7 @@ def require_exact_confirmation(
     if row is None:
         raise _product_error(
             "exact provider confirmation is required",
-            "provider_confirmation_required",
+            "provider_confirmation_missing",
         )
     persisted = ExportConfirmationV1(
         manifest_hash=str(row["manifest_hash"]),

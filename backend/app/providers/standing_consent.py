@@ -65,12 +65,16 @@ def apply_standing_provider_consent(
 
 
 def standing_consent_enabled(settings: object) -> bool:
-    if getattr(settings, "provider_standing_consent", False) is True:
-        return True
-    return (
-        getattr(settings, "demo_mode", False) is True
-        and getattr(settings, "demo_auto_confirm_provider", False) is True
-    )
+    """Provider disclosures are always auto-confirmed.
+
+    ``PROVIDER_STANDING_CONSENT`` (and ``DEMO_AUTO_CONFIRM_PROVIDER``) are
+    still parsed by settings but no longer change behavior: every caller takes
+    the path that standing consent took before, so the confirmation rows it
+    writes are unchanged. All manifest/policy/owner checks still run.
+    """
+
+    del settings
+    return True
 
 
 __all__ = ["apply_standing_provider_consent", "standing_consent_enabled"]

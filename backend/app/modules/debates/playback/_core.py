@@ -65,6 +65,7 @@ _SAFE_GENERATION_CODES = {
     "provider_preflight_blocked",
     "persona_confirmation_required",
     "provider_confirmation_required",
+    "provider_confirmation_unavailable",
     "provider_not_sent",
     "acceptance_unknown",
     "debate_stopped",
@@ -90,6 +91,7 @@ _SAFE_GENERATION_CODES = {
 }
 _RECOVERABLE_PROVIDER_GENERATION_CODES = {
     "provider_confirmation_required",
+    "provider_confirmation_unavailable",
     "provider_not_sent",
     "acceptance_unknown",
     "tts_timeout",

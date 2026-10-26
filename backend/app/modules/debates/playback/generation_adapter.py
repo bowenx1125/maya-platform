@@ -692,7 +692,7 @@ class SqlTurnPreparer:
                     )
                 except ProductPublicationError as exc:
                     if exc.code not in {
-                        "provider_confirmation_required",
+                        "provider_confirmation_missing",
                         "provider_confirmation_stale",
                     }:
                         raise
@@ -762,7 +762,7 @@ class SqlTurnPreparer:
                 )
             except ProductPublicationError as exc:
                 if exc.code not in {
-                    "provider_confirmation_required",
+                    "provider_confirmation_missing",
                     "provider_confirmation_stale",
                 }:
                     raise
@@ -1647,7 +1647,7 @@ class SqlTurnPreparer:
             )
         except ProductPublicationError as error:
             if error.code not in {
-                "provider_confirmation_required",
+                "provider_confirmation_missing",
                 "provider_confirmation_stale",
             }:
                 raise PlatformError(
@@ -1661,10 +1661,10 @@ class SqlTurnPreparer:
                 policy,
                 self.settings,
             )
-            if not standing_confirmed and error.code == "provider_confirmation_required":
+            if not standing_confirmed and error.code == "provider_confirmation_missing":
                 raise conflict(
-                    "provider_confirmation_required",
-                    "The course teacher must confirm the exact query disclosure.",
+                    "provider_confirmation_unavailable",
+                    "The exact query disclosure confirmation could not be recorded.",
                     {
                         "manifest_hash": query_plan.manifest.manifest_hash,
                         "turn_id": str(turn.id),
@@ -1689,10 +1689,10 @@ class SqlTurnPreparer:
                     agent_version_id=owner.version_id,
                 )
             except ProductPublicationError as confirmed_error:
-                if confirmed_error.code == "provider_confirmation_required":
+                if confirmed_error.code == "provider_confirmation_missing":
                     raise conflict(
-                        "provider_confirmation_required",
-                        "The course teacher must confirm the exact query disclosure.",
+                        "provider_confirmation_unavailable",
+                        "The exact query disclosure confirmation could not be recorded.",
                         {
                             "manifest_hash": query_plan.manifest.manifest_hash,
                             "turn_id": str(turn.id),

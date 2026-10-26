@@ -468,7 +468,7 @@ def test_teacher_only_confirmation_is_revision_and_hash_cas_bound() -> None:
             model_key=FIXED_MODELS["llm_debate"],
             scope_id=changed_manifest.scope_id,
         )
-    assert drifted_preflight.value.code == "provider_confirmation_required"
+    assert drifted_preflight.value.code == "provider_confirmation_unavailable"
 
 
 def test_confirmation_is_durably_visible_to_a_new_service_instance() -> None:
@@ -529,7 +529,7 @@ def test_missing_manifest_is_not_found_and_preflight_never_calls_transport() -> 
             scope_id="debate-scope",
             payload={"speech": "safe"},
         )
-    assert required.value.code == "provider_confirmation_required"
+    assert required.value.code == "provider_confirmation_unavailable"
     assert calls == []
 
 

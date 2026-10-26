@@ -875,12 +875,12 @@ class TurnGenerationService:
             )
 
         status = str(getattr(outcome, "status", "failed"))
-        if status in {"provider_confirmation_required", "not_sent", "acceptance_unknown"}:
+        if status in {"provider_confirmation_unavailable", "not_sent", "acceptance_unknown"}:
             if self.fence is not None and active_claim is not None:
                 self.fence.release(active_claim)
             error = GenerationProviderError("The LLM turn is waiting for a safe provider retry.")
             error.code = {
-                "provider_confirmation_required": "provider_confirmation_required",
+                "provider_confirmation_unavailable": "provider_confirmation_unavailable",
                 "not_sent": "provider_not_sent",
                 "acceptance_unknown": "acceptance_unknown",
             }[status]

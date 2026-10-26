@@ -329,7 +329,7 @@ def test_confirmation_gate_has_zero_reservation_and_zero_adapter_calls() -> None
         build_manifest_hash=_hash("build"),
     )
     outcome = runtime.run(prepared, confirmed=False)
-    assert outcome.status == "provider_confirmation_required"
+    assert outcome.status == "provider_confirmation_unavailable"
     assert adapter.calls == 0
     assert prepared.operation is not None
     assert prepared.operation.request_count == 0
@@ -369,7 +369,7 @@ def test_confirmation_then_explicit_retry_reuses_the_prepared_zero_use_operation
         build_manifest_hash=_hash("build"),
     )
     waiting = runtime.run(first, confirmed=False)
-    assert waiting.status == "provider_confirmation_required"
+    assert waiting.status == "provider_confirmation_unavailable"
     second = runtime.prepare(
         prompt,
         policy_hash=_hash("policy"),

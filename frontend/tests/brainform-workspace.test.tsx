@@ -214,7 +214,7 @@ beforeEach(() => {
       knowledge_set_id: "set-1",
       state: "blocked",
       provider_manifest_hash: "a".repeat(64),
-      safe_error_code: "provider_confirmation_required",
+      safe_error_code: "provider_confirmation_unavailable",
       accepted_item_count: 0,
       materialized_item_count: 0,
       failed_item_count: 0,
@@ -1451,7 +1451,7 @@ describe("Brainform workspace actions", () => {
         version_seq: 0,
         content_hash: null,
         generation_state: "failed",
-        safe_error_code: "provider_confirmation_required",
+        safe_error_code: "provider_confirmation_unavailable",
       },
     ]);
     state.api.knowledgeMarkdown.mockRejectedValueOnce(
@@ -1724,7 +1724,7 @@ describe("Brainform workspace actions", () => {
         content_hash: null,
         generation_job_id: "job-1",
         generation_state: "failed",
-        safe_error_code: "provider_confirmation_required",
+        safe_error_code: "provider_confirmation_unavailable",
       },
     ]);
     renderWorkspace("teacher");
@@ -1852,7 +1852,7 @@ describe("Brainform workspace actions", () => {
         version_seq: 2,
         content_hash: "b".repeat(64),
         generation_state: "blocked",
-        safe_error_code: "provider_confirmation_required",
+        safe_error_code: "provider_confirmation_unavailable",
         generation_job_id: "job-2",
       },
     ]);
@@ -1862,7 +1862,7 @@ describe("Brainform workspace actions", () => {
       knowledge_set_id: "set-1",
       state: "blocked",
       provider_manifest_hash: "c".repeat(64),
-      safe_error_code: "provider_confirmation_required",
+      safe_error_code: "provider_confirmation_unavailable",
       accepted_item_count: 0,
       materialized_item_count: 0,
       failed_item_count: 0,
@@ -1905,7 +1905,7 @@ describe("Brainform workspace actions", () => {
     state.api.brainformKnowledge
       .mockResolvedValueOnce([row("job-1", "running", null)])
       .mockResolvedValue([
-        row("job-2", "blocked", "provider_confirmation_required"),
+        row("job-2", "blocked", "provider_confirmation_unavailable"),
       ]);
     state.api.replaceKnowledgeDocument.mockResolvedValue({
       ...source,
@@ -1926,7 +1926,7 @@ describe("Brainform workspace actions", () => {
         knowledge_set_id: "set-1",
         state: "blocked",
         provider_manifest_hash: "d".repeat(64),
-        safe_error_code: "provider_confirmation_required",
+        safe_error_code: "provider_confirmation_unavailable",
         accepted_item_count: 0,
         materialized_item_count: 0,
         failed_item_count: 0,
@@ -1973,7 +1973,7 @@ describe("Brainform workspace actions", () => {
         knowledge_set_id: "set-1",
         state: "blocked",
         provider_manifest_hash: "a".repeat(64),
-        safe_error_code: "provider_confirmation_required",
+        safe_error_code: "provider_confirmation_unavailable",
       });
     });
     expect(
