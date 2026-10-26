@@ -211,8 +211,9 @@ describe("PW3-E teacher shell and responsive contract", () => {
       // capabilities section, then again in five explainer cards. It is a rule
       // the screen enforces, not a sentence the screen has to say, so the last
       // statement of it is gone too.
-      await waitFor(() => expect(api.courses).toHaveBeenCalledTimes(1));
-      expect(api.publishedAgents).toHaveBeenCalledWith(courseId);
+      await waitFor(() =>
+        expect(api.publishedAgents).toHaveBeenCalledWith(courseId),
+      );
       for (const boundary of [
         "Student drafts cannot be viewed or edited here.",
         "教师视图不能查看或编辑学生草稿。",
@@ -258,11 +259,13 @@ describe("PW3-E teacher shell and responsive contract", () => {
         : join(process.cwd(), "frontend");
     const css = readFileSync(join(frontendRoot, "app", "globals.css"), "utf8");
     const shell = readFileSync(
-      join(frontendRoot, "components", "app-shell.module.css"),
+      join(frontendRoot, "components", "app-shell.tsx"),
       "utf8",
     );
-    expect(shell).toMatch(/\.link\s*\{[^}]*min-height:\s*44px/s);
-    expect(shell).toMatch(/\.logout\s*\{[^}]*min-height:\s*44px/s);
+    // Sidebar rows (and Logout, which reuses them) and the collapsed icon
+    // buttons keep 44px targets.
+    expect(shell).toMatch(/const ITEM =\s*"[^"]*\bmin-h-11\b/);
+    expect(shell).toMatch(/const ICON_ITEM =\s*"[^"]*\bsize-11\b/);
     expect(css).toMatch(/\.text-link\s*\{[^}]*min-height:\s*44px/s);
     expect(css).toMatch(/details > summary\s*\{[^}]*min-height:\s*44px/s);
     expect(css).toMatch(

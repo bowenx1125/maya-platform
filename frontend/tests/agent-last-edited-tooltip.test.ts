@@ -11,9 +11,7 @@ describe("agentLastEditedTitle", () => {
       last_edited_by_name: "Kaikai",
       current_version_label: "V1.2",
     };
-    expect(agentLastEditedTitle(en, agent)).toBe(
-      "Latest version: V1.2 · Last edited by: Kaikai",
-    );
+    expect(agentLastEditedTitle(en, agent)).toBe("Last edited by: Kaikai");
   });
 
   it("names a teacher who edited a student's public Agent", () => {
@@ -22,7 +20,7 @@ describe("agentLastEditedTitle", () => {
         last_edited_by_name: "Maya",
         current_version_label: "V1.3",
       }),
-    ).toBe("Latest version: V1.3 · Last edited by: Maya");
+    ).toBe("Last edited by: Maya");
   });
 
   it("names the student creator before anyone else edited", () => {
@@ -33,7 +31,7 @@ describe("agentLastEditedTitle", () => {
         { last_edited_by_name: "Bowen", current_version_label: null },
         "1.0",
       ),
-    ).toBe("Latest version: V1.0 · Last edited by: Bowen");
+    ).toBe("Last edited by: Bowen");
   });
 
   it("is absent only when no editor name is known", () => {

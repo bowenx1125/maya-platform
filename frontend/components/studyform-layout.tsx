@@ -1,9 +1,17 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { FitTitle } from "./fit-title";
+import { useT } from "../lib/i18n";
+import { cn } from "../lib/utils";
+import { IconPlus } from "./quiet-icons";
+import { buttonVariants } from "./ui/button";
+import {
+  AGENT_GRID_CLASS,
+  AgentCard,
+  agentMascot,
+  type AgentRename,
+} from "./ui/agent-card";
 
 import styles from "./knowledge/brainform-workspace.module.css";
-import { IconClose } from "./quiet-icons";
 import { WorkspaceIcon } from "./workspace-icon";
 
 export function ModuleGrid({
@@ -68,8 +76,25 @@ export function ModuleList({ children }: { children: ReactNode }) {
   return <ul className={styles.list}>{children}</ul>;
 }
 
-export function ModuleTiles({ children }: { children: ReactNode }) {
-  return <ul className="agent-tile-grid module-tile-grid">{children}</ul>;
+export function ModuleTiles({
+  children,
+  variant,
+}: {
+  children: ReactNode;
+  /** "list": the Agents page grid of 186px card A columns. */
+  variant?: "list";
+}) {
+  return (
+    <ul
+      className={
+        variant === "list"
+          ? "m-0 grid list-none items-center grid-cols-[repeat(auto-fill,186px)] gap-x-[26px] gap-y-[30px] p-0 max-[767px]:grid-cols-2"
+          : AGENT_GRID_CLASS
+      }
+    >
+      {children}
+    </ul>
+  );
 }
 
 /**
@@ -88,6 +113,7 @@ export function teamVersionLabel(seq: number) {
 }
 
 export function VersionTile({
+  id,
   name,
   href,
   label,
@@ -97,80 +123,96 @@ export function VersionTile({
   onDelete,
   deleteLabel,
   title,
+  editedBy,
+  materialTheme,
+  rename,
+  variant,
+  index,
 }: {
+  /** "list": card A of the Agents page. */
+  variant?: "list";
+  /** Picks the mascot when there is no avatar theme (defaults to href). */
+  id?: string;
   name: string;
   href: string;
-  /** Immediate hover help: latest version and last editor. */
+  /** ui-guide hover help: the last editor. */
   title?: string;
+  /** Last editor's name for the card footer. */
+  editedBy?: string | null;
+  /** avatar_config.material_theme of the current version. */
+  materialTheme?: string | null;
   label: string;
   pending: boolean;
   visibility?: "private" | "public";
   deleting?: boolean;
   onDelete?: () => void;
   deleteLabel: string;
+  rename?: AgentRename;
+  /** Position in the list; cycles the card tone. */
+  index?: number;
 }) {
-  // Green/grey pills carry Private or Public; the name stays a text link.
+  const t = useT();
   return (
-    <li className="agent-tile">
-      <Link
-        className="agent-tile-name text-link"
-        href={href}
-        data-ui-guide={title ? "agent.lastEdited" : undefined}
-        data-ui-guide-text={title}
-      >
-        <FitTitle text={name} />
-      </Link>
-      {onDelete ? (
-        <button
-          type="button"
-          className="agent-pill agent-pill-action"
-          data-pending={pending ? "true" : "false"}
-          data-visibility={visibility}
-          disabled={deleting}
-          aria-label={deleteLabel}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onDelete();
-          }}
-        >
-          <span className="agent-pill-label">{label}</span>
-          <span className="agent-pill-x" aria-hidden="true">
-            <IconClose size={12} />
-          </span>
-        </button>
-      ) : (
-        <span
-          className="agent-pill"
-          data-pending={pending ? "true" : "false"}
-          data-visibility={visibility}
-        >
-          {label}
-        </span>
-      )}
-    </li>
+    <AgentCard
+      index={index}
+      id={id ?? href}
+      name={name}
+      href={href}
+      label={label}
+      pending={pending}
+      visibility={visibility}
+      visibilityLabel={
+        visibility === "public"
+          ? t("publicOption")
+          : visibility === "private"
+            ? t("privateOption")
+            : undefined
+      }
+      mascot={agentMascot(id ?? href, materialTheme)}
+      footer={editedBy ? t("agentLastEditedBy", { name: editedBy }) : null}
+      guideText={title}
+      deleting={deleting}
+      onDelete={onDelete}
+      deleteLabel={deleteLabel}
+      rename={rename}
+      variant={variant}
+    />
   );
 }
 
 /** The same + as ModulePlus, opening a file picker instead of a page. */
 export function ModuleUpload({
   label,
+  caption,
   accept,
   disabled,
   onFile,
+  className,
 }: {
+  /** Replaces the default button look (the Agent card's "+ New"). */
+  className?: string;
   label: string;
+  /** Visible text next to the +. Defaults to label; Brainform passes "New". */
+  caption?: string;
   accept: string;
   disabled?: boolean;
   onFile: (file: File) => void;
 }) {
   return (
     <label
-      className={styles.addButton}
+      className={cn(
+        className ??
+          cn(
+            buttonVariants({ variant: "default" }),
+            "m-0 gap-1.5 font-display text-base font-extrabold",
+          ),
+        disabled && "pointer-events-none opacity-50",
+      )}
       aria-disabled={disabled || undefined}
       data-ui-guide="agent.uploadRag"
     >
-      <WorkspaceIcon name="new" />
+      <IconPlus size={16} />
+      <span aria-hidden="true">{caption ?? label}</span>
       <input
         className="sr-only"
         type="file"

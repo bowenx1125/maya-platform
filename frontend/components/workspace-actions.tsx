@@ -17,6 +17,9 @@ export type WorkspaceActionOptions = {
   /** Work this action started is still running: the button shows a spinner. */
   busy?: boolean;
   priority?: number;
+  /** "page": the page draws this control itself (the Agent banner), so the
+      shell keeps the registration but skips its sidebar button. */
+  placement?: "page";
 };
 export type WorkspaceActions = Partial<
   Record<WorkspaceActionName, WorkspaceActionOptions>
@@ -43,6 +46,7 @@ export function WorkspaceAction({
   disabled,
   busy,
   priority = 0,
+  placement,
 }: WorkspaceActionOptions & { name: WorkspaceActionName }) {
   const registry = useContext(WorkspaceActionsContext);
   const owner = useId();
@@ -52,9 +56,20 @@ export function WorkspaceAction({
     return registry?.register(
       name,
       owner,
-      { href, form, onClick, disabled: disabled || busy, busy },
+      { href, form, onClick, disabled: disabled || busy, busy, placement },
       priority,
     );
-  }, [registry, owner, name, href, form, onClick, disabled, busy, priority]);
+  }, [
+    registry,
+    owner,
+    name,
+    href,
+    form,
+    onClick,
+    disabled,
+    busy,
+    priority,
+    placement,
+  ]);
   return null;
 }

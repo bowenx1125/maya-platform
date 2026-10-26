@@ -2,10 +2,14 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { unlayer } from "./unlayer";
+
 const style = document.createElement("style");
-style.textContent = readFileSync(
-  resolve(process.cwd(), "components/debate/setup/debate-setup.module.css"),
-  "utf8",
+style.textContent = unlayer(
+  readFileSync(
+    resolve(process.cwd(), "components/debate/setup/debate-setup.module.css"),
+    "utf8",
+  ),
 );
 
 function layoutRules() {

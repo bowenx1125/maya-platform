@@ -1991,6 +1991,26 @@ export class PlatformApi {
     });
   }
 
+  /**
+   * Rename an Agent (CAS on its metadata revision). Only the name is sent:
+   * the server leaves the description alone when it is absent. The answer
+   * carries the name the server kept (it may add "-2" to avoid a clash).
+   */
+  async updateAgentMetadata(
+    agentId: string,
+    body: { name: string; expected_metadata_revision: number },
+  ): Promise<AgentDetail> {
+    return unwrap(
+      await this.client.PATCH("/agents/{agent_id}", {
+        params: {
+          path: { agent_id: agentId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body: body as components["schemas"]["UpdateAgentMetadataRequest"],
+      }),
+    );
+  }
+
   async versions(agentId: string): Promise<AgentVersion[]> {
     return unwrap(
       await this.client.GET("/agents/{agent_id}/versions", {

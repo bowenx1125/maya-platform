@@ -501,8 +501,9 @@ describe("Wave 1C real workbench boundary", () => {
     fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
       target: { value: "# Unsaved" },
     });
-    expect(back.closest("nav")).not.toBeNull();
-    expect(back.closest("main")).toBeNull();
+    // Back leads the page banner, not the sidebar.
+    expect(back.closest("main")).not.toBeNull();
+    expect(back.closest("nav")).toBeNull();
     expect(back.getAttribute("href")).toBe("/student/agents/agent-id");
     expect(fireEvent.click(back)).toBe(false);
     expect(confirm).toHaveBeenCalledTimes(1);

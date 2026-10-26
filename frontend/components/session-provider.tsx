@@ -1,6 +1,7 @@
 "use client";
 
 import { DismissibleAlert } from "./dismissible-alert";
+import { StickerBadge } from "./ui";
 import {
   clearLoginQueue,
   loadLoginQueue,
@@ -679,6 +680,11 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
 
   const hasDemoIdentities = identities.length > 0;
 
+  // Only the "empty field" message names its field(s); others stay bubble-only.
+  const nameInvalid =
+    emptyField === "loginNeedBoth" || emptyField === "loginNeedUsername";
+  const passwordInvalid =
+    emptyField === "loginNeedBoth" || emptyField === "loginNeedPassword";
   return (
     <section className="login-panel" aria-labelledby="login-title">
       <h2 id="login-title">
@@ -748,6 +754,9 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
       ) : null}
       {emptyField ? (
         <DismissibleAlert
+          kind="field"
+          n={1}
+          id="login-field-error"
           className="form-error"
           resetKey={`${attempt}:${emptyField}`}
         >
@@ -766,26 +775,40 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
       <form className="stack-form login-form" noValidate onSubmit={submit}>
         <label>
           <span>{t("username")}</span>
-          <input
-            autoComplete="username"
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            onFocus={() => setMood("attentive")}
-            onBlur={() => setMood("idle")}
-            required
-          />
+          <span className="relative block">
+            {nameInvalid ? <StickerBadge n={1} /> : null}
+            <input
+              aria-invalid={nameInvalid || undefined}
+              aria-describedby={nameInvalid ? "login-field-error" : undefined}
+              className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
+              autoComplete="username"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              onFocus={() => setMood("attentive")}
+              onBlur={() => setMood("idle")}
+              required
+            />
+          </span>
         </label>
         <label>
           <span>{t("password")}</span>
-          <input
-            autoComplete="current-password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            onFocus={() => setMood("discreet")}
-            onBlur={() => setMood("idle")}
-            required
-          />
+          <span className="relative block">
+            {passwordInvalid ? <StickerBadge n={1} /> : null}
+            <input
+              aria-invalid={passwordInvalid || undefined}
+              aria-describedby={
+                passwordInvalid ? "login-field-error" : undefined
+              }
+              className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
+              autoComplete="current-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              onFocus={() => setMood("discreet")}
+              onBlur={() => setMood("idle")}
+              required
+            />
+          </span>
         </label>
         <button className="primary-action" type="submit" disabled={busy}>
           {busy ? t("signingIn") : t("signIn")}

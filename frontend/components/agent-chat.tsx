@@ -80,7 +80,13 @@ import { IconClose, IconPin } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import { PageAction } from "./page-action";
-import { ErrorNotice, LoadingCard, Notice, PageIntro } from "./ui";
+import {
+  ErrorNotice,
+  LoadingCard,
+  Notice,
+  PageIntro,
+  useNoticeTrayAbove,
+} from "./ui";
 import { WorkspaceAction } from "./workspace-actions";
 import styles from "./agent-chat.module.css";
 
@@ -544,6 +550,10 @@ function AgentChatScope({
   role: "teacher" | "student";
 }) {
   const t = useT();
+  // In Chat the mascot tray speaks from just above the message box.
+  const [composerElement, setComposerElement] =
+    useState<HTMLFormElement | null>(null);
+  useNoticeTrayAbove(composerElement);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -3240,8 +3250,8 @@ function AgentChatScope({
                   ) : null}
                   {error && !sendRefusalHint(error) ? (
                     <ErrorNotice
-                      inline
                       error={error}
+                      transient
                       onRetry={
                         historyRefreshTarget
                           ? () => void openHistory(historyRefreshTarget)
@@ -3252,7 +3262,6 @@ function AgentChatScope({
                   {closedNotice &&
                   closedNoticeDismissed !== activeSession?.id ? (
                     <Notice
-                      inline
                       id="chat-readonly-help"
                       tone="warning"
                       onClose={() =>
@@ -3264,7 +3273,6 @@ function AgentChatScope({
                   ) : null}
                   {selectedTeam && teamError && !sendRefusalHint(teamError) ? (
                     <Notice
-                      inline
                       tone="error"
                       onClose={() => setTeamError(null)}
                       action={
@@ -3370,6 +3378,7 @@ function AgentChatScope({
                   </p>
                 ) : null}
                 <form
+                  ref={setComposerElement}
                   className={styles.composer}
                   onSubmit={(event) => submitMessage(event)}
                 >

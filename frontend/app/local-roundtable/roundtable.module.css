@@ -1,203 +1,206 @@
-.page {
-  position: relative;
-  height: 100dvh;
-  overflow: hidden;
-  background: #fff;
-  font-family:
-    "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
-}
+@layer legacy {
+  .page {
+    position: relative;
+    height: 100dvh;
+    overflow: hidden;
+    background: #fff;
+    font-family:
+      "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui,
+      sans-serif;
+  }
 
-.toolbar {
-  position: absolute;
-  z-index: 10;
-  top: 12px;
-  right: 12px;
-  max-width: calc(100% - 24px);
-}
-
-.toolbar h1 {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.controls {
-  display: flex;
-  gap: 3px;
-  max-width: 100%;
-  padding: 4px;
-  overflow-x: auto;
-  border: 1px solid rgba(211, 167, 74, 0.52);
-  border-radius: 8px;
-  background: rgba(252, 250, 246, 0.94);
-  box-shadow: 0 8px 24px rgba(39, 35, 61, 0.18);
-  backdrop-filter: blur(14px);
-}
-
-.shortLabel {
-  display: none;
-}
-
-.controls button {
-  min-height: 34px;
-  padding: 6px 12px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--indigo-dark);
-  font: inherit;
-  font-size: 0.84rem;
-  font-weight: 650;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.controls button:nth-of-type(2):not(:disabled) {
-  background: var(--indigo);
-  color: #fff;
-}
-
-.controls button:hover:not(:disabled) {
-  background: var(--gold-soft);
-  color: var(--indigo-dark);
-}
-
-.controls button:focus-visible {
-  outline: 2px solid var(--indigo);
-  outline-offset: -2px;
-}
-
-.controls button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.hiddenInput {
-  display: none;
-}
-
-.status {
-  position: absolute;
-  z-index: 9;
-  bottom: 14px;
-  left: 14px;
-  max-width: calc(100% - 28px);
-  margin: 0;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(211, 167, 74, 0.5);
-  background: rgba(252, 250, 246, 0.96);
-  color: var(--ink);
-  font-size: 0.82rem;
-}
-
-.transcript {
-  position: absolute;
-  z-index: 8;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  height: clamp(220px, 34dvh, 360px);
-  padding: 16px 24px;
-  border-top: 2px solid var(--gold);
-  background: rgba(252, 250, 246, 0.58);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  font-family:
-    "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", serif;
-}
-
-.transcript[hidden] {
-  display: none;
-}
-
-.transcriptHeading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.transcriptHeading h2 {
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  font-size: 1rem;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.transcriptHeading span {
-  flex: 0 0 auto;
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
-.turns {
-  overflow-y: auto;
-}
-
-.turn {
-  display: grid;
-  grid-template-columns: 72px 1fr;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.turn strong {
-  font-size: 0.9rem;
-}
-
-.turn p {
-  min-height: 1.5em;
-  margin: 0;
-  font-size: 1rem;
-  line-height: 1.5;
-}
-
-.turn[data-active="true"] strong {
-  color: var(--indigo-dark);
-}
-
-@media (max-width: 700px) {
   .toolbar {
-    top: 8px;
-    right: 8px;
-    max-width: calc(100% - 16px);
+    position: absolute;
+    z-index: 10;
+    top: 12px;
+    right: 12px;
+    max-width: calc(100% - 24px);
   }
 
-  .transcript {
-    padding: 12px;
-    height: min(45dvh, 360px);
+  .toolbar h1 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
-  .transcriptHeading {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 2px;
-  }
-}
-
-@media (max-width: 360px) {
-  .controls button {
-    padding-inline: 7px;
-    font-size: 0.82rem;
-  }
-
-  .longLabel {
-    display: none;
+  .controls {
+    display: flex;
+    gap: 3px;
+    max-width: 100%;
+    padding: 4px;
+    overflow-x: auto;
+    border: 1px solid rgba(211, 167, 74, 0.52);
+    border-radius: 8px;
+    background: rgba(252, 250, 246, 0.94);
+    box-shadow: 0 8px 24px rgba(39, 35, 61, 0.18);
+    backdrop-filter: blur(14px);
   }
 
   .shortLabel {
-    display: inline;
+    display: none;
+  }
+
+  .controls button {
+    min-height: 34px;
+    padding: 6px 12px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--indigo-dark);
+    font: inherit;
+    font-size: 0.84rem;
+    font-weight: 650;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .controls button:nth-of-type(2):not(:disabled) {
+    background: var(--indigo);
+    color: #fff;
+  }
+
+  .controls button:hover:not(:disabled) {
+    background: var(--gold-soft);
+    color: var(--indigo-dark);
+  }
+
+  .controls button:focus-visible {
+    outline: 2px solid var(--indigo);
+    outline-offset: -2px;
+  }
+
+  .controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .hiddenInput {
+    display: none;
+  }
+
+  .status {
+    position: absolute;
+    z-index: 9;
+    bottom: 14px;
+    left: 14px;
+    max-width: calc(100% - 28px);
+    margin: 0;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(211, 167, 74, 0.5);
+    background: rgba(252, 250, 246, 0.96);
+    color: var(--ink);
+    font-size: 0.82rem;
+  }
+
+  .transcript {
+    position: absolute;
+    z-index: 8;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: clamp(220px, 34dvh, 360px);
+    padding: 16px 24px;
+    border-top: 2px solid var(--gold);
+    background: rgba(252, 250, 246, 0.58);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    font-family:
+      "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", serif;
+  }
+
+  .transcript[hidden] {
+    display: none;
+  }
+
+  .transcriptHeading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .transcriptHeading h2 {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    font-size: 1rem;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .transcriptHeading span {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+
+  .turns {
+    overflow-y: auto;
+  }
+
+  .turn {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .turn strong {
+    font-size: 0.9rem;
+  }
+
+  .turn p {
+    min-height: 1.5em;
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+
+  .turn[data-active="true"] strong {
+    color: var(--indigo-dark);
+  }
+
+  @media (max-width: 700px) {
+    .toolbar {
+      top: 8px;
+      right: 8px;
+      max-width: calc(100% - 16px);
+    }
+
+    .transcript {
+      padding: 12px;
+      height: min(45dvh, 360px);
+    }
+
+    .transcriptHeading {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 2px;
+    }
+  }
+
+  @media (max-width: 360px) {
+    .controls button {
+      padding-inline: 7px;
+      font-size: 0.82rem;
+    }
+
+    .longLabel {
+      display: none;
+    }
+
+    .shortLabel {
+      display: inline;
+    }
   }
 }

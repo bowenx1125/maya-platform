@@ -48,7 +48,7 @@ import { useT } from "../../lib/i18n";
 import { useSession } from "../session-provider";
 import { WorkspaceAction } from "../workspace-actions";
 import { ModulePlus } from "../studyform-layout";
-import { ErrorNotice, LoadingCard } from "../ui";
+import { ErrorNotice, isNotFound, LoadingCard } from "../ui";
 import { ReportMarkdown } from "../report/report-markdown";
 import {
   RecordDetail,
@@ -655,6 +655,8 @@ function BrainformWorkspaceBody({
   const [groups, setGroups] = useState<Group[]>(snapshot?.nextGroups ?? []);
   const [loading, setLoading] = useState(!snapshot);
   const [loadError, setLoadError] = useState<unknown>(null);
+  // U3: a refused filename wears the file sticker, on the line and the field.
+  const filenameError = isFilenameError(loadError);
   const [notice, setNotice] = useState("");
   const [pendingRagAction, setPendingRagAction] =
     useState<PendingRagAction | null>(null);
@@ -815,7 +817,13 @@ function BrainformWorkspaceBody({
           [initialGroupId],
           () => api.knowledge(initialGroupId),
           refresh,
-        );
+        ).catch((cause: unknown) => {
+          // A teacher who has not Entered the group gets a 404 here. That is
+          // not a deleted item: say they are not in the group.
+          if (role === "teacher" && isNotFound(cause))
+            throw new Error(t("groupNotFound"));
+          throw cause;
+        });
         // A group refusal can finish this loader before its file read settles.
         startedReads.push(documents);
         const group = await read(
@@ -2421,6 +2429,7 @@ function BrainformWorkspaceBody({
       {loadError ? (
         <ErrorNotice
           error={loadError}
+          badge={filenameError ? 1 : undefined}
           onRetry={() =>
             pendingRagAction ? retryRagAction() : void loadWorkspace()
           }
@@ -2885,6 +2894,7 @@ function BrainformWorkspaceBody({
                 />
               </label>
               <KnowledgeFilenameField
+                fileError={filenameError}
                 className={styles.field}
                 value={newKnowledge.name}
                 disabled={busyKey === "knowledge-new"}
@@ -2947,6 +2957,7 @@ function BrainformWorkspaceBody({
                 </label>
               ) : null}
               <KnowledgeFilenameField
+                fileError={filenameError}
                 className={styles.field}
                 value={newRag.name}
                 disabled={busyKey === "rag-new"}
@@ -2999,6 +3010,7 @@ function BrainformWorkspaceBody({
                 </label>
               ) : null}
               <KnowledgeFilenameField
+                fileError={filenameError}
                 className={styles.field}
                 value={selectedDraft.filename}
                 disabled={busyKey === `import:${pane.draftKey}`}
@@ -3071,6 +3083,7 @@ function BrainformWorkspaceBody({
                     </label>
                   ) : null}
                   <KnowledgeFilenameField
+                    fileError={filenameError}
                     className={styles.field}
                     value={knowledgeNameDraft}
                     disabled={
@@ -3134,4 +3147,10 @@ function BrainformWorkspaceBody({
       ) : null}
     </main>
   );
+}
+
+function isFilenameError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const { details } = error as { details?: { field?: unknown } };
+  return details?.field === "display_name" || details?.field === "filename";
 }

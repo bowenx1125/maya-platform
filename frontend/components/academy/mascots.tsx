@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 
 import { useAcademyMood, type AcademyMood } from "./mood";
 import { usePrefersReducedMotion } from "./motion";
@@ -435,36 +435,44 @@ function Scholar({
   scholar,
   mood,
   pupilRef,
+  still = false,
+  clipKey = "",
 }: {
   scholar: Scholar;
   mood: AcademyMood;
   pupilRef: (node: SVGGElement | null) => void;
+  /** A static portrait (cards, notices, guide): no bobbing, no eye tracking,
+   * and none of the `.academy-scholar` hooks the home easter egg queries. */
+  still?: boolean;
+  clipKey?: string;
 }) {
   const { cx, body, shade, w, h } = scholar;
   const geometry = geometryFor(scholar);
   const { top, left, right, eyeY, eyeDx, eyeR } = geometry;
   const closed = mood === "discreet";
   const outline = bodyPath(scholar.shape, left, top, w, h);
-  const clipId = `academy-body-${scholar.id}`;
+  const clipId = `academy-body-${scholar.id}${clipKey}`;
   const hem = round(top + h * 0.62);
   const footY = FLOOR - 1;
 
   return (
     <g
-      className="academy-scholar"
-      data-scholar={scholar.id}
+      className={still ? undefined : "academy-scholar"}
+      data-scholar={still ? undefined : scholar.id}
       data-shape={scholar.shape}
       data-height={h}
       data-width={w}
       style={
-        {
-          "--bob": scholar.bob,
-          "--stagger": scholar.stagger,
-          transform: closed
-            ? `rotate(${scholar.turn}deg) translate(0px, ${scholar.duck}px)`
-            : undefined,
-          transformOrigin: `${cx}px ${FLOOR}px`,
-        } as React.CSSProperties
+        still
+          ? undefined
+          : ({
+              "--bob": scholar.bob,
+              "--stagger": scholar.stagger,
+              transform: closed
+                ? `rotate(${scholar.turn}deg) translate(0px, ${scholar.duck}px)`
+                : undefined,
+              transformOrigin: `${cx}px ${FLOOR}px`,
+            } as React.CSSProperties)
       }
     >
       <ellipse
@@ -479,7 +487,7 @@ function Scholar({
       {/* Inner group carries the idle breathing and the squash on a mood
           change, so it composes with the turn on the group above. */}
       <g
-        className="academy-jelly"
+        className={still ? undefined : "academy-jelly"}
         style={{ transformOrigin: `${cx}px ${FLOOR}px` }}
       >
         <Accessory scholar={scholar} geometry={geometry} mood={mood} />
@@ -579,6 +587,54 @@ export function AcademyMascots({ label }: { label: string }) {
           }}
         />
       ))}
+    </svg>
+  );
+}
+
+export type MascotId = "scroll" | "wreath" | "tablet" | "wave";
+
+export const MASCOT_IDS: readonly MascotId[] = [
+  "scroll",
+  "wreath",
+  "tablet",
+  "wave",
+];
+
+/**
+ * One scholar on its own, standing still: the Agent card avatar, the notice
+ * tray speaker and the guide portrait. Decorative (aria-hidden); it carries no
+ * `.academy-scholar` class, so the home easter egg never picks it up.
+ */
+export function MascotFigure({
+  id,
+  className,
+}: {
+  id: MascotId;
+  className?: string;
+}) {
+  const clipKey = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const scholar = SCHOLARS.find((item) => item.id === id) ?? SCHOLARS[3];
+  const { top, left } = geometryFor(scholar);
+  const padX = 30;
+  const x = round(left - padX);
+  const y = round(top - 26);
+  const width = round(scholar.w + padX * 2);
+  const height = round(FLOOR + 17 - y);
+  return (
+    <svg
+      className={className}
+      viewBox={`${x} ${y} ${width} ${height}`}
+      aria-hidden="true"
+      focusable="false"
+      data-mascot={scholar.id}
+    >
+      <Scholar
+        scholar={scholar}
+        mood="idle"
+        pupilRef={() => undefined}
+        still
+        clipKey={`-${clipKey}`}
+      />
     </svg>
   );
 }

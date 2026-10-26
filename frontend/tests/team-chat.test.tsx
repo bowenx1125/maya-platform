@@ -229,7 +229,10 @@ function renderTeamManagement(
 }
 
 function sidebarButton(name: string) {
-  return within(screen.getByRole("navigation")).getByRole("button", {
+  // Back and Done sit in the page header (top-right of main); New stays in nav.
+  return within(
+    screen.getByRole(name === "New" ? "navigation" : "main"),
+  ).getByRole("button", {
     name,
   }) as HTMLButtonElement;
 }
@@ -357,7 +360,9 @@ describe("Studyform Teams", () => {
     expect(await screen.findByLabelText("Name")).toBeTruthy();
     expect(sidebarButton("Done")).toBeTruthy();
     expect(
-      within(screen.getByRole("main")).queryByRole("button", { name: "Done" }),
+      within(screen.getByRole("navigation")).queryByRole("button", {
+        name: "Done",
+      }),
     ).toBeNull();
     expect(
       within(screen.getByRole("main")).queryByRole("button", {
@@ -711,8 +716,8 @@ describe("Studyform Team cards", () => {
     );
 
     const headings = await screen.findAllByRole("heading", { level: 2 });
+    // Agents left Studyform for its own page.
     expect(headings.map((heading) => heading.textContent)).toEqual([
-      "Agents",
       "Teams",
       "Voices",
       "RAG",
@@ -734,7 +739,7 @@ describe("Studyform Team cards", () => {
       screen
         .getAllByRole("link", { name: "New" })
         .map((link) => link.getAttribute("href")),
-    ).toEqual(["/teacher/agents/new", "/teacher/studyform?mode=team-new"]);
+    ).toEqual(["/teacher/studyform?mode=team-new"]);
   });
 
   it("lets a student create a private Team beside Agents and Voices", async () => {
@@ -761,8 +766,8 @@ describe("Studyform Team cards", () => {
     );
 
     const headings = await screen.findAllByRole("heading", { level: 2 });
+    // Agents left Studyform for its own page.
     expect(headings.map((heading) => heading.textContent)).toEqual([
-      "Agents",
       "Teams",
       "Voices",
     ]);
@@ -778,10 +783,7 @@ describe("Studyform Team cards", () => {
       screen
         .getAllByRole("link", { name: "New" })
         .map((link) => link.getAttribute("href")),
-    ).toEqual([
-      "/student/groups/group-1/agents/new",
-      "/student/groups/group-1?mode=team-new",
-    ]);
+    ).toEqual(["/student/groups/group-1?mode=team-new"]);
   });
 
   it("shows a visiting teacher the group's Teams read-only, without creating one", async () => {
@@ -800,7 +802,7 @@ describe("Studyform Team cards", () => {
       </>,
     );
 
-    await screen.findByRole("heading", { name: "Agents" });
+    await screen.findByRole("heading", { name: "Teams" });
     // The group's Teams are listed for the teacher to look at, asked for by
     // group so its members' private Teams come too.
     expect(screen.getByRole("heading", { name: "Teams" })).toBeTruthy();
@@ -1158,7 +1160,7 @@ describe("Chatform", () => {
     ).toBeTruthy();
   });
 
-  it("explains under the latest message that a member Agent was deleted", async () => {
+  it("explains in the mascot tray that a member Agent was deleted", async () => {
     const history = {
       ...teamSession,
       can_send: false,
@@ -1187,7 +1189,7 @@ describe("Chatform", () => {
     const log = await screen.findByRole("log");
     const deletedName = teamSession.team.members[1].name;
     expect(
-      await within(log).findByText(
+      await screen.findByText(
         `${deletedName} was deleted by its publisher. This Team chat can't continue; its history is kept.`,
       ),
     ).toBeTruthy();
@@ -1228,7 +1230,7 @@ describe("Chatform", () => {
     );
     const log = await screen.findByRole("log");
     expect(
-      await within(log).findByText(
+      await screen.findByText(
         "This Team Chat can't continue: its members are no longer available to you. Start a new Chat with the Team.",
       ),
     ).toBeTruthy();

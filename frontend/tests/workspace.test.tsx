@@ -157,7 +157,7 @@ function renderChat({
 
 async function chooseSocrates() {
   fireEvent.click(await screen.findByRole("button", { name: /Socrates/ }));
-  const done = within(screen.getByRole("navigation")).getByRole("button", {
+  const done = within(screen.getByRole("main")).getByRole("button", {
     name: "Done",
   });
   await waitFor(() => expect(done.hasAttribute("disabled")).toBe(false));
@@ -1387,7 +1387,7 @@ describe("private Agent chat", () => {
 });
 
 describe("chat that cannot continue", () => {
-  it("says under the latest message that the publisher deleted the Agent, and closes", async () => {
+  it("says in the mascot tray that the publisher deleted the Agent, and closes", async () => {
     state.api.conversations.mockResolvedValue([
       {
         ...completedConversation,
@@ -1401,7 +1401,7 @@ describe("chat that cannot continue", () => {
       </>,
     );
     const log = await screen.findByRole("log");
-    const notice = await within(log).findByText(
+    const notice = await screen.findByText(
       "The publisher deleted this Agent. This chat can't continue; its history is kept.",
     );
     expect(within(log).getByText("A considered reply")).toBeTruthy();
@@ -1410,9 +1410,9 @@ describe("chat that cannot continue", () => {
       "disabled",
       true,
     );
-    fireEvent.click(within(log).getByRole("button", { name: "Dismiss" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(
-      within(log).queryByText(
+      screen.queryByText(
         "The publisher deleted this Agent. This chat can't continue; its history is kept.",
       ),
     ).toBeNull();
@@ -1544,10 +1544,10 @@ describe("teacher workspace access", () => {
     expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
     const navigation = screen.getByRole("navigation");
     expect(
-      Array.from(navigation.children)
-        .filter((item) => item.matches("a, [aria-disabled='true']"))
-        .map((item) => item.textContent?.trim()),
-    ).toEqual(["Mayaform", "Studyform", "Chatform", "Debates", "Accounts"]);
+      Array.from(
+        navigation.querySelectorAll("a[data-tour], [aria-disabled='true']"),
+      ).map((item) => item.textContent?.trim()),
+    ).toEqual(["Mayaform", "Agents", "Chat with Agent", "Debates", "Accounts"]);
     expect(screen.queryByText("Components")).toBeNull();
     expect(screen.queryByRole("button", { name: "Set API Key" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Check" })).toBeNull();
