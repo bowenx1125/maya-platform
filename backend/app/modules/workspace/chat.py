@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4, uuid5
 
-from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.engine import CursorResult
@@ -20,7 +20,7 @@ from app.core.adaptive_admission import polling_pressure
 from app.core.config import Settings, get_settings
 from app.core.create_admission import create_admission_slot
 from app.core.db import Database
-from app.core.errors import Error, PlatformError, conflict, not_found
+from app.core.errors import Error, PlatformError, conflict, not_found, unprocessable
 from app.core.message_timing import message_timing
 from app.core.models import (
     Agent,
@@ -1479,17 +1479,65 @@ def _chat_agents(db: Session, context: AuthContext, course_id: str) -> list[Chat
     ]
 
 
+# entry_kind=team covers both stored Team kinds.
+_CONVERSATION_ENTRY_FILTERS: dict[str, tuple[str, ...]] = {
+    "agent": ("agent",),
+    "team": ("team", "maya_team"),
+}
+
+
+def _conversation_filters(
+    entry_kind: str | None, course_id: str | None
+) -> tuple[tuple[str, ...] | None, str | None]:
+    kinds = None
+    if entry_kind is not None:
+        kinds = _CONVERSATION_ENTRY_FILTERS.get(entry_kind)
+        if kinds is None:
+            raise unprocessable(
+                "conversation_filter_invalid",
+                "entry_kind must be agent or team.",
+                {"fields": ["entry_kind"]},
+            )
+    course = None
+    if course_id is not None:
+        try:
+            course = str(UUID(course_id))
+        except ValueError:
+            raise unprocessable(
+                "conversation_filter_invalid",
+                "course_id must be a UUID.",
+                {"fields": ["course_id"]},
+            ) from None
+    return kinds, course
+
+
 @router.get(
-    "/conversations", response_model=list[ConversationSession], operation_id="listConversations"
+    "/conversations",
+    response_model=list[ConversationSession],
+    operation_id="listConversations",
+    responses={422: {"model": Error, "description": "Invalid entry_kind or course_id."}},
 )
 def list_conversations(
+    entry_kind: str | None = Query(
+        None,
+        description="agent, or team (Team and Maya Team Chats). Omit for all.",
+        json_schema_extra={"enum": ["agent", "team"]},
+    ),
+    course_id: str | None = Query(
+        None, description="Only Chats in this course.", json_schema_extra={"format": "uuid"}
+    ),
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> list[ConversationSession]:
+    kinds, course = _conversation_filters(entry_kind, course_id)
+    query = select(Conversation)
+    if kinds is not None:
+        query = query.where(Conversation.entry_kind.in_(kinds))
+    if course is not None:
+        query = query.where(Conversation.course_id == course)
     rows = db.scalars(
-        select(Conversation)
-        .join(
+        query.join(
             CourseMember,
             (
                 (CourseMember.course_id == Conversation.course_id)
