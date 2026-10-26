@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  isValidElement,
   useEffect,
   useState,
   useSyncExternalStore,
@@ -156,6 +157,10 @@ export function Notice({
       : tone === "error"
         ? (kind ?? "server")
         : undefined;
+  // U3: Retry belongs to the black "!" server kind only; a field, file or
+  // other kind of error is fixed where it points, never by asking again.
+  const shownAction =
+    sticker && sticker !== "server" && isRetryPill(action) ? null : action;
   const notice = (
     <div
       id={id}
@@ -172,7 +177,7 @@ export function Notice({
           cn(
             "pointer-events-auto my-0 flex-none",
             // U3: 440px bubbles; a server error with Retry gets 480px.
-            !action && "max-w-[440px]",
+            !shownAction && "max-w-[440px]",
             NOTICE_TAIL_CLASS,
           ),
       )}
@@ -181,7 +186,7 @@ export function Notice({
       {sticker ? <KindSticker kind={sticker} n={badge} /> : null}
       {title ? <strong className="whitespace-nowrap">{title}</strong> : null}
       {children ? <span className="min-w-0 flex-1">{children}</span> : null}
-      {action}
+      {shownAction}
       <RoundX
         className="notice-close absolute top-[9px] right-[10px]"
         aria-label={t("noticeDismiss")}
@@ -202,6 +207,10 @@ export function Notice({
       ) : null}
     </>
   );
+}
+
+function isRetryPill(node: ReactNode): boolean {
+  return isValidElement(node) && node.type === RetryPill;
 }
 
 /** Sticker (14 option A): a tilted round red number; green with ✓ once fixed. */
