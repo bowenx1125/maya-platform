@@ -2901,32 +2901,39 @@ function AgentChatScope({
 
   return (
     <>
-      <header className={cn(AGENT_BANNER, "mb-5")}>
-        {newChatRoute ? (
-          <PageAction
-            name="back"
-            placement="page"
-            disabled={creating}
-            onClick={() => closeNewEntry()}
-          />
-        ) : null}
-        <h1 className={AGENT_BANNER_TITLE}>Chatform</h1>
-        {newChatRoute ? (
-          <PageAction
-            name="done"
-            placement="page"
-            disabled={!pick || creating || busy || teamBusy}
-            onClick={() => void createPicked()}
-          />
-        ) : (
-          <PageAction
-            name="new"
-            placement="page"
-            className="bg-[#FF4D8D]"
-            disabled={busy || teamBusy}
-            onClick={openNewEntry}
-          />
-        )}
+      <header className={cn(AGENT_BANNER, "mb-5 justify-between")}>
+        <h1 className={cn(AGENT_BANNER_TITLE, "flex-none")}>Chatform</h1>
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+          {newChatRoute ? (
+            <>
+              <PageAction
+                name="back"
+                placement="page"
+                disabled={creating}
+                onClick={() => closeNewEntry()}
+              />
+              <PageAction
+                name="done"
+                placement="page"
+                disabled={!pick || creating || busy || teamBusy}
+                className={
+                  !pick || creating || busy || teamBusy
+                    ? "bg-[#FFB3CE] text-[#111]/50"
+                    : undefined
+                }
+                onClick={() => void createPicked()}
+              />
+            </>
+          ) : (
+            <PageAction
+              name="new"
+              placement="page"
+              className="bg-[#FF4D8D]"
+              disabled={busy || teamBusy}
+              onClick={openNewEntry}
+            />
+          )}
+        </div>
       </header>
       {/* Owner decision (2026-10-13): opening Memory shows no status line
           and no "continue" button; the Chat itself shows what happened. */}
