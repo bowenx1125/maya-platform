@@ -6,6 +6,8 @@ import { useT } from "../../lib/i18n";
 import { IconCheck } from "../quiet-icons";
 import { MascotFigure } from "../academy/mascots";
 import { agentMascot, agentTone } from "../ui/agent-card";
+import { TEAM_WELLS, TeamFaces, teamFaces } from "../ui/team-faces";
+import type { TeamFaceMember } from "../ui/team-faces";
 import { teamVersionLabel } from "../studyform-layout";
 import { cn } from "../../lib/utils";
 import styles from "../agent-chat.module.css";
@@ -15,10 +17,15 @@ export type ChatTargetTeam = {
   display_name: string;
   current_version_seq?: number;
   visibility?: "private" | "public";
+  /** Used by Studyform teamFaces when members are absent. */
+  member_count?: number;
+  /** Prefer member Agent mascots (Studyform Teams list). */
+  members?: TeamFaceMember[] | null;
 };
 
 /**
  * The New page: Scheme A sticker cards for Agents and Teams.
+ * Agents = Studyform agentMascot/agentTone. Teams = Studyform TeamFaces stack.
  */
 export function ChatTargetPicker({
   teams,
@@ -87,10 +94,12 @@ export function ChatTargetPicker({
     const label = team.current_version_seq
       ? teamVersionLabel(team.current_version_seq)
       : null;
-    // Same Studyform VersionTile/AgentCard assignment: agentMascot(id) + agentTone.
-    // Teams have no material_theme → hash by stable team.id (history/peek/picker share it).
-    const tone = agentTone(team.id, index);
-    const mascot = agentMascot(team.id);
+    const memberCount = team.member_count ?? team.members?.length ?? 0;
+    const faces = teamFaces({
+      id: team.id,
+      member_count: memberCount,
+      members: team.members,
+    });
     return (
       <li key={key} className={styles.pickCardWrap}>
         <button
@@ -108,14 +117,10 @@ export function ChatTargetPicker({
             <FitTitle text={team.display_name} />
           </span>
           <span
-            className={styles.pickArt}
-            style={{
-              backgroundColor: tone,
-              backgroundImage:
-                "radial-gradient(circle at 50% 60%,#fff8 0 30%,transparent 31%),repeating-conic-gradient(from 0deg at 50% 60%,#fff6 0 10deg,transparent 10deg 20deg)",
-            }}
+            className={cn(styles.pickArt, styles.pickTeamArt)}
+            style={{ backgroundColor: TEAM_WELLS[index % TEAM_WELLS.length] }}
           >
-            <MascotFigure id={mascot} className="h-24 w-auto" />
+            <TeamFaces faces={faces} more={Math.max(memberCount - 4, 0)} />
           </span>
           {picked ? (
             <span className={styles.pickMark} aria-hidden="true">

@@ -2752,13 +2752,30 @@ function AgentChatScope({
   const activeSession = selectedTeam ?? selected;
   const teamIds = new Set(teamChoices.map((team) => team.id));
   const teamOptions: ChatTargetTeam[] = [
-    ...teamChoices,
+    ...teamChoices.map((team) => ({
+      id: team.id,
+      display_name: team.display_name,
+      current_version_seq: team.current_version_seq,
+      visibility: team.visibility,
+      member_count: team.member_count,
+      // TeamSummary may carry members once the directory lists them.
+      members: (team as { members?: ChatTargetTeam["members"] }).members,
+    })),
     ...mayaChoices
       .filter((team) => !teamIds.has(team.id))
       .map((team) => ({
         id: team.id,
         display_name: team.display_name,
         visibility: "public" as const,
+        member_count: team.members.length,
+        members: team.members.map((member) => ({
+          agent_id: null as string | null,
+          material_theme:
+            typeof member.avatar_config?.material_theme === "string"
+              ? member.avatar_config.material_theme
+              : null,
+          is_leader: member.is_leader,
+        })),
       })),
   ];
   const chatTitle =
