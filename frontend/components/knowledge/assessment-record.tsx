@@ -175,6 +175,25 @@ const CHIP = [
   "bg-[#FFE14D]",
 ] as const;
 
+/** Soft tinted chip shadows — never solid black decorative fills. */
+const CHIP_SHADOW = [
+  "shadow-[2px_2px_0_rgba(255,77,141,0.45)]",
+  "shadow-[2px_2px_0_rgba(163,230,53,0.5)]",
+  "shadow-[2px_2px_0_rgba(103,232,249,0.55)]",
+  "shadow-[2px_2px_0_rgba(196,181,253,0.55)]",
+  "shadow-[2px_2px_0_rgba(255,225,77,0.55)]",
+] as const;
+
+const CARD_SHADOW = [
+  "shadow-[6px_6px_0_#C4B5FD]",
+  "shadow-[6px_6px_0_#67E8F9]",
+  "shadow-[6px_6px_0_#FBCFE8]",
+] as const;
+
+function cardShell(index = 0): string {
+  return `relative flex w-full flex-wrap items-center gap-3.5 rounded-[14px] border-[3px] border-black bg-white px-[18px] py-4 text-left font-inherit text-inherit ${CARD_SHADOW[index % CARD_SHADOW.length]} [transform:none]`;
+}
+
 /** Cream clipboard board (shared list + detail chrome). */
 function ClipboardBoard({
   children,
@@ -186,11 +205,11 @@ function ClipboardBoard({
   return (
     <section
       aria-labelledby={labelledBy}
-      className="relative mx-auto w-full max-w-[1120px] rounded-lg border-[4px] border-black bg-[#F5E6C8] bg-[radial-gradient(#E9DFC4_1.4px,transparent_1.4px)] bg-[length:22px_22px] px-9 pb-10 pt-14 shadow-[10px_10px_0_#111] min-h-[740px] before:absolute before:left-1/2 before:top-[-18px] before:h-9 before:w-[120px] before:-translate-x-1/2 before:rounded-t-lg before:rounded-b-sm before:border-[3px] before:border-black before:bg-[#9CA3AF] before:shadow-[inset_0_-6px_0_#6B7280] before:content-['']"
+      className="relative mx-auto w-full max-w-[1120px] rounded-lg border-[4px] border-black bg-[#F5E6C8] bg-[radial-gradient(#E9DFC4_1.4px,transparent_1.4px)] bg-[length:22px_22px] px-9 pb-10 pt-14 shadow-[10px_10px_0_#67E8F9] min-h-[740px] before:absolute before:left-1/2 before:top-[-18px] before:h-9 before:w-[120px] before:-translate-x-1/2 before:rounded-t-lg before:rounded-b-sm before:border-[3px] before:border-black before:bg-[#C4B5FD] before:shadow-[inset_0_-6px_0_#A78BFA] before:content-['']"
     >
       <span
         aria-hidden="true"
-        className="absolute left-1/2 top-1.5 z-[2] h-7 w-9 -translate-x-1/2 rounded border-[3px] border-black bg-[#E5E7EB]"
+        className="absolute left-1/2 top-1.5 z-[2] h-7 w-9 -translate-x-1/2 rounded border-[3px] border-black bg-[#EDE9FE]"
       />
       {children}
     </section>
@@ -205,13 +224,13 @@ function ListChrome({ teacher, intro }: { teacher: boolean; intro: string }) {
         data-ui-guide="brainform.record"
         data-ui-guide-text={intro}
         tabIndex={0}
-        className="m-0 inline-block -rotate-[1.5deg] rounded-md border-[3px] border-black border-l-[10px] border-l-[#FACC15] bg-white px-[18px] py-1 text-[40px] font-extrabold leading-none shadow-[4px_4px_0_#111]"
+        className="m-0 inline-block -rotate-[1.5deg] rounded-md border-[3px] border-black border-l-[10px] border-l-[#FACC15] bg-white px-[18px] py-1 text-[40px] font-extrabold leading-none shadow-[4px_4px_0_#FFE14D]"
       >
         Record
       </h2>
       <span
         aria-hidden="true"
-        className="mt-2.5 h-5 w-16 rotate-6 border-2 border-black bg-[rgba(103,232,249,0.75)]"
+        className="mt-2.5 h-5 w-16 rotate-6 rounded-sm border-2 border-[#67E8F9] bg-[rgba(103,232,249,0.9)] shadow-[2px_2px_0_#A5F3FC]"
       />
       <span
         aria-hidden="true"
@@ -219,7 +238,7 @@ function ListChrome({ teacher, intro }: { teacher: boolean; intro: string }) {
           teacher
             ? "rotate-8 border-[#EF4444] text-[#EF4444]"
             : "-rotate-6 border-[#16A34A] text-[#16A34A]"
-        } bg-white/70`}
+        } bg-white/85`}
       >
         {teacher ? "CLASS ROSTER" : "MY PROGRESS"}
       </span>
@@ -227,16 +246,17 @@ function ListChrome({ teacher, intro }: { teacher: boolean; intro: string }) {
   );
 }
 
+/** Colorful XP/RUN ribbon — white body, never solid-black decorative fill. */
 function XpRibbon({ label, width = "62%" }: { label: string; width?: string }) {
   return (
     <div
       aria-hidden="true"
-      className="mt-5 flex items-center gap-3 rounded-[14px] border-[3px] border-black bg-black px-3.5 py-2.5 shadow-[4px_4px_0_#FF4D8D]"
+      className="mt-5 flex items-center gap-3 rounded-[14px] border-[3px] border-black bg-white px-3.5 py-2.5 shadow-[4px_4px_0_#FF4D8D]"
     >
-      <span className="shrink-0 text-[11px] font-extrabold uppercase tracking-wider text-[#FFE14D]">
+      <span className="shrink-0 text-[11px] font-extrabold uppercase tracking-wider text-[#FF4D8D]">
         {label}
       </span>
-      <span className="h-4 flex-1 overflow-hidden rounded-full border-2 border-white bg-[#333]">
+      <span className="h-4 flex-1 overflow-hidden rounded-full border-2 border-[#F9A8D4] bg-[#FCE7F3]">
         <i
           className="block h-full bg-gradient-to-r from-[#FFE14D] via-[#A3E635] to-[#67E8F9]"
           style={{ width }}
@@ -246,22 +266,40 @@ function XpRibbon({ label, width = "62%" }: { label: string; width?: string }) {
   );
 }
 
-function Burst({ n = 5 }: { n?: number }) {
+/** Candy burst + optional star sticker — colorful fills/shadows only. */
+function Burst({ n = 5, star }: { n?: number; star?: string }) {
   const tones = [
-    "bg-[#FF4D8D] -rotate-8",
-    "bg-[#A3E635] rotate-6",
-    "bg-[#67E8F9] -rotate-3",
-    "bg-[#FFE14D] rotate-[10deg]",
-    "bg-[#C4B5FD] -rotate-5",
+    "bg-[#FF4D8D] -rotate-8 shadow-[2px_2px_0_#FBCFE8]",
+    "bg-[#A3E635] rotate-6 shadow-[2px_2px_0_#D9F99D]",
+    "bg-[#67E8F9] -rotate-3 shadow-[2px_2px_0_#A5F3FC]",
+    "bg-[#FFE14D] rotate-[10deg] shadow-[2px_2px_0_#FEF08A]",
+    "bg-[#C4B5FD] -rotate-5 shadow-[2px_2px_0_#DDD6FE]",
   ];
   return (
-    <div aria-hidden="true" className="mt-3.5 flex flex-wrap gap-2">
+    <div aria-hidden="true" className="mt-3.5 flex flex-wrap items-center gap-2">
       {tones.slice(0, n).map((cls, i) => (
         <i
           key={i}
-          className={`h-7 w-7 rounded-lg border-2 border-black shadow-[2px_2px_0_#111] ${cls}`}
+          className={`h-7 w-7 rounded-lg border-2 border-white ${cls}`}
         />
       ))}
+      {star ? (
+        <span className="-rotate-4 rounded-full border-2 border-[#FACC15] bg-[#FFE14D] px-2.5 py-1 text-[11px] font-extrabold text-black shadow-[2px_2px_0_#FEF08A]">
+          {star}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function WashiStrip() {
+  return (
+    <div aria-hidden="true" className="mt-[22px] flex flex-wrap gap-2.5">
+      <i className="inline-block h-[22px] w-16 -rotate-3 rounded-lg border-2 border-[#A78BFA] bg-[#C4B5FD] shadow-[2px_2px_0_#DDD6FE]" />
+      <i className="inline-block h-[22px] w-14 rotate-4 rounded-lg border-2 border-[#22D3EE] bg-[#67E8F9] shadow-[2px_2px_0_#A5F3FC]" />
+      <i className="inline-block h-[22px] w-12 -rotate-1 rounded-lg border-2 border-[#F472B6] bg-[#FBCFE8] shadow-[2px_2px_0_#FCE7F3]" />
+      <i className="inline-block h-[22px] w-[60px] rotate-5 rounded-lg border-2 border-[#FACC15] bg-[#FFE14D] shadow-[2px_2px_0_#FEF08A]" />
+      <i className="inline-block h-[22px] w-10 -rotate-6 rounded-lg border-2 border-[#84CC16] bg-[#A3E635] shadow-[2px_2px_0_#D9F99D]" />
     </div>
   );
 }
@@ -271,14 +309,14 @@ function EmptyAlbum() {
   return (
     <>
       <div className="mt-2 grid grid-cols-3 gap-x-5 gap-y-6">
-        <div className="grid min-h-[280px] place-items-center content-center gap-3.5 rounded-[14px] border-[3px] border-black bg-white p-[22px] text-center shadow-[6px_6px_0_#111]">
+        <div className="grid min-h-[280px] place-items-center content-center gap-3.5 rounded-[14px] border-[3px] border-black bg-white p-[22px] text-center shadow-[6px_6px_0_#67E8F9]">
           <span
             aria-hidden="true"
-            className="relative grid h-[88px] w-[88px] place-items-center rounded-2xl border-[3px] border-black bg-[#67E8F9] shadow-[4px_4px_0_#111]"
+            className="relative grid h-[88px] w-[88px] place-items-center rounded-2xl border-[3px] border-black bg-[#67E8F9] shadow-[4px_4px_0_#A5F3FC]"
           >
-            <span className="relative h-14 w-11 rounded border-[3px] border-black bg-[#FFF8E7] before:absolute before:left-1/2 before:top-[-8px] before:h-2.5 before:w-[22px] before:-translate-x-1/2 before:rounded-sm before:border-2 before:border-black before:bg-[#9CA3AF] before:content-['']" />
+            <span className="relative h-14 w-11 rounded border-[3px] border-black bg-[#FFF8E7] before:absolute before:left-1/2 before:top-[-8px] before:h-2.5 before:w-[22px] before:-translate-x-1/2 before:rounded-sm before:border-2 before:border-black before:bg-[#C4B5FD] before:content-['']" />
           </span>
-          <p className="-rotate-2 inline-block rounded-xl border-[3px] border-black bg-[#FFE14D] px-4 py-2 text-xl font-extrabold shadow-[4px_4px_0_#111]">
+          <p className="-rotate-2 inline-block rounded-xl border-[3px] border-black bg-[#FFE14D] px-4 py-2 text-xl font-extrabold shadow-[4px_4px_0_#FDE68A]">
             {t("overviewNoResults")}
           </p>
         </div>
@@ -295,18 +333,10 @@ function EmptyAlbum() {
           +
         </div>
       </div>
-      <div aria-hidden="true" className="mt-[22px] flex flex-wrap gap-2.5">
-        <i className="inline-block h-[22px] w-14 -rotate-3 rounded-lg border-2 border-black bg-[#C4B5FD] shadow-[2px_2px_0_#111]" />
-        <i className="inline-block h-[22px] w-14 rotate-4 rounded-lg border-2 border-black bg-[#67E8F9] shadow-[2px_2px_0_#111]" />
-        <i className="inline-block h-[22px] w-14 -rotate-1 rounded-lg border-2 border-black bg-[#FBCFE8] shadow-[2px_2px_0_#111]" />
-        <i className="inline-block h-[22px] w-14 rotate-5 rounded-lg border-2 border-black bg-[#FFE14D] shadow-[2px_2px_0_#111]" />
-      </div>
+      <WashiStrip />
     </>
   );
 }
-
-const cardShell =
-  "relative flex w-full flex-wrap items-center gap-3.5 rounded-[14px] border-[3px] border-black bg-white px-[18px] py-4 text-left font-inherit text-inherit shadow-[6px_6px_0_#111] [transform:none]";
 
 function tonePill(tone: string): string {
   if (tone === "high") return "bg-[#A3E635] text-black";
@@ -350,7 +380,7 @@ export function RecordSection({
       ) : !loaded ? (
         <ul className="m-0 flex list-none flex-col gap-4 p-0" aria-busy="true" aria-label={t("loading")}>
           {[0, 1, 2].map((index) => (
-            <li key={index} className={`${cardShell} animate-pulse`}>
+            <li key={index} className={`${cardShell(index)} animate-pulse`}>
               <span className="h-3.5 w-3/5 rounded bg-[#EBE5DA]" />
               <span className="ml-auto h-[38px] w-[38px] rounded-full bg-[#EBE5DA]" />
             </li>
@@ -363,7 +393,7 @@ export function RecordSection({
               <li key={team.name}>
                 <button
                   type="button"
-                  className={cardShell}
+                  className={cardShell(index)}
                   aria-label={t(
                     scope === "own" ? "recordOwnOpenNamed" : "recordOpenNamed",
                     { name: team.name },
@@ -372,11 +402,11 @@ export function RecordSection({
                 >
                   <span
                     aria-hidden="true"
-                    className="absolute right-7 top-[-8px] h-3.5 w-12 rotate-8 border-2 border-black bg-[rgba(103,232,249,0.85)]"
+                    className="absolute right-7 top-[-8px] h-3.5 w-12 rotate-8 rounded-sm border-2 border-[#22D3EE] bg-[rgba(103,232,249,0.92)] shadow-[1px_1px_0_#A5F3FC]"
                   />
                   <span
                     aria-hidden="true"
-                    className={`absolute left-[52px] top-[-10px] h-[22px] w-[22px] rounded-full border-2 border-black shadow-[2px_2px_0_#111] ${CHIP[index % CHIP.length]}`}
+                    className={`absolute left-[52px] top-[-10px] h-[22px] w-[22px] rounded-full border-2 border-white ${CHIP_SHADOW[index % CHIP_SHADOW.length]} ${CHIP[index % CHIP.length]}`}
                   />
                   <span
                     aria-hidden="true"
@@ -412,7 +442,7 @@ export function RecordSection({
           </ul>
           {/* Filled: XP + burst only — no dashed album slots. */}
           <XpRibbon label="XP" />
-          <Burst />
+          <Burst star="CLEAR!" />
         </>
       ) : (
         <EmptyAlbum />
@@ -479,21 +509,21 @@ export function RecordDetail({
 
       <dl className="mb-[18px] flex flex-wrap gap-3">
         {own ? (
-          <div className="min-w-[120px] rounded-lg border-[3px] border-black bg-white px-3.5 py-2.5 shadow-[3px_3px_0_#111]">
+          <div className="min-w-[120px] rounded-lg border-[3px] border-black bg-white px-3.5 py-2.5 shadow-[3px_3px_0_#C4B5FD]">
             <dt className="mb-0.5 text-[10px] font-extrabold tracking-wide text-[#666]">
               {t("recordAttempts")}
             </dt>
             <dd className="m-0 text-2xl font-extrabold">{team.attempts.length}</dd>
           </div>
         ) : (
-          <div className="min-w-[120px] rounded-lg border-[3px] border-black bg-white px-3.5 py-2.5 shadow-[3px_3px_0_#111]">
+          <div className="min-w-[120px] rounded-lg border-[3px] border-black bg-white px-3.5 py-2.5 shadow-[3px_3px_0_#C4B5FD]">
             <dt className="mb-0.5 text-[10px] font-extrabold tracking-wide text-[#666]">
               {t("recordStudents")}
             </dt>
             <dd className="m-0 text-2xl font-extrabold">{team.students}</dd>
           </div>
         )}
-        <div className="min-w-[120px] rounded-lg border-[3px] border-black bg-white px-3.5 py-2.5 shadow-[3px_3px_0_#111]">
+        <div className="min-w-[120px] rounded-lg border-[3px] border-black bg-white px-3.5 py-2.5 shadow-[3px_3px_0_#C4B5FD]">
           <dt className="mb-0.5 text-[10px] font-extrabold tracking-wide text-[#666]">
             {t("recordCompleted")}
           </dt>
@@ -506,7 +536,7 @@ export function RecordDetail({
           </dd>
         </div>
         {own ? null : (
-          <div className="min-w-[120px] rounded-lg border-[3px] border-black bg-white px-3.5 py-2.5 shadow-[3px_3px_0_#111]">
+          <div className="min-w-[120px] rounded-lg border-[3px] border-black bg-white px-3.5 py-2.5 shadow-[3px_3px_0_#C4B5FD]">
             <dt className="mb-0.5 text-[10px] font-extrabold tracking-wide text-[#666]">
               {t("recordAverage")}
             </dt>
@@ -527,14 +557,14 @@ export function RecordDetail({
             : attempt.test_name;
           const pillTone = own ? "muted" : tone(attempt, ratio);
           return (
-            <li key={key} className={cardShell}>
+            <li key={key} className={cardShell(index)}>
               <span
                 aria-hidden="true"
-                className="absolute right-7 top-[-8px] h-3.5 w-12 rotate-8 border-2 border-black bg-[rgba(103,232,249,0.85)]"
+                className="absolute right-7 top-[-8px] h-3.5 w-12 rotate-8 rounded-sm border-2 border-[#22D3EE] bg-[rgba(103,232,249,0.92)] shadow-[1px_1px_0_#A5F3FC]"
               />
               <span
                 aria-hidden="true"
-                className={`absolute left-[52px] top-[-10px] h-[22px] w-[22px] rounded-full border-2 border-black shadow-[2px_2px_0_#111] ${CHIP[index % CHIP.length]}`}
+                className={`absolute left-[52px] top-[-10px] h-[22px] w-[22px] rounded-full border-2 border-white ${CHIP_SHADOW[index % CHIP_SHADOW.length]} ${CHIP[index % CHIP.length]}`}
               />
               <span
                 aria-hidden="true"
@@ -582,7 +612,7 @@ export function RecordDetail({
                 <div className="flex shrink-0 gap-2">
                   {attempt.report_download_path ? (
                     <a
-                      className="inline-flex h-9 items-center gap-1 rounded-lg border-2 border-black bg-[#67E8F9] px-2.5 text-xs font-extrabold text-black no-underline shadow-[2px_2px_0_#111]"
+                      className="inline-flex h-9 items-center gap-1 rounded-lg border-2 border-black bg-[#67E8F9] px-2.5 text-xs font-extrabold text-black no-underline shadow-[2px_2px_0_#67E8F9]"
                       href={attempt.report_download_path}
                       download
                       // The report covers the whole test, not this attempt.
@@ -597,7 +627,7 @@ export function RecordDetail({
                   {onDelete ? (
                     <button
                       type="button"
-                      className="inline-flex h-9 items-center justify-center rounded-lg border-2 border-black bg-[#EF4444] px-2.5 text-white shadow-[2px_2px_0_#111]"
+                      className="inline-flex h-9 items-center gap-1 rounded-lg border-2 border-black bg-[#EF4444] px-2.5 text-xs font-extrabold text-white shadow-[2px_2px_0_#FCA5A5]"
                       aria-label={t("recordDeleteNamed", {
                         name: attempt.student_name,
                       })}
@@ -605,6 +635,7 @@ export function RecordDetail({
                       onClick={() => void remove(attempt)}
                     >
                       <IconClose />
+                      {t("delete")}
                     </button>
                   ) : null}
                 </div>
@@ -625,8 +656,17 @@ export function RecordDetail({
         })}
       </ul>
       {/* Detail: RUN/burst only — no dashed slots. Student cards stay flat 0°. */}
-      {own ? <XpRibbon label="RUN" width="50%" /> : null}
-      <Burst n={own ? 3 : 4} />
+      {own ? (
+        <>
+          <XpRibbon label="RUN" width="50%" />
+          <Burst n={3} star="GO!" />
+        </>
+      ) : (
+        <>
+          <Burst n={4} star="CLASS" />
+          <WashiStrip />
+        </>
+      )}
     </ClipboardBoard>
   );
 }
@@ -665,7 +705,7 @@ function ScoreRing({ ratio }: { ratio: number | null }) {
   const percent = Math.round(ratio * 100);
   return (
     <span
-      className="grid h-12 w-12 shrink-0 place-items-center rounded-full border-[3px] border-black shadow-[3px_3px_0_#111]"
+      className="grid h-12 w-12 shrink-0 place-items-center rounded-full border-[3px] border-black shadow-[3px_3px_0_#FF4D8D]"
       style={
         {
           background: `conic-gradient(#FF4D8D ${percent}%, #fff 0)`,
