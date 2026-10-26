@@ -55,6 +55,7 @@ from httpx import Response
 from sqlalchemy import delete, func, select
 
 from tests.conftest import login, post_message
+from tests.provider_confirm_helpers import chat_standing_disclosure, confirm_disclosure
 from tests.test_mayaform_team_conversations import _make_agent_version
 from tests.test_wave4_llm_adapter import _adapter
 from tests.test_wave4_llm_ledger import _valid_policy
@@ -295,22 +296,20 @@ def test_static_course_chat_disclosure_creates_standing_grant_before_any_student
         "app.modules.workspace.chat_provider.HttpxLLMTransport.post_bytes", transport
     )
 
-    _, teacher_csrf = login(client)
-    teacher_headers = {"X-CSRF-Token": teacher_csrf}
-    disclosure = client.get(
-        "/api/v1/provider/data-call/chat-standing/disclosure",
-        headers=teacher_headers,
-        params={"course_id": COURSE_ID},
+    reviewed = chat_standing_disclosure(
+        database,
+        TEACHER_ID,
+        course_id=COURSE_ID,
+        policy_hash=app.state.settings.provider_policy_hash_for("llm"),
     )
-    assert disclosure.status_code == 200, disclosure.text
-    reviewed = disclosure.json()
+    disclosure_text = json.dumps(reviewed)
     assert reviewed["disclosure"]["outbound_field_classes"] == [
         "authorized_courseware_text",
         "private_conversation_messages",
         "teacher_agent_instructions",
         "topic_and_platform_rules",
     ]
-    assert "Private" not in disclosure.text and "Student" not in disclosure.text
+    assert "Private" not in disclosure_text and "Student" not in disclosure_text
     with database.session() as db:
         static_manifest = db.scalar(
             select(ProviderExportManifest).where(
@@ -323,16 +322,13 @@ def test_static_course_chat_disclosure_creates_standing_grant_before_any_student
         assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
         assert db.scalar(select(func.count()).select_from(ChatProviderStandingGrant)) == 0
 
-    confirmed = client.post(
-        "/api/v1/provider/data-call/disclosure/confirm",
-        headers=teacher_headers,
-        json={
-            "policy_hash": reviewed["policy_hash"],
-            "manifest_hash": reviewed["manifest_hash"],
-            "expected_revision": reviewed["confirmation_revision"],
-        },
+    confirm_disclosure(
+        database,
+        TEACHER_ID,
+        policy_hash=reviewed["policy_hash"],
+        manifest_hash=reviewed["manifest_hash"],
+        expected_revision=reviewed["confirmation_revision"],
     )
-    assert confirmed.status_code == 200, confirmed.text
     with database.session() as db:
         grant = db.scalar(select(ChatProviderStandingGrant))
         assert grant is not None
@@ -483,27 +479,23 @@ def test_single_retrieval_uses_purpose_specific_embedding_grant(
     adapter = DashScopeEmbeddingAdapter(config, transport)
     monkeypatch.setattr("app.modules.workspace.chat_provider.embedding_provider", lambda _: adapter)
 
-    _, teacher_csrf = login(client, "maya")
-    teacher_headers = {"X-CSRF-Token": teacher_csrf}
-    preview = client.get(
-        "/api/v1/provider/data-call/chat-standing/disclosure",
-        headers=teacher_headers,
-        params={"course_id": COURSE_ID, "provider_operation": "embedding_query"},
+    reviewed = chat_standing_disclosure(
+        database,
+        TEACHER_ID,
+        course_id=COURSE_ID,
+        policy_hash=app.state.settings.provider_policy_hash_for("embedding"),
+        provider_operation="embedding_query",
     )
-    assert preview.status_code == 200, preview.text
-    reviewed = preview.json()
+    preview_text = json.dumps(reviewed)
     assert reviewed["disclosure"]["outbound_field_classes"] == ["current_evidence_excerpt"]
-    assert "A source that remains available" not in preview.text
-    confirmed = client.post(
-        "/api/v1/provider/data-call/disclosure/confirm",
-        headers=teacher_headers,
-        json={
-            "policy_hash": reviewed["policy_hash"],
-            "manifest_hash": reviewed["manifest_hash"],
-            "expected_revision": reviewed["confirmation_revision"],
-        },
+    assert "A source that remains available" not in preview_text
+    confirm_disclosure(
+        database,
+        TEACHER_ID,
+        policy_hash=reviewed["policy_hash"],
+        manifest_hash=reviewed["manifest_hash"],
+        expected_revision=reviewed["confirmation_revision"],
     )
-    assert confirmed.status_code == 200, confirmed.text
     with database.session() as db:
         grant = db.scalar(
             select(ChatProviderStandingGrant).where(
@@ -660,25 +652,19 @@ def test_single_llm_sending_guard_rechecks_live_owner_source_and_consent(
     )
     monkeypatch.setattr("app.modules.workspace.chat_provider.llm_provider", lambda _: adapter)
 
-    _, teacher_csrf = login(client, "maya")
-    teacher_headers = {"X-CSRF-Token": teacher_csrf}
-    preview = client.get(
-        "/api/v1/provider/data-call/chat-standing/disclosure",
-        headers=teacher_headers,
-        params={"course_id": COURSE_ID},
+    disclosure = chat_standing_disclosure(
+        database,
+        TEACHER_ID,
+        course_id=COURSE_ID,
+        policy_hash=app.state.settings.provider_policy_hash_for("llm"),
     )
-    assert preview.status_code == 200, preview.text
-    disclosure = preview.json()
-    confirmed = client.post(
-        "/api/v1/provider/data-call/disclosure/confirm",
-        headers=teacher_headers,
-        json={
-            "policy_hash": disclosure["policy_hash"],
-            "manifest_hash": disclosure["manifest_hash"],
-            "expected_revision": disclosure["confirmation_revision"],
-        },
+    confirm_disclosure(
+        database,
+        TEACHER_ID,
+        policy_hash=disclosure["policy_hash"],
+        manifest_hash=disclosure["manifest_hash"],
+        expected_revision=disclosure["confirmation_revision"],
     )
-    assert confirmed.status_code == 200, confirmed.text
 
     _, csrf = login(client, "bowen")
     created = client.post(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -21,11 +22,12 @@ from app.modules.workspace.chat import _chat_sending_guard, claim_chat_send
 from app.modules.workspace.chat_provider import retrieve_sources
 from app.modules.workspace.models import ChatProviderStandingGrant, Conversation
 from app.providers.control_repository import ProviderRepository
-from app.seed import COURSE_ID
+from app.seed import COURSE_ID, TEACHER_ID
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from tests.conftest import login
+from tests.provider_confirm_helpers import chat_standing_disclosure, confirm_disclosure
 from tests.test_wave3_mock_rag_delta import GROUP_DEMO_ID, _insert_sql_published_agent
 from tests.test_wave4_query_standing_consent import (
     _policy,
@@ -89,27 +91,22 @@ def test_single_embedding_send_rechecks_live_source_with_actor_context(
     adapter = DashScopeEmbeddingAdapter(config, transport)
     monkeypatch.setattr("app.modules.workspace.chat_provider.embedding_provider", lambda _: adapter)
 
-    _, teacher_csrf = login(client, "maya")
-    teacher_headers = {"Origin": "http://testserver", "X-CSRF-Token": teacher_csrf}
-    preview = client.get(
-        "/api/v1/provider/data-call/chat-standing/disclosure",
-        headers=teacher_headers,
-        params={"course_id": COURSE_ID, "provider_operation": "embedding_query"},
+    reviewed = chat_standing_disclosure(
+        database,
+        TEACHER_ID,
+        course_id=COURSE_ID,
+        policy_hash=policy.policy_hash,
+        provider_operation="embedding_query",
     )
-    assert preview.status_code == 200, preview.text
-    reviewed = preview.json()
     assert reviewed["disclosure"]["outbound_field_classes"] == ["current_evidence_excerpt"]
-    assert "A source that remains available" not in preview.text
-    confirmed = client.post(
-        "/api/v1/provider/data-call/disclosure/confirm",
-        headers=teacher_headers,
-        json={
-            "policy_hash": reviewed["policy_hash"],
-            "manifest_hash": reviewed["manifest_hash"],
-            "expected_revision": reviewed["confirmation_revision"],
-        },
+    assert "A source that remains available" not in json.dumps(reviewed)
+    confirm_disclosure(
+        database,
+        TEACHER_ID,
+        policy_hash=reviewed["policy_hash"],
+        manifest_hash=reviewed["manifest_hash"],
+        expected_revision=reviewed["confirmation_revision"],
     )
-    assert confirmed.status_code == 200, confirmed.text
     with database.session() as db:
         grant = db.scalar(
             select(ChatProviderStandingGrant).where(
