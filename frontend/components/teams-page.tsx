@@ -42,19 +42,22 @@ const WELLS = [
 ] as const;
 
 /**
- * G2 faces, leader first, at most four. TeamSummary does not list members yet
- * (MayaUI API ask: TeamSummary.members[{agent_id, material_theme, is_leader}]
- * capped at 4, leader first). Until it does, the faces hash from the team id
- * with the same picker as agentMascot.
+ * G2 faces, leader first, at most four, from TeamSummary.members. A member
+ * whose Agent was deleted (agent_id null) keeps its snapshot theme, or a
+ * neutral default face; faces are never links.
  */
-function teamFaces(team: TeamSummaryDto): MascotId[] {
-  const listed = (team as TeamSummaryDto & { members?: TeamFaceMember[] })
-    .members;
+export function teamFaces(team: TeamSummaryDto): MascotId[] {
+  const listed = (team as { members?: TeamFaceMember[] | null }).members;
   if (Array.isArray(listed) && listed.length)
-    return [...listed]
-      .sort((left, right) => Number(right.is_leader) - Number(left.is_leader))
-      .slice(0, 4)
-      .map((member) => agentMascot(member.agent_id, member.material_theme));
+    return (
+      [...listed]
+        .sort((left, right) => Number(right.is_leader) - Number(left.is_leader))
+        .slice(0, 4)
+        // "" hashes to MASCOT_IDS[0], the neutral default face.
+        .map((member) =>
+          agentMascot(member.agent_id ?? "", member.material_theme),
+        )
+    );
   let hash = 0;
   for (const char of team.id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return Array.from(
@@ -63,7 +66,7 @@ function teamFaces(team: TeamSummaryDto): MascotId[] {
   );
 }
 type TeamFaceMember = {
-  agent_id: string;
+  agent_id: string | null;
   material_theme?: string | null;
   is_leader?: boolean;
 };
