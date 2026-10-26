@@ -91,6 +91,24 @@ describe("U3 tray: in flow below 900px, fixed from 900px", () => {
     expect(tray.parentElement).toBe(document.body);
     expect(tray.className).toContain("min-[900px]:fixed");
     expect(tray.className).toContain("min-[900px]:w-[380px]");
+    // body fallback padding is mobile-only, so the fixed tray is not inset at >=900px
+    expect(tray.className).toContain("max-[899px]:[body>&]:px-3");
+    expect(tray.className).not.toMatch(/(^| )\[body>&\]:px-3/);
+    // the bubble keeps the mock's 14px text at every width (no 680px shrink)
+    expect(tray.className).not.toContain("text-[13px]");
+  });
+
+  it("gives a sticker bubble the mock padding (12 46 12 14)", () => {
+    setViewport({ width: 1440 });
+    render(
+      <Notice tone="error" kind="server">
+        Something went wrong
+      </Notice>,
+    );
+    const bubble = document.querySelector(".notice-tray>.notice")!;
+    for (const c of ["py-3", "pr-[46px]", "pl-3.5"])
+      expect(bubble.className).toContain(c);
+    expect(bubble.className).not.toContain("pt-5");
   });
 
   it("scrolls a new off-screen error into view smoothly, once", async () => {

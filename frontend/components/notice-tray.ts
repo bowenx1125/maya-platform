@@ -16,13 +16,12 @@ const noSubscription = () => () => {};
  */
 const TRAY_CLASS = [
   "notice-tray relative mt-3.5 flex flex-row items-end justify-end gap-1.5 w-full pointer-events-none font-body empty:hidden",
-  "[body>&]:px-3 [body>&]:pb-4",
+  "max-[899px]:[body>&]:px-3 max-[899px]:[body>&]:pb-4",
   "min-[900px]:fixed min-[900px]:right-7 min-[900px]:bottom-[var(--arc-tray-bottom,24px)] min-[900px]:z-[60] min-[900px]:m-0 min-[900px]:w-[380px] min-[900px]:p-0",
   "min-[900px]:max-h-[var(--arc-tray-max,calc(100dvh-32px))] min-[900px]:overflow-y-auto min-[900px]:overscroll-contain",
   "after:content-[''] after:block after:flex-none after:w-[58px] after:h-[74px]",
   "after:bg-[url(/mascots/wave.svg)] after:bg-contain after:bg-bottom after:bg-no-repeat after:drop-shadow-[3px_3px_0_#111]",
   "[&>.notice]:flex-1 [&>.notice]:min-w-0 [&>.notice]:max-w-none",
-  "max-[680px]:[&>.notice]:text-[13px] max-[680px]:[&>.notice]:py-2.5 max-[680px]:[&>.notice]:pr-[38px] max-[680px]:[&>.notice]:pl-3",
   "[&>.notice:has(~.notice)]:hidden",
 ].join(" ");
 
