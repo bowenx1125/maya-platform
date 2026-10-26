@@ -81,6 +81,52 @@
       scale: 0 1;
     }
   }
+  /* Student Live cabinet (approved 01-student-live F1 / T1 / O2). Every use
+     is paired with motion-reduce:animate-none on the Live root. */
+  --animate-live-blink: live-blink 1.2s infinite;
+  --animate-live-blink-fast: live-blink 0.8s infinite;
+  --animate-live-blink-slow: live-blink 2.4s infinite;
+  @keyframes live-blink {
+    50% {
+      opacity: 0.35;
+    }
+  }
+  --animate-live-hop: live-hop 1s infinite;
+  @keyframes live-hop {
+    50% {
+      transform: translateY(-6px);
+    }
+  }
+  --animate-live-rise: live-rise 3s linear infinite;
+  @keyframes live-rise {
+    0% {
+      transform: translateY(0) scale(0.6);
+      opacity: 0;
+    }
+    20% {
+      opacity: 0.9;
+    }
+    100% {
+      transform: translateY(-120px) scale(1.2);
+      opacity: 0;
+    }
+  }
+  --animate-live-breathe: live-breathe 4s ease-in-out infinite;
+  @keyframes live-breathe {
+    50% {
+      transform: rotate(-1.5deg) scale(0.99);
+    }
+  }
+  --animate-live-swing: live-swing 2.6s ease-in-out infinite;
+  @keyframes live-swing {
+    0%,
+    100% {
+      transform: translateX(-50%) rotate(-7deg);
+    }
+    50% {
+      transform: translateX(-50%) rotate(4deg);
+    }
+  }
   --color-main: var(--arc-main);
   --color-main-fg: var(--arc-main-fg);
   --color-ink: var(--arc-ink);
