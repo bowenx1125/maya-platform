@@ -1223,11 +1223,10 @@ def list_course_teams(
     readable = can_view_team if group_id is not None else can_read_team
     shown = [team for team in rows if readable(db, user_id, team)]
     owner_ids = {team.owner_user_id for team in shown if team.owner_user_id}
-    owner_names = (
-        dict(db.execute(select(User.id, User.display_name).where(User.id.in_(owner_ids))).all())
-        if owner_ids
-        else {}
-    )
+    owner_names: dict[str, str] = {}
+    if owner_ids:
+        names = db.execute(select(User.id, User.display_name).where(User.id.in_(owner_ids)))
+        owner_names = {user_id: name for user_id, name in names.all()}
     return [_team_summary(db, team, user_id=user_id, owner_names=owner_names) for team in shown]
 
 

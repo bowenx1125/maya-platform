@@ -39,9 +39,7 @@ def _enter(database: Any) -> None:
         db.commit()
 
 
-def test_owner_and_non_owner_on_a_public_teacher_team(
-    client: TestClient, database: Any
-) -> None:
+def test_owner_and_non_owner_on_a_public_teacher_team(client: TestClient, database: Any) -> None:
     _, csrf = login(client, "maya")
     first = _make_agent_version(database, owner_id=MAYA_ID, name="Edit A", visibility="public")
     second = _make_agent_version(database, owner_id=MAYA_ID, name="Edit B", visibility="public")
@@ -66,11 +64,18 @@ def test_owner_and_non_owner_on_a_public_teacher_team(
     assert student_row["can_edit"] is False
     assert student_row["can_delete"] is False
     assert student_row["last_edited_by_name"] == _name(database, MAYA_ID)
-    refused = client.delete(f"/api/v1/teams/{team['id']}", headers=_headers(student_csrf, "d-summary-del-0001"))
+    refused = client.delete(
+        f"/api/v1/teams/{team['id']}", headers=_headers(student_csrf, "d-summary-del-0001")
+    )
     assert refused.status_code == 404
 
     _, csrf = login(client, "maya")
-    assert client.delete(f"/api/v1/teams/{team['id']}", headers=_headers(csrf, "d-summary-del-0002")).status_code == 204
+    assert (
+        client.delete(
+            f"/api/v1/teams/{team['id']}", headers=_headers(csrf, "d-summary-del-0002")
+        ).status_code
+        == 204
+    )
 
 
 def test_visiting_teacher_cannot_delete_a_student_group_team(
@@ -102,7 +107,9 @@ def test_visiting_teacher_cannot_delete_a_student_group_team(
     assert visiting["can_edit"] is False
     assert visiting["can_delete"] is False
     assert visiting["last_edited_by_name"] == _name(database, BOWEN_ID)
-    refused = client.delete(f"/api/v1/teams/{team['id']}", headers=_headers(teacher_csrf, "d-summary-del-0003"))
+    refused = client.delete(
+        f"/api/v1/teams/{team['id']}", headers=_headers(teacher_csrf, "d-summary-del-0003")
+    )
     assert refused.status_code == 404
 
 
@@ -134,4 +141,9 @@ def test_visiting_teacher_owns_a_group_team_only_while_entered(
     detail = client.get(f"/api/v1/teams/{team['id']}", headers=_headers(csrf))
     if detail.status_code == 200:
         assert detail.json()["can_delete"] is False
-    assert client.delete(f"/api/v1/teams/{team['id']}", headers=_headers(csrf, "d-summary-del-0004")).status_code == 404
+    assert (
+        client.delete(
+            f"/api/v1/teams/{team['id']}", headers=_headers(csrf, "d-summary-del-0004")
+        ).status_code
+        == 404
+    )

@@ -3293,7 +3293,7 @@
         }
       },
       "patch": {
-        "description": "CAS-update description without touching any versioned Agent data.",
+        "description": "CAS-update name and/or description without touching versioned Agent data.",
         "operationId": "updateAgentMetadata",
         "parameters": [
           {
@@ -3357,6 +3357,16 @@
               }
             },
             "description": "Metadata revision conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "agent_name_required or agent_name_too_long (max 120 characters)."
           }
         },
         "security": [
@@ -13036,6 +13046,14 @@
             "title": "Expected Metadata Revision",
             "type": "integer"
           },
+          "name": {
+            "default": null,
+            "title": "Name",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "visibility": {
             "enum": [
               "private",
@@ -16246,7 +16264,6 @@
             "type": "string"
           },
           "name": {
-            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
@@ -18227,6 +18244,19 @@
             "type": "boolean",
             "title": "Can Edit"
           },
+          "can_delete": {
+            "type": "boolean",
+            "title": "Can Delete",
+            "description": "Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group)."
+          },
+          "last_edited_by_name": {
+            "title": "Last Edited By Name",
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone."
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -18284,6 +18314,8 @@
           "current_version_seq",
           "member_count",
           "can_edit",
+          "can_delete",
+          "last_edited_by_name",
           "created_at",
           "updated_at",
           "members",
@@ -18444,6 +18476,24 @@
           "can_edit": {
             "type": "boolean",
             "title": "Can Edit"
+          },
+          "can_delete": {
+            "type": "boolean",
+            "title": "Can Delete",
+            "description": "Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group)."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "last_edited_by_name": {
+            "title": "Last Edited By Name",
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone."
           }
         },
         "additionalProperties": false,
@@ -18461,7 +18511,10 @@
           "current_version_id",
           "current_version_seq",
           "member_count",
-          "can_edit"
+          "can_edit",
+          "can_delete",
+          "updated_at",
+          "last_edited_by_name"
         ],
         "title": "TeamSummary"
       },
