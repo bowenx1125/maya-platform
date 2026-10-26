@@ -671,7 +671,7 @@ export function AppShell({
       label: t("sidebarClassroom"),
       rail: "border-ink",
       tile: "bg-surface",
-      square: "bg-ink",
+      square: "bg-white",
       items: links
         .filter((link) => ["live", "classroom", "accounts"].includes(link.icon))
         .map((link) => ({
