@@ -515,3 +515,56 @@
     transition: none;
   }
 }
+
+/* Check RAG in T1 cards: unchanged SegmentRag/EvidenceTrace inspectors,
+   dressed as Preview F (eye + "Check RAG" + yellow count pill). */
+.transcriptDrawer details {
+  margin-top: 10px;
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 2px dashed #111;
+  border-radius: 0;
+  background: transparent;
+}
+.transcriptDrawer details > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px 4px 8px;
+  border: 2px solid #111;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  font-size: 12px;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+}
+.transcriptDrawer details > summary::-webkit-details-marker {
+  display: none;
+}
+.transcriptDrawer details > summary::before {
+  content: "";
+  width: 18px;
+  height: 18px;
+  flex: none;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.transcriptDrawer details > summary:hover {
+  background: #f1f7ff;
+}
+.transcriptDrawer details > summary > span {
+  display: inline-grid;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  margin-left: 2px;
+  place-items: center;
+  border: 2px solid #111;
+  border-radius: 999px;
+  background: #ffe14d;
+  color: #111;
+  font-size: 11px;
+  font-weight: 800;
+}
