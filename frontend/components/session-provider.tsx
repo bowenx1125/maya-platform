@@ -1,6 +1,7 @@
 "use client";
 
 import { DismissibleAlert } from "./dismissible-alert";
+import { StickerBadge } from "./ui";
 import {
   clearLoginQueue,
   loadLoginQueue,
@@ -679,6 +680,11 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
 
   const hasDemoIdentities = identities.length > 0;
 
+  // Only the "empty field" message names its field(s); others stay bubble-only.
+  const nameInvalid =
+    emptyField === "loginNeedBoth" || emptyField === "loginNeedUsername";
+  const passwordInvalid =
+    emptyField === "loginNeedBoth" || emptyField === "loginNeedPassword";
   return (
     <section className="login-panel" aria-labelledby="login-title">
       <h2 id="login-title">
@@ -748,6 +754,7 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
       ) : null}
       {emptyField ? (
         <DismissibleAlert
+          id="login-field-error"
           className="form-error"
           resetKey={`${attempt}:${emptyField}`}
         >
@@ -764,9 +771,13 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
         </div>
       ) : null}
       <form className="stack-form login-form" noValidate onSubmit={submit}>
-        <label>
+        <label className="relative">
+          {nameInvalid ? <StickerBadge n={1} /> : null}
           <span>{t("username")}</span>
           <input
+            aria-invalid={nameInvalid || undefined}
+            aria-describedby={nameInvalid ? "login-field-error" : undefined}
+            className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
             autoComplete="username"
             value={username}
             onChange={(event) => setUsername(event.target.value)}
@@ -775,9 +786,13 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
             required
           />
         </label>
-        <label>
+        <label className="relative">
+          {passwordInvalid ? <StickerBadge n={nameInvalid ? 2 : 1} /> : null}
           <span>{t("password")}</span>
           <input
+            aria-invalid={passwordInvalid || undefined}
+            aria-describedby={passwordInvalid ? "login-field-error" : undefined}
+            className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
             autoComplete="current-password"
             type="password"
             value={password}

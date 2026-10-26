@@ -1,9 +1,11 @@
 "use client";
 
 import { useRef, useState, type HTMLAttributes, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { useT } from "../lib/i18n";
 import { IconClose } from "./quiet-icons";
+import { NOTICE_TAIL_CLASS, useNoticeTray } from "./notice-tray";
 
 /**
  * The compact × that closes an error, failure or warning line. Closing only
@@ -57,7 +59,11 @@ export function DismissibleAlert({
   children: ReactNode;
 } & Omit<HTMLAttributes<HTMLElement>, "children" | "role" | "className">) {
   const [dismissed, setDismissed] = useState<unknown>(NOT_DISMISSED);
+  // Errors are spoken by the mascot: role=alert lines float in the tray.
+  const tray = useNoticeTray(role === "alert");
   const lineRef = useRef<HTMLElement | null>(null);
+  // Where the line was written, so Dismiss still finds its form from the tray.
+  const anchorRef = useRef<HTMLSpanElement | null>(null);
   const key =
     resetKey !== undefined
       ? resetKey
@@ -81,24 +87,39 @@ export function DismissibleAlert({
       : undefined;
     const target =
       described ??
-      line?.closest("form")?.querySelector<HTMLElement>("[type=submit]") ??
+      (anchorRef.current ?? line)
+        ?.closest("form")
+        ?.querySelector<HTMLElement>("[type=submit]") ??
       null;
     target?.focus();
     setDismissed(key);
   }
-  return (
+  const alertLine = (
     <Tag
       {...rest}
       ref={(node: HTMLElement | null) => {
         lineRef.current = node;
       }}
-      className={
-        className ? `dismissible-alert ${className}` : "dismissible-alert"
-      }
+      className={[
+        "dismissible-alert",
+        className,
+        tray
+          ? `notice notice-error dismissible-alert-tray pointer-events-auto flex-none ${NOTICE_TAIL_CLASS}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       role={role}
     >
       <span className="dismissible-alert-body">{children}</span>
       <DismissButton label={dismissLabel} onDismiss={dismiss} />
     </Tag>
+  );
+  if (!tray) return alertLine;
+  return (
+    <>
+      <span ref={anchorRef} hidden />
+      {createPortal(alertLine, tray)}
+    </>
   );
 }

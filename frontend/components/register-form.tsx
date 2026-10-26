@@ -11,6 +11,7 @@ import {
 import { useRouter } from "next/navigation";
 
 import { DismissibleAlert } from "./dismissible-alert";
+import { StickerBadge } from "./ui";
 import { type RegistrationOptions } from "../lib/api";
 import { localizeError, type MessageKey } from "../lib/i18n";
 import { sanitizeNextPath } from "../lib/navigation";
@@ -201,6 +202,8 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
     }
   }
 
+  const passwordShort = localError === "passwordTooShort";
+  const mismatch = localError === "registerPasswordMismatch";
   return (
     <section className="login-panel" aria-labelledby="register-title">
       <h2 id="register-title">{t("registerTitle")}</h2>
@@ -210,6 +213,7 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
       </p>
       {localError ? (
         <DismissibleAlert
+          id="register-field-error"
           className="form-error"
           resetKey={`${attempt}:${localError}`}
         >
@@ -235,10 +239,17 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
                 required
               />
             </label>
-            <label>
+            <label className="relative">
+              {passwordShort ? <StickerBadge n={1} /> : null}
               <span>{t("password")}</span>
               <input
-                aria-describedby="register-password-rule"
+                aria-invalid={passwordShort || undefined}
+                className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
+                aria-describedby={
+                  passwordShort
+                    ? "register-password-rule register-field-error"
+                    : "register-password-rule"
+                }
                 autoComplete="new-password"
                 type="password"
                 value={password}
@@ -253,9 +264,13 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
             <small className="muted" id="register-password-rule">
               {t("passwordRule")}
             </small>
-            <label>
+            <label className="relative">
+              {mismatch ? <StickerBadge n={1} /> : null}
               <span>{t("registerConfirmPassword")}</span>
               <input
+                aria-invalid={mismatch || undefined}
+                aria-describedby={mismatch ? "register-field-error" : undefined}
+                className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
                 autoComplete="new-password"
                 type="password"
                 value={confirmation}
