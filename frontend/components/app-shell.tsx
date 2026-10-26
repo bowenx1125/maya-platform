@@ -36,6 +36,7 @@ import {
   SIDEBAR_MOBILE_QUERY,
   SIDEBAR_REVEAL_EVENT,
 } from "../lib/sidebar-reveal";
+import { PRESS_MOTION } from "./ui/button";
 import { NoticeTraySlot } from "./ui/error-kit";
 
 type ActionRegistration = {
@@ -830,7 +831,7 @@ export function AppShell({
   return (
     <WorkspaceActionsContext.Provider value={actionRegistry}>
       <div
-        className={`grid min-h-dvh max-[900px]:grid-cols-1 ${pathname === "/student" || pathname === "/teacher" || agentsArea || ragArea ? "bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px]" : ""} ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[220px_minmax(0,1fr)]"}`}
+        className={`grid min-h-dvh bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px] max-[900px]:grid-cols-1 ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[220px_minmax(0,1fr)]"}`}
       >
         <div className="sticky top-0 z-30 hidden h-[50px] items-center justify-center border-b-[3px] border-border bg-sidebar px-3 max-[900px]:flex">
           <button
@@ -958,56 +959,7 @@ export function AppShell({
                     </div>
                   );
                 })}
-                {/* Back and Done live in the page header (A mock); only New stays here. */}
-                {([["new", "New"]] as const).map(([name, label]) => {
-                  const action = actions[name];
-                  // New stays in the sidebar once a page registers it, faded when
-                  // it cannot run. Back and Done exist only while their owning
-                  // screen needs them, and remain disabled during busy work.
-                  if (!action || action.placement === "page") return null;
-                  const faded = Boolean(action.disabled);
-                  const content = (
-                    <>
-                      {action.busy ? (
-                        <span className="spinner" aria-hidden="true" />
-                      ) : (
-                        <WorkspaceIcon name={name} size={18} />
-                      )}
-                      {collapsed ? (
-                        <span className="sr-only">{label}</span>
-                      ) : (
-                        <span>{label}</span>
-                      )}
-                    </>
-                  );
-                  const actionClass = `${collapsed ? `${ICON_ITEM} group/tip` : ITEM} border-border bg-surface shadow-arc-s hover:-translate-y-px active:translate-x-[3px] active:translate-y-[3px] active:shadow-none`;
-                  return action.href && !faded ? (
-                    <Link
-                      key={name}
-                      className={actionClass}
-                      href={action.href}
-                      onClick={action.onClick}
-                      data-ui-guide={`workspace.${name}`}
-                    >
-                      {content}
-                      {railTip(label)}
-                    </Link>
-                  ) : (
-                    <button
-                      key={name}
-                      className={`${actionClass} w-full cursor-pointer text-left disabled:cursor-not-allowed disabled:opacity-50`}
-                      type={action.form ? "submit" : "button"}
-                      form={action.form}
-                      disabled={faded}
-                      aria-busy={action.busy || undefined}
-                      onClick={action.onClick}
-                      data-ui-guide={`workspace.${name}`}
-                    >
-                      {content}
-                      {railTip(label)}
-                    </button>
-                  );
-                })}
+                {/* Back, Done and New all live in the page header, never here. */}
               </nav>
               <div
                 className={`mt-auto grid gap-2 ${collapsed ? "justify-items-center" : ""}`}
@@ -1067,8 +1019,9 @@ export function AppShell({
           className={`relative mx-auto w-[min(100%,1320px)] min-w-0 px-[clamp(24px,4vw,64px)] pt-12 max-[900px]:px-6 max-[900px]:pt-8 max-[480px]:px-4 max-[480px]:pt-7 ${workspaceStyles.surface} ${pathname === "/teacher/chat" || pathname === "/student/chat" ? "pb-[max(24px,env(safe-area-inset-bottom))]" : "pb-20 max-[900px]:pb-16 max-[480px]:pb-12"}`}
         >
           {(actions.back && actions.back.placement !== "page") ||
-          (actions.done && actions.done.placement !== "page") ? (
-            // Agents banners own theirs (placement "page"). The page header's own Back / Done, top-right (14 option A
+          (actions.done && actions.done.placement !== "page") ||
+          (actions.new && actions.new.placement !== "page") ? (
+            // Agents banners own theirs (placement "page"). The page header's own Back / Done / New, top-right (14 option A
             // "New Debate" header, the Agents pattern). Same handlers.
             <div
               data-page-actions
@@ -1078,12 +1031,13 @@ export function AppShell({
                 [
                   ["back", "Back"],
                   ["done", "Done"],
+                  ["new", "New"],
                 ] as const
               ).map(([name, label]) => {
                 const action = actions[name];
                 if (!action || action.placement === "page") return null;
                 const faded = Boolean(action.disabled);
-                const cls = `inline-flex items-center gap-1.5 rounded-[10px] border-[3px] border-border px-[18px] py-2 font-body text-sm font-bold text-ink no-underline shadow-[3px_3px_0_#111] hover:-translate-y-px active:translate-x-[3px] active:translate-y-[3px] active:shadow-none max-[480px]:px-3 max-[480px]:py-1.5 max-[480px]:text-[13px] ${name === "done" ? "bg-main" : "bg-surface"}`;
+                const cls = `inline-flex items-center gap-1.5 rounded-[10px] border-[3px] border-border px-[18px] py-2 font-body text-sm font-bold text-ink no-underline ${PRESS_MOTION} max-[480px]:px-3 max-[480px]:py-1.5 max-[480px]:text-[13px] ${name === "back" ? "bg-surface" : "bg-main"}`;
                 const content = (
                   <>
                     {action.busy ? (
