@@ -85,7 +85,9 @@ def test_count_is_one_aggregate_not_per_course(client: TestClient, database: Any
             db.add(Course(id=course_id, code=f"ZZ{index}", name=f"Extra {index}", created_at=now))
             db.flush()
             db.add(
-                CourseMember(course_id=course_id, user_id=teacher_id, role="teacher", created_at=now)
+                CourseMember(
+                    course_id=course_id, user_id=teacher_id, role="teacher", created_at=now
+                )
             )
         db.commit()
     four_courses, after = _count_queries(database, client)
