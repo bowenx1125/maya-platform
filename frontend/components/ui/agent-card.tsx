@@ -283,7 +283,7 @@ export function AgentCard({
                       setEditing(false);
                     }
                   }}
-                  className="m-0 h-10 w-full rounded-arc-s border-[3px] border-border bg-surface px-2.5 font-display text-lg font-extrabold text-ink shadow-[3px_3px_0_#FF4D8D] outline-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main aria-invalid:border-err aria-invalid:bg-err-bg"
+                  className="m-0 h-10 w-full rounded-arc-s border-[3px] border-border bg-surface px-2.5 font-display text-lg font-extrabold text-ink shadow-[3px_3px_0_#FF4D8D] outline-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main aria-invalid:border-err aria-invalid:bg-surface aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]"
                 />
               ) : (
                 <button

@@ -475,8 +475,8 @@ function Tour({
         className={cn(
           "pointer-events-none absolute rounded-[14px]",
           target
-            ? "shadow-[0_0_0_4px_#FFE14D,0_0_0_7px_#111,0_0_0_200vmax_rgba(17,17,17,0.6)]"
-            : "shadow-[0_0_0_200vmax_rgba(17,17,17,0.6)]",
+            ? "outline-[4px] outline-offset-4 outline-[#FF4D8D] outline-solid shadow-[0_0_0_200vmax_rgba(17,17,17,0.4)]"
+            : "shadow-[0_0_0_200vmax_rgba(17,17,17,0.4)]",
           glide,
         )}
         aria-hidden="true"
@@ -508,64 +508,46 @@ function Tour({
         body={t(words.body)}
         pointer={
           spot.side ? (
+            // Guide v3: a white notch on the card's edge points at the target.
             <span
               aria-hidden="true"
               className={cn(
-                "absolute grid text-[#FFE14D] drop-shadow-[2px_2px_0_#111]",
-                spot.side === "right" && "-left-[34px] rotate-0",
-                spot.side === "left" && "-right-[34px] rotate-180",
-                spot.side === "below" && "-top-[34px] rotate-90",
-                spot.side === "above" && "-bottom-[34px] -rotate-90",
+                "absolute z-[1] size-3.5 rotate-45 border-[3px] border-border bg-white",
+                spot.side === "right" && "-left-[9px] border-t-0 border-r-0",
+                spot.side === "left" && "-right-[9px] border-b-0 border-l-0",
+                spot.side === "below" && "-top-[9px] border-r-0 border-b-0",
+                spot.side === "above" && "-bottom-[9px] border-t-0 border-l-0",
               )}
               style={
                 spot.side === "right" || spot.side === "left"
-                  ? { top: spot.arrow - 15 }
-                  : { left: spot.arrow - 15 }
+                  ? { top: spot.arrow - 7 }
+                  : { left: spot.arrow - 7 }
               }
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="30"
-                height="30"
-                className="motion-safe:animate-tour-nod"
-              >
-                <path
-                  d="M20 12H5m6-6-6 6 6 6"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
+            />
           ) : null
         }
-        hud={
-          <GuideHud
-            total={steps.length}
-            index={index}
-            label={t("tourProgress", {
-              step: index + 1,
-              total: steps.length,
-            })}
-          />
-        }
+        hud={<GuideHud total={steps.length} index={index} />}
         actions={
           <>
             <Button
               variant="neutral"
               size="sm"
-              className="m-0 min-h-0 border-0 bg-transparent shadow-none hover:translate-0 hover:underline"
+              className="m-0 h-auto min-h-0 border-0 bg-transparent px-0 py-0 text-[13px] font-semibold underline shadow-none hover:translate-0"
               onClick={onClose}
             >
               {t("tourSkip")}
             </Button>
+            <span className="ml-auto text-xs font-semibold text-arc-muted">
+              {t("tourProgress", {
+                step: index + 1,
+                total: steps.length,
+              })}
+            </span>
             {index > 0 ? (
               <Button
                 variant="neutral"
                 size="sm"
-                className="m-0 min-h-0"
+                className="m-0 h-auto min-h-0 rounded-[6px] border-2 bg-white px-3 py-[5px] text-[13px] font-bold shadow-[0_3px_0_#111]"
                 onClick={back}
               >
                 {t("tourBack")}
@@ -574,7 +556,7 @@ function Tour({
             <Button
               ref={nextRef}
               size="sm"
-              className="m-0 min-h-0 min-w-[84px]"
+              className="m-0 h-auto min-h-0 rounded-[8px] border-[3px] bg-[#FF4D8D] px-3.5 py-[5px] text-[13px] font-bold shadow-[0_4px_0_#111]"
               onClick={next}
             >
               {last ? t("tourFinish") : t("tourNext")}

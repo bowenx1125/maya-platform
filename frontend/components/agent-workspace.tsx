@@ -1659,7 +1659,7 @@ export function AgentWorkbench({
                     aria-describedby={
                       nameMissing ? "agent-submit-hint" : undefined
                     }
-                    className="aria-invalid:border-[3px]! aria-invalid:border-err! aria-invalid:bg-err-bg!"
+                    className="aria-invalid:border-[3px]! aria-invalid:border-err! aria-invalid:bg-surface! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
                     value={draftName}
                     disabled={editingLocked}
                     maxLength={120}

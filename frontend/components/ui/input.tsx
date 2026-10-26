@@ -9,7 +9,7 @@ export function Input({ className, type, ...props }: ComponentProps<"input">) {
       type={type}
       data-slot="input"
       className={cn(
-        "flex h-10 w-full rounded-[var(--radius-base)] border-[3px] border-[var(--border)] bg-[var(--secondary-background)] px-3 py-2 text-sm font-[500] text-[var(--foreground)] font-[family-name:var(--arc-font-body)] placeholder:text-[var(--arc-muted)] focus-visible:outline-none focus-visible:shadow-[3px_3px_0_0_var(--main)] disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-err aria-invalid:bg-err-bg aria-invalid:focus-visible:shadow-[3px_3px_0_0_var(--arc-err)]",
+        "flex h-10 w-full rounded-[var(--radius-base)] border-[3px] border-[var(--border)] bg-[var(--secondary-background)] px-3 py-2 text-sm font-[500] text-[var(--foreground)] font-[family-name:var(--arc-font-body)] placeholder:text-[var(--arc-muted)] focus-visible:outline-none focus-visible:shadow-[3px_3px_0_0_var(--main)] disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-err aria-invalid:bg-surface aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]",
         className,
       )}
       {...props}

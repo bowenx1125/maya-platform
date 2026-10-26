@@ -43,17 +43,17 @@ const noSubscription = () => () => {};
  * tray's children stay exactly the notices and `:empty` still hides it.
  */
 const TRAY_CLASS = [
-  "notice-tray fixed right-5 bottom-[var(--arc-tray-bottom,20px)] z-[60] grid gap-2.5",
-  "w-[min(520px,calc(100vw-32px))] pr-[90px] pb-1.5 pointer-events-none font-body empty:hidden",
-  "max-h-[var(--arc-tray-max,calc(100dvh-32px))] overflow-y-auto overscroll-contain content-end",
-  "after:content-[''] after:absolute after:right-0 after:bottom-0 after:w-[76px] after:h-[95px]",
-  "after:bg-[url(/mascots/wave.svg)] after:bg-contain after:bg-bottom after:bg-no-repeat",
-  "data-[more]:before:content-['+'_attr(data-more)] data-[more]:before:justify-self-end",
+  "notice-tray fixed right-6 bottom-[var(--arc-tray-bottom,16px)] z-[60] flex flex-col items-end gap-3",
+  "w-[min(420px,calc(100vw-32px))] pointer-events-none font-body empty:hidden",
+  "max-h-[var(--arc-tray-max,calc(100dvh-32px))] overflow-y-auto overscroll-contain",
+  "after:content-[''] after:block after:flex-none after:mr-3 after:w-20 after:h-[100px]",
+  "after:bg-[url(/mascots/wave.svg)] after:bg-contain after:bg-bottom after:bg-no-repeat after:drop-shadow-[3px_3px_0_#111]",
+  "data-[more]:before:content-['+'_attr(data-more)] data-[more]:before:self-end",
   "data-[more]:before:rounded-full data-[more]:before:border-2 data-[more]:before:border-border",
   "data-[more]:before:bg-surface data-[more]:before:px-2.5 data-[more]:before:py-0.5",
   "data-[more]:before:text-xs data-[more]:before:font-bold data-[more]:before:shadow-[2px_2px_0_#111]",
   "max-[680px]:left-3 max-[680px]:right-3 max-[680px]:w-auto max-[680px]:bottom-[var(--arc-tray-bottom,12px)]",
-  "max-[680px]:pr-[68px] max-[680px]:after:w-14 max-[680px]:after:h-[70px]",
+  "max-[680px]:after:w-14 max-[680px]:after:h-[70px]",
   "max-[680px]:[&>.notice:nth-last-child(n+3)]:hidden",
 ].join(" ");
 
@@ -176,21 +176,21 @@ export function Notice({
       id={id}
       className={cn(
         `notice notice-${tone}`,
-        "relative my-4 flex w-full items-center gap-3 max-[680px]:flex-wrap rounded-[14px] border-[3px] border-border bg-surface px-3.5 py-2.5 font-body text-sm leading-snug text-ink shadow-[4px_4px_0_#111]",
+        "relative my-4 flex w-full items-start gap-2.5 rounded-[18px] border-[3px] border-border bg-surface py-3 pr-[42px] pl-3.5 text-left font-body text-sm leading-[1.45] font-medium text-ink shadow-[4px_4px_0_#111] max-[680px]:flex-wrap",
         // Status dot instead of an icon font; the colour carries the tone.
-        "before:size-2.5 before:flex-none before:rounded-full before:border-2 before:border-border before:bg-main before:content-['']",
+        "before:mt-1 before:size-3 before:flex-none before:rounded-full before:border-2 before:border-border before:bg-main before:content-['']",
         NOTICE_TONE[tone],
         !inline &&
-          "pointer-events-auto my-0 [.notice-tray>&:last-child]:after:absolute [.notice-tray>&:last-child]:after:-right-[11px] [.notice-tray>&:last-child]:after:bottom-3 [.notice-tray>&:last-child]:after:size-4 [.notice-tray>&:last-child]:after:rotate-[-45deg] [.notice-tray>&:last-child]:after:border-r-[3px] [.notice-tray>&:last-child]:after:border-b-[3px] [.notice-tray>&:last-child]:after:border-border [.notice-tray>&:last-child]:after:bg-inherit [.notice-tray>&:last-child]:after:content-['']",
+          "pointer-events-auto my-0 flex-none [.notice-tray>&:last-child]:after:absolute [.notice-tray>&:last-child]:after:right-[30px] [.notice-tray>&:last-child]:after:-bottom-[15px] [.notice-tray>&:last-child]:after:size-[22px] [.notice-tray>&:last-child]:after:rotate-45 [.notice-tray>&:last-child]:after:skew-[10deg] [.notice-tray>&:last-child]:after:border-r-[3px] [.notice-tray>&:last-child]:after:border-b-[3px] [.notice-tray>&:last-child]:after:border-border [.notice-tray>&:last-child]:after:bg-inherit [.notice-tray>&:last-child]:after:content-['']",
       )}
       role={tone === "error" || tone === "warning" ? "alert" : "status"}
     >
       {title ? <strong className="whitespace-nowrap">{title}</strong> : null}
-      {children ? <span className="min-w-0">{children}</span> : null}
+      {children ? <span className="min-w-0 flex-1">{children}</span> : null}
       {action}
       <button
         type="button"
-        className="notice-close ml-auto [.inline-button+&]:ml-0 inline-grid size-[26px] flex-none cursor-pointer place-items-center rounded-full border-2 border-border bg-surface text-ink hover:bg-err hover:text-white focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
+        className="notice-close absolute top-2 right-2.5 inline-grid size-6 text-[13px] flex-none cursor-pointer place-items-center rounded-full border-2 border-border bg-surface text-ink hover:bg-err hover:text-white focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
         aria-label={t("noticeDismiss")}
         onClick={() => (onClose ? onClose() : setClosed(true))}
       >
