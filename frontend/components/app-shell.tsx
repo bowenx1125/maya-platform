@@ -667,7 +667,7 @@ export function AppShell({
       label: t("sidebarClassroom"),
       rail: "border-ink",
       tile: "bg-surface",
-      square: "bg-ink",
+      square: "bg-surface",
       items: links
         .filter((link) => ["live", "classroom", "accounts"].includes(link.icon))
         .map((link) => ({
@@ -782,7 +782,7 @@ export function AppShell({
   return (
     <WorkspaceActionsContext.Provider value={actionRegistry}>
       <div
-        className={`grid min-h-dvh max-[900px]:grid-cols-1 ${pathname === "/student" || pathname === "/teacher" ? "bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px]" : ""} ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[248px_minmax(0,1fr)]"}`}
+        className={`grid min-h-dvh max-[900px]:grid-cols-1 ${pathname === "/student" || pathname === "/teacher" ? "bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px]" : ""} ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[220px_minmax(0,1fr)]"}`}
       >
         <div className="sticky top-0 z-30 hidden h-14 items-center gap-3 border-b-[3px] border-border bg-sidebar px-4 max-[900px]:flex">
           <button
@@ -847,7 +847,7 @@ export function AppShell({
                 title={collapsed ? t("appName") : undefined}
                 data-tour="home"
                 data-lit={mayaformLit || undefined}
-                className={`isolate ${collapsed ? `${ICON_ITEM} border-border bg-main shadow-arc-s` : `${ITEM} font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " active" : ""}`}
+                className={`isolate ${collapsed ? `${ICON_ITEM} border-border bg-main shadow-arc-s` : `${ITEM} w-fit justify-self-start font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " active" : ""}`}
               >
                 {mayaformLit && !collapsed ? pill : null}
                 <span
@@ -888,7 +888,7 @@ export function AppShell({
                       className={
                         collapsed
                           ? "m-0 grid list-none gap-1 p-0"
-                          : `m-0 ml-[9px] grid list-none gap-1 border-l-4 py-0 pr-0 pl-2 ${group.rail}`
+                          : `m-0 ml-[9px] grid list-none gap-0.5 border-l-4 py-0 pr-0 pl-2 ${group.rail}`
                       }
                     >
                       {group.items.map((item, index) =>
