@@ -793,7 +793,7 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
         <label>
           <span>{t("password")}</span>
           <span className="relative block">
-            {passwordInvalid ? <StickerBadge n={nameInvalid ? 2 : 1} /> : null}
+            {passwordInvalid ? <StickerBadge n={1} /> : null}
             <input
               aria-invalid={passwordInvalid || undefined}
               aria-describedby={
