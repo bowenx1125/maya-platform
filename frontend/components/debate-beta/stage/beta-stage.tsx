@@ -3878,6 +3878,7 @@ export function BetaDebateStage({
         {!readOnly ? (
           <button
             className="primary-action"
+            data-dock="advance"
             type="button"
             disabled={canStart ? busyAction !== null : !canAdvance}
             onClick={() => void runControl(canStart ? "start" : "next")}
@@ -3902,6 +3903,7 @@ export function BetaDebateStage({
         <button
           ref={transcriptToggleRef}
           className="secondary-action"
+          data-dock="transcript"
           type="button"
           aria-expanded={transcriptOpen}
           aria-controls="debate-transcript"

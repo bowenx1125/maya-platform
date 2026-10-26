@@ -16,9 +16,6 @@ export type BetaStageLabels = {
   transcriptToggle: string;
   interactionOpening: string;
   interactionClosedHint: string;
-  closeCollection: string;
-  closeCollectionConfirm: string;
-  closingCollection: string;
 };
 
 export const defaultBetaStageLabels: BetaStageLabels = {
@@ -33,8 +30,4 @@ export const defaultBetaStageLabels: BetaStageLabels = {
   interactionOpening: "Opening…",
   interactionClosedHint:
     "Open classroom messages to show a join code on the stage.",
-  closeCollection: "Close collection",
-  closeCollectionConfirm:
-    "Close collection? Students will no longer be able to submit, and the debate will keep running.",
-  closingCollection: "Closing…",
 };

@@ -319,13 +319,23 @@
   display: inline-flex;
   align-items: baseline;
   gap: 8px;
-  padding: 3px 12px 4px;
+  box-sizing: border-box;
+  /* A1 candy capsules: fixed 320 so lane lengths align. */
+  min-width: 320px;
+  max-width: 320px;
+  width: 320px;
+  padding: 6px 14px 6px 8px;
+  border: 2px solid #111;
   border-radius: 999px;
-  background: rgba(252, 250, 245, 0.82);
+  background: #fff;
+  box-shadow: 3px 3px 0 #111;
+  box-sizing: border-box;
   color: var(--ink, #1d1d1f);
   font-size: 0.9rem;
   line-height: 1.55;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .bullet b,
