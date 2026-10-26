@@ -110,7 +110,7 @@ function TeamPolaroid({
       style={{ "--r": `${TILTS[index % TILTS.length]}deg` } as CSSProperties}
     >
       <Link href={href} className="block text-[#111] no-underline">
-        <span className={cn(TAPE, "text-[13px]")}>{team.display_name}</span>
+        <span className={cn(TAPE, "text-[13px] max-[767px]:max-w-[92%] max-[767px]:truncate max-[767px]:whitespace-nowrap max-[767px]:text-[11px]")}>{team.display_name}</span>
         <span
           className={cn(PHOTO, "h-[130px] max-[767px]:h-[100px]")}
           style={{ backgroundColor: WELLS[index % WELLS.length] }}
@@ -122,13 +122,13 @@ function TeamPolaroid({
           />
         </span>
         <span className="mt-2.5 flex">
-          <span className="inline-flex overflow-hidden rounded-[6px] border-2 border-[#111] font-body text-[11px] font-extrabold shadow-[2px_2px_0_#111]">
-            <span className="bg-white px-2 py-px">
+          <span className="inline-flex overflow-hidden rounded-[6px] border-2 max-[767px]:w-full border-[#111] font-body text-[11px] font-extrabold shadow-[2px_2px_0_#111]">
+            <span className="bg-white px-2 py-px max-[767px]:min-w-0 max-[767px]:flex-1 max-[767px]:px-1 max-[767px]:leading-tight max-[767px]:tracking-[-0.03em]">
               {t("memberCountShort", { count: team.member_count })}
             </span>
             <span
               className={cn(
-                "border-l-2 border-[#111] px-2 py-px",
+                "shrink-0 border-l-2 border-[#111] px-2 py-px max-[767px]:px-1",
                 isPublic ? "bg-[#22C55E]" : "bg-[#E5E7EB]",
               )}
             >
@@ -181,73 +181,82 @@ export function TeamsPage({
   const t = useT();
   const newLabel = t("newAgent");
   return (
-    <div className={AGENT_PAGE}>
-      <header
-        className={cn(
-          AGENT_BANNER,
-          "py-[45px] max-[767px]:flex-nowrap max-[767px]:py-[18px]",
-        )}
-      >
-        <h1
-          id="studyform-teams"
+    <>
+      {/* F1 page ground: the Agents-area blue grid (app-shell.tsx:828),
+          which the shell only paints on Agents routes, so Teams paints it. */}
+      <div
+        aria-hidden="true"
+        data-testid="teams-ground"
+        className="pointer-events-none fixed inset-0 z-0 bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px]"
+      />
+      <div className={cn(AGENT_PAGE, "relative z-[1]")}>
+        <header
           className={cn(
-            AGENT_BANNER_TITLE,
-            "max-[767px]:order-none max-[767px]:mt-[18px] max-[767px]:mb-5 max-[767px]:basis-auto",
+            AGENT_BANNER,
+            "py-[45px] max-[767px]:flex-nowrap max-[767px]:py-[18px]",
           )}
         >
-          {t("chatTargetTeams")}
-        </h1>
-        {teams.length && newHref ? (
-          <NewButton href={newHref} label={newLabel} className={AGENTS_NEW_CLASS} />
-        ) : null}
-      </header>
-      <section aria-labelledby="studyform-teams">
-        {teams.length ? (
-          <ul className="m-0 flex list-none flex-wrap gap-x-7 gap-y-[34px] p-0 pt-[30px] max-[767px]:gap-x-5 max-[767px]:gap-y-7">
-            {teams.map(({ team, href, onDelete }, index) => (
-              <TeamPolaroid
-                key={team.id}
-                team={team}
-                index={index}
-                href={href}
-                deleting={deleting}
-                deleteLabel={t("deleteAgent")}
-                onDelete={onDelete}
-              />
-            ))}
-          </ul>
-        ) : (
-          <div className="relative flex min-h-[360px] items-center justify-center pt-10 pb-5">
-            <GhostPolaroid side="left" />
-            <div className="relative z-[2] w-[240px] scale-[1.12] max-[767px]:w-full max-[767px]:scale-100">
-              <div
-                className={cn(POLAROID, "w-[240px] max-[767px]:w-full")}
-                style={{ "--r": "-1.5deg" } as CSSProperties}
-              >
-                <p className={cn(TAPE, "m-0 text-base")}>{t("teamNoneYet")}</p>
-                <div className={cn(PHOTO, SUN, "h-[130px] max-[767px]:h-[100px]")}>
-                  <Faces faces={["wave", "wreath", "scroll"]} size="starter" />
-                </div>
-                <div className="mt-2.5 flex justify-center">
-                  {newHref ? (
-                    <Link
-                      href={newHref}
-                      aria-label={newLabel}
-                      data-tour="new"
-                      data-tour-empty="true"
-                      className={AGENTS_NEW_CLASS}
-                    >
-                      <IconPlus size={16} />
-                      {newLabel}
-                    </Link>
-                  ) : null}
+          <h1
+            id="studyform-teams"
+            className={cn(
+              AGENT_BANNER_TITLE,
+              "max-[767px]:order-none max-[767px]:mt-[18px] max-[767px]:mb-5 max-[767px]:basis-auto",
+            )}
+          >
+            {t("chatTargetTeams")}
+          </h1>
+          {teams.length && newHref ? (
+            <NewButton href={newHref} label={newLabel} className={AGENTS_NEW_CLASS} />
+          ) : null}
+        </header>
+        <section aria-labelledby="studyform-teams">
+          {teams.length ? (
+            <ul className="m-0 flex list-none flex-wrap gap-x-7 gap-y-[34px] p-0 pt-[30px] max-[767px]:gap-x-5 max-[767px]:gap-y-7">
+              {teams.map(({ team, href, onDelete }, index) => (
+                <TeamPolaroid
+                  key={team.id}
+                  team={team}
+                  index={index}
+                  href={href}
+                  deleting={deleting}
+                  deleteLabel={t("deleteAgent")}
+                  onDelete={onDelete}
+                />
+              ))}
+            </ul>
+          ) : (
+            <div className="relative flex min-h-[360px] items-center justify-center pt-10 pb-5">
+              <GhostPolaroid side="left" />
+              <div className="relative z-[2] w-[240px] scale-[1.12] max-[767px]:w-full max-[767px]:scale-100">
+                <div
+                  className={cn(POLAROID, "w-[240px] max-[767px]:w-full")}
+                  style={{ "--r": "-1.5deg" } as CSSProperties}
+                >
+                  <p className={cn(TAPE, "m-0 text-base")}>{t("teamNoneYet")}</p>
+                  <div className={cn(PHOTO, SUN, "h-[130px] max-[767px]:h-[100px]")}>
+                    <Faces faces={["wave", "wreath", "scroll"]} size="starter" />
+                  </div>
+                  <div className="mt-2.5 flex justify-center">
+                    {newHref ? (
+                      <Link
+                        href={newHref}
+                        aria-label={newLabel}
+                        data-tour="new"
+                        data-tour-empty="true"
+                        className={AGENTS_NEW_CLASS}
+                      >
+                        <IconPlus size={16} />
+                        {newLabel}
+                      </Link>
+                    ) : null}
+                  </div>
                 </div>
               </div>
+              <GhostPolaroid side="right" />
             </div>
-            <GhostPolaroid side="right" />
-          </div>
-        )}
-      </section>
-    </div>
+          )}
+        </section>
+      </div>
+    </>
   );
 }
