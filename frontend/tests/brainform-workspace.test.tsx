@@ -795,7 +795,9 @@ describe("Brainform workspace actions", () => {
     });
     expect(viewButtons).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Edit lesson.md" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Hide lesson.md" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Delete lesson.md" }),
+    ).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Reindex lesson.md" }),
     ).toBeNull();
@@ -849,7 +851,7 @@ describe("Brainform workspace actions", () => {
     expect(reindexKeys[1]).toBe(reindexKeys[0]);
 
     fireEvent.click(
-      await screen.findByRole("button", { name: "Hide lesson.md" }),
+      await screen.findByRole("button", { name: "Delete lesson.md" }),
     );
     await waitFor(() =>
       expect(state.api.hideKnowledge).toHaveBeenCalledTimes(1),
@@ -2121,5 +2123,61 @@ describe("Brainform workspace actions", () => {
     expect(
       screen.queryByRole("img", { name: /Knowledge relationship graph/ }),
     ).toBeNull();
+  });
+
+  it("shows the RAG album on its own page with Used by and a comma-joined delete confirm", async () => {
+    state.role = "teacher";
+    state.userId = "55555555-5555-4555-8555-555555555555";
+    const used = [
+      { agent_id: "a1", name: "Debate Coach" },
+      { agent_id: "a2", name: "Pro Side Sparring" },
+    ];
+    state.api.workspaceDocuments.mockResolvedValue([
+      { ...source, used_by_agents: used, owner_username: "ms.lee" },
+    ]);
+    state.api.knowledgeAffectedAgents = vi.fn(async () => used);
+    state.api.hideKnowledge = vi.fn(async () => ({}));
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(
+      <ActionsHost>
+        <BrainformWorkspace role="teacher" ragPage />
+      </ActionsHost>,
+    );
+
+    expect(await screen.findByText("Used by")).toBeTruthy();
+    expect(await screen.findByText("Pro Side Sparring")).toBeTruthy();
+    expect(screen.getByText("Last edited by")).toBeTruthy();
+    expect(screen.getByText("@ms.lee")).toBeTruthy();
+    expect(screen.queryByText(/Knowledge/)).toBeNull();
+    // The card reads the list; affected-agents is only for the delete confirm.
+    expect(state.api.knowledgeAffectedAgents).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Delete lesson.md" }));
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    expect(confirm.mock.calls[0][0]).toContain(
+      "Debate Coach, Pro Side Sparring",
+    );
+    expect(state.api.hideKnowledge).not.toHaveBeenCalled();
+  });
+
+  it("keeps 'No Agents yet' when used_by_agents is empty or null, without per-card calls", async () => {
+    state.role = "teacher";
+    state.userId = "55555555-5555-4555-8555-555555555555";
+    state.api.workspaceDocuments.mockResolvedValue([
+      { ...source, used_by_agents: null },
+      {
+        ...source,
+        id: "doc-empty",
+        source_filename: "empty.md",
+        used_by_agents: [],
+      },
+    ]);
+    state.api.knowledgeAffectedAgents = vi.fn(async () => []);
+    render(
+      <ActionsHost>
+        <BrainformWorkspace role="teacher" ragPage />
+      </ActionsHost>,
+    );
+    expect((await screen.findAllByText("No Agents yet")).length).toBe(2);
+    expect(state.api.knowledgeAffectedAgents).not.toHaveBeenCalled();
   });
 });
