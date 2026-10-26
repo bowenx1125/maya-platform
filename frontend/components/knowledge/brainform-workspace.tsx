@@ -3219,6 +3219,7 @@ function BrainformWorkspaceBody({
                   </label>
                 ) : null}
                 <KnowledgeFilenameField
+                  label={t("ragFilename")}
                   className={album.fl}
                   value={newRag.name}
                   disabled={busyKey === "rag-new"}
@@ -3254,6 +3255,7 @@ function BrainformWorkspaceBody({
                   {selectedDraft.filename}
                 </h2>
                 <KnowledgeFilenameField
+                  label={t("ragFilename")}
                   className={album.fl}
                   value={selectedDraft.filename}
                   disabled={busyKey === `import:${pane.draftKey}`}

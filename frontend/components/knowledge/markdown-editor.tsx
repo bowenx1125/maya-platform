@@ -26,6 +26,7 @@ export function KnowledgeFilenameField({
   describedBy,
   invalid = false,
   fileError = false,
+  label,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -36,11 +37,13 @@ export function KnowledgeFilenameField({
   invalid?: boolean;
   /** U3: the number sticker on the field a filename error points at. */
   fileError?: boolean;
+  /** Optional visible label override (RAG create/edit uses "File Name"). */
+  label?: string;
 }) {
   const t = useT();
   return (
     <label className={className}>
-      <span>{t("knowledgeFilename")}</span>
+      <span>{label ?? t("knowledgeFilename")}</span>
       {/* U3: the sticker sits on the input's corner, clear of the label. */}
       <span className="relative block">
         {fileError ? <KindSticker kind="field" n={1} on /> : null}
