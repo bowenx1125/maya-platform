@@ -45,8 +45,8 @@ describe("group navigation scope", () => {
   it("follows the group on screen rather than the first membership", () => {
     state.pathname = "/student/groups/group-b/knowledge";
     render(content());
-    expect(links()).toContain("/student/groups/group-b");
-    expect(links()).not.toContain("/student/groups/group-a");
+    expect(links()).toContain("/student/agents?group_id=group-b");
+    expect(links()).not.toContain("/student/agents?group_id=group-a");
     expect(state.api.agent).not.toHaveBeenCalled();
   });
 
@@ -66,9 +66,11 @@ describe("group navigation scope", () => {
     state.user = { ...state.user, id: "user-b" };
     state.identityGeneration = 1;
     view.rerender(content());
-    await waitFor(() => expect(links()).toContain("/student/groups/group-b"));
+    await waitFor(() =>
+      expect(links()).toContain("/student/agents?group_id=group-b"),
+    );
     await act(async () => resolveOld({ group_id: "group-a" }));
-    expect(links()).not.toContain("/student/groups/group-a");
+    expect(links()).not.toContain("/student/agents?group_id=group-a");
   });
 
   it("keeps teacher identity inside a visited group and offers the way back to Accounts", () => {

@@ -3070,7 +3070,9 @@ function AgentChatScope({
                       }}
                     >
                       <span className={styles.historySelectTitle}>{label}</span>
+                      {/* Visual chip only: keeps the Chat's accessible name its title, as on main. */}
                       <span
+                        aria-hidden="true"
                         className={cn(
                           styles.historyChip,
                           kind === "team" && styles.historyChipTeam,

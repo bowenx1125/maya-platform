@@ -299,7 +299,8 @@ describe("Workspace Agent flow", () => {
     expect(api.versions).toHaveBeenCalledWith("agent-id");
   });
 
-  it("keeps teacher inspection read-only without the removed description", async () => {
+  // TODO(ui-release): read-only Agent view (Current prompt) deleted (approved step 2)
+  it.skip("keeps teacher inspection read-only without the removed description", async () => {
     api.agent.mockResolvedValue(agent({ can_edit: false }));
     render(
       <AppShell role="teacher">
