@@ -27,6 +27,8 @@ class Course(BaseModel):
     code: str
     name: str
     current_audio_debate_id: UUID | None = None
+    # Active students in the course; only course teachers see it, else null.
+    student_count: int | None = None
 
 
 class CourseDetail(Course):
