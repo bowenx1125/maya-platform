@@ -32,6 +32,27 @@ paths:
   /conversations:
     get:
       operationId: listConversations
+      description: >-
+        The caller's own non-withdrawn Chats in courses they belong to, newest
+        first. Optional filters narrow the list; without them the list is
+        unchanged. Invalid filter values return 422 conversation_filter_invalid.
+      parameters:
+      - in: query
+        name: entry_kind
+        required: false
+        description: agent, or team (Team and Maya Team Chats). Omit for all.
+        schema:
+          type: [string, 'null']
+          enum: [agent, team]
+          title: Entry Kind
+      - in: query
+        name: course_id
+        required: false
+        description: Only Chats in this course.
+        schema:
+          type: [string, 'null']
+          format: uuid
+          title: Course Id
       responses:
         '200':
           content:
@@ -74,6 +95,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: Conflict
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Invalid entry_kind or course_id (conversation_filter_invalid).
       security:
       - sessionCookie: []
       summary: List Conversations
