@@ -188,7 +188,7 @@ function hintBar(): HTMLElement {
 }
 
 describe("Debate create names every Agent problem", () => {
-  it("checks each Agent as it is picked, in one bar above the form, and sends nothing", async () => {
+  it("checks each Agent as it is picked, in one mascot bubble outside the form, and sends nothing", async () => {
     const create = vi.fn();
     const { container } = renderCreate(
       [
@@ -216,10 +216,8 @@ describe("Debate create names every Agent problem", () => {
       within(bar).getAllByRole("link", { name: "Edit Agent “Zhu Xi”" }),
     ).toHaveLength(2);
     const form = container.querySelector("form");
-    expect(
-      form &&
-        bar.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    // The checklist is spoken by the mascot, not inlined in the form.
+    expect(form?.contains(bar)).toBe(false);
     fireEvent.change(screen.getByLabelText("Topic"), {
       target: { value: "How should we learn?" },
     });
