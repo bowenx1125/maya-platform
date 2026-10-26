@@ -1,5 +1,6 @@
 "use client";
 
+import { LIST_CARD_LIFT } from "../agent-chrome";
 import { FitTitle } from "../fit-title";
 import type { ChatAgent } from "../../lib/api";
 import { useT } from "../../lib/i18n";
@@ -52,7 +53,7 @@ export function ChatTargetPicker({
       agent.avatar_config?.material_theme,
     );
     return (
-      <li key={key} className={styles.pickCardWrap}>
+      <li key={key} className={cn(styles.pickCardWrap, LIST_CARD_LIFT)}>
         <button
           type="button"
           className={cn(styles.pickCard, picked && styles.pickCardPicked)}
@@ -101,7 +102,7 @@ export function ChatTargetPicker({
       members: team.members,
     });
     return (
-      <li key={key} className={styles.pickCardWrap}>
+      <li key={key} className={cn(styles.pickCardWrap, LIST_CARD_LIFT)}>
         <button
           type="button"
           className={cn(styles.pickCard, picked && styles.pickCardPicked)}
