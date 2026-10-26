@@ -776,7 +776,8 @@ export function AppShell({
     pathname === "/student/teams" || pathname === "/teacher/teams";
   // The RAG page lights only its own row, as Agents does.
   const ragArea = pathname === "/student/rag" || pathname === "/teacher/rag";
-  const mayaformLit = !agentsArea && !teamsArea && !ragArea && activeHref === home;
+  const mayaformLit =
+    !agentsArea && !teamsArea && !ragArea && activeHref === home;
 
   function renderItem(group: SidebarGroup, item: SidebarItem, index: number) {
     const lit = litKey === `${group.key}:${item.key}`;
