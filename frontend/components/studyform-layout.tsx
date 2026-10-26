@@ -127,6 +127,7 @@ export function VersionTile({
   materialTheme,
   rename,
   variant,
+  index,
 }: {
   /** "list": card A of the Agents page. */
   variant?: "list";
@@ -147,10 +148,13 @@ export function VersionTile({
   onDelete?: () => void;
   deleteLabel: string;
   rename?: AgentRename;
+  /** Position in the list; cycles the card tone. */
+  index?: number;
 }) {
   const t = useT();
   return (
     <AgentCard
+      index={index}
       id={id ?? href}
       name={name}
       href={href}

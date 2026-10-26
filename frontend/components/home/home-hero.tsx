@@ -77,7 +77,7 @@ export function HomeStat({
 
 /** Module heading as a strip of tape: white, inked, yellow ends. */
 export const HOME_TAPE_TITLE =
-  "m-0 inline-block w-max -rotate-1 border-[3px] border-ink bg-white bg-[linear-gradient(90deg,#FFE14D_0_8px,transparent_8px_calc(100%-8px),#FFE14D_calc(100%-8px))] px-4 py-0.5 font-display text-[22px] leading-tight font-extrabold text-ink";
+  "m-0 inline-block w-max -rotate-1 border-[3px] border-ink bg-white bg-[linear-gradient(90deg,#FFE14D_0_8px,transparent_8px_calc(100%-8px),#FFE14D_calc(100%-8px))] px-4 py-0.5 font-display text-[22px] leading-[36px] font-extrabold text-ink";
 
 /** The home page: a column of modules on the page's blue. */
 export const HOME_CLASS =

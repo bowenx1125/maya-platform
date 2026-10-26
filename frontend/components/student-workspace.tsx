@@ -248,16 +248,17 @@ export function StudentDashboard() {
       <HomeHero name={name} />
       {published.length ? (
         <section
-          className="home-panel grid min-w-0 gap-2"
+          className="home-panel grid min-w-0 gap-[26px] max-[767px]:gap-[23px]"
           aria-labelledby="student-agents-title"
         >
           <h2 id="student-agents-title" className={HOME_TAPE_TITLE}>
             {t("agents")} · {published.length}
           </h2>
           <HomeAgentRow>
-            {published.map((item) => (
+            {published.map((item, index) => (
               <VersionTile
                 key={item.agent.id}
+                index={index}
                 id={item.agent.id}
                 materialTheme={
                   item.current_version.avatar_config?.material_theme
@@ -782,9 +783,10 @@ function GroupWorkspaceSession({
         >
           {items.length ? (
             <ModuleTiles variant="list">
-              {items.map(({ agent, versions }) => (
+              {items.map(({ agent, versions }, index) => (
                 <GroupAgentRow
                   variant="list"
+                  index={index}
                   agent={agent}
                   key={agent.id}
                   versions={versions}
@@ -812,9 +814,10 @@ function GroupWorkspaceSession({
                   }
                 />
               ))}
-              {sharedAgents.map((item) => (
+              {sharedAgents.map((item, index) => (
                 <VersionTile
                   variant="list"
+                  index={items.length + index}
                   key={item.agent.id}
                   id={item.agent.id}
                   editedBy={item.agent.last_edited_by_name}
@@ -837,9 +840,10 @@ function GroupWorkspaceSession({
             </ModuleTiles>
           ) : sharedAgents.length ? (
             <ModuleTiles variant="list">
-              {sharedAgents.map((item) => (
+              {sharedAgents.map((item, index) => (
                 <VersionTile
                   variant="list"
+                  index={index}
                   key={item.agent.id}
                   name={item.agent.name}
                   href={`/student/agents/${item.agent.id}`}
@@ -940,8 +944,11 @@ function GroupAgentRow({
   onDelete,
   rename,
   variant,
+  index,
 }: {
   variant?: "list";
+  /** List position: picks the card tone as the mocks cycle it. */
+  index?: number;
   agent: AgentSummary;
   versions: AgentVersion[];
   deleting: boolean;
@@ -967,6 +974,7 @@ function GroupAgentRow({
       deleteLabel={t("deleteAgent")}
       onDelete={canDelete ? onDelete : undefined}
       variant={variant}
+      index={index}
     />
   );
 }
