@@ -311,9 +311,9 @@
     }
     .surface :global(.account-row) > :global(.button-row) {
       justify-content: flex-start;
-      padding: 10px 0 0;
+      padding: 0;
       border-left: 0;
-      border-top: 1px solid var(--workspace-divider);
+      border-top: 0;
     }
     .surface :global(.stat-row) > div {
       padding: 10px 8px;

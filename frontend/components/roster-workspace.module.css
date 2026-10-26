@@ -29,7 +29,7 @@
 
 .card {
   display: grid;
-  gap: 14px;
+  gap: 0;
   min-width: 0;
   padding: 18px 18px 16px;
   border: 3px solid #111;
@@ -42,7 +42,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 2px;
+  margin-bottom: 16px;
 }
 
 .tapeTitle {
@@ -94,7 +94,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 8px;
+  margin: 0;
   font-size: inherit;
   font-weight: inherit;
 }
@@ -140,7 +140,8 @@
   gap: 8px;
 }
 
-.row {
+.row,
+.layout :global(.list-row.account-row) {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -156,6 +157,15 @@
 @media (max-width: 560px) {
   .row {
     flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .row > .acts,
+  .row > :global(.button-row) {
+    width: 100%;
+    padding-top: 0;
+    border-top: 0 !important;
+    border-left: 0 !important;
   }
 }
 
@@ -174,6 +184,8 @@
 }
 
 .identity :global(.user-avatar) {
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
   border: 2.5px solid #111;
   box-shadow: 2px 2px 0 #111;
@@ -182,20 +194,34 @@
   flex: none;
 }
 
-.headline {
+@media (max-width: 560px) {
+  .identity :global(.user-avatar) {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* Final stacks display name over username (not inline). Override globals
+   .roster-headline flex-wrap row. */
+.headline,
+.row :global(.roster-headline) {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 1px;
   line-height: 1.2;
 }
 
-.headline strong {
+.headline strong,
+.row :global(.roster-headline) strong {
   font-size: 14px;
   font-weight: 800;
+  white-space: nowrap;
 }
 
-.username {
+.username,
+.row :global(.roster-username) {
   font-size: 12px;
   font-weight: 500;
   color: #4b5563;
@@ -218,6 +244,10 @@
   gap: 6px;
   flex: none;
   flex-wrap: wrap;
+  padding: 0;
+  border: 0;
+  border-top: 0;
+  border-left: 0;
 }
 
 @media (max-width: 560px) {
