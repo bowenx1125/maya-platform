@@ -13,9 +13,10 @@ import type { DebateDetail } from "../lib/api";
 import { PlatformApiError } from "../lib/api";
 
 const useSessionMock = vi.hoisted(() => vi.fn());
+const replaceMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: replaceMock }),
   useParams: () => ({ debate_id: "20000000-0000-4000-8000-000000000001" }),
 }));
 vi.mock("../components/session-provider", () => ({
@@ -278,6 +279,22 @@ afterEach(() => {
 });
 
 describe("Wave 3 control-page Finish authority gate", () => {
+  it("redirects legacy debates to the immersive beta control page", async () => {
+    replaceMock.mockReset();
+    const api = pageApi();
+    api.debate.mockResolvedValue(runningDetail());
+    useSessionMock.mockReturnValue({ api });
+
+    render(<TeacherDebateControlPage />);
+
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenCalledWith(
+        `/teacher/debates-beta/${debateId}/control`,
+      ),
+    );
+    expect(screen.queryByTestId("debate-preview")).toBeNull();
+  });
+
   it("uses the teacher preview for the segments protocol and gates classroom access", async () => {
     const preview = runningDetail();
     preview.turn_protocol = "segments_v2";
@@ -343,154 +360,4 @@ describe("Wave 3 control-page Finish authority gate", () => {
     );
   });
 
-  it("keeps Finish blocked after superseded even when public paused state advances", async () => {
-    const { api, finish, socket } = await mountWithController();
-    socket.emit("message", revoked("superseded"));
-    forceFinishHandler(finish);
-    expect(api.finishDebate).not.toHaveBeenCalled();
-    socket.emit(
-      "message",
-      eventEnvelope("playback.paused", 1, {
-        turn_id: turnId,
-        cursor_ms: 100,
-        control_version: 2,
-      }),
-    );
-
-    await waitFor(() => expect(finish).toHaveProperty("disabled", true));
-    expect(screen.getByText(/another teacher page has control/)).toBeTruthy();
-    forceFinishHandler(finish);
-    expect(api.finishDebate).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ["4401", /please sign in again/],
-    ["4403", /classroom address does not match/],
-    ["terminal", /debate is already ending/],
-    ["network", /connection is restored/],
-    ["sequence", /classroom state is resynchronized/],
-  ])("fails Finish closed for %s", async (reason, copy) => {
-    const { api, finish, socket } = await mountWithController();
-    if (reason === "4401" || reason === "4403") {
-      socket.emit("error");
-      socket.emit("close", Number(reason));
-    } else if (reason === "terminal") {
-      socket.emit("message", revoked("debate_terminal"));
-    } else if (reason === "network") {
-      socket.emit("close", 1006);
-    } else {
-      socket.emit(
-        "message",
-        eventEnvelope("playback.paused", 2, {
-          turn_id: turnId,
-          control_version: 2,
-        }),
-      );
-    }
-
-    forceFinishHandler(finish);
-    expect(api.finishDebate).not.toHaveBeenCalled();
-    await waitFor(() => expect(finish).toHaveProperty("disabled", true));
-    expect(screen.getByText(copy)).toBeTruthy();
-    forceFinishHandler(finish);
-    expect(api.finishDebate).not.toHaveBeenCalled();
-  });
-
-  it("allows active controller Finish exactly once", async () => {
-    const { api, finish } = await mountWithController();
-    fireEvent.click(finish);
-    fireEvent.click(finish);
-    await waitFor(() => expect(api.finishDebate).toHaveBeenCalledTimes(1));
-  });
-
-  it("blocks Finish synchronously while Next is in flight", async () => {
-    const { api, finish } = await mountWithController();
-    let releaseNext!: (value: DebateDetail) => void;
-    api.advanceDebatePlayback.mockReturnValue(
-      new Promise<DebateDetail>((resolve) => {
-        releaseNext = resolve;
-      }),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    forceFinishHandler(finish);
-    expect(api.finishDebate).not.toHaveBeenCalled();
-
-    releaseNext(runningDetail());
-    await waitFor(() => expect(finish).toHaveProperty("disabled", false));
-  });
-
-  it("keeps Finish hidden while a finished debate replay waits for Next", async () => {
-    ControlPageSocket.instances = [];
-    vi.stubGlobal("WebSocket", ControlPageSocket);
-    const replay = runningDetail();
-    replay.status = "completed";
-    replay.playback = {
-      ...replay.playback,
-      status: "playing",
-      mode: "replay",
-      current_turn_id: turnId,
-      next_turn_ready: false,
-    };
-    const api = pageApi();
-    api.debate.mockResolvedValue(replay);
-    useSessionMock.mockReturnValue({ api });
-    render(<TeacherDebateControlPage />);
-
-    await waitFor(() => expect(ControlPageSocket.instances).toHaveLength(1));
-    const socket = ControlPageSocket.instances[0]!;
-    socket.emit("open");
-    socket.emit("message", acquired());
-    socket.emit(
-      "message",
-      eventEnvelope("replay.started", 1, {
-        scope: "all",
-        turn_id: turnId,
-        control_version: 1,
-      }),
-    );
-    socket.emit(
-      "message",
-      eventEnvelope("playback.waiting_next", 2, {
-        mode: "replay",
-        completed_turn_id: turnId,
-        control_version: 1,
-        next_turn_ready: true,
-      }),
-    );
-
-    await waitFor(() =>
-      expect(
-        document.querySelector('[data-classroom-phase="waiting"]'),
-      ).toBeTruthy(),
-    );
-    expect(screen.getByRole("button", { name: "Next" })).toHaveProperty(
-      "disabled",
-      false,
-    );
-    expect(screen.queryByRole("button", { name: "End" })).toBeNull();
-    expect(
-      screen.queryByText(
-        "Finish is available only while the classroom status is Waiting.",
-      ),
-    ).toBeNull();
-  });
-
-  it("keeps page Finish closed when manual reconnect snapshot returns HTTP 401", async () => {
-    const { api, finish, socket } = await mountWithController();
-    api.debate.mockRejectedValue(
-      new PlatformApiError(401, "Authentication is required."),
-    );
-    socket.emit("close", 1006);
-    fireEvent.click(await screen.findByRole("button", { name: /Reconnect/ }));
-
-    expect(
-      await screen.findAllByText(/Finish unavailable: please sign in again/),
-    ).not.toHaveLength(0);
-    await waitFor(() => expect(finish).toHaveProperty("disabled", true));
-    expect(screen.queryByRole("button", { name: /Reconnect/ })).toBeNull();
-    expect(screen.queryByText("Authentication is required.")).toBeNull();
-    forceFinishHandler(finish);
-    expect(api.finishDebate).not.toHaveBeenCalled();
-  });
 });

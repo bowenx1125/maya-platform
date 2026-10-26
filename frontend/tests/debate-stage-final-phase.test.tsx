@@ -8,7 +8,6 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DebateStage } from "../components/debate/stage";
 import type {
   DebatePlaybackApi,
   PlaybackSocket,
@@ -177,7 +176,6 @@ afterEach(() => {
 });
 
 describe.each([
-  ["classic", DebateStage],
   ["beta", BetaDebateStage],
 ] as const)("%s final text phase", (name, Stage) => {
   function renderStage(
