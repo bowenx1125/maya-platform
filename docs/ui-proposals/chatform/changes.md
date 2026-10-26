@@ -52,3 +52,7 @@ Open questions: (1) Move "Check status" into the error sticker or keep separate?
 - New state `errfold` (6s collapse to red mascot "!" badge) for all schemes at 1440/390. Note: per U3 an error with an action button (Check status) never collapses; errfold shows the transient-error variant for review.
 - Copy/a11y audit (`src/audit-compare.mjs`, extraction logic from 00-global/audit-text.mjs): 0 missing across 36 mockups (`audit/RESULT.txt`). Fixes: composer attach is now a button with aria-label "Attach a file" + its title + hidden input `chat-attachment-input`; empty state header gets New (its copy says "press New"); hidden mobile top bar kept on desktop (real markup, "Expand sidebar"). Exclusions: mock data strings; create-state sidebar New (replaced by Back/Done by design).
 - Current 390 shots added: `current/2-create-390.png`, `current/4-new-empty-conv-390.png` (via mobile drawer).
+
+## FINAL draft (2026-10-27)
+
+See `final/FINAL.md`. Scheme A base + C radiant-disk empty panel + C peeking title row in A light colors. Check status inside U3 sticker (no auto-collapse). Audit 0 missing (`audit/FINAL-RESULT.txt`). PNGs under `final/`.
