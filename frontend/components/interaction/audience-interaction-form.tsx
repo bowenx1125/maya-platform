@@ -42,7 +42,9 @@ const OK_TAG =
 const STATUS_LINE = "m-0 mt-2.5 text-[13px] font-bold text-[#E8FFE0]";
 const ARCADE =
   "relative cursor-pointer rounded-full border-3 border-black bg-main font-extrabold text-ink shadow-[0_6px_0_#9b1747,0_6px_0_3px_#000] active:translate-y-1.5 active:shadow-[0_0_0_3px_#000] disabled:cursor-default disabled:translate-y-[3px] disabled:bg-[#6b6b6b] disabled:text-[#cfcfcf] disabled:shadow-[0_3px_0_#333,0_3px_0_3px_#000]";
-const STICKER_AT = "left-auto top-[-6px] right-[-8px]";
+// Offsets measured against the mock: the button border (3px) shifts the containing block.
+const STICKER_AT = "left-auto top-[-9px] right-[-11px] size-[26px]";
+const VOTE_STICKER_AT = "left-auto top-[-4px] right-[-6px] size-[26px] z-[6]";
 const SLOT_TONES = ["#FFE14D", "#67E8F9", "#A3E635"];
 const LED_TONES = ["bg-main", "bg-[#FFE14D]", "bg-[#67E8F9]"];
 
@@ -390,11 +392,11 @@ export function AudienceInteractionForm({
                 <span className="text-[11px] font-extrabold tracking-[.04em]">
                   {t("appName")}
                 </span>
-                <h1 className="m-0 font-display text-[22px] tracking-normal font-extrabold min-[900px]:text-[40px]">
+                <h1 className="m-0 font-display text-[22px] tracking-normal font-extrabold leading-[normal] min-[900px]:text-[40px]">
                   {t("audienceUnavailable")}
                 </h1>
                 {/* Q2: the hint, never the server's wording. */}
-                <p className="m-0 mt-1.5 text-sm font-medium">
+                <p className="m-0 mt-1.5 text-sm leading-[normal] font-medium">
                   {t("audienceUnavailableHint")}
                 </p>
               </section>
@@ -551,7 +553,7 @@ export function AudienceInteractionForm({
               </h1>
             </header>
 
-            <label className="mt-3.5 flex flex-col gap-1.5 [&>span]:text-xs [&>span]:font-bold [&>span]:tracking-[.04em] [&>span]:text-[#FFE14D]">
+            <label className="mt-3.5 flex flex-col gap-1.5 [&>span]:text-xs [&>span]:leading-[15px] [&>span]:font-bold [&>span]:tracking-[.04em] [&>span]:text-[#FFE14D]">
               <span>{t("audienceNickname")}</span>
               <input
                 value={nickname}
@@ -748,7 +750,10 @@ export function AudienceInteractionForm({
                     </label>
                   ))}
                 </div>
-                <div className="mt-4 flex justify-center">
+                <div className="relative mt-4 flex justify-center">
+                  {voteError ? (
+                    <KindSticker kind="bell" on className={VOTE_STICKER_AT} />
+                  ) : null}
                   <button
                     className={cn(
                       ARCADE,
@@ -759,9 +764,6 @@ export function AudienceInteractionForm({
                       !canInteract || submissionsClosed || voteState !== "idle"
                     }
                   >
-                    {voteError ? (
-                      <KindSticker kind="bell" on className={STICKER_AT} />
-                    ) : null}
                     {voteState === "busy"
                       ? t("audienceSubmitting")
                       : t("audienceVoteSubmit")}
