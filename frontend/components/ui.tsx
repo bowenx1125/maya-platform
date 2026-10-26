@@ -238,6 +238,13 @@ export const NOTICE_ACTION_CLASS = cn(
   "h-8 px-3 text-[13px]",
 );
 
+/** U3: an upload or filename refusal wears the file sticker. */
+function isFileError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const { code } = error as { code?: unknown };
+  return typeof code === "string" && /file|upload|attachment/.test(code);
+}
+
 /** A missing record, as opposed to one the server named a reason for. */
 function isNotFound(error: unknown) {
   if (!error || typeof error !== "object") return false;
@@ -259,9 +266,12 @@ export function ErrorNotice({
   onClosed,
   kind,
   transient,
+  badge,
 }: {
   id?: string;
   kind?: ErrorKind;
+  /** U3: the number of the field this error describes. */
+  badge?: number;
   transient?: boolean;
   /** Runs after the X closes it, e.g. to give focus back to a field. */
   onClosed?: () => void;
@@ -282,7 +292,8 @@ export function ErrorNotice({
       tone={conflict ? "warning" : "error"}
       title={conflict ? t("revisionConflict") : undefined}
       inline={inline}
-      kind={kind}
+      kind={kind ?? (isFileError(error) ? "file" : "server")}
+      badge={badge}
       transient={transient}
       onClose={() => {
         setDismissed(error);

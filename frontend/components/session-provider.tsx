@@ -754,6 +754,8 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
       ) : null}
       {emptyField ? (
         <DismissibleAlert
+          kind="field"
+          n={1}
           id="login-field-error"
           className="form-error"
           resetKey={`${attempt}:${emptyField}`}

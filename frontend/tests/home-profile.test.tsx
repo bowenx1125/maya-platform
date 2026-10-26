@@ -265,3 +265,28 @@ describe("profile identity boundary", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 });
+
+describe("profile password (U3)", () => {
+  it("numbers the confirm field and its error line on a mismatch", async () => {
+    inEnglish(<AccountSettings />);
+    fireEvent.change(screen.getByLabelText("Current password"), {
+      target: { value: "old-password" },
+    });
+    fireEvent.change(screen.getByLabelText("New password"), {
+      target: { value: "new-password-1" },
+    });
+    const confirm = screen.getByLabelText("Confirm password");
+    expect(confirm.getAttribute("aria-invalid")).toBeNull();
+    fireEvent.change(confirm, { target: { value: "new-password-2" } });
+    fireEvent.submit(confirm.closest("form")!);
+
+    const line = await screen.findByRole("alert");
+    expect(line.textContent).toMatch(/do not match/i);
+    expect(
+      line.querySelector('[data-sticker="field"]')?.getAttribute("data-n"),
+    ).toBe("1");
+    expect(confirm.getAttribute("aria-invalid")).toBe("true");
+    expect(confirm.getAttribute("aria-describedby")).toBe(line.id);
+    expect(session.api.changePassword).not.toHaveBeenCalled();
+  });
+});

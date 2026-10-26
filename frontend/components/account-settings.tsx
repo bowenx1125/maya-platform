@@ -6,7 +6,7 @@ import type { FormEvent } from "react";
 import { cachedCall, requestCacheIdentity } from "../lib/request-cache";
 import { useT } from "../lib/i18n";
 import { useSession } from "./session-provider";
-import { ErrorNotice, SectionCard } from "./ui";
+import { ErrorNotice, SectionCard, StickerBadge } from "./ui";
 import { USER_AVATAR_CHOICES, UserAvatar } from "./user-avatar";
 
 export function AccountSettings({ onSaved }: { onSaved?: () => void }) {
@@ -38,6 +38,8 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
     "avatar" | "name" | "group" | "password" | null
   >(null);
   const [error, setError] = useState<unknown>(null);
+  // U3: the confirm field the mismatch error points at, by number.
+  const [mismatch, setMismatch] = useState(false);
   const [saved, setSaved] = useState<
     "avatar" | "name" | "group" | "password" | null
   >(null);
@@ -107,6 +109,7 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
     setBusy("avatar");
     setSaved(null);
     setError(null);
+    setMismatch(false);
     try {
       await api.updateCurrentUser({ avatar: choice });
       if (!mounted.current) return;
@@ -134,6 +137,7 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
     setBusy("name");
     setSaved(null);
     setError(null);
+    setMismatch(false);
     try {
       await api.updateCurrentUser({ display_name: typedName });
       if (!mounted.current) return;
@@ -165,6 +169,7 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
     setBusy("group");
     setSaved(null);
     setError(null);
+    setMismatch(false);
     try {
       await api.updateCurrentUser({ group_name: groupChoice });
       if (!mounted.current) return;
@@ -186,7 +191,9 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
     event.preventDefault();
     setSaved(null);
     setError(null);
+    setMismatch(false);
     if (newPassword !== confirmPassword) {
+      setMismatch(true);
       setError(new Error(t("registerPasswordMismatch")));
       return;
     }
@@ -209,7 +216,13 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
 
   return (
     <SectionCard title={t("profile")} className="account-settings-card">
-      {error ? <ErrorNotice error={error} /> : null}
+      {error ? (
+        <ErrorNotice
+          id={mismatch ? "password-field-error" : undefined}
+          error={error}
+          badge={mismatch ? 1 : undefined}
+        />
+      ) : null}
       <div className="account-settings-grid">
         <section className="profile-panel" aria-labelledby="profile-avatar">
           <div className="profile-panel-heading">
@@ -360,9 +373,13 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
               onChange={(event) => setNewPassword(event.target.value)}
             />
           </label>
-          <label>
+          <label className="relative">
+            {mismatch ? <StickerBadge n={1} /> : null}
             <span>{t("registerConfirmPassword")}</span>
             <input
+              aria-invalid={mismatch || undefined}
+              aria-describedby={mismatch ? "password-field-error" : undefined}
+              className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
               type="password"
               autoComplete="new-password"
               value={confirmPassword}
