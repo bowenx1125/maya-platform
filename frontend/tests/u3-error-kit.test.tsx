@@ -13,7 +13,7 @@ import { Notice } from "../components/ui";
 import { KindSticker, TRANSIENT_FOLD_MS } from "../components/ui/error-kit";
 import { UserAvatar } from "../components/user-avatar";
 import { KnowledgeFilenameField } from "../components/knowledge/markdown-editor";
-import { ErrorNotice } from "../components/ui";
+import { ErrorNotice, RetryPill } from "../components/ui";
 
 function contrastOnWhite(hex: string) {
   const c = [1, 3, 5].map((i) => {
@@ -161,6 +161,9 @@ describe("U3 file errors", () => {
     );
     const onField = container.querySelector('[data-sticker="field"]');
     expect(onField?.getAttribute("data-n")).toBe("1");
+    // On the input's corner, not over the "Filename" label text.
+    expect(onField?.nextElementSibling?.tagName).toBe("INPUT");
+    expect(onField?.parentElement?.tagName).not.toBe("LABEL");
     expect(container.querySelector('[data-sticker="file"]')).toBeNull();
     expect(screen.getByRole("textbox").getAttribute("aria-invalid")).toBeNull();
     render(<ErrorNotice error={new Error("bad name")} badge={1} />);
@@ -198,5 +201,49 @@ describe("U3 chat server errors", () => {
     expect(badge.textContent).toBe("!");
     fireEvent.click(badge);
     expect(alert.className.split(" ")).not.toContain("hidden");
+  });
+});
+
+describe("U3 Retry goes with the server kind only", () => {
+  afterEach(() => {
+    cleanup();
+    document.querySelector(".notice-tray")?.remove();
+  });
+  const retry = () => screen.queryByRole("button", { name: /retry/i });
+
+  it("field kind never renders Retry, even when onRetry is given", () => {
+    render(
+      <ErrorNotice error={new Error("bad")} badge={1} onRetry={() => {}} />,
+    );
+    expect(
+      screen.getByRole("alert").querySelector('[data-sticker="field"]'),
+    ).toBeTruthy();
+    expect(retry()).toBeNull();
+  });
+  it("field kind never renders a Retry pill passed as a Notice action", () => {
+    render(
+      <Notice
+        tone="error"
+        badge={2}
+        action={<RetryPill onClick={() => {}}>Retry</RetryPill>}
+      >
+        bad
+      </Notice>,
+    );
+    expect(retry()).toBeNull();
+  });
+  it("file kind never renders Retry", () => {
+    const error = Object.assign(new Error("too large"), {
+      code: "attachment_too_large",
+    });
+    render(<ErrorNotice error={error} onRetry={() => {}} />);
+    expect(retry()).toBeNull();
+  });
+  it("server kind still renders Retry", () => {
+    render(<ErrorNotice error={new Error("boom")} onRetry={() => {}} />);
+    expect(
+      screen.getByRole("alert").querySelector('[data-sticker="server"]'),
+    ).toBeTruthy();
+    expect(retry()).toBeTruthy();
   });
 });
