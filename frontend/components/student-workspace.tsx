@@ -272,7 +272,7 @@ export function StudentDashboard() {
         <EmptyCard title={t("noGroup")} />
       ) : (
         <div
-          className="home-columns grid grid-cols-2 items-start gap-8 max-[880px]:grid-cols-1 max-[880px]:gap-10"
+          className="home-columns grid grid-cols-2 items-stretch gap-8 max-[880px]:grid-cols-1 max-[880px]:gap-10"
           id="student-groups"
         >
           <section
