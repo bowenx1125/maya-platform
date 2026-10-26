@@ -139,7 +139,11 @@ describe("sidebar groups", () => {
     expect(
       nav().getByRole("link", { name: "Agents" }).getAttribute("href"),
     ).toBe("/teacher/agents");
-    for (const name of ["RAG", "Voices", "Knowledge"])
+    // RAG is its own page (2026-10-26); Voices and Knowledge stay on Studyform.
+    expect(nav().getByRole("link", { name: "RAG" }).getAttribute("href")).toBe(
+      "/teacher/rag",
+    );
+    for (const name of ["Voices", "Knowledge"])
       expect(nav().getByRole("link", { name }).getAttribute("href")).toBe(
         "/teacher/studyform",
       );
@@ -149,10 +153,10 @@ describe("sidebar groups", () => {
     state.user = { ...teacher(), groups: [{ group_id: "g", role: "admin" }] };
     renderShell("teacher", "/student/groups/g");
     expect(nav().getByRole("link", { name: "RAG" }).getAttribute("href")).toBe(
-      "/teacher/knowledge?group_id=g",
+      "/teacher/rag?group_id=g",
     );
     expect(nav().getByRole("link", { name: "RAG" }).getAttribute("href")).toBe(
-      "/teacher/knowledge?group_id=g",
+      "/teacher/rag?group_id=g",
     );
     expect(
       nav().getByRole("link", { name: "Chat with Agent" }).getAttribute("href"),

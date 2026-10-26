@@ -63,6 +63,17 @@ import {
 } from "../quiet-icons";
 
 import styles from "./brainform-workspace.module.css";
+import {
+  AlbumIcon,
+  AlbumIconButton,
+  AlbumPlus,
+  AlbumRings,
+  albumStyles as album,
+  fileExt,
+  RagCard,
+  ragAlbumClass,
+  useRagAgents,
+} from "./rag-album";
 
 /**
  * A Brainform row title that enters exactly like an Agent tile's title: the
@@ -77,7 +88,9 @@ function TitleButton({
   onEnter,
   onRename,
   editable,
+  className,
 }: {
+  className?: string;
   title: string;
   enterLabel: string;
   onEnter?: () => void;
@@ -100,7 +113,7 @@ function TitleButton({
   return (
     <button
       type="button"
-      className={`agent-tile-name text-link ${styles.titleLink}`}
+      className={className ?? `agent-tile-name text-link ${styles.titleLink}`}
       aria-label={enterLabel}
       aria-disabled={onEnter ? undefined : true}
       data-ui-guide={editable ? "knowledge.edit" : "knowledge.view"}
@@ -411,6 +424,8 @@ function isGenerationActive(
   return state === "pending" || state === "running";
 }
 
+const NO_DOCUMENTS: KnowledgeDocument[] = [];
+
 function indexStatusText(
   document: KnowledgeDocument,
   t: ReturnType<typeof useT>,
@@ -446,10 +461,13 @@ export function BrainformWorkspace({
   initialMode,
   initialDocumentId,
   embedded = false,
+  ragPage = false,
   onPaneChange,
 }: {
   /** Rendered inside Studyform: RAG and Record join Studyform's grid. */
   embedded?: boolean;
+  /** The dedicated RAG page (/student/rag, /teacher/rag): RAG only. */
+  ragPage?: boolean;
   /** Embedded only: a RAG or Record page opened (true) or closed (false). */
   onPaneChange?: (open: boolean) => void;
   role: BrainformRole;
@@ -566,6 +584,7 @@ export function BrainformWorkspace({
       initialMode={initialMode}
       initialDocumentId={initialDocumentId}
       embedded={embedded}
+      ragPage={ragPage}
       onPaneChange={onPaneChange}
       identityScope={dataScope}
       ragDraftScope={JSON.stringify([
@@ -608,11 +627,13 @@ function BrainformWorkspaceBody({
   initialMode,
   initialDocumentId,
   embedded = false,
+  ragPage = false,
   onPaneChange,
   identityScope,
   ragDraftScope,
 }: {
   embedded?: boolean;
+  ragPage?: boolean;
   onPaneChange?: (open: boolean) => void;
   role: BrainformRole;
   courseIds: string[];
@@ -1566,6 +1587,7 @@ function BrainformWorkspaceBody({
         t("brainformRagHideConfirm", { filename: document.source_filename }),
         () => api.knowledgeAffectedAgents(document.id),
         (names) => t("deleteAffectsAgents", { names }),
+        ", ",
       );
       if (!window.confirm(message)) return;
     }
@@ -2331,12 +2353,16 @@ function BrainformWorkspaceBody({
   const canAddKnowledge = role === "teacher" && !teacherGroupView;
   const canAddRag =
     !teacherGroupView && (role === "teacher" || ragGroupIds.length > 0);
+  const ragAgents = useRagAgents(ragPage ? ragDocuments : NO_DOCUMENTS);
 
   return (
     <main
-      className={embedded ? styles.embeddedPage : styles.page}
+      className={
+        ragPage ? ragAlbumClass : embedded ? styles.embeddedPage : styles.page
+      }
       data-studyform-embedded={embedded || undefined}
     >
+      {ragPage ? <AlbumRings /> : null}
       {pane?.kind === "rag-new" ? (
         <WorkspaceAction
           name="done"
@@ -2444,7 +2470,223 @@ function BrainformWorkspaceBody({
 
       {/* Embedded in Studyform each card paints on its own: RAG shows a
           loading line while its list arrives, Record never waits for it. */}
-      {!pane &&
+      {ragPage &&
+      !pane &&
+      !initialMode &&
+      !loading &&
+      !loadError &&
+      courseId ? (
+        <section aria-labelledby="brainform-rag-heading">
+          <div className={album.top}>
+            <h2
+              id="brainform-rag-heading"
+              data-ui-guide="knowledge.files"
+              data-ui-guide-text={t("brainformRagIntro")}
+              tabIndex={0}
+            >
+              RAG
+            </h2>
+            <span className={album.tape} aria-hidden="true" />
+            <span className={album.sp} />
+            {canAddRag ? (
+              ragDocuments.length ? (
+                <AlbumPlus
+                  label={t("brainformNewRag")}
+                  onClick={beginNewRag}
+                  disabled={Boolean(busyKey)}
+                  busy={busyKey === "rag-new"}
+                />
+              ) : null
+            ) : (
+              <span className={album.count}>{ragDocuments.length}</span>
+            )}
+          </div>
+          {ragDocuments.length ? (
+            <ul className={album.grid}>
+              {ragDocuments.map((document, index) => {
+                const canEdit = document.can_manage_visibility;
+                const status = indexStatusText(document, t);
+                const failed = document.index_status === "failed";
+                return (
+                  <RagCard
+                    key={document.id}
+                    index={index}
+                    document={document}
+                    agents={ragAgents[document.id]}
+                    tone={failed ? "failed" : status ? "pending" : ""}
+                    title={
+                      renameDocumentId === document.id ? (
+                        <input
+                          ref={renameInputRef}
+                          className={album.renameInput}
+                          aria-label={t("brainformRagName")}
+                          value={renameValue}
+                          onChange={(event) =>
+                            setRenameValue(event.target.value)
+                          }
+                          onBlur={() => void saveDocumentName(document)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              event.currentTarget.blur();
+                            }
+                            if (event.key === "Escape")
+                              setRenameDocumentId(null);
+                          }}
+                        />
+                      ) : (
+                        <TitleButton
+                          className={album.fn}
+                          title={document.source_filename}
+                          editable={canEdit}
+                          enterLabel={t(
+                            canEdit
+                              ? "brainformEditRagNamed"
+                              : "brainformViewRagNamed",
+                            { name: document.source_filename },
+                          )}
+                          onEnter={() =>
+                            void (canEdit
+                              ? editRag(document)
+                              : viewRag(document))
+                          }
+                          onRename={
+                            canEdit
+                              ? () => {
+                                  setRenameDocumentId(document.id);
+                                  setRenameValue(
+                                    document.source_filename.replace(
+                                      /\.[^.]+$/,
+                                      "",
+                                    ),
+                                  );
+                                }
+                              : undefined
+                          }
+                        />
+                      )
+                    }
+                    status={
+                      status ? (
+                        <p
+                          className={`${album.stk} ${album.warn}`}
+                          role="status"
+                        >
+                          <i className={album.spin} aria-hidden="true" />
+                          {status}
+                        </p>
+                      ) : failed ? (
+                        <p
+                          className={`${album.stk} ${album.bad}`}
+                          role="status"
+                        >
+                          {ragIndexFailureReason(document, t)}
+                        </p>
+                      ) : null
+                    }
+                    footer={
+                      <>
+                        <AlbumIconButton
+                          icon="download"
+                          label={t("brainformDownloadRagNamed", {
+                            name: document.source_filename,
+                          })}
+                          guide="knowledge.download"
+                          disabled={busyKey === `download:${document.id}`}
+                          onClick={() => void downloadRag(document)}
+                        />
+                        {canEdit && failed ? (
+                          <AlbumIconButton
+                            icon="refresh"
+                            label={t("brainformReindexRagNamed", {
+                              name: document.source_filename,
+                            })}
+                            guide="knowledge.reindex"
+                            disabled={busyKey === `reindex:${document.id}`}
+                            onClick={() => void reindexRag(document)}
+                          />
+                        ) : null}
+                        {pendingRagAction?.documentId === document.id ? (
+                          <button
+                            className={album.retry}
+                            type="button"
+                            disabled={Boolean(busyKey)}
+                            onClick={retryRagAction}
+                          >
+                            {t("retry")}
+                          </button>
+                        ) : null}
+                        <span className={album.sp} />
+                        {canEdit ? (
+                          <AlbumIconButton
+                            icon="close"
+                            danger
+                            label={t("brainformHideRagNamed", {
+                              name: document.source_filename,
+                            })}
+                            guide="knowledge.hide"
+                            disabled={busyKey === `hide:${document.id}`}
+                            onClick={() => void hideRag(document)}
+                          />
+                        ) : null}
+                      </>
+                    }
+                    badge={
+                      failed ? (
+                        <span
+                          className={`status-badge status-bad ${album.fb}`}
+                          data-ui-guide="knowledge.indexFailed"
+                          data-ui-guide-text={ragIndexFailureReason(
+                            document,
+                            t,
+                          )}
+                          tabIndex={0}
+                        >
+                          <span aria-hidden="true" />
+                          failed
+                        </span>
+                      ) : null
+                    }
+                  />
+                );
+              })}
+            </ul>
+          ) : (
+            <div className={album.grid}>
+              <div className={`${album.ghost} ${album.ghostFirst}`}>
+                <svg
+                  width="64"
+                  height="64"
+                  viewBox="0 0 24 24"
+                  fill="#67E8F9"
+                  stroke="#111"
+                  strokeWidth="1.6"
+                  aria-hidden="true"
+                >
+                  <path d="M6 3h9l4 4v14H6zM14 3v5h5" />
+                </svg>
+                <p>{t("brainformRagEmpty")}</p>
+                {canAddRag ? (
+                  <AlbumPlus
+                    label={t("brainformNewRag")}
+                    onClick={beginNewRag}
+                    disabled={Boolean(busyKey)}
+                    busy={busyKey === "rag-new"}
+                  />
+                ) : null}
+              </div>
+              <div className={album.ghost} aria-hidden="true">
+                <AlbumIcon name="plus" size={40} />
+              </div>
+              <div className={album.ghost} aria-hidden="true">
+                <AlbumIcon name="plus" size={40} />
+              </div>
+            </div>
+          )}
+        </section>
+      ) : null}
+      {!ragPage &&
+      !pane &&
       !initialMode &&
       (!loading || embedded) &&
       !loadError &&
@@ -2844,7 +3086,190 @@ function BrainformWorkspaceBody({
         />
       ) : null}
 
-      {pane && pane.kind !== "record" ? (
+      {ragPage && pane?.kind.startsWith("rag") ? (
+        <div className={album.spread}>
+          {pane.kind === "rag-view" ? (
+            <div className={`${album.card} ${album.big}`}>
+              <div className={album.art}>
+                <span className={album.no} aria-hidden="true">
+                  #
+                  {String(
+                    Math.max(
+                      0,
+                      ragDocuments.findIndex(
+                        (item) => item.id === pane.documentId,
+                      ),
+                    ) + 1,
+                  ).padStart(2, "0")}
+                </span>
+                <span className={album.ty} aria-hidden="true">
+                  {fileExt(
+                    ragDocuments.find((item) => item.id === pane.documentId)
+                      ?.source_filename ?? pane.filename,
+                  )}
+                </span>
+              </div>
+              <div className={album.plate}>
+                <span className={album.eb}>RAG</span>
+                <h2 className={album.nm} id="brainform-editor-heading">
+                  {pane.filename}
+                </h2>
+              </div>
+            </div>
+          ) : pane.kind === "rag-edit" && !selectedDraft?.canEdit ? (
+            <div />
+          ) : (
+            <label
+              className={album.pack}
+              aria-busy={
+                pane.kind === "rag-new"
+                  ? busyKey === "rag-new"
+                  : busyKey ===
+                    `import:${pane.kind === "rag-edit" ? pane.draftKey : ""}`
+              }
+            >
+              <span className={album.disc}>
+                <AlbumIcon name="upload" size={56} stroke={3} />
+              </span>
+              <span className={album.types} aria-hidden="true">
+                <i>MD</i>
+                <i>PDF</i>
+                <i>DOCX</i>
+              </span>
+              <input
+                className="sr-only"
+                type="file"
+                aria-label={
+                  pane.kind === "rag-new"
+                    ? t("uploadRag")
+                    : t("knowledgeImportFile")
+                }
+                accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                disabled={Boolean(busyKey)}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  event.currentTarget.value = "";
+                  if (!file) return;
+                  if (pane.kind === "rag-new") void importNewRag(file);
+                  else if (pane.kind === "rag-edit")
+                    void importRag(pane.draftKey, file);
+                }}
+              />
+            </label>
+          )}
+          {pane.kind === "rag-view" ? (
+            <div className={album.page2}>
+              <ReportMarkdown>{pane.markdown}</ReportMarkdown>
+            </div>
+          ) : pane.kind === "rag-new" ? (
+            <div className={album.blank}>
+              <div className={album.in}>
+                <span className={album.eb}>RAG</span>
+                <h2 className={album.nm} id="brainform-editor-heading">
+                  {newRag.name.trim() || t("brainformNewRag")}
+                </h2>
+                {role !== "teacher" &&
+                !initialGroupId &&
+                ragGroupIds.length > 1 ? (
+                  <label className={album.fl}>
+                    <span>{t("group")}</span>
+                    <select
+                      value={newRag.groupId}
+                      disabled={busyKey === "rag-new"}
+                      onChange={(event) => {
+                        const groupId = event.target.value;
+                        setNewRag((current) => ({ ...current, groupId }));
+                      }}
+                    >
+                      {groups.map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                <KnowledgeFilenameField
+                  className={album.fl}
+                  value={newRag.name}
+                  disabled={busyKey === "rag-new"}
+                  onChange={(name) =>
+                    setNewRag((current) => ({ ...current, name }))
+                  }
+                />
+                {newRag.file ? (
+                  <p className={`${album.stk} ${album.warn}`} role="status">
+                    {t("brainformRagFileStaged", {
+                      filename: newRag.file.name,
+                    })}{" "}
+                    {t("brainformNotMarkdownEditor")}
+                  </p>
+                ) : (
+                  <KnowledgeMarkdownField
+                    className={album.fl}
+                    value={newRag.markdown}
+                    disabled={busyKey === "rag-new"}
+                    readOnly={busyKey === "rag-new"}
+                    rows={10}
+                    onChange={(markdown) =>
+                      setNewRag((current) => ({ ...current, markdown }))
+                    }
+                  />
+                )}
+              </div>
+            </div>
+          ) : pane.kind === "rag-edit" && selectedDraft ? (
+            <div className={album.blank}>
+              <div className={album.in}>
+                <span className={album.eb}>RAG</span>
+                <h2 className={album.nm} id="brainform-editor-heading">
+                  {selectedDraft.filename}
+                </h2>
+                <KnowledgeFilenameField
+                  className={album.fl}
+                  value={selectedDraft.filename}
+                  disabled={busyKey === `import:${pane.draftKey}`}
+                  readOnly={!selectedDraft.canEdit}
+                  onChange={(filename) => {
+                    if (!selectedDraft.canEdit) return;
+                    updateRagDraft(pane.draftKey, {
+                      ...selectedDraft,
+                      filename,
+                    });
+                  }}
+                />
+                {selectedRagFile ? (
+                  <p className={`${album.stk} ${album.warn}`} role="status">
+                    {t("brainformRagFileStaged", {
+                      filename: selectedRagFile.name,
+                    })}{" "}
+                    {t("brainformNotMarkdownEditor")}
+                  </p>
+                ) : (
+                  <KnowledgeMarkdownField
+                    className={album.fl}
+                    value={selectedDraft.markdown}
+                    disabled={busyKey === `import:${pane.draftKey}`}
+                    rows={16}
+                    readOnly={!selectedDraft.canEdit}
+                    onChange={(markdown) =>
+                      updateRagDraft(pane.draftKey, {
+                        ...selectedDraft,
+                        markdown,
+                      })
+                    }
+                  />
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className={album.eb}>{t("loading")}</p>
+          )}
+        </div>
+      ) : null}
+      {pane &&
+      pane.kind !== "record" &&
+      !(ragPage && pane.kind.startsWith("rag")) ? (
         <section
           className={styles.editorPanel}
           aria-labelledby="brainform-editor-heading"
