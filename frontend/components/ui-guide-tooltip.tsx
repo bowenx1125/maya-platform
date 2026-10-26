@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 
 import { uiGuideText, type UiGuideKey } from "../lib/ui-guide-copy";
 import { useT } from "../lib/i18n";
-import styles from "./ui-guide-tooltip.module.css";
 
 const tooltipId = "maya-ui-guide-tooltip";
 const selector = "[data-ui-guide]";
@@ -380,7 +379,7 @@ export function UiGuideTooltip() {
   return createPortal(
     <div
       id={tooltipId}
-      className={styles.tooltip}
+      className="pointer-events-none fixed z-[1500] w-max max-w-[min(280px,calc(100vw-16px))] rounded-[12px] border border-(--line,#e4ddd2) bg-(--surface,#fdfaf3) px-[13px] py-2.5 text-[13px] leading-[1.5] font-normal whitespace-pre-line text-(--ink,#332d22) shadow-[0_4px_16px_rgb(52_45_30/10%)] [overflow-wrap:anywhere] motion-safe:animate-tooltip-in"
       role="tooltip"
       ref={tooltipRef}
       style={{ left: position.left, top: position.top }}

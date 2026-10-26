@@ -27,6 +27,12 @@ function renderStream(
     <>
       <SpeechStream
         activeReveal={activeReveal}
+        // Callers pass their own class map since the classic stage CSS was removed.
+        styles={{
+          streamItem: "streamItem",
+          streamParagraphs: "streamParagraphs",
+          streamSpeech: "streamSpeech",
+        }}
         describe={() => ({ slot: "A", name: "River Keeper" })}
         emptyMessage="No published speech."
         labels={labels}

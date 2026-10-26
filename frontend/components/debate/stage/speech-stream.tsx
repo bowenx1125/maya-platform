@@ -8,8 +8,6 @@ import {
   type SegmentRagSegment,
   type SegmentRagSource,
 } from "../../evidence";
-import defaultStyles from "./debate-stage.module.css";
-import replyStyles from "./speech-stream.module.css";
 import { useT } from "../../../lib/i18n";
 import type { PlaybackStageLabels } from "./types";
 
@@ -184,10 +182,10 @@ function StreamItem({
               <Fragment key={`${turn.id}-segment-${index}`}>
                 {segment.reply_to && segment.reply_text ? (
                   <blockquote
-                    className={replyStyles.replyQuote}
+                    className="m-0 rounded-[12px] bg-(--surface-subtle) px-4 py-3 text-[0.95rem] leading-[1.6] text-(--ink) [overflow-wrap:anywhere] [&_p]:mt-1 [&_p]:mb-0 [&_p]:whitespace-pre-wrap"
                     aria-label={replyLabel}
                   >
-                    <span className={replyStyles.replyLabel}>{replyLabel}</span>
+                    <span className="text-[0.8rem] text-(--muted)">{replyLabel}</span>
                     <p>{segment.reply_text}</p>
                   </blockquote>
                 ) : null}
@@ -239,7 +237,7 @@ function StreamItem({
  * the room looking in one place.
  */
 export function SpeechStream({
-  styles = defaultStyles,
+  styles = {},
   turns,
   labels,
   describe,

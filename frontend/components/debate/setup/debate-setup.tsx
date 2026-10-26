@@ -50,6 +50,7 @@ import {
 import { Button } from "../../ui/button";
 import { NewButton } from "../../ui/agent-card";
 import { cn } from "../../../lib/utils";
+import { LIST_CARD_LIFT } from "../../agent-chrome";
 import {
   CREATE_SEG,
   CREATE_SEG_BUTTON,
@@ -217,7 +218,7 @@ export function TeacherDebateList({
           <div className="grid gap-3.5">
             {debates.map((debate, index) => (
               <div
-                className="relative grid grid-cols-[70px_1fr_150px] rounded-[18px] border-2 border-[#111] bg-white shadow-[0_4px_0_#111] transition-transform duration-[80ms] [grid-template-areas:'v_b_s'_'v_a_a'] hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0 max-[600px]:grid-cols-[52px_1fr] max-[600px]:[grid-template-areas:'v_b'_'v_s'_'a_a']"
+                className={`relative grid grid-cols-[70px_1fr_150px] rounded-[18px] border-2 border-[#111] bg-white shadow-[0_4px_0_#111] [grid-template-areas:'v_b_s'_'v_a_a'] max-[600px]:grid-cols-[52px_1fr] max-[600px]:[grid-template-areas:'v_b'_'v_s'_'a_a'] ${LIST_CARD_LIFT}`}
                 data-testid="debate-row"
                 key={debate.id}
               >

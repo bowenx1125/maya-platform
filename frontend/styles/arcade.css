@@ -176,6 +176,18 @@
       background-position: -150% 0;
     }
   }
+  /* Guide tooltip fades up (motion-safe only). */
+  --animate-tooltip-in: tooltip-in 120ms ease-out;
+  @keyframes tooltip-in {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
   --color-main: var(--arc-main);
   --color-main-fg: var(--arc-main-fg);
   --color-ink: var(--arc-ink);
