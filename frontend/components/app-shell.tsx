@@ -784,16 +784,16 @@ export function AppShell({
       <div
         className={`grid min-h-dvh max-[900px]:grid-cols-1 ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[220px_minmax(0,1fr)]"}`}
       >
-        <div className="sticky top-0 z-30 hidden h-14 items-center gap-3 border-b-[3px] border-border bg-sidebar px-4 max-[900px]:flex">
+        <div className="sticky top-0 z-30 hidden h-[50px] items-center justify-center border-b-[3px] border-border bg-sidebar px-3 max-[900px]:flex">
           <button
             type="button"
-            className="grid size-10 place-items-center rounded-arc-s border-[3px] border-border bg-surface text-ink shadow-arc-s active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
+            className="absolute top-1/2 left-3 grid size-[30px] -translate-y-1/2 place-items-center rounded-[6px] border-[2px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] after:absolute after:-inset-[7px] after:content-[''] active:shadow-none"
             aria-label={t("sidebarExpand")}
             aria-expanded={drawerOpen}
             aria-controls={SIDEBAR_ID}
             onClick={() => setDrawerPath(pathname)}
           >
-            <WorkspaceIcon name="menu" />
+            <WorkspaceIcon name="menu" size={18} />
           </button>
           <span
             className="flex items-center gap-2 font-display text-lg font-extrabold text-ink"
