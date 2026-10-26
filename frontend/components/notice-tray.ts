@@ -13,7 +13,7 @@ const noSubscription = () => () => {};
  */
 const TRAY_CLASS = [
   "notice-tray fixed right-6 bottom-[var(--arc-tray-bottom,16px)] z-[60] flex flex-col items-end gap-3",
-  "w-[min(440px,calc(100vw-32px))] pointer-events-none font-body empty:hidden",
+  "w-[min(480px,calc(100vw-32px))] pointer-events-none font-body empty:hidden",
   "max-h-[var(--arc-tray-max,calc(100dvh-32px))] overflow-y-auto overscroll-contain",
   "after:content-[''] after:block after:flex-none after:mr-3 after:w-24 after:h-[120px]",
   "after:bg-[url(/mascots/wave.svg)] after:bg-contain after:bg-bottom after:bg-no-repeat after:drop-shadow-[3px_3px_0_#111]",
