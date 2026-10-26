@@ -399,7 +399,10 @@ const enMessages = {
   brainformEditKnowledgeNamed: "Edit Knowledge {name}",
   brainformViewKnowledgeNamed: "View Knowledge {name}",
   brainformDownloadRagNamed: "Download {name}",
-  brainformHideRagNamed: "Hide {name}",
+  brainformHideRagNamed: "Delete {name}",
+  ragUsedBy: "Used by",
+  ragNoAgentsYet: "No Agents yet",
+  ragLastEditedBy: "Last edited by",
   brainformDeleteKnowledgeNamed: "Delete {name}",
   brainformDeleteKnowledgeConfirm:
     "Delete the Knowledge {name}? Agents and Teams that use it stop seeing it.",

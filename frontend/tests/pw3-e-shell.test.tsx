@@ -324,7 +324,7 @@ describe("student shell navigation", () => {
     // Studyform lights Teams; Agents is its own page.
     expect(studyform.getAttribute("aria-current")).toBeNull();
     expect(nav.getByRole("link", { name: "RAG" }).getAttribute("href")).toBe(
-      "/teacher/knowledge?group_id=group-b",
+      "/teacher/rag?group_id=group-b",
     );
     expect(
       nav.getByRole("link", { name: "Chat with Agent" }).getAttribute("href"),
@@ -342,7 +342,7 @@ describe("student shell navigation", () => {
   });
 
   it.each([
-    ["Brainform", "RAG", "/teacher/knowledge"],
+    ["Brainform", "RAG", "/teacher/rag"],
     ["Chatform", "Chat with Agent", "/teacher/chat"],
   ])(
     "keeps the visit while the teacher is in that group's %s",
@@ -393,7 +393,7 @@ describe("student shell navigation", () => {
     );
     expect(studyform.getAttribute("aria-current")).toBe("page");
     expect(nav.getByRole("link", { name: "RAG" }).getAttribute("href")).toBe(
-      "/teacher/knowledge?group_id=group-b",
+      "/teacher/rag?group_id=group-b",
     );
     expect(leaveGroupAsTeacher).not.toHaveBeenCalled();
   });

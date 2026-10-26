@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Lexend } from "next/font/google";
+import { Bricolage_Grotesque, Lexend, Space_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 
 import { SessionProvider } from "../components/session-provider";
@@ -21,6 +21,13 @@ const body = Lexend({
   variable: "--font-lexend",
   display: "swap",
 });
+// The RAG album's sticker numbers (#01, file type).
+const mono = Space_Mono({
+  subsets: ["latin"],
+  weight: "700",
+  variable: "--font-space-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Mayaform",
@@ -32,7 +39,10 @@ export default async function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en-US" className={`${display.variable} ${body.variable}`}>
+    <html
+      lang="en-US"
+      className={`${display.variable} ${body.variable} ${mono.variable}`}
+    >
       <body>
         <SessionProvider>
           {children}

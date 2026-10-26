@@ -360,7 +360,9 @@ export function AppShell({
   // visit and removes that access.
   const visitPageGroupId =
     teacherSurface &&
-    (pathname === "/teacher/knowledge" || pathname === "/teacher/chat")
+    (pathname === "/teacher/knowledge" ||
+      pathname === "/teacher/rag" ||
+      pathname === "/teacher/chat")
       ? new URLSearchParams(locationSearch).get("group_id")
       : null;
   const visitPage = Boolean(
@@ -404,6 +406,7 @@ export function AppShell({
     // visit.
     const reading =
       window.location.pathname === "/teacher/knowledge" ||
+      window.location.pathname === "/teacher/rag" ||
       window.location.pathname === "/teacher/chat"
         ? new URLSearchParams(window.location.search).get("group_id")
         : null;
@@ -620,6 +623,11 @@ export function AppShell({
   const brainHref = visit ? `/teacher/knowledge?group_id=${visit}` : undefined;
   const chatHref = links.find((link) => link.icon === "chat")?.href ?? "";
   const brainItemHref = brainHref ?? studyformHref;
+  const ragHref = visit
+    ? `/teacher/rag?group_id=${visit}`
+    : teacherSurface
+      ? "/teacher/rag"
+      : "/student/rag";
   const groups: SidebarGroup[] = [
     {
       key: "studyform",
@@ -653,7 +661,7 @@ export function AppShell({
       tile: "bg-brainform",
       square: "bg-brainform",
       items: [
-        { key: "rag", href: brainItemHref, label: t("rag"), icon: "file" },
+        { key: "rag", href: ragHref, label: t("rag"), icon: "file" },
         {
           key: "voices",
           href: studentVoicesHref ?? brainItemHref,
@@ -766,7 +774,9 @@ export function AppShell({
   // The Mayaform pill lights on home only, not on pages nested under it.
   const teamsArea =
     pathname === "/student/teams" || pathname === "/teacher/teams";
-  const mayaformLit = !agentsArea && !teamsArea && activeHref === home;
+  // The RAG page lights only its own row, as Agents does.
+  const ragArea = pathname === "/student/rag" || pathname === "/teacher/rag";
+  const mayaformLit = !agentsArea && !teamsArea && !ragArea && activeHref === home;
 
   function renderItem(group: SidebarGroup, item: SidebarItem, index: number) {
     const lit = litKey === `${group.key}:${item.key}`;
@@ -1153,6 +1163,8 @@ export function AppShell({
 const PAGE_ROW: Record<string, string> = {
   "/teacher/knowledge": "knowledge",
   "/student/knowledge": "knowledge",
+  "/teacher/rag": "rag",
+  "/student/rag": "rag",
 };
 
 /**

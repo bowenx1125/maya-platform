@@ -9,6 +9,7 @@ export async function deleteConfirmText(
   base: string,
   lookup: () => Promise<AffectedAgent[]>,
   affects: (names: string) => string,
+  separator = "、",
 ): Promise<string> {
   let agents: AffectedAgent[] = [];
   try {
@@ -17,6 +18,6 @@ export async function deleteConfirmText(
     agents = [];
   }
   if (agents.length === 0) return base;
-  const names = agents.map((agent) => agent.name).join("、");
+  const names = agents.map((agent) => agent.name).join(separator);
   return `${base}\n\n${affects(names)}`;
 }
