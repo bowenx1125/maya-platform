@@ -65,7 +65,7 @@ export function ChatTargetPicker({
             style={{
               backgroundColor: tone,
               backgroundImage:
-                "repeating-conic-gradient(from 0deg at 50% 50%,#fff9 0 10deg,transparent 10deg 20deg)",
+                "repeating-conic-gradient(from 0deg at 50% 70%,#ffffff66 0 10deg,transparent 10deg 20deg)",
             }}
           >
             <MascotFigure id={mascot} className="h-24 w-auto" />
@@ -93,7 +93,6 @@ export function ChatTargetPicker({
           className={cn(styles.pickCard, picked && styles.pickCardPicked)}
           style={{
             transform: `rotate(${index % 2 ? 1.2 : -1.2}deg)`,
-            backgroundColor: "#C9D3F0",
           }}
           aria-pressed={picked}
           disabled={disabled}

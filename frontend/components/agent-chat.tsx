@@ -81,9 +81,11 @@ import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import { PageAction } from "./page-action";
 import {
+  ChatAvatar,
   ChatEmptyGhosts,
   ChatPeekAvatar,
   ChatRadiantDisk,
+  chatHistoryTapeClass,
   chatKindChipClass,
   chatTapeTitleClass,
 } from "./chatform-chrome";
@@ -2974,7 +2976,7 @@ function AgentChatScope({
         <div className={styles.layout}>
           <aside className={styles.sidebar}>
             <div className={styles.historyHead}>
-              <h2 className={chatTapeTitleClass("text-base")}>{t("chatHistory")}</h2>
+              <h2 className={chatHistoryTapeClass()}>{t("chatHistory")}</h2>
             </div>
             <div className={styles.history} aria-label="History">
               {historyItems.length === 0 ? (
@@ -2982,6 +2984,19 @@ function AgentChatScope({
               ) : null}
               {historyItems.map(({ kind, session, name, label }) => (
                 <div className={styles.historyRow} key={session.id}>
+                    <ChatAvatar
+                      agentId={
+                        kind === "agent"
+                          ? session.agent.agent_id
+                          : session.team.id
+                      }
+                      materialTheme={
+                        kind === "agent"
+                          ? session.agent.avatar_config?.material_theme
+                          : null
+                      }
+                      size={36}
+                    />
                   {renaming?.session.id === session.id ? (
                     <input
                       className={styles.historyRename}
@@ -3037,7 +3052,15 @@ function AgentChatScope({
                         setRenaming({ session, initial: label, value: label });
                       }}
                     >
-                      <span>{label}</span>
+                      <span className={styles.historySelectTitle}>{label}</span>
+                      <span
+                        className={cn(
+                          styles.historyChip,
+                          kind === "team" && styles.historyChipTeam,
+                        )}
+                      >
+                        {kind === "team" ? "Team" : "Agent"}
+                      </span>
                     </button>
                   )}
                   <span className={styles.historyMeta}>
@@ -3060,7 +3083,7 @@ function AgentChatScope({
                         });
                       }}
                     >
-                      <IconPin filled={Boolean(session.pinned_at)} />
+                      <IconPin size={13} filled={Boolean(session.pinned_at)} />
                     </button>
                     <button
                       type="button"
@@ -3077,7 +3100,7 @@ function AgentChatScope({
                         void removeChat(session);
                       }}
                     >
-                      <IconClose />
+                      <IconClose size={11} />
                     </button>
                   </span>
                 </div>
@@ -3128,37 +3151,51 @@ function AgentChatScope({
                           {turn.user_text}
                         </div>
                       ) : null}
-                      <div className={styles.reply}>
-                        {turn.assistant_text ? (
-                          <ReportMarkdown>{turn.assistant_text}</ReportMarkdown>
-                        ) : (
-                          <span className={styles.pending} role="status">
-                            {turn.state === "pending" ? (
-                              <>
-                                <span className="spinner" aria-hidden="true" />
-                                {t("loading")}
-                              </>
-                            ) : turn.state === "acceptance_unknown" ? (
-                              t("errorChatAcceptanceUnknown")
-                            ) : (
-                              localizeError({ code: turn.safe_error_code })
-                            )}
-                          </span>
-                        )}
-                        {turn.sources.length ? (
-                          <details>
-                            <summary>Check RAG · {turn.sources.length}</summary>
-                            {turn.sources.map((source) => (
-                              <div
-                                className={styles.source}
-                                key={source.chunk_id}
-                              >
-                                <strong>{source.filename}</strong>
-                                <p>{source.excerpt}</p>
-                              </div>
-                            ))}
-                          </details>
-                        ) : null}
+                      <div className={styles.agentBubble}>
+                        <ChatAvatar
+                          agentId={peekAgentId}
+                          materialTheme={peekTheme}
+                          size={30}
+                        />
+                        <div className={styles.reply}>
+                          {turn.assistant_text ? (
+                            <ReportMarkdown>
+                              {turn.assistant_text}
+                            </ReportMarkdown>
+                          ) : (
+                            <span className={styles.pending} role="status">
+                              {turn.state === "pending" ? (
+                                <>
+                                  <span
+                                    className="spinner"
+                                    aria-hidden="true"
+                                  />
+                                  {t("loading")}
+                                </>
+                              ) : turn.state === "acceptance_unknown" ? (
+                                t("errorChatAcceptanceUnknown")
+                              ) : (
+                                localizeError({ code: turn.safe_error_code })
+                              )}
+                            </span>
+                          )}
+                          {turn.sources.length ? (
+                            <details>
+                              <summary>
+                                Check RAG · {turn.sources.length}
+                              </summary>
+                              {turn.sources.map((source) => (
+                                <div
+                                  className={styles.source}
+                                  key={source.chunk_id}
+                                >
+                                  <strong>{source.filename}</strong>
+                                  <p>{source.excerpt}</p>
+                                </div>
+                              ))}
+                            </details>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -3236,6 +3273,20 @@ function AgentChatScope({
                               className={styles.teamResult}
                               key={result.id}
                             >
+                              <div className={styles.agentBubble}>
+                                <ChatAvatar
+                                  agentId={
+                                    participant?.id ??
+                                    result.participant_id ??
+                                    peekAgentId
+                                  }
+                                  materialTheme={
+                                    participant?.avatar_config?.material_theme ??
+                                    null
+                                  }
+                                  size={30}
+                                />
+                                <div className={styles.reply}>
                               <h3>
                                 {result.speaker_name}
                                 {participant?.is_leader
@@ -3297,6 +3348,8 @@ function AgentChatScope({
                                   stage={selectedTeam.assessment_stage}
                                 />
                               ) : null}
+                                </div>
+                              </div>
                             </article>
                           );
                         })}
@@ -3306,9 +3359,18 @@ function AgentChatScope({
                   {pendingMessage ? (
                     <div className={styles.exchange}>
                       <div className={styles.userMessage}>{pendingMessage}</div>
-                      <div className={styles.pending} role="status">
-                        <span className="spinner" aria-hidden="true" />
-                        {t("loading")}
+                      <div className={styles.agentBubble}>
+                        <ChatAvatar
+                          agentId={peekAgentId}
+                          materialTheme={peekTheme}
+                          size={30}
+                        />
+                        <div className={styles.reply}>
+                          <span className={styles.pending} role="status">
+                            <span className="spinner" aria-hidden="true" />
+                            {t("loading")}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ) : null}
