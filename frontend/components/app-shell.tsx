@@ -113,7 +113,7 @@ type SidebarGroup = {
 };
 
 const ITEM =
-  "group/item relative flex min-h-11 items-center gap-2.5 rounded-arc-s border-[3px] px-2 py-1 font-body text-sm font-bold text-ink no-underline transition-[background-color,box-shadow] duration-150";
+  "group/item relative flex min-h-11 items-center gap-2.5 rounded-arc-s border-[3px] px-2 py-1 font-body text-sm font-semibold text-ink no-underline transition-[background-color,box-shadow] duration-150";
 const ITEM_IDLE = "border-transparent hover:bg-white/60";
 const ITEM_ACTIVE = "border-border bg-main shadow-arc-s";
 const ICON_ITEM =
@@ -624,7 +624,7 @@ export function AppShell({
           key: "voices",
           href: studentVoicesHref ?? brainItemHref,
           label: t("voices"),
-          icon: "voice",
+          icon: "mic",
         },
         {
           key: "record",
@@ -707,7 +707,7 @@ export function AppShell({
     <span
       aria-hidden="true"
       data-live-lamp={on ? "on" : "off"}
-      className={`${corner ? "absolute -top-1 -right-1" : "ml-auto"} size-2.5 rounded-full border-2 border-border ${on ? "bg-ok shadow-[0_0_0_2px_rgba(34,197,94,0.35),0_0_10px_2px_rgba(34,197,94,0.75)]" : "bg-[#9ca3af]"}`}
+      className={`${corner ? "absolute -top-1 -right-1" : "ml-auto"} ${on ? "size-2.5 rounded-full border-2 border-border bg-ok shadow-[0_0_0_2px_rgba(34,197,94,0.35),0_0_10px_2px_rgba(34,197,94,0.75)]" : `${corner ? "size-2" : "size-[11px]"} rounded-full bg-[#6B6B6B] shadow-[0_0_0_2px_#111]`}`}
     />
   );
   const toggleLabel = mobile
@@ -828,12 +828,11 @@ export function AppShell({
             <button
               type="button"
               data-sidebar-toggle
-              className={`absolute ${mobile ? "top-4 right-3 size-8 rounded-arc-s" : `top-[6px] ${collapsed ? "-right-[26px]" : "-right-[22px]"} size-8 rounded-full`} z-10 grid place-items-center border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none`}
+              className={`group/toggle absolute ${mobile ? "top-4 right-3 size-8 rounded-arc-s" : `top-[6px] ${collapsed ? "-right-[26px]" : "-right-[22px]"} size-8 rounded-full`} z-10 grid place-items-center border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none`}
               aria-label={toggleLabel}
               aria-expanded={mobile ? drawerOpen : !collapsed}
               aria-controls={SIDEBAR_ID}
               aria-keyshortcuts="Control+B Meta+B"
-              title={`${toggleLabel} (Ctrl/⌘ B)`}
               onClick={() =>
                 mobile ? setDrawerPath(null) : writeCollapsed(!collapsed)
               }
@@ -844,6 +843,15 @@ export function AppShell({
                 }
                 size={16}
               />
+              {mobile ? null : (
+                <span
+                  aria-hidden="true"
+                  data-sidebar-toggle-tip
+                  className="pointer-events-none invisible absolute top-1/2 left-[calc(100%+10px)] -translate-y-1/2 rounded-[5px] bg-[#111] px-2 py-[5px] font-body text-xs font-semibold whitespace-nowrap text-white group-hover/toggle:visible group-focus-visible/toggle:visible"
+                >
+                  {toggleLabel} · Ctrl B
+                </span>
+              )}
             </button>
             <div
               className={`flex h-full flex-col gap-5 overflow-y-auto pt-5 pb-4 ${collapsed ? "items-center px-2" : "px-3"}`}
@@ -982,12 +990,12 @@ export function AppShell({
                     </span>
                   </a>
                 ) : (
-                  <p className="m-0 grid gap-0.5 rounded-arc-s border-[3px] border-border bg-surface p-2.5 font-body text-xs font-medium text-arc-muted shadow-arc-s">
-                    <span className="font-display text-sm font-extrabold text-ink">
+                  <p className="m-0 grid gap-[3px] rounded-[6px] border-2 border-border bg-surface px-2.5 py-2 font-body text-xs text-ink shadow-[3px_3px_0_#111]">
+                    <span className="font-bold text-ink">
                       Meet Problems?
                     </span>
                     <a
-                      className="font-bold [overflow-wrap:anywhere] text-ink underline"
+                      className="font-normal [overflow-wrap:anywhere] text-ink underline"
                       href="mailto:t330034059@mail.bnbu.edu.cn"
                     >
                       Send to t330034059@mail.bnbu.edu.cn
