@@ -88,7 +88,7 @@ export function ModuleTiles({
     <ul
       className={
         variant === "list"
-          ? "m-0 grid list-none items-center grid-cols-[repeat(auto-fill,186px)] gap-x-[26px] gap-y-[30px] p-0 max-[767px]:grid-cols-2"
+          ? "m-0 grid w-full list-none grid-cols-4 gap-x-[26px] gap-y-[44px] p-0 pt-[18px] max-[767px]:-mx-2.5 max-[767px]:w-auto max-[767px]:grid-cols-2 max-[767px]:gap-x-[18px] max-[767px]:gap-y-10 max-[767px]:pt-6"
           : AGENT_GRID_CLASS
       }
     >

@@ -31,10 +31,7 @@ export function AgentsPage({
         </h1>
         {action}
       </header>
-      <section
-        aria-labelledby="studyform-agents"
-        className="rounded-[16px] border-[3px] border-[#111] bg-white px-7 pt-[35px] pb-[34px] shadow-[8px_8px_0_#111] max-[767px]:px-4 max-[767px]:py-6"
-      >
+      <section aria-labelledby="studyform-agents">
         {children}
       </section>
     </div>
