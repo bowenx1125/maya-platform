@@ -38,6 +38,14 @@ import {
 const courseId = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b";
 import { AppShell } from "../components/app-shell";
 
+/** Back, Done and New all sit in the page header (data-page-actions). */
+function pageActions() {
+  return within(
+    (document.querySelector("[data-page-actions]") as HTMLElement | null) ??
+      document.createElement("div"),
+  );
+}
+
 function render(ui: Parameters<typeof renderComponent>[0]) {
   return renderComponent(<AppShell role="teacher">{ui}</AppShell>);
 }
@@ -192,9 +200,7 @@ describe("Wave 2 teacher debate setup", () => {
     ).toBeNull();
     expect(
       (
-        await within(screen.getByRole("navigation")).findByRole("link", {
-          name: "New",
-        })
+        await waitFor(() => pageActions().getByRole("link", { name: "New" }))
       ).getAttribute("href"),
     ).toBe("/teacher/debates/new");
   });
@@ -1098,14 +1104,14 @@ it("removes bulk Refresh and never retries stalled records when reading the list
   expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
   expect(
     (
-      await within(screen.getByRole("navigation")).findByRole("link", {
-        name: "New",
-      })
+      await waitFor(() => pageActions().getByRole("link", { name: "New" }))
     ).getAttribute("href"),
   ).toBe("/teacher/debates/new");
   expect(
-    within(screen.getByRole("main")).queryByRole("link", { name: "New" }),
-  ).toBeNull();
+    within(screen.getByRole("main"))
+      .queryAllByRole("link", { name: "New" })
+      .filter((el) => !el.closest("[data-page-actions]")),
+  ).toHaveLength(0);
   fireEvent.focus(window);
   await waitFor(() => expect(api.debates).toHaveBeenCalledTimes(2));
   expect(api.remakeDebate).not.toHaveBeenCalled();
