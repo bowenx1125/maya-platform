@@ -1036,7 +1036,7 @@ export function AppShell({
             // "New Debate" header, the Agents pattern). Same handlers.
             <div
               data-page-actions
-              className="relative z-10 float-right mb-[22px] ml-4 flex gap-2.5"
+              className="relative z-10 mb-[22px] flex justify-end gap-2.5"
             >
               {(
                 [
