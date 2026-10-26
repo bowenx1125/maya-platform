@@ -4,7 +4,7 @@ import { LIST_CARD_LIFT } from "../agent-chrome";
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { cn } from "../../lib/utils";
 import { MascotFigure, MASCOT_IDS, type MascotId } from "../academy/mascots";
@@ -63,7 +63,7 @@ const BAND_CLASS =
   "relative z-[1] flex h-16 items-center border-b-[3px] border-border px-3 pr-10";
 
 /** The round × that deletes; the existing confirm flow runs on click. */
-function DeleteX({
+export function DeleteX({
   label,
   disabled,
   onClick,
@@ -283,6 +283,161 @@ export function AgentCard({
       {footer}
     </span>
   ) : null;
+
+  if (listCard) {
+    // A1 (proposals/17-agents-list): the Teams polaroid language — tilted
+    // card on the grid, yellow tape name, V tag, framed art, one pill.
+    const tilt = (index ?? 0) % 2 ? 1.2 : -1.2;
+    const nameText = (
+      <span className="[overflow-wrap:normal] [word-break:normal]">{name}</span>
+    );
+    const tapeClass =
+      "absolute -top-3 right-10 left-[34px] z-[3] -rotate-2 border-[2.5px] border-[#111] bg-[#FFE14D] px-2 py-1 text-center font-body text-sm leading-[1.15] font-extrabold text-[#111] shadow-[2px_2px_0_#111]";
+    const listArt = (
+      <span
+        data-card-art
+        aria-hidden="true"
+        className="flex h-[150px] items-end justify-center overflow-hidden border-[3px] border-[#111] max-[767px]:h-[118px]"
+        style={{
+          backgroundColor: tone,
+          backgroundImage:
+            "radial-gradient(circle at 50% 62%,#fff8 0 22%,transparent 23%),repeating-conic-gradient(from 0deg at 50% 62%,#ffffff55 0 10deg,transparent 10deg 20deg)",
+        }}
+      >
+        <MascotFigure
+          id={mascot}
+          className="h-[172px] w-auto max-[767px]:h-[134px]"
+        />
+      </span>
+    );
+    const pill =
+      footer || visibilityLabel ? (
+        <span
+          data-card-strip
+          data-visibility={visibility}
+          className="pointer-events-none relative z-[1] mt-2.5 flex overflow-hidden rounded-[6px] border-2 border-[#111] font-body text-[11px] font-bold text-[#111] shadow-[2px_2px_0_#111]"
+        >
+          {footer ? (
+            <span
+              data-card-footer
+              className="flex-1 bg-white px-[7px] py-[5px] whitespace-nowrap max-[767px]:px-1.5 max-[767px]:py-1 max-[767px]:leading-[1.2] max-[767px]:whitespace-normal"
+            >
+              {footer}
+            </span>
+          ) : null}
+          {visibilityLabel ? (
+            <span
+              className={cn(
+                "flex items-center px-2 py-[5px] font-extrabold",
+                footer ? "border-l-2 border-[#111]" : "flex-1",
+                visibility === "public" ? "bg-[#22C55E]" : "bg-[#E5E7EB]",
+              )}
+            >
+              {visibilityLabel}
+            </span>
+          ) : null}
+        </span>
+      ) : null;
+    const versionTag = (
+      <span
+        data-pending={pending ? "true" : "false"}
+        className={cn(
+          "pointer-events-none absolute -top-2 -left-2 z-[4] -rotate-4 rounded-[5px] border-2 border-[#111] bg-white px-1.5 py-[3px] font-body text-[11px] leading-[normal] font-extrabold text-[#111] shadow-[2px_2px_0_#111]",
+          pending && "bg-warn-bg",
+        )}
+      >
+        {label}
+      </span>
+    );
+    return (
+      <li
+        className={cn("group/card relative list-none rounded-[12px] border-[3px] border-[#111] bg-white px-3 pt-[30px] pb-3 font-body text-[#111] shadow-[6px_6px_0_#111]", LIST_CARD_LIFT)}
+        style={{ "--r": `${tilt}deg` } as CSSProperties}
+        data-agent-card={id}
+        data-tone={tone}
+      >
+        {rename ? (
+          <>
+            <Link
+              href={href}
+              aria-label={name}
+              className="absolute inset-0 z-0 rounded-[10px] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
+              data-ui-guide={guideText ? "agent.lastEdited" : undefined}
+              data-ui-guide-text={guideText}
+            />
+            {renameInvalid ? <KindSticker kind="server" on /> : null}
+            {versionTag}
+            <span data-card-band className={tapeClass}>
+              {editing ? (
+                <input
+                  ref={bindInput}
+                  autoFocus
+                  aria-label={fieldLabel}
+                  aria-invalid={renameInvalid || undefined}
+                  aria-describedby={renameInvalid ? renameErrorId : undefined}
+                  maxLength={120}
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onCompositionStart={() => (composing.current = true)}
+                  onCompositionEnd={() => (composing.current = false)}
+                  onBlur={() => {
+                    if (!renameInvalid) void save();
+                  }}
+                  onKeyDown={(event) => {
+                    if (composing.current || event.nativeEvent.isComposing)
+                      return;
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void save();
+                    } else if (event.key === "Escape") {
+                      event.preventDefault();
+                      settled.current = true;
+                      setEditing(false);
+                    }
+                  }}
+                  className="m-0 h-7 w-full rounded-[4px] border-2 border-[#111] bg-white px-1.5 text-center font-body text-sm font-extrabold text-[#111] outline-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main aria-invalid:border-err aria-invalid:shadow-[0_0_0_3px_#FFE4E4]"
+                />
+              ) : (
+                <button
+                  type="button"
+                  className={cn(
+                    "m-0 block min-h-0 w-full cursor-text rounded-[3px] border-0 bg-transparent p-0 text-center font-body text-sm leading-[1.15] font-extrabold text-[#111] shadow-none hover:outline-2 hover:outline-dashed hover:outline-[#111]",
+                    renameInvalid && "outline-[3px] outline-err",
+                  )}
+                  aria-describedby={renameInvalid ? renameErrorId : undefined}
+                  onClick={startEditing}
+                >
+                  {nameText}
+                </button>
+              )}
+            </span>
+            <span className="pointer-events-none block">
+              {listArt}
+              {pill}
+            </span>
+          </>
+        ) : (
+          <Link
+            href={href}
+            aria-label={name}
+            className="block rounded-[10px] text-[#111] no-underline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
+            data-ui-guide={guideText ? "agent.lastEdited" : undefined}
+            data-ui-guide-text={guideText}
+          >
+            {versionTag}
+            <span data-card-band className={tapeClass}>
+              {nameText}
+            </span>
+            {listArt}
+            {pill}
+          </Link>
+        )}
+        {onDelete ? (
+          <DeleteX label={deleteLabel} disabled={deleting} onClick={onDelete} />
+        ) : null}
+      </li>
+    );
+  }
 
   return (
     <li

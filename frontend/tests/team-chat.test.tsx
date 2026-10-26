@@ -1025,7 +1025,7 @@ describe("Chatform", () => {
     render(
       <>
         <AppShell role="teacher">
-          <TeacherStudyformWorkspace initialMode="team-new" />
+          <TeacherStudyformWorkspace view="teams" initialMode="team-new" />
         </AppShell>
       </>,
     );
@@ -1065,7 +1065,7 @@ describe("Chatform", () => {
     render(
       <>
         <AppShell role="teacher">
-          <TeacherStudyformWorkspace initialMode="team-new" />
+          <TeacherStudyformWorkspace view="teams" initialMode="team-new" />
         </AppShell>
       </>,
     );

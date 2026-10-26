@@ -52,6 +52,26 @@ export const AGENT_BANNER =
   "mb-9 flex items-center gap-4 rounded-[16px] border-[3px] border-[#111] bg-[#FFF7CC] px-7 py-[26px] shadow-[0_0_0_3px_#FDBA74,8px_8px_0_3px_#111] [background-image:repeating-conic-gradient(from_0deg_at_92%_100%,#FFE14D55_0_8deg,transparent_8deg_16deg)] max-[767px]:mb-6 max-[767px]:flex-wrap max-[767px]:gap-2.5 max-[767px]:p-[18px]";
 export const AGENT_BANNER_TITLE =
   "m-0 min-w-0 flex-1 font-display text-[52px] leading-[1.1] font-extrabold tracking-normal text-[#111] max-[767px]:order-[-1] max-[767px]:basis-full max-[767px]:text-[34px]";
+
+/*
+ * Unified Studyform banner, approved H2 (proposals/15-studyform-banner):
+ * one fixed-height box for the Agents and Teams list, create and edit pages
+ * (132px, 390: 92px; 32px sides). The list carries the title and "+ New" at
+ * the far right; create/edit carry Back, the title and Done.
+ */
+export const STUDYFORM_BANNER =
+  "mb-9 box-border flex h-[132px] min-h-0 flex-nowrap items-center gap-4 rounded-[16px] border-[3px] border-[#111] bg-[#FFF7CC] px-8 py-0 shadow-[0_0_0_3px_#FDBA74,8px_8px_0_3px_#111] [background-image:repeating-conic-gradient(from_0deg_at_92%_100%,#FFE14D55_0_8deg,transparent_8deg_16deg)] max-[767px]:mb-6 max-[767px]:h-[92px] max-[767px]:gap-2.5 max-[767px]:px-[18px]";
+/** Create/Edit banner: Back · title · Done in one row; at 390 (13-teams-final)
+ * the title takes its own row and Back · Done sit on the next. */
+export const STUDYFORM_BANNER_FORM =
+  "max-[767px]:h-auto max-[767px]:flex-wrap max-[767px]:gap-2.5 max-[767px]:p-[18px]";
+export const STUDYFORM_BANNER_TITLE =
+  "m-0 min-w-0 flex-1 overflow-hidden font-display text-[52px] leading-[1.1] font-extrabold tracking-normal text-ellipsis whitespace-nowrap text-[#111] max-[767px]:text-[34px]";
+/** Create/Edit title at 390: first row, full width, 34px. */
+export const STUDYFORM_BANNER_FORM_TITLE =
+  "max-[767px]:order-first max-[767px]:basis-full max-[767px]:text-[34px]";
+/** H2 list "+ New": 52px tall, 22px sides, 17px label, 22px icon (3.5). */
+export const STUDYFORM_NEW_CLASS = `m-0 ml-auto box-border inline-flex h-[52px] min-h-[52px] shrink-0 items-center gap-2.5 rounded-[10px] border-[3px] border-[#111] bg-[#FF4D8D] px-[22px] py-0 font-body text-[17px] leading-none font-extrabold text-[#111] no-underline [&_svg]:size-[22px] [&_svg]:stroke-[3.5] ${PRESS_MOTION}`;
 /** List-card hover lift (DESIGN-RULES: -2px, --dur-ui 150ms, --ease); keeps the --r tilt; none under reduced motion. */
 export const LIST_CARD_LIFT =
   "[transform:translateY(var(--card-lift,0px))_rotate(var(--r,0deg))] transition-transform duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:[--card-lift:-2px] motion-reduce:hover:[--card-lift:0px]";
