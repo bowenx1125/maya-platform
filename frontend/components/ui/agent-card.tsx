@@ -62,7 +62,7 @@ const BAND_CLASS =
   "relative z-[1] flex h-16 items-center border-b-[3px] border-border px-3 pr-10";
 
 /** The round × that deletes; the existing confirm flow runs on click. */
-function DeleteX({
+export function DeleteX({
   label,
   disabled,
   onClick,

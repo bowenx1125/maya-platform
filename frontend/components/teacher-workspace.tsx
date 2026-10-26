@@ -65,6 +65,7 @@ import {
 } from "./studyform-layout";
 import { VoiceLibrary } from "./voice/voice-library";
 import { AgentsPage } from "./agents-page";
+import { TeamsPage } from "./teams-page";
 import { EmptyCard, ErrorNotice, LoadingCard, PageIntro } from "./ui";
 
 export function TeacherDashboard() {
@@ -550,6 +551,26 @@ export function TeacherStudyformWorkspace({
             />
           )}
         </AgentsPage>
+      </>
+    );
+
+  // ?mode=teams (where Team Back / Done return): the F1 Teams page.
+  if (initialMode === "teams")
+    return (
+      <>
+        {error ? <ErrorNotice error={error} /> : null}
+        <TeamsPage
+          deleting={deletingId !== null}
+          newHref={teacherCourseId ? "/teacher/studyform?mode=team-new" : undefined}
+          teams={teams.map((team) => ({
+            team,
+            href: `/teacher/studyform?mode=team-edit&team_id=${encodeURIComponent(team.id)}`,
+            onDelete: team.can_edit
+              ? () =>
+                  void deleteOwnedTeam(team.id, t("deletePrivateTeamConfirm"))
+              : undefined,
+          }))}
+        />
       </>
     );
 

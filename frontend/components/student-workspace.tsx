@@ -66,6 +66,7 @@ import {
   type AgentRename,
 } from "./ui/agent-card";
 import { AgentsPage } from "./agents-page";
+import { TeamsPage } from "./teams-page";
 import { GuidePortrait } from "./ui/guide-dialog";
 import {
   EmptyCard,
@@ -863,6 +864,24 @@ function GroupWorkspaceSession({
           )}
         </AgentsPage>
       </>
+    );
+
+  // ?mode=teams (where Team Back / Done return): the F1 Teams page.
+  if (initialMode === "teams")
+    return (
+      <TeamsPage
+        deleting={deleting !== null}
+        newHref={
+          teacherIdentity ? undefined : `/student/groups/${groupId}?mode=team-new`
+        }
+        teams={teams.map((team) => ({
+          team,
+          href: `/student/groups/${groupId}?mode=team-edit&team_id=${encodeURIComponent(team.id)}`,
+          onDelete: team.can_edit
+            ? () => void deleteOwnedTeam(team.id)
+            : undefined,
+        }))}
+      />
     );
 
   return (
