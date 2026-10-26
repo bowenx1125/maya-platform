@@ -72,4 +72,4 @@ export const STUDYFORM_BANNER_FORM_TITLE =
   "max-[767px]:order-first max-[767px]:basis-full max-[767px]:text-[34px]";
 /** H2 list "+ New": 52px tall, 22px sides, 17px label, 22px icon (3.5). */
 export const STUDYFORM_NEW_CLASS =
-  "m-0 ml-auto box-border inline-flex h-[52px] min-h-[52px] shrink-0 items-center gap-2.5 rounded-[10px] border-[3px] border-[#111] bg-[#FF4D8D] px-[22px] py-0 font-body text-[17px] leading-none font-extrabold text-[#111] no-underline shadow-[0_6px_0_#111] hover:translate-x-0 hover:translate-y-0 hover:shadow-[0_6px_0_#111] [&_svg]:size-[22px] [&_svg]:stroke-[3.5]";
+  "m-0 ml-auto box-border inline-flex h-[52px] min-h-[52px] shrink-0 items-center gap-2.5 rounded-[10px] border-[3px] border-[#111] bg-[#FF4D8D] px-[22px] py-0 font-body text-[17px] leading-none font-extrabold text-[#111] no-underline shadow-[0_6px_0_#111]! hover:translate-x-0 hover:translate-y-0 hover:shadow-[0_6px_0_#111] [&_svg]:size-[22px] [&_svg]:stroke-[3.5]";
