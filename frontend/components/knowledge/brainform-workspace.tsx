@@ -655,6 +655,8 @@ function BrainformWorkspaceBody({
   const [groups, setGroups] = useState<Group[]>(snapshot?.nextGroups ?? []);
   const [loading, setLoading] = useState(!snapshot);
   const [loadError, setLoadError] = useState<unknown>(null);
+  // U3: a refused filename wears the file sticker, on the line and the field.
+  const filenameError = isFilenameError(loadError);
   const [notice, setNotice] = useState("");
   const [pendingRagAction, setPendingRagAction] =
     useState<PendingRagAction | null>(null);
@@ -2427,6 +2429,7 @@ function BrainformWorkspaceBody({
       {loadError ? (
         <ErrorNotice
           error={loadError}
+          kind={filenameError ? "file" : undefined}
           onRetry={() =>
             pendingRagAction ? retryRagAction() : void loadWorkspace()
           }
@@ -2891,6 +2894,7 @@ function BrainformWorkspaceBody({
                 />
               </label>
               <KnowledgeFilenameField
+                fileError={filenameError}
                 className={styles.field}
                 value={newKnowledge.name}
                 disabled={busyKey === "knowledge-new"}
@@ -2953,6 +2957,7 @@ function BrainformWorkspaceBody({
                 </label>
               ) : null}
               <KnowledgeFilenameField
+                fileError={filenameError}
                 className={styles.field}
                 value={newRag.name}
                 disabled={busyKey === "rag-new"}
@@ -3005,6 +3010,7 @@ function BrainformWorkspaceBody({
                 </label>
               ) : null}
               <KnowledgeFilenameField
+                fileError={filenameError}
                 className={styles.field}
                 value={selectedDraft.filename}
                 disabled={busyKey === `import:${pane.draftKey}`}
@@ -3077,6 +3083,7 @@ function BrainformWorkspaceBody({
                     </label>
                   ) : null}
                   <KnowledgeFilenameField
+                    fileError={filenameError}
                     className={styles.field}
                     value={knowledgeNameDraft}
                     disabled={
@@ -3140,4 +3147,10 @@ function BrainformWorkspaceBody({
       ) : null}
     </main>
   );
+}
+
+function isFilenameError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const { details } = error as { details?: { field?: unknown } };
+  return details?.field === "display_name" || details?.field === "filename";
 }

@@ -12,6 +12,8 @@ import { noticeTray } from "../components/notice-tray";
 import { Notice } from "../components/ui";
 import { KindSticker, TRANSIENT_FOLD_MS } from "../components/ui/error-kit";
 import { UserAvatar } from "../components/user-avatar";
+import { KnowledgeFilenameField } from "../components/knowledge/markdown-editor";
+import { ErrorNotice } from "../components/ui";
 
 function contrastOnWhite(hex: string) {
   const c = [1, 3, 5].map((i) => {
@@ -135,5 +137,29 @@ describe("U3 icon-by-kind errors", () => {
       const bg = tile.style.getPropertyValue("--avatar-body");
       expect(contrastOnWhite(bg)).toBeGreaterThanOrEqual(4.5);
     }
+  });
+});
+
+describe("U3 file errors", () => {
+  afterEach(cleanup);
+  it("gives an upload refusal the file sticker without changing its text", () => {
+    const error = Object.assign(new Error("too large"), {
+      code: "attachment_too_large",
+    });
+    render(<ErrorNotice error={error} />);
+    const line = screen.getByRole("alert");
+    expect(line.querySelector('[data-sticker="file"]')).toBeTruthy();
+    expect(line.querySelector('[data-sticker="server"]')).toBeNull();
+  });
+  it("puts the file sticker on the filename field only when asked", () => {
+    const { rerender, container } = render(
+      <KnowledgeFilenameField value="a.md" onChange={() => {}} />,
+    );
+    expect(container.querySelector('[data-sticker="file"]')).toBeNull();
+    rerender(
+      <KnowledgeFilenameField value="a.md" onChange={() => {}} fileError />,
+    );
+    expect(container.querySelector('[data-sticker="file"]')).toBeTruthy();
+    expect(screen.getByRole("textbox").getAttribute("aria-invalid")).toBeNull();
   });
 });
