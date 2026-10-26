@@ -319,10 +319,10 @@ export function StudentDashboard() {
                     <strong className="min-w-0 truncate text-sm font-semibold">
                       {member.display_name}
                     </strong>
-                    {/* Shown as Leader / Member; the words are roleLabel's. */}
+                    {/* roleLabel words, uppercased by CSS as the approved home mock draws them. */}
                     <small
                       className={
-                        "rounded border-2 border-ink px-2 py-px text-[11px] font-extrabold text-ink capitalize shadow-[2px_2px_0_#111] " +
+                        "rounded border-2 border-ink px-2 py-px font-body text-[11px] font-extrabold text-ink uppercase shadow-[2px_2px_0_#111] " +
                         (member.role === "leader"
                           ? "-rotate-3 bg-[#FF4D8D]"
                           : "rotate-3 bg-[#67E8F9]")
