@@ -53,7 +53,8 @@ const TRAY_CLASS = [
   "data-[more]:before:bg-surface data-[more]:before:px-2.5 data-[more]:before:py-0.5",
   "data-[more]:before:text-xs data-[more]:before:font-bold data-[more]:before:shadow-[2px_2px_0_#111]",
   "max-[680px]:left-3 max-[680px]:right-3 max-[680px]:w-auto max-[680px]:bottom-[var(--arc-tray-bottom,12px)]",
-  "max-[680px]:after:w-14 max-[680px]:after:h-[70px]",
+  "max-[680px]:gap-2 max-[680px]:after:w-14 max-[680px]:after:h-[70px] max-[680px]:after:mr-1",
+  "max-[680px]:[&>.notice]:text-[13px] max-[680px]:[&>.notice]:py-2.5 max-[680px]:[&>.notice]:pr-[38px] max-[680px]:[&>.notice]:pl-3",
   "max-[680px]:[&>.notice:nth-last-child(n+3)]:hidden",
 ].join(" ");
 
@@ -136,7 +137,7 @@ export function useNoticeTrayAbove(target: HTMLElement | null) {
 }
 
 /** The tray exists only in the browser; the server renders no notice. */
-function useNoticeTray(enabled: boolean) {
+export function useNoticeTray(enabled: boolean) {
   const browser = useSyncExternalStore(
     noSubscription,
     () => true,
@@ -181,7 +182,7 @@ export function Notice({
         "before:mt-1 before:size-3 before:flex-none before:rounded-full before:border-2 before:border-border before:bg-main before:content-['']",
         NOTICE_TONE[tone],
         !inline &&
-          "pointer-events-auto my-0 flex-none [.notice-tray>&:last-child]:after:absolute [.notice-tray>&:last-child]:after:right-[30px] [.notice-tray>&:last-child]:after:-bottom-[15px] [.notice-tray>&:last-child]:after:size-[22px] [.notice-tray>&:last-child]:after:rotate-45 [.notice-tray>&:last-child]:after:skew-[10deg] [.notice-tray>&:last-child]:after:border-r-[3px] [.notice-tray>&:last-child]:after:border-b-[3px] [.notice-tray>&:last-child]:after:border-border [.notice-tray>&:last-child]:after:bg-inherit [.notice-tray>&:last-child]:after:content-['']",
+          cn("pointer-events-auto my-0 flex-none", NOTICE_TAIL_CLASS),
       )}
       role={tone === "error" || tone === "warning" ? "alert" : "status"}
     >
@@ -200,6 +201,10 @@ export function Notice({
   );
   return inline || !tray ? notice : createPortal(notice, tray);
 }
+
+/** The tail on the newest tray bubble, pointing down at the mascot. */
+export const NOTICE_TAIL_CLASS =
+  "[.notice-tray>&:last-child]:after:absolute [.notice-tray>&:last-child]:after:right-[30px] [.notice-tray>&:last-child]:after:-bottom-[15px] [.notice-tray>&:last-child]:after:size-[22px] [.notice-tray>&:last-child]:after:rotate-45 [.notice-tray>&:last-child]:after:skew-[10deg] [.notice-tray>&:last-child]:after:border-r-[3px] [.notice-tray>&:last-child]:after:border-b-[3px] [.notice-tray>&:last-child]:after:border-border [.notice-tray>&:last-child]:after:bg-inherit [.notice-tray>&:last-child]:after:content-['']";
 
 const NOTICE_TONE = {
   error: "bg-err-bg before:bg-err",

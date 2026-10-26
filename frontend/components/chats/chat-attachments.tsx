@@ -6,6 +6,7 @@ import type { ChatAttachment } from "../../lib/api/platform";
 import { localizeError } from "../../lib/i18n";
 import { useT } from "../../lib/i18n";
 import { IconClose } from "../quiet-icons";
+import { Notice } from "../ui";
 import { useSession } from "../session-provider";
 import styles from "../agent-chat.module.css";
 
@@ -78,7 +79,7 @@ export function ChatAttachments({
 
   return (
     <>
-      {items.length || uploading || error ? (
+      {items.length || uploading ? (
         <div className={styles.attachmentRow}>
           {items.map((item) => (
             <span key={item.id} className={styles.attachmentChip}>
@@ -99,17 +100,24 @@ export function ChatAttachments({
               {t("chatAttachmentUploading")}
             </span>
           ) : null}
-          {error ? (
-            <p className={styles.attachmentError} role="alert">
-              {localizeError(error, "errorFileOperationFailed")}
-            </p>
-          ) : null}
         </div>
+      ) : null}
+      {/* All feedback is spoken by the mascot: the error is a tray bubble. */}
+      {error ? (
+        <Notice
+          id="chat-attachment-error"
+          tone="error"
+          onClose={() => setError(null)}
+        >
+          {localizeError(error, "errorFileOperationFailed")}
+        </Notice>
       ) : null}
       <button
         type="button"
-        className={styles.attachButton}
+        className={`${styles.attachButton} ${error ? "border-err! shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!" : ""}`}
         aria-label={t("chatAttach")}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? "chat-attachment-error" : undefined}
         title={t("chatAttachHelp")}
         disabled={disabled || uploading}
         onClick={() => input.current?.click()}
