@@ -1,5 +1,6 @@
 "use client";
 
+import { LIST_CARD_LIFT } from "./agent-chrome";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -461,7 +462,7 @@ export function RosterWorkspace() {
           {groups.length ? (
             <ul className={styles.polarList}>
               {sortedGroups.map((group, index) => (
-                <li key={group.id}>
+                <li key={group.id} className={LIST_CARD_LIFT}>
                   <button
                     className={styles.polar}
                     type="button"
