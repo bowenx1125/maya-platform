@@ -30,7 +30,7 @@ export function HomeHero({
           {before}
           {/* O3's sticker: pink, inked, hard shadow, a black pointer on its
               right edge. A label, not a button: no hover, press or focus. */}
-          <span className="relative mt-3.5 block w-fit max-w-full -rotate-[1.5deg] rounded-[10px] border-[3px] border-ink bg-[#FF4D8D] px-3 pb-1 text-[66px] break-words text-ink shadow-[6px_6px_0_#111] after:absolute after:top-1/2 after:-right-[13px] after:-translate-y-1/2 after:border-y-[9px] after:border-l-[11px] after:border-y-transparent after:border-l-ink after:content-[''] max-[767px]:text-[42px] max-[767px]:shadow-[4px_4px_0_#111]">
+          <span className="relative mt-3.5 block w-fit max-w-full -rotate-[3deg] rounded-[16px] border-[3px] border-ink bg-[#FF4D8D] py-1 pr-[30px] pl-[18px] text-[64px] leading-none break-words text-ink shadow-[6px_6px_0_#111] after:absolute after:top-[58%] after:-right-[6px] after:-translate-y-1/2 after:border-y-[12px] after:border-l-[20px] after:border-y-transparent after:border-l-ink after:content-[''] max-[767px]:pr-[26px] max-[767px]:pl-4 max-[767px]:text-[42px] max-[767px]:shadow-[4px_4px_0_#111] max-[767px]:after:border-y-[9px] max-[767px]:after:border-l-[15px]">
             {name}
           </span>
           {after}
