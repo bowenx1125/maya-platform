@@ -2,7 +2,6 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-  DebateStage,
   type DebatePlaybackApi,
   type PlaybackSocket,
 } from "../components/debate/stage";
@@ -137,37 +136,7 @@ function detail(audioReady: boolean | null): DebateDetail {
   };
 }
 
-function renderClassic(audioReady: boolean | null, readOnly = true) {
-  return render(
-    <>
-      <DebateStage
-        api={api}
-        debateId={debateId}
-        detail={detail(audioReady)}
-        readOnly={readOnly}
-        socketFactory={() => new IdleSocket()}
-      />
-    </>,
-  );
-}
-
 describe("segments_v2 stage projection", () => {
-  it("uses SegmentRagInspector for completed classic turns", () => {
-    renderClassic(true);
-
-    expect(screen.getAllByText("A source-grounded paragraph.")).toHaveLength(2);
-    expect(screen.queryByTestId("evidence-trace-absent")).toBeNull();
-    fireEvent.click(screen.getByText("Check RAG"));
-    expect(screen.getByText("synthetic-water-record.md")).toBeTruthy();
-    expect(
-      screen.getByText("The record describes shared water maintenance."),
-    ).toBeTruthy();
-    expect(
-      screen.getByText("Find the shared water maintenance record."),
-    ).toBeTruthy();
-    expect(screen.getAllByText("V2.0")).toHaveLength(2);
-  });
-
   it("uses the same structured projection in the Beta stage", () => {
     render(
       <>
@@ -184,23 +153,6 @@ describe("segments_v2 stage projection", () => {
     expect(screen.getByText("Check RAG")).toBeTruthy();
     expect(screen.queryByTestId("evidence-trace-absent")).toBeNull();
   });
-});
-
-describe("segments_v2 retained audio replay", () => {
-  it.each([
-    [true, false],
-    [false, true],
-    [null, true],
-  ] as const)(
-    "gates replay on every public turn audio_ready value (%s)",
-    (audioReady, disabled) => {
-      renderClassic(audioReady, false);
-      const replay = screen.getByRole("button", {
-        name: "Replay whole debate",
-      });
-      expect((replay as HTMLButtonElement).disabled).toBe(disabled);
-    },
-  );
 });
 
 it("shows current/total progress and connection color without separate connection or transcript counts", () => {

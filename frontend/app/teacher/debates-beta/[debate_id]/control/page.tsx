@@ -569,17 +569,6 @@ export default function TeacherDebateControlPage() {
                     {interactionError}
                   </DismissibleAlert>
                 ) : null}
-                {!segmentsProtocol &&
-                (detail.status === "debate_finished" ||
-                  detail.status === "completed") &&
-                hasCompletePublicPlan(detail) ? (
-                  <Link
-                    className="primary-action"
-                    href={`/teacher/debates/${debateId}/interaction`}
-                  >
-                    {t("wave3Title")}
-                  </Link>
-                ) : null}
               </>
             )}
             api={api}
