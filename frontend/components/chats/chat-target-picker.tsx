@@ -64,8 +64,9 @@ export function ChatTargetPicker({
             className={styles.pickArt}
             style={{
               backgroundColor: tone,
+              // Same sunburst formula as Studyform AgentCard art.
               backgroundImage:
-                "repeating-conic-gradient(from 0deg at 50% 70%,#ffffff66 0 10deg,transparent 10deg 20deg)",
+                "radial-gradient(circle at 50% 60%,#fff8 0 30%,transparent 31%),repeating-conic-gradient(from 0deg at 50% 60%,#fff6 0 10deg,transparent 10deg 20deg)",
             }}
           >
             <MascotFigure id={mascot} className="h-24 w-auto" />
@@ -86,6 +87,10 @@ export function ChatTargetPicker({
     const label = team.current_version_seq
       ? teamVersionLabel(team.current_version_seq)
       : null;
+    // Same Studyform VersionTile/AgentCard assignment: agentMascot(id) + agentTone.
+    // Teams have no material_theme → hash by stable team.id (history/peek/picker share it).
+    const tone = agentTone(team.id, index);
+    const mascot = agentMascot(team.id);
     return (
       <li key={key} className={styles.pickCardWrap}>
         <button
@@ -104,15 +109,13 @@ export function ChatTargetPicker({
           </span>
           <span
             className={styles.pickArt}
-            style={{ backgroundColor: "#C9D3F0" }}
+            style={{
+              backgroundColor: tone,
+              backgroundImage:
+                "radial-gradient(circle at 50% 60%,#fff8 0 30%,transparent 31%),repeating-conic-gradient(from 0deg at 50% 60%,#fff6 0 10deg,transparent 10deg 20deg)",
+            }}
           >
-            <span className={styles.pickTeamFaces} aria-hidden="true">
-              {(["wave", "wreath", "scroll"] as const).map((id) => (
-                <span key={id} className={styles.pickFace}>
-                  <MascotFigure id={id} className="h-10 w-auto" />
-                </span>
-              ))}
-            </span>
+            <MascotFigure id={mascot} className="h-24 w-auto" />
           </span>
           {picked ? (
             <span className={styles.pickMark} aria-hidden="true">
