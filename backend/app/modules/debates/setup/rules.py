@@ -132,7 +132,7 @@ def canonical_rule_snapshot_json(
     *,
     rule_set_id: Literal["ordered_multi_expert_mutual_learning_v1"] = RULE_SET_ID,
     round_count: int = 2,
-    turn_protocol: Literal["segments_v2"] | None = None,
+    turn_protocol: Literal["segments_v2"] | None = "segments_v2",
     teaching_protocol: Literal["four_round_v1"] | None = None,
     frozen_teaching: Mapping[str, object] | None = None,
 ) -> str:
