@@ -9,6 +9,11 @@ import {
   type CSSProperties,
 } from "react";
 import { createPortal } from "react-dom";
+import {
+  inSidebar,
+  revealSidebar,
+  sidebarIsDrawer,
+} from "../lib/sidebar-reveal";
 
 import type { MessageKey } from "../lib/i18n";
 import { finishTour, tourPendingFor } from "../lib/onboarding";
@@ -278,18 +283,25 @@ export function OnboardingTour({
     : null;
 }
 
+function reachable(element: Element | null) {
+  return shown(element) || (inSidebar(element) && sidebarIsDrawer());
+}
+
 function startSteps(): Saved {
   const groupHref = groupPageHref();
-  // Places this screen does not show (a phone's folded sidebar, a student
-  // with no group yet) are left out rather than pointed at in thin air.
+  // Places this screen does not show (a student with no group yet) are left
+  // out rather than pointed at in thin air. The phone's sidebar drawer counts
+  // as shown: the step opens it.
   // Steps on the group's page are kept when there is a group to open.
   const ids = STEPS.filter((step) => {
     if (!step.target) return true;
     if (step.page === "group") {
       if (!groupHref) return false;
-      return step.id === "new" || shown(document.querySelector(step.target));
+      return (
+        step.id === "new" || reachable(document.querySelector(step.target))
+      );
     }
-    return shown(document.querySelector(step.target));
+    return reachable(document.querySelector(step.target));
   }).map((step) => step.id);
   return { ids, index: 0, groupHref };
 }
@@ -337,6 +349,8 @@ function Tour({
     let frame = 0;
     let tries = 0;
     let poll = 0;
+    let settle = 0;
+    let revealed = false;
     const measure = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
@@ -364,6 +378,13 @@ function Tour({
         poll = window.setTimeout(find, 100);
         return;
       }
+      if (element && inSidebar(element) && sidebarIsDrawer()) {
+        // Open the phone's drawer for this step, then measure once it has
+        // slid in; the cleanup below closes it again.
+        revealed = true;
+        revealSidebar(true);
+        settle = window.setTimeout(measure, 220);
+      }
       setEmpty(element?.hasAttribute("data-tour-empty") ?? false);
       element?.scrollIntoView({
         block: "center",
@@ -377,6 +398,8 @@ function Tour({
     return () => {
       cancelAnimationFrame(frame);
       window.clearTimeout(poll);
+      window.clearTimeout(settle);
+      if (revealed) revealSidebar(false);
       window.removeEventListener("resize", measure);
       window.removeEventListener("scroll", measure, true);
     };

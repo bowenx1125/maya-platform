@@ -130,13 +130,16 @@ describe("Workspace Agent flow", () => {
     expect(screen.queryByRole("heading", { name: "Versions" })).toBeNull();
     const nav = within(screen.getByRole("navigation"));
     expect(
-      (await nav.findByRole("link", { name: "Back" })).getAttribute("href"),
+      (
+        await within(screen.getByRole("main")).findByRole("link", {
+          name: "Back",
+        })
+      ).getAttribute("href"),
     ).toBe("/student/groups/group-id");
     expect(nav.queryByRole("button", { name: "New" })).toBeNull();
-    expect(nav.getByRole("button", { name: "Done" })).toHaveProperty(
-      "disabled",
-      true,
-    );
+    expect(
+      within(screen.getByRole("main")).getByRole("button", { name: "Done" }),
+    ).toHaveProperty("disabled", true);
     expect(api.nextVersion).not.toHaveBeenCalled();
   });
 
@@ -149,7 +152,11 @@ describe("Workspace Agent flow", () => {
     );
     const nav = within(screen.getByRole("navigation"));
     expect(
-      (await nav.findByRole("link", { name: "Back" })).getAttribute("href"),
+      (
+        await within(screen.getByRole("main")).findByRole("link", {
+          name: "Back",
+        })
+      ).getAttribute("href"),
     ).toBe("/student/groups/group-id");
     expect(nav.queryByRole("button", { name: "New" })).toBeNull();
     expect(api.nextVersion).not.toHaveBeenCalled();
@@ -173,7 +180,9 @@ describe("Workspace Agent flow", () => {
 
     const navigation = within(screen.getByRole("navigation"));
     await waitFor(() => {
-      const backs = navigation.getAllByRole("link", { name: "Back" });
+      const backs = within(screen.getByRole("main")).getAllByRole("link", {
+        name: "Back",
+      });
       expect(backs.map((link) => link.getAttribute("href"))).toContain(
         "/teacher/studyform",
       );
@@ -275,7 +284,9 @@ describe("Workspace Agent flow", () => {
         <GroupWorkspace groupId="group-id" />
       </AppShell>,
     );
-    const link = await screen.findByRole("link", { name: /Agent/ });
+    const link = await within(screen.getByRole("main")).findByRole("link", {
+      name: /Agent/,
+    });
     link.focus();
     expect(document.activeElement).toBe(link);
     expect(link.getAttribute("href")).toBe("/student/agents/agent-id");
@@ -306,7 +317,9 @@ describe("Workspace Agent flow", () => {
     const nav = within(screen.getByRole("navigation"));
     expect(nav.queryByRole("button", { name: "New" })).toBeNull();
     expect(nav.queryByRole("button", { name: "Done" })).toBeNull();
-    expect(nav.getByRole("link", { name: "Back" })).toBeTruthy();
+    expect(
+      within(screen.getByRole("main")).getByRole("link", { name: "Back" }),
+    ).toBeTruthy();
   });
 
   it("deletes a Workspace Agent only after confirmation and retains a blocked row", async () => {
@@ -334,10 +347,14 @@ describe("Workspace Agent flow", () => {
     expect(api.deleteAgent).not.toHaveBeenCalled();
     fireEvent.click(button);
     await screen.findByText("Used by a Debate");
-    expect(screen.getByRole("link", { name: /Agent/ })).toBeTruthy();
+    expect(
+      within(screen.getByRole("main")).getByRole("link", { name: /Agent/ }),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() =>
-      expect(screen.queryByRole("link", { name: /Agent/ })).toBeNull(),
+      expect(
+        within(screen.getByRole("main")).queryByRole("link", { name: /Agent/ }),
+      ).toBeNull(),
     );
     expect(api.deleteAgent).toHaveBeenCalledTimes(2);
   });

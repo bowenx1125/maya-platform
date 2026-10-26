@@ -258,11 +258,13 @@ describe("PW3-E teacher shell and responsive contract", () => {
         : join(process.cwd(), "frontend");
     const css = readFileSync(join(frontendRoot, "app", "globals.css"), "utf8");
     const shell = readFileSync(
-      join(frontendRoot, "components", "app-shell.module.css"),
+      join(frontendRoot, "components", "app-shell.tsx"),
       "utf8",
     );
-    expect(shell).toMatch(/\.link\s*\{[^}]*min-height:\s*44px/s);
-    expect(shell).toMatch(/\.logout\s*\{[^}]*min-height:\s*44px/s);
+    // Sidebar rows (and Logout, which reuses them) and the collapsed icon
+    // buttons keep 44px targets.
+    expect(shell).toMatch(/const ITEM =\s*"[^"]*\bmin-h-11\b/);
+    expect(shell).toMatch(/const ICON_ITEM =\s*"[^"]*\bsize-11\b/);
     expect(css).toMatch(/\.text-link\s*\{[^}]*min-height:\s*44px/s);
     expect(css).toMatch(/details > summary\s*\{[^}]*min-height:\s*44px/s);
     expect(css).toMatch(

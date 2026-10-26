@@ -58,6 +58,14 @@ import { UiGuideTooltip } from "../components/ui-guide-tooltip";
 import { abandonChatRequest } from "../lib/chat-request-store";
 import { PlatformApiError } from "../lib/api/platform";
 
+/** Back, Done and New all sit in the page header (data-page-actions). */
+function pageActions() {
+  return within(
+    (document.querySelector("[data-page-actions]") as HTMLElement | null) ??
+      document.createElement("div"),
+  );
+}
+
 const agents = [
   {
     agent_id: "agent-1",
@@ -229,7 +237,8 @@ function renderTeamManagement(
 }
 
 function sidebarButton(name: string) {
-  return within(screen.getByRole("navigation")).getByRole("button", {
+  // Back, Done and New all sit in the page header (top-right of main).
+  return within(screen.getByRole("main")).getByRole("button", {
     name,
   }) as HTMLButtonElement;
 }
@@ -251,7 +260,9 @@ async function fillTeamForm(name: string, leader = "Socrates") {
 
 async function openNewChat() {
   const nav = within(screen.getByRole("navigation"));
-  const create = await nav.findByRole("button", { name: "New" });
+  const create = await waitFor(() =>
+    pageActions().getByRole("button", { name: "New" }),
+  );
   await waitFor(() =>
     expect((create as HTMLButtonElement).disabled).toBe(false),
   );
@@ -357,7 +368,9 @@ describe("Studyform Teams", () => {
     expect(await screen.findByLabelText("Name")).toBeTruthy();
     expect(sidebarButton("Done")).toBeTruthy();
     expect(
-      within(screen.getByRole("main")).queryByRole("button", { name: "Done" }),
+      within(screen.getByRole("navigation")).queryByRole("button", {
+        name: "Done",
+      }),
     ).toBeNull();
     expect(
       within(screen.getByRole("main")).queryByRole("button", {
@@ -393,7 +406,7 @@ describe("Studyform Teams", () => {
     expect(screen.getByText("Readable circle")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Public" })).toBeNull();
     expect(
-      within(screen.getByRole("navigation")).queryByRole("button", {
+      pageActions().queryByRole("button", {
         name: "New",
       }),
     ).toBeNull();
@@ -468,6 +481,10 @@ describe("Studyform Teams", () => {
       }),
     ).toBeNull();
     expect(sidebarButton("Back")).toBeTruthy();
+    // Back/Done are icon + text sitewide; the icon is hidden from the name.
+    const back = sidebarButton("Back");
+    expect(back.querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+    expect(back.textContent).toBe("Back");
     expect(screen.queryByRole("button", { name: "Public" })).toBeNull();
   });
 
@@ -502,7 +519,7 @@ describe("Studyform Teams", () => {
     const view = renderTeamManagement();
     expect(await screen.findByText("No Teams yet.")).toBeTruthy();
     expect(
-      within(screen.getByRole("navigation")).queryByRole("button", {
+      pageActions().queryByRole("button", {
         name: "New",
       }),
     ).toBeNull();
@@ -823,10 +840,12 @@ describe("Chatform", () => {
         screen.queryByText("Click New and start chatting with me!"),
       ).toBeNull();
       expect(
-        within(screen.getByRole("main")).queryByRole("button", { name: "New" }),
-      ).toBeNull();
+        within(screen.getByRole("main"))
+          .queryAllByRole("button", { name: "New" })
+          .filter((el) => !el.closest("[data-page-actions]")),
+      ).toHaveLength(0);
       expect(
-        within(screen.getByRole("navigation")).getByRole("button", {
+        pageActions().getByRole("button", {
           name: "New",
         }),
       ).toBeTruthy();

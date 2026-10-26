@@ -53,6 +53,14 @@ import {
   type ChatSession,
 } from "../lib/api/platform";
 
+/** Back, Done and New all sit in the page header (data-page-actions). */
+function pageActions() {
+  return within(
+    (document.querySelector("[data-page-actions]") as HTMLElement | null) ??
+      document.createElement("div"),
+  );
+}
+
 const agent = {
   agent_id: "agent",
   version_id: "version",
@@ -157,7 +165,7 @@ function renderChat({
 
 async function chooseSocrates() {
   fireEvent.click(await screen.findByRole("button", { name: /Socrates/ }));
-  const done = within(screen.getByRole("navigation")).getByRole("button", {
+  const done = within(screen.getByRole("main")).getByRole("button", {
     name: "Done",
   });
   await waitFor(() => expect(done.hasAttribute("disabled")).toBe(false));
@@ -166,7 +174,7 @@ async function chooseSocrates() {
 }
 
 async function startNewAgentChat() {
-  const create = within(screen.getByRole("navigation")).getByRole("button", {
+  const create = pageActions().getByRole("button", {
     name: "New",
   });
   await waitFor(() => expect(create.hasAttribute("disabled")).toBe(false));
@@ -232,8 +240,10 @@ describe("private Agent chat", () => {
     // Done created the Chat before any message, and closed the New page.
     expect(state.api.createConversation).toHaveBeenCalledWith("version");
     expect(
-      within(screen.getByRole("main")).queryByRole("button", { name: "New" }),
-    ).toBeNull();
+      within(screen.getByRole("main"))
+        .queryAllByRole("button", { name: "New" })
+        .filter((el) => !el.closest("[data-page-actions]")),
+    ).toHaveLength(0);
     expect(nav.queryByText("Done")).toBeNull();
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
       target: { value: "Hello" },
@@ -242,7 +252,9 @@ describe("private Agent chat", () => {
     await screen.findByText("A considered reply");
     await waitFor(() =>
       expect(
-        nav.getByRole("button", { name: "New" }).hasAttribute("disabled"),
+        pageActions()
+          .getByRole("button", { name: "New" })
+          .hasAttribute("disabled"),
       ).toBe(false),
     );
     const first = (await state.api.streamConversation.mock.results[0].value)
@@ -1544,10 +1556,10 @@ describe("teacher workspace access", () => {
     expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
     const navigation = screen.getByRole("navigation");
     expect(
-      Array.from(navigation.children)
-        .filter((item) => item.matches("a, [aria-disabled='true']"))
-        .map((item) => item.textContent?.trim()),
-    ).toEqual(["Mayaform", "Studyform", "Chatform", "Debates", "Accounts"]);
+      Array.from(
+        navigation.querySelectorAll("a[data-tour], [aria-disabled='true']"),
+      ).map((item) => item.textContent?.trim()),
+    ).toEqual(["Mayaform", "Agents", "Chat with Agent", "Debates", "Accounts"]);
     expect(screen.queryByText("Components")).toBeNull();
     expect(screen.queryByRole("button", { name: "Set API Key" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Check" })).toBeNull();

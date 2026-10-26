@@ -8,6 +8,14 @@ import errorCopy from "./error-copy.json";
  */
 const enMessages = {
   appName: "Mayaform",
+  sidebarCollapse: "Collapse sidebar",
+  sidebarExpand: "Expand sidebar",
+  sidebarTeams: "Teams",
+  sidebarRecord: "Record",
+  sidebarChatAgent: "Chat with Agent",
+  sidebarChatTeam: "Chat with Team",
+  sidebarClassroom: "Classroom",
+  sidebarOnAir: "On air",
   studyform: "Studyform",
   workspace: "Teaching workspace",
   loading: "Loading…",

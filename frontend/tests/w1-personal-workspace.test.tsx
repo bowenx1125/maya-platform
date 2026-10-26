@@ -167,7 +167,7 @@ describe("W1 teacher personal workspace", () => {
     expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy();
     expect(api.publishedAgents).toHaveBeenCalledWith(courseId);
     expect(
-      screen.getByRole("link", { name: "Studyform" }).getAttribute("href"),
+      screen.getByRole("link", { name: "Agents" }).getAttribute("href"),
     ).toBe("/teacher/studyform");
   });
 
@@ -533,7 +533,7 @@ describe("W1 teacher personal workspace", () => {
     // Agents / Teams / Record over RAG / Knowledge / Voices.
     for (const name of ["Agents", "Teams", "Record", "RAG", "Knowledge"])
       expect(await screen.findByRole("heading", { name })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Brainform" })).toBeNull();
+    expect(document.querySelector('[data-tour="brain"]')).toBeNull();
     // The embedded Brainform cards read groups for RAG; Voices does not.
     expect(api.enrollVoice).not.toHaveBeenCalled();
   });
