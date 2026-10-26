@@ -56,9 +56,11 @@ const paths: Record<WorkspaceIconName, string> = {
 export function WorkspaceIcon({
   name,
   size = 20,
+  stroke = 1.65,
 }: {
   name: WorkspaceIconName;
   size?: number;
+  stroke?: number;
 }) {
   return (
     <svg
@@ -68,7 +70,7 @@ export function WorkspaceIcon({
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.65"
+      strokeWidth={stroke}
       strokeLinecap="round"
       strokeLinejoin="round"
       focusable="false"

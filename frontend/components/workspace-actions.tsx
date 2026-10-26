@@ -20,6 +20,10 @@ export type WorkspaceActionOptions = {
   /** "page": the page draws this control itself (the Agent banner), so the
       shell keeps the registration but skips its sidebar button. */
   placement?: "page";
+  /** aria-describedby for the shell's button. */
+  describedBy?: string;
+  /** data-ui-guide override for the shell's button (default workspace.<name>). */
+  guide?: string;
 };
 export type WorkspaceActions = Partial<
   Record<WorkspaceActionName, WorkspaceActionOptions>
@@ -47,6 +51,8 @@ export function WorkspaceAction({
   busy,
   priority = 0,
   placement,
+  describedBy,
+  guide,
 }: WorkspaceActionOptions & { name: WorkspaceActionName }) {
   const registry = useContext(WorkspaceActionsContext);
   const owner = useId();
@@ -56,7 +62,16 @@ export function WorkspaceAction({
     return registry?.register(
       name,
       owner,
-      { href, form, onClick, disabled: disabled || busy, busy, placement },
+      {
+        href,
+        form,
+        onClick,
+        disabled: disabled || busy,
+        busy,
+        placement,
+        describedBy,
+        guide,
+      },
       priority,
     );
   }, [
@@ -70,6 +85,8 @@ export function WorkspaceAction({
     busy,
     priority,
     placement,
+    describedBy,
+    guide,
   ]);
   return null;
 }

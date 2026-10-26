@@ -514,7 +514,7 @@ describe("student shell navigation", () => {
     expect(studyform.getAttribute("aria-current")).toBe("page");
     // Sidebar (DESIGN-RULES §7): Voices is a Brainform row on the group.
     expect(nav.getByRole("link", { name: "Voices" }).getAttribute("href")).toBe(
-      "/student/groups/group-b/voices",
+      "/student/voices?group_id=group-b",
     );
   });
 });
