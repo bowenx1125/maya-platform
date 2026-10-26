@@ -30,6 +30,7 @@ import {
   type KnowledgeSetSummary,
   type KnowledgeSnapshot,
   type RagPreview,
+  type VoiceProfile,
 } from "../lib/api";
 import {
   clearAgentDraftStash,
@@ -40,6 +41,7 @@ import { groupLibraryOrClosed } from "../lib/group-library";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { blockerLabel, statusLabel, type MessageKey } from "../lib/i18n";
 import { useT } from "../lib/i18n";
+import { cn } from "../lib/utils";
 import {
   AVATAR_TEMPLATE_DEFAULT_CONFIGS,
   AvatarEditor,
@@ -50,7 +52,10 @@ import {
 import { buildAgentTemplate } from "./agent-template";
 import { PageAction } from "./page-action";
 import { ModuleUpload } from "./studyform-layout";
-import { IconClose, IconDownload, IconUpload } from "./quiet-icons";
+import {
+  IconDownload,
+  IconUpload,
+} from "./quiet-icons";
 import { VoiceLibrary } from "./voice/voice-library";
 import {
   downloadText,
@@ -69,6 +74,17 @@ import {
   SectionCard,
   StatusBadge,
 } from "./ui";
+
+
+/** Arcade SectionCard chrome for Create/Edit (O2). */
+const ARC_WB_CARD =
+  "mb-0 border-[3px] border-border bg-surface p-[30px_22px] shadow-[8px_8px_0_#111] [&_.section-card-header]:-mx-[22px] [&_.section-card-header]:-mt-[30px] [&_.section-card-header]:mb-[18px] [&_.section-card-header]:border-b-[3px] [&_.section-card-header]:border-border [&_.section-card-header]:bg-[radial-gradient(#1112_1.5px,transparent_1.6px)] [&_.section-card-header]:[background-size:9px_9px] [&_.section-card-header]:px-[22px] [&_.section-card-header]:py-3.5 [&_.section-card-header_h2]:font-display [&_.section-card-header_h2]:text-[22px] [&_.section-card-header_h2]:font-extrabold [&_.section-card-header_h2]:tracking-normal";
+const ARC_WB_CARD_CMP =
+  "arc-cmp !px-[18px] !pt-[26px] !pb-4 !shadow-[5px_5px_0_#111]";
+const ARC_AVATAR_CARD =
+  "c-av mb-0 border-[3px] border-border bg-surface p-[30px_22px] shadow-[8px_8px_0_#111] [background-image:radial-gradient(ellipse_at_50%_46%,#FFE14D_0_20%,transparent_21%),repeating-conic-gradient(from_0deg_at_50%_32%,#FDBA74_0_9deg,#FFE7CC_9deg_18deg)] [&_.section-card-header]:-mx-[22px] [&_.section-card-header]:-mt-[30px] [&_.section-card-header]:mb-[18px] [&_.section-card-header]:border-b-[3px] [&_.section-card-header]:border-border [&_.section-card-header]:bg-surface/80 [&_.section-card-header]:px-[22px] [&_.section-card-header]:py-3.5 [&_.section-card-header_h2]:font-display [&_.section-card-header_h2]:text-[22px] [&_.section-card-header_h2]:font-extrabold";
+const ARC_ICON_BTN =
+  "inline-flex size-10 min-h-0 items-center justify-center rounded-[10px] border-2 border-border bg-[var(--secondary-background)] p-0 text-[var(--foreground)] shadow-[3px_3px_0_0_var(--border)] hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
 
 export function AgentOverview({ agentId }: { agentId: string }) {
   const t = useT();
@@ -379,6 +395,7 @@ export function AgentWorkbench({
   const avatarLoadSequence = useRef(0);
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
   const [voiceProfileId, setVoiceProfileId] = useState<string | null>(null);
+  const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfile[]>([]);
   const [agentIssuesDismissed, setAgentIssuesDismissed] = useState(false);
   // After a line's Done the bar is pinned to what was on screen, minus the
   // line that now passes, so one check never moves the other lines.
@@ -1545,17 +1562,25 @@ export function AgentWorkbench({
     }
   }
 
+  const brainformEmpty =
+    documents.length === 0 &&
+    stagedRag.length === 0 &&
+    !queuedCreateRag &&
+    knowledgeSets.length === 0;
+  const voicesEmpty = voiceProfiles.length === 0;
+  const duoEmpty = brainformEmpty && voicesEmpty;
+
   return (
     <>
-      <PageIntro
-        title={
-          unsavedCreate
+      <header className="mb-8 rounded-[16px] border-[3px] border-border bg-[#FFF7CC] px-7 py-6 shadow-[0_0_0_3px_#FDBA74,8px_8px_0_3px_#111] [background-image:repeating-conic-gradient(from_0deg_at_92%_100%,#FFE14D55_0_8deg,transparent_8deg_16deg)]">
+        <h1 className="m-0 font-display text-[clamp(1.6rem,2.4vw,2.1rem)] font-extrabold leading-tight tracking-tight text-ink">
+          {unsavedCreate
             ? draftName.trim()
               ? `${draftName.trim()} · ${version.version_label}`
               : t("newAgent")
-            : `${agent.name} · ${version.version_label}`
-        }
-      />
+            : `${agent.name} · ${version.version_label}`}
+        </h1>
+      </header>
       {!unsavedCreate && !agentIssuesDismissed ? (
         <AgentHintBar
           title={t("agentIssuesTitle")}
@@ -1608,8 +1633,9 @@ export function AgentWorkbench({
           {t(notice)}
         </Notice>
       ) : null}
-      <div className="agent-entry">
-        <div className="workbench-main">
+      <div className="grid gap-8">
+        <div className="grid grid-cols-1 items-start gap-x-9 gap-y-11 min-[768px]:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
+          <div className="col-span-full grid gap-4 empty:hidden">
           {unsavedCreate && submitHint ? (
             // The mascot tray says it; the field it is about is marked and
             // gets focus back once the notice is dismissed.
@@ -1641,8 +1667,35 @@ export function AgentWorkbench({
               }
             />
           ) : null}
+          </div>
+          <div className="stage sticky top-5 grid gap-11 self-start max-[767px]:static max-[767px]:order-2">
+            {avatarConfig ? (
+              <SectionCard title={t("avatarDesign")} className={ARC_AVATAR_CARD}>
+                {avatarTemplatesError ? (
+                  <ErrorNotice
+                    inline
+                    error={avatarTemplatesError}
+                    onRetry={() => void loadAvatarTemplates()}
+                  />
+                ) : null}
+                {avatarTemplatesLoading ? <LoadingCard /> : null}
+                <AvatarEditor
+                  templates={avatarTemplates}
+                  value={avatarConfig}
+                  onChange={setAvatarConfig}
+                  fallbackLabel={agent.name}
+                  disabled={
+                    editingLocked ||
+                    avatarTemplatesLoading ||
+                    Boolean(avatarTemplatesError)
+                  }
+                />
+              </SectionCard>
+            ) : null}
+          </div>
+          <div className="stats grid min-w-0 gap-11 max-[767px]:order-1">
           {unsavedCreate ? (
-            <SectionCard title={t("agentName")}>
+            <SectionCard title={t("agentName")} className={ARC_WB_CARD}>
               <form
                 id="create-agent-form"
                 className="stack-form wide-form quiet-create"
@@ -1703,6 +1756,7 @@ export function AgentWorkbench({
           <SectionCard
             title={t("agentMd")}
             guide="agent.markdown"
+            className={ARC_WB_CARD}
             action={
               <div className="button-row">
                 <button
@@ -1720,7 +1774,7 @@ export function AgentWorkbench({
                   {t("insertOutline")}
                 </button>
                 <button
-                  className="icon-action"
+                  className={ARC_ICON_BTN}
                   type="button"
                   disabled={editingLocked || !agentMd}
                   aria-label={`${t("download")} AGENT.md`}
@@ -1730,7 +1784,7 @@ export function AgentWorkbench({
                   <IconDownload />
                 </button>
                 <label
-                  className="icon-action"
+                  className={ARC_ICON_BTN}
                   data-ui-guide="agent.uploadMarkdown"
                 >
                   <IconUpload />
@@ -1768,14 +1822,23 @@ export function AgentWorkbench({
               </span>
             </div>
           </SectionCard>
+          <div
+            className={cn(
+              "duo grid min-w-0 gap-11",
+              duoEmpty &&
+                "grid-cols-2 gap-7 max-[767px]:grid-cols-1",
+            )}
+          >
           <SectionCard
             title={t("brainform")}
             guide="agent.brainform"
+            className={cn(ARC_WB_CARD, "c-bf", brainformEmpty && ARC_WB_CARD_CMP)}
             action={
               // RAG is added only here, inside its Agent, and takes the
               // Agent's Private or Public.
               <ModuleUpload
                 label={t("uploadRag")}
+                caption={t("newAgent")}
                 accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 disabled={editingLocked}
                 onFile={(file) => void uploadKnowledge(file)}
@@ -1991,48 +2054,24 @@ export function AgentWorkbench({
               )}
             </div>
           </SectionCard>
-          <div className="agent-editor-media">
-            {avatarConfig ? (
-              <SectionCard title={t("avatarDesign")}>
-                {avatarTemplatesError ? (
-                  <ErrorNotice
-                    inline
-                    error={avatarTemplatesError}
-                    onRetry={() => void loadAvatarTemplates()}
-                  />
-                ) : null}
-                {avatarTemplatesLoading ? <LoadingCard /> : null}
-                <AvatarEditor
-                  templates={avatarTemplates}
-                  value={avatarConfig}
-                  onChange={setAvatarConfig}
-                  fallbackLabel={agent.name}
-                  disabled={
-                    editingLocked ||
-                    avatarTemplatesLoading ||
-                    Boolean(avatarTemplatesError)
-                  }
-                />
-              </SectionCard>
-            ) : null}
-            <div>
-              <VoiceLibrary
-                groupId={agent.group_id}
-                courseId={agent.group_id ? null : agent.course_id}
-                membershipGroupIds={
-                  agent.group_id
-                    ? []
-                    : (user?.groups ?? []).map((group) => group.group_id)
-                }
-                embedded
-                selectedId={voiceProfileId}
-                disabled={editingLocked}
-                // A teacher's personal Agent picks from that teacher's own
-                // voices, as on main (owner decision 2026-10-12). None is a
-                // choice of its own, so the picker never toggles to empty.
-                onSelect={setVoiceProfileId}
-              />
-            </div>
+            <VoiceLibrary
+              groupId={agent.group_id}
+              courseId={agent.group_id ? null : agent.course_id}
+              membershipGroupIds={
+                agent.group_id
+                  ? []
+                  : (user?.groups ?? []).map((group) => group.group_id)
+              }
+              embedded
+              selectedId={voiceProfileId}
+              disabled={editingLocked}
+              // A teacher's personal Agent picks from that teacher's own
+              // voices, as on main (owner decision 2026-10-12). None is a
+              // choice of its own, so the picker never toggles to empty.
+              onSelect={setVoiceProfileId}
+              onProfilesChange={setVoiceProfiles}
+            />
+          </div>
           </div>
         </div>
       </div>

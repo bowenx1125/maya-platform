@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { useT } from "../lib/i18n";
+import { cn } from "../lib/utils";
+import { IconPlus } from "./quiet-icons";
+import { buttonVariants } from "./ui/button";
 import {
   AGENT_GRID_CLASS,
   AgentCard,
@@ -155,22 +158,30 @@ export function VersionTile({
 /** The same + as ModulePlus, opening a file picker instead of a page. */
 export function ModuleUpload({
   label,
+  caption,
   accept,
   disabled,
   onFile,
 }: {
   label: string;
+  /** Visible text next to the +. Defaults to label; Brainform passes "New". */
+  caption?: string;
   accept: string;
   disabled?: boolean;
   onFile: (file: File) => void;
 }) {
   return (
     <label
-      className={styles.addButton}
+      className={cn(
+        buttonVariants({ variant: "default" }),
+        "m-0 gap-1.5 font-display text-base font-extrabold",
+        disabled && "pointer-events-none opacity-50",
+      )}
       aria-disabled={disabled || undefined}
       data-ui-guide="agent.uploadRag"
     >
-      <WorkspaceIcon name="new" />
+      <IconPlus size={16} />
+      <span aria-hidden="true">{caption ?? label}</span>
       <input
         className="sr-only"
         type="file"

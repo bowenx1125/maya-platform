@@ -1148,12 +1148,6 @@ button.agent-tile-name {
   gap: 18px;
 }
 
-.agent-editor-media {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  align-items: start;
-}
 
 .knowledge-check {
   /* Fixed to the viewport so the dialog is not clipped or scrolled away with
@@ -1202,11 +1196,6 @@ button.agent-tile-name {
   }
 }
 
-@media (max-width: 800px) {
-  .agent-editor-media {
-    grid-template-columns: 1fr;
-  }
-}
 
 .workbench-main,
 .workbench-side {
