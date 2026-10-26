@@ -1096,7 +1096,12 @@ export function VoiceLibrary({
   if (albumList && creating) {
     const titleId = id ? `${id}-title` : "voices-title";
     return (
-      <div id={id} data-voice-album="v2" data-voice-create="p2-tab">
+      <div
+        id={id}
+        data-voice-album="v2"
+        data-voice-create="p2-tab"
+        className="-mt-8"
+      >
         {/* Back / Done in the shared page header (icon + text). */}
         <WorkspaceAction
           name="back"
