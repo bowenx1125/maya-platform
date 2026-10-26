@@ -78,8 +78,11 @@ export function HomeStat({
 }
 
 /** Module heading as a strip of tape: white, inked, yellow ends. */
-export const HOME_TAPE_TITLE =
-  "m-0 inline-block w-max -rotate-1 border-[3px] border-ink bg-white bg-[linear-gradient(90deg,#FFE14D_0_8px,transparent_8px_calc(100%-8px),#FFE14D_calc(100%-8px))] px-4 py-0.5 font-display text-[22px] leading-[36px] font-extrabold text-ink";
+const HOME_TAPE_BASE =
+  "m-0 inline-block w-max -rotate-1 border-[3px] border-ink bg-white bg-[linear-gradient(90deg,#FFE14D_0_8px,transparent_8px_calc(100%-8px),#FFE14D_calc(100%-8px))] px-4 py-0.5 font-display leading-[36px] font-extrabold text-ink";
+
+/** The flat Agents strip's tape title (24px, as in the final2 mock). */
+export const HOME_TAPE_TITLE = `${HOME_TAPE_BASE} text-[24px]`;
 
 /** The home page: a column of modules on the page's blue. */
 export const HOME_CLASS =
@@ -90,4 +93,4 @@ export const HOME_CARD_CLASS =
   "relative grid min-w-0 content-start gap-3 rounded-xl border-[3px] border-ink bg-white px-5 pt-[30px] pb-5 font-body text-ink";
 
 /** The tape title riding a module's top edge. */
-export const HOME_CARD_TITLE = `${HOME_TAPE_TITLE} absolute -top-5 left-4`;
+export const HOME_CARD_TITLE = `${HOME_TAPE_BASE} text-[22px] absolute -top-5 left-4`;
