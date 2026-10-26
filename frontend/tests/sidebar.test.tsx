@@ -117,8 +117,11 @@ describe("sidebar groups", () => {
     expect(
       nav().getByRole("link", { name: "Chat with Team" }).getAttribute("href"),
     ).toBe("/student/chat");
-    // Brainform has no page of its own for a student: a heading, not a link.
-    expect(document.querySelector('[data-tour="brain"]')).toBeNull();
+    // Brainform has no page of its own for a student: a heading, not a link,
+    // and the Guide's Brainform step points at that heading.
+    expect(
+      document.querySelector('[data-tour="brain"]')?.textContent?.trim(),
+    ).toBe("Brainform");
   });
 
   it("gives a teacher Knowledge in Brainform and Debates and Accounts in Classroom", () => {

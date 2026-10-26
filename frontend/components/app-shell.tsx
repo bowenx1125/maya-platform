@@ -104,6 +104,8 @@ type SidebarGroup = {
   label: string;
   /** The tour target today's top-level entry carried; now on the first row. */
   tour?: string;
+  /** A tour target on the group heading itself (B-final student Brainform). */
+  headingTour?: string;
   rail: string;
   tile: string;
   square: string;
@@ -611,6 +613,8 @@ export function AppShell({
       key: "brainform",
       label: "Brainform",
       tour: brainHref ? "brain" : undefined,
+      // Guide v3 (9 steps): a student's Brainform step points at the heading.
+      headingTour: !teacherSurface && !brainHref ? "brain" : undefined,
       rail: "border-brainform",
       tile: "bg-brainform",
       square: "bg-brainform",
@@ -718,7 +722,12 @@ export function AppShell({
     // Live, Debates and Accounts keep today's aria-current and active class.
     const legacy = links.find((link) => link.icon === item.key);
     const current = legacy ? activeHref === legacy.href : lit;
-    const tour = item.tour ?? (index === 0 ? group.tour : undefined);
+    // A collapsed rail hides headings, so their target falls to the first row.
+    const tour =
+      item.tour ??
+      (index === 0
+        ? (group.tour ?? (collapsed ? group.headingTour : undefined))
+        : undefined);
     const isLive = item.key === "live";
     if (item.disabled) {
       return (
@@ -878,6 +887,7 @@ export function AppShell({
                       {collapsed ? null : (
                         <div
                           id={headingId}
+                          data-tour={group.headingTour}
                           className="flex items-center gap-1.5 px-1 font-body text-[11px] font-extrabold tracking-[0.12em] text-ink uppercase"
                         >
                           <span
