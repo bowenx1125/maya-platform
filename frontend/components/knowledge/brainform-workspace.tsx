@@ -44,7 +44,7 @@ import {
 } from "./markdown-editor";
 import { runKnowledgeMutation } from "./knowledge-mutation";
 import { republishAgentsUsingDocument } from "./republish";
-import { useT } from "../../lib/i18n";
+import { localizeError, useT } from "../../lib/i18n";
 import { useSession } from "../session-provider";
 import { PageAction } from "../page-action";
 import { WorkspaceAction } from "../workspace-actions";
@@ -76,6 +76,15 @@ import {
   ragAlbumClass,
   ragAgents,
 } from "./rag-album";
+import {
+  KnowledgeCard,
+  KnowledgeIcon,
+  KnowledgeArt,
+  KnowledgeRings,
+  knowledgeAlbum as kAlbum,
+} from "./knowledge-album";
+import { Button } from "../ui/button";
+import { cn } from "../../lib/utils";
 
 /**
  * A Brainform row title that enters exactly like an Agent tile's title: the
@@ -462,12 +471,15 @@ export function BrainformWorkspace({
   initialDocumentId,
   embedded = false,
   ragPage = false,
+  knowledgePage = false,
   onPaneChange,
 }: {
   /** Rendered inside Studyform: RAG and Record join Studyform's grid. */
   embedded?: boolean;
   /** The dedicated RAG page (/student/rag, /teacher/rag): RAG only. */
   ragPage?: boolean;
+  /** The teacher Knowledge album (/teacher/knowledge): Knowledge only. */
+  knowledgePage?: boolean;
   /** Embedded only: a RAG or Record page opened (true) or closed (false). */
   onPaneChange?: (open: boolean) => void;
   role: BrainformRole;
@@ -585,6 +597,7 @@ export function BrainformWorkspace({
       initialDocumentId={initialDocumentId}
       embedded={embedded}
       ragPage={ragPage}
+      knowledgePage={knowledgePage}
       onPaneChange={onPaneChange}
       identityScope={dataScope}
       ragDraftScope={JSON.stringify([
@@ -628,12 +641,14 @@ function BrainformWorkspaceBody({
   initialDocumentId,
   embedded = false,
   ragPage = false,
+  knowledgePage: knowledgePageProp = false,
   onPaneChange,
   identityScope,
   ragDraftScope,
 }: {
   embedded?: boolean;
   ragPage?: boolean;
+  knowledgePage?: boolean;
   onPaneChange?: (open: boolean) => void;
   role: BrainformRole;
   courseIds: string[];
@@ -2356,14 +2371,28 @@ function BrainformWorkspaceBody({
   const canAddRag =
     !teacherGroupView && (role === "teacher" || ragGroupIds.length > 0);
 
+  const knowledgePage = knowledgePageProp && role === "teacher";
+  const knowledgeEditor =
+    knowledgePage &&
+    (pane?.kind === "knowledge-new" || pane?.kind === "knowledge-edit");
+  const knowledgeNameError =
+    filenameError ? localizeError(loadError) : null;
+
   return (
     <main
       className={
-        ragPage ? ragAlbumClass : embedded ? styles.embeddedPage : styles.page
+        ragPage
+          ? ragAlbumClass
+          : knowledgePage
+            ? cn(kAlbum.alb, knowledgeEditor && kAlbum.albEd)
+            : embedded
+              ? styles.embeddedPage
+              : styles.page
       }
       data-studyform-embedded={embedded || undefined}
     >
       {ragPage ? <AlbumRings /> : null}
+      {knowledgePage ? <KnowledgeRings editor={knowledgeEditor} /> : null}
       {pane?.kind === "rag-new" && !ragPage ? (
         <WorkspaceAction
           name="done"
@@ -2376,7 +2405,7 @@ function BrainformWorkspaceBody({
           }
         />
       ) : null}
-      {pane?.kind === "knowledge-new" ? (
+      {pane?.kind === "knowledge-new" && !knowledgePage ? (
         <WorkspaceAction
           name="done"
           onClick={() => void saveNewKnowledge()}
@@ -2388,6 +2417,7 @@ function BrainformWorkspaceBody({
         />
       ) : null}
       {(pane || initialMode) &&
+      !knowledgeEditor &&
       !(
         ragPage &&
         (pane?.kind.startsWith("rag") ||
@@ -2423,7 +2453,7 @@ function BrainformWorkspaceBody({
           disabled={Boolean(busyKey) || !selectedDraft.canEdit || !ragDirty}
         />
       ) : null}
-      {pane?.kind === "knowledge-edit" && markdown ? (
+      {pane?.kind === "knowledge-edit" && markdown && !knowledgePage ? (
         <WorkspaceAction
           name="done"
           onClick={() => void saveKnowledge()}
@@ -2677,7 +2707,209 @@ function BrainformWorkspaceBody({
           )}
         </section>
       ) : null}
+      {knowledgePage &&
+      !pane &&
+      !initialMode &&
+      !loading &&
+      !loadError &&
+      courseId ? (
+        <section aria-labelledby="brainform-knowledge-heading">
+          <div className={kAlbum.top}>
+            <h2
+              id="brainform-knowledge-heading"
+              className={kAlbum.title}
+              data-ui-guide="knowledge.files"
+              data-ui-guide-text={t("brainformKnowledgeIntro")}
+              tabIndex={0}
+            >
+              {t("brainformKnowledgeHeading")}
+            </h2>
+            <span className={kAlbum.tape} aria-hidden="true" />
+            <span className={kAlbum.sp} />
+            {canAddKnowledge ? (
+              <Button
+                className={cn(kAlbum.btn, kAlbum.pink)}
+                aria-label={t("brainformNewKnowledge")}
+                aria-busy={busyKey === "knowledge-new" || undefined}
+                disabled={Boolean(busyKey)}
+                onClick={beginNewKnowledge}
+              >
+                {busyKey === "knowledge-new" ? (
+                  <span className="spinner" aria-hidden="true" />
+                ) : (
+                  <KnowledgeIcon name="plus" stroke={3} />
+                )}
+                <span aria-hidden="true">New</span>
+              </Button>
+            ) : (
+              <span>{displayedKnowledgeRows.length}</span>
+            )}
+          </div>
+          {displayedKnowledgeRows.length ? (
+            <ul className={kAlbum.grid}>
+              {displayedKnowledgeRows.map((row) => {
+                const currentDoc = (row.version_seq ?? 0) > 0;
+                const isGenerating = isGenerationActive(row.generation_state);
+                const jobStatus = generationStatuses[row.canonical_set_id];
+                const generationErrorCode =
+                  jobStatus &&
+                  jobStatus.job_id === generationJobs[row.canonical_set_id]
+                    ? jobStatus.safe_error_code
+                    : row.safe_error_code;
+                const failed =
+                  !isGenerating &&
+                  Boolean(row.generation_state) &&
+                  row.generation_state !== "completed";
+                return (
+                  <KnowledgeCard
+                    key={row.canonical_set_id}
+                    artId={`kart-${row.canonical_set_id}`}
+                    tone={isGenerating ? "running" : failed ? "failed" : ""}
+                    footer={
+                      <>
+                        {isGenerating ? (
+                          <button
+                            type="button"
+                            className={kAlbum.ib}
+                            aria-label={t("brainformGeneratingNamed", {
+                              name: row.knowledge_display_name,
+                            })}
+                            aria-busy="true"
+                            disabled
+                          >
+                            <span className="spinner" aria-hidden="true" />
+                          </button>
+                        ) : null}
+                        {currentDoc && !isGenerating ? (
+                          <Button
+                            className={kAlbum.btn}
+                            aria-label={t("brainformDownloadKnowledgeNamed", {
+                              name: row.knowledge_display_name,
+                            })}
+                            data-ui-guide="knowledge.download"
+                            disabled={
+                              busyKey ===
+                              `download-knowledge:${row.canonical_set_id}`
+                            }
+                            onClick={() => void downloadKnowledgeSet(row)}
+                          >
+                            <KnowledgeIcon name="download" />
+                            <span aria-hidden="true">Download</span>
+                          </Button>
+                        ) : null}
+                        {row.can_edit && !isGenerating ? (
+                          <Button
+                            className={cn(kAlbum.btn, kAlbum.del)}
+                            aria-label={t("brainformDeleteKnowledgeNamed", {
+                              name: row.knowledge_display_name,
+                            })}
+                            data-ui-guide="knowledge.hide"
+                            disabled={
+                              busyKey === `delete-set:${row.canonical_set_id}`
+                            }
+                            onClick={() => void deleteKnowledge(row)}
+                          >
+                            <KnowledgeIcon name="trash" />
+                            <span aria-hidden="true">Delete</span>
+                          </Button>
+                        ) : null}
+                      </>
+                    }
+                  >
+                    {renameSetId === row.canonical_set_id ? (
+                      <input
+                        ref={renameInputRef}
+                        className={kAlbum.renameInput}
+                        aria-label={t("brainformSetName")}
+                        value={renameValue}
+                        onChange={(event) => setRenameValue(event.target.value)}
+                        onBlur={() => void saveSetName(row.canonical_set_id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            event.currentTarget.blur();
+                          }
+                          if (event.key === "Escape") setRenameSetId(null);
+                        }}
+                      />
+                    ) : (
+                      <TitleButton
+                        className={kAlbum.fn}
+                        title={row.knowledge_display_name}
+                        editable={row.can_edit}
+                        enterLabel={
+                          row.can_edit
+                            ? t("brainformEditKnowledgeNamed", {
+                                name: row.knowledge_display_name,
+                              })
+                            : t("brainformViewKnowledgeNamed", {
+                                name: row.knowledge_display_name,
+                              })
+                        }
+                        onEnter={
+                          isGenerating || (!currentDoc && !row.can_edit)
+                            ? undefined
+                            : () =>
+                                void openKnowledge(
+                                  row,
+                                  row.can_edit ? "edit" : "view",
+                                )
+                        }
+                        onRename={
+                          row.can_edit
+                            ? () => {
+                                setRenameSetId(row.canonical_set_id);
+                                setRenameValue(row.knowledge_display_name);
+                              }
+                            : undefined
+                        }
+                      />
+                    )}
+                    {failed ? (
+                      <DismissibleAlert
+                        as="span"
+                        className={kAlbum.bad}
+                        resetKey={`${row.generation_state}:${generationErrorCode ?? ""}`}
+                      >
+                        {generationErrorCode &&
+                        generationErrorCode !== "provider_confirmation_required"
+                          ? t("brainformGenerationFailedReason", {
+                              reason: generationErrorCode.replaceAll("_", " "),
+                            })
+                          : t("brainformGenerationFailed")}
+                      </DismissibleAlert>
+                    ) : null}
+                    {!currentDoc && !row.generation_state ? (
+                      <span className={kAlbum.bad} role="status">
+                        {t("brainformNoKnowledgeDocument")}
+                      </span>
+                    ) : null}
+                    {row.source_agent_display_name ? (
+                      <span className={kAlbum.ag}>
+                        {row.source_agent_display_name}
+                      </span>
+                    ) : null}
+                  </KnowledgeCard>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className={kAlbum.grid}>
+              <div className={kAlbum.ghostFirst}>
+                <div className={kAlbum.ghostArt} aria-hidden="true">
+                  <KnowledgeArt id="kart-empty" />
+                </div>
+                <p>{t("brainformKnowledgeEmpty")}</p>
+              </div>
+              <div className={kAlbum.ghost} aria-hidden="true">
+                <KnowledgeIcon name="plus" size={36} stroke={2.4} />
+              </div>
+            </div>
+          )}
+        </section>
+      ) : null}
       {!ragPage &&
+      !knowledgePage &&
       !pane &&
       !initialMode &&
       (!loading || embedded) &&
@@ -3298,8 +3530,208 @@ function BrainformWorkspaceBody({
         </div>
         </>
       ) : null}
+      {knowledgeEditor ? (
+        <>
+          <div className={kAlbum.top}>
+            <h2
+              id="brainform-knowledge-heading"
+              className={cn(kAlbum.title, kAlbum.titleEd)}
+              data-ui-guide="knowledge.files"
+              data-ui-guide-text={t("brainformKnowledgeIntro")}
+              tabIndex={0}
+            >
+              {t("brainformKnowledgeHeading")}
+            </h2>
+            <span className={kAlbum.tape} aria-hidden="true" />
+            <span className={kAlbum.sp} />
+            <span className={kAlbum.acts}>
+              <PageAction
+                name="back"
+                placement="page"
+                onClick={closePane}
+                disabled={Boolean(busyKey)}
+              />
+              {pane?.kind === "knowledge-new" ? (
+                <PageAction
+                  name="done"
+                  placement="page"
+                  onClick={() => void saveNewKnowledge()}
+                  disabled={
+                    Boolean(busyKey) ||
+                    !newKnowledge.name.trim() ||
+                    !newKnowledge.markdown.trim()
+                  }
+                />
+              ) : (
+                <PageAction
+                  name="done"
+                  placement="page"
+                  onClick={() => void saveKnowledge()}
+                  disabled={
+                    Boolean(busyKey) ||
+                    !markdown?.can_edit ||
+                    markdown.audience !== "full" ||
+                    !knowledgeDirty
+                  }
+                />
+              )}
+            </span>
+          </div>
+          {pane?.kind === "knowledge-new" || markdown ? (
+            <div className={kAlbum.spread}>
+              <div className={kAlbum.lcol}>
+                {pane?.kind === "knowledge-new" ||
+                (markdown?.can_edit && markdown.audience === "full") ? (
+                  <label
+                    className={kAlbum.pack}
+                    aria-busy={
+                      pane?.kind === "knowledge-new"
+                        ? busyKey === "knowledge-new"
+                        : busyKey ===
+                          `knowledge-save:${markdown?.canonical_set_id}`
+                    }
+                  >
+                    <span className={kAlbum.disc}>
+                      <KnowledgeIcon name="upload" size={36} stroke={3} />
+                    </span>
+                    <input
+                      className="sr-only"
+                      type="file"
+                      aria-label={t("brainformUploadKnowledgeFile")}
+                      accept=".md,text/markdown"
+                      disabled={Boolean(busyKey)}
+                      onChange={(event) => {
+                        const file = event.currentTarget.files?.[0];
+                        event.currentTarget.value = "";
+                        if (!file) return;
+                        if (pane?.kind === "knowledge-new")
+                          void importNewKnowledge(file);
+                        else void importKnowledgeEdit(file);
+                      }}
+                    />
+                  </label>
+                ) : null}
+                <p className={kAlbum.req} aria-hidden="true">
+                  {t("brainformUploadKnowledgeFile")}
+                </p>
+              </div>
+              <section
+                className={kAlbum.blank}
+                aria-labelledby="brainform-editor-heading"
+              >
+                <div className={kAlbum.in}>
+                  <h2 className="sr-only" id="brainform-editor-heading">
+                    {pane?.kind === "knowledge-new"
+                      ? newKnowledge.name.trim() || t("brainformNewKnowledge")
+                      : (markdown?.knowledge_display_name ?? t("loading"))}
+                  </h2>
+                  {pane?.kind === "knowledge-edit" &&
+                  markdown?.version_seq === 0 ? (
+                    <p className={styles.empty} role="status">
+                      {t("brainformKnowledgeFirstVersionEmpty")}
+                    </p>
+                  ) : null}
+                  <div className="flex flex-col gap-[8px]">
+                    <KnowledgeFilenameField
+                      label={t("knowledgeFileNameLabel")}
+                      fileError={filenameError}
+                      invalid={filenameError}
+                      describedBy={
+                        knowledgeNameError
+                          ? "brainform-knowledge-name-error"
+                          : undefined
+                      }
+                      className={cn(album.fl, filenameError && kAlbum.flErr)}
+                      value={
+                        pane?.kind === "knowledge-new"
+                          ? newKnowledge.name
+                          : knowledgeNameDraft
+                      }
+                      disabled={
+                        pane?.kind === "knowledge-new"
+                          ? busyKey === "knowledge-new"
+                          : busyKey ===
+                            `knowledge-save:${markdown?.canonical_set_id}`
+                      }
+                      readOnly={
+                        pane?.kind === "knowledge-edit" &&
+                        (!markdown?.can_edit || markdown.audience !== "full")
+                      }
+                      onChange={(name) =>
+                        pane?.kind === "knowledge-new"
+                          ? setNewKnowledge((current) => ({ ...current, name }))
+                          : setKnowledgeNameDraft(name)
+                      }
+                    />
+                    {knowledgeNameError ? (
+                      <span
+                        id="brainform-knowledge-name-error"
+                        className={kAlbum.em}
+                      >
+                        {knowledgeNameError}
+                      </span>
+                    ) : null}
+                  </div>
+                  {pane?.kind === "knowledge-new" ? (
+                    <KnowledgeMarkdownField
+                      className={album.fl}
+                      value={newKnowledge.markdown}
+                      disabled={busyKey === "knowledge-new"}
+                      readOnly={busyKey === "knowledge-new"}
+                      rows={13}
+                      onChange={(markdown) =>
+                        setNewKnowledge((current) => ({ ...current, markdown }))
+                      }
+                    />
+                  ) : markdown ? (
+                    <KnowledgeMarkdownField
+                      className={album.fl}
+                      value={markdownDraft}
+                      disabled={
+                        busyKey === `knowledge-save:${markdown.canonical_set_id}`
+                      }
+                      readOnly={
+                        !markdown.can_edit ||
+                        markdown.audience !== "full" ||
+                        busyKey === `knowledge-save:${markdown.canonical_set_id}`
+                      }
+                      rows={13}
+                      onChange={(value) => {
+                        const current = knowledgeDrafts[
+                          markdown.canonical_set_id
+                        ] ?? {
+                          markdown: markdown.markdown,
+                          expectedVersionSeq: markdown.version_seq,
+                        };
+                        if (value !== markdownDraft) {
+                          mutationStore.abandon(
+                            `brainform-markdown:${markdown.canonical_set_id}:${current.expectedVersionSeq}`,
+                          );
+                        }
+                        setMarkdownDraft(value);
+                        const nextDrafts = {
+                          ...knowledgeDrafts,
+                          [markdown.canonical_set_id]: {
+                            ...current,
+                            markdown: value,
+                          },
+                        };
+                        rememberKnowledgeDrafts(identityScope, nextDrafts);
+                        setKnowledgeDrafts(nextDrafts);
+                      }}
+                    />
+                  ) : null}
+                </div>
+              </section>
+            </div>
+          ) : (
+            <LoadingCard />
+          )}
+        </>
+      ) : null}
       {pane &&
       pane.kind !== "record" &&
+      !knowledgeEditor &&
       !(ragPage && pane.kind.startsWith("rag")) ? (
         <section
           className={styles.editorPanel}
