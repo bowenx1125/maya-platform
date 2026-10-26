@@ -3141,7 +3141,6 @@ function BrainformWorkspaceBody({
                 </span>
               </div>
               <div className={album.plate}>
-                <span className={album.eb}>RAG</span>
                 <h2 className={album.nmBig} id="brainform-editor-heading">
                   {pane.filename}
                 </h2>
@@ -3195,9 +3194,8 @@ function BrainformWorkspaceBody({
           ) : pane.kind === "rag-new" ? (
             <div className={album.blank}>
               <div className={album.in}>
-                <span className={album.eb}>RAG</span>
                 <h2 className={album.nm} id="brainform-editor-heading">
-                  {newRag.name.trim() || t("brainformNewRag")}
+                  {t("brainformRagCreateTitle")}
                 </h2>
                 {role !== "teacher" &&
                 !initialGroupId &&
@@ -3252,7 +3250,6 @@ function BrainformWorkspaceBody({
           ) : pane.kind === "rag-edit" && selectedDraft ? (
             <div className={album.blank}>
               <div className={album.in}>
-                <span className={album.eb}>RAG</span>
                 <h2 className={album.nm} id="brainform-editor-heading">
                   {selectedDraft.filename}
                 </h2>

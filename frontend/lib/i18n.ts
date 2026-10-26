@@ -409,6 +409,7 @@ const enMessages = {
   brainformKnowledgeDeleted: "Knowledge deleted.",
   brainformNewKnowledge: "New Knowledge",
   brainformNewRag: "New RAG",
+  brainformRagCreateTitle: "New",
   brainformUploadKnowledgeFile: "Upload a Markdown file as Knowledge",
   brainformReindexRagNamed: "Reindex {name}",
   brainformViewKnowledge: "View Knowledge",
