@@ -39,19 +39,22 @@ export function KnowledgeFilenameField({
 }) {
   const t = useT();
   return (
-    <label className={fileError ? `relative ${className ?? ""}` : className}>
-      {fileError ? <KindSticker kind="field" n={1} on /> : null}
+    <label className={className}>
       <span>{t("knowledgeFilename")}</span>
-      <input
-        type="text"
-        value={value}
-        disabled={disabled}
-        readOnly={readOnly}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={t("knowledgeFilenamePlaceholder")}
-        aria-invalid={invalid || undefined}
-        aria-describedby={describedBy}
-      />
+      {/* U3: the sticker sits on the input's corner, clear of the label. */}
+      <span className="relative block">
+        {fileError ? <KindSticker kind="field" n={1} on /> : null}
+        <input
+          type="text"
+          value={value}
+          disabled={disabled}
+          readOnly={readOnly}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={t("knowledgeFilenamePlaceholder")}
+          aria-invalid={invalid || undefined}
+          aria-describedby={describedBy}
+        />
+      </span>
     </label>
   );
 }
