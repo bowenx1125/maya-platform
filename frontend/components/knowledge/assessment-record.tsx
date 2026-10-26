@@ -1,5 +1,6 @@
 "use client";
 
+import { LIST_CARD_LIFT } from "../agent-chrome";
 import {
   useCallback,
   useEffect,
@@ -192,7 +193,7 @@ const CARD_SHADOW = [
 ] as const;
 
 function cardShell(index = 0): string {
-  return `relative flex w-full flex-wrap items-center gap-3.5 rounded-[14px] border-[3px] border-black bg-white px-[18px] py-4 text-left font-inherit text-inherit ${CARD_SHADOW[index % CARD_SHADOW.length]} [transform:none]`;
+  return `relative flex w-full flex-wrap items-center gap-3.5 rounded-[14px] border-[3px] border-black bg-white px-[18px] py-4 text-left font-inherit text-inherit ${CARD_SHADOW[index % CARD_SHADOW.length]} ${LIST_CARD_LIFT}`;
 }
 
 /** Cream clipboard board (shared list + detail chrome). */
