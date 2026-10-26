@@ -328,13 +328,13 @@ describe("edge toggle", () => {
     expect(button.parentElement!.className).toMatch(/(^| )sticky( |$)/);
     expect(button.parentElement!.className).toContain("h-dvh");
     expect(button.className).toContain("absolute");
-    expect(button.className).toContain("top-[6px]");
+    expect(button.className).toContain("top-[15px]");
     // It sits clear of the rows (12px padding) and of the collapsed tiles.
     expect(button.className).toContain("-right-[22px]");
     act(() => {
       fireEvent.click(button);
     });
     expect(toggle().className).toContain("-right-[26px]");
-    expect(toggle().className).toContain("top-[6px]");
+    expect(toggle().className).toContain("top-[15px]");
   });
 });

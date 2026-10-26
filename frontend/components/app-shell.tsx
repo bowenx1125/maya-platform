@@ -703,6 +703,18 @@ export function AppShell({
       />
     </ViewTransition>
   );
+  // toggle-A / collapse-C: a collapsed rail labels its tiles with a drawn
+  // tooltip (hover or keyboard focus), not a native title.
+  const railTip = (label: string) =>
+    collapsed && !mobile ? (
+      <span
+        aria-hidden="true"
+        data-rail-tip=""
+        className="pointer-events-none invisible absolute top-1/2 left-[calc(100%+10px)] z-50 -translate-y-1/2 rounded-[5px] bg-[#111] px-2 py-[5px] font-body text-xs font-semibold whitespace-nowrap text-white group-hover/tip:visible group-focus-visible/tip:visible"
+      >
+        {label}
+      </span>
+    ) : null;
   const lamp = (on: boolean, corner: boolean) => (
     <span
       aria-hidden="true"
@@ -735,21 +747,21 @@ export function AppShell({
           <span
             aria-disabled="true"
             data-tour={tour}
-            title={collapsed ? item.label : undefined}
             aria-label={collapsed ? item.label : undefined}
             className={
               collapsed
-                ? `${ICON_ITEM} border-transparent opacity-55`
+                ? `${ICON_ITEM} group/tip border-transparent`
                 : `${ITEM} ${ITEM_IDLE} cursor-not-allowed text-arc-muted hover:bg-transparent`
             }
           >
-            <span className={collapsed ? "" : "opacity-55"}>
+            <span className="opacity-55">
               <WorkspaceIcon name={item.icon} size={18} />
             </span>
             {collapsed ? null : (
               <span className="opacity-55">{item.label}</span>
             )}
             {isLive ? lamp(false, collapsed) : null}
+            {railTip(item.label)}
           </span>
         </li>
       );
@@ -760,11 +772,10 @@ export function AppShell({
           href={item.href}
           aria-current={current ? "page" : undefined}
           aria-label={collapsed ? item.label : undefined}
-          title={collapsed ? item.label : undefined}
           data-tour={tour}
           data-sidebar-item={item.key}
           data-lit={lit || undefined}
-          className={`${collapsed ? ICON_ITEM : ITEM} isolate ${lit ? ITEM_ACTIVE : collapsed ? "border-transparent hover:bg-white/60" : ITEM_IDLE}${current ? " active" : ""}`}
+          className={`${collapsed ? `${ICON_ITEM} group/tip` : ITEM} isolate ${lit ? ITEM_ACTIVE : collapsed ? "border-transparent hover:bg-white/60" : ITEM_IDLE}${current ? " active" : ""}`}
         >
           {lit ? pill : null}
           <WorkspaceIcon name={item.icon} size={18} />
@@ -783,6 +794,7 @@ export function AppShell({
               </span>
             )
           ) : null}
+          {railTip(item.label)}
         </Link>
       </li>
     );
@@ -828,7 +840,7 @@ export function AppShell({
             <button
               type="button"
               data-sidebar-toggle
-              className={`group/toggle absolute ${mobile ? "top-4 right-3 size-8 rounded-arc-s" : `top-[6px] ${collapsed ? "-right-[26px]" : "-right-[22px]"} size-8 rounded-full`} z-10 grid place-items-center border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none`}
+              className={`group/toggle absolute ${mobile ? "top-4 right-3 size-8 rounded-arc-s" : `top-[15px] ${collapsed ? "-right-[26px]" : "-right-[22px]"} size-8 rounded-full`} z-10 grid place-items-center border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none`}
               aria-label={toggleLabel}
               aria-expanded={mobile ? drawerOpen : !collapsed}
               aria-controls={SIDEBAR_ID}
@@ -847,7 +859,7 @@ export function AppShell({
                 <span
                   aria-hidden="true"
                   data-sidebar-toggle-tip
-                  className="pointer-events-none invisible absolute top-1/2 left-[calc(100%+10px)] -translate-y-1/2 rounded-[5px] bg-[#111] px-2 py-[5px] font-body text-xs font-semibold whitespace-nowrap text-white group-hover/toggle:visible group-focus-visible/toggle:visible"
+                  className="pointer-events-none invisible absolute top-[5px] left-[calc(100%+2px)] rounded-[5px] bg-[#111] px-2 py-[5px] font-body text-xs font-semibold whitespace-nowrap text-white group-hover/toggle:visible group-focus-visible/toggle:visible"
                 >
                   {toggleLabel} · Ctrl B
                 </span>
@@ -864,10 +876,9 @@ export function AppShell({
                   href={home}
                   aria-current={mayaformLit ? "page" : undefined}
                   aria-label={collapsed ? t("appName") : undefined}
-                  title={collapsed ? t("appName") : undefined}
                   data-tour="home"
                   data-lit={mayaformLit || undefined}
-                  className={`isolate ${collapsed ? `${ICON_ITEM} border-border bg-main shadow-arc-s` : mobile ? `${ITEM} w-fit justify-self-start border-transparent font-display text-lg font-extrabold` : `${ITEM} w-fit justify-self-start font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " active" : ""}`}
+                  className={`isolate ${collapsed ? `${ICON_ITEM} group/tip ${mayaformLit ? "border-border bg-main shadow-arc-s" : "border-transparent"}` : mobile ? `${ITEM} w-fit justify-self-start border-transparent font-display text-lg font-extrabold` : `${ITEM} w-fit justify-self-start font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " active" : ""}`}
                 >
                   {mayaformLit && !collapsed && !mobile ? pill : null}
                   <span
@@ -875,6 +886,7 @@ export function AppShell({
                     aria-hidden="true"
                   />
                   {collapsed ? null : <span>{t("appName")}</span>}
+                  {railTip(t("appName"))}
                 </Link>
                 {groups.map((group) => {
                   const headingId = `sidebar-group-${group.key}`;
@@ -946,7 +958,7 @@ export function AppShell({
                       )}
                     </>
                   );
-                  const actionClass = `${collapsed ? `${ICON_ITEM}` : ITEM} border-border bg-surface shadow-arc-s hover:-translate-y-px active:translate-x-[3px] active:translate-y-[3px] active:shadow-none`;
+                  const actionClass = `${collapsed ? `${ICON_ITEM} group/tip` : ITEM} border-border bg-surface shadow-arc-s hover:-translate-y-px active:translate-x-[3px] active:translate-y-[3px] active:shadow-none`;
                   return action.href && !faded ? (
                     <Link
                       key={name}
@@ -954,9 +966,9 @@ export function AppShell({
                       href={action.href}
                       onClick={action.onClick}
                       data-ui-guide={`workspace.${name}`}
-                      title={collapsed ? label : undefined}
                     >
                       {content}
+                      {railTip(label)}
                     </Link>
                   ) : (
                     <button
@@ -968,9 +980,9 @@ export function AppShell({
                       aria-busy={action.busy || undefined}
                       onClick={action.onClick}
                       data-ui-guide={`workspace.${name}`}
-                      title={collapsed ? label : undefined}
                     >
                       {content}
+                      {railTip(label)}
                     </button>
                   );
                 })}
@@ -981,13 +993,13 @@ export function AppShell({
                 {collapsed ? (
                   <a
                     href="mailto:t330034059@mail.bnbu.edu.cn"
-                    title="Send to t330034059@mail.bnbu.edu.cn"
-                    className={`${ICON_ITEM} border-border bg-surface shadow-arc-s`}
+                    className={`${ICON_ITEM} group/tip border-border bg-surface shadow-arc-s`}
                   >
                     <WorkspaceIcon name="mail" size={18} />
                     <span className="sr-only">
                       Meet Problems? Send to t330034059@mail.bnbu.edu.cn
                     </span>
+                    {railTip("Meet Problems?")}
                   </a>
                 ) : (
                   <p className="m-0 grid gap-[3px] rounded-[6px] border-2 border-border bg-surface px-2.5 py-2 font-body text-xs text-ink shadow-[3px_3px_0_#111]">
@@ -1003,11 +1015,10 @@ export function AppShell({
                   </p>
                 )}
                 <button
-                  className={`${collapsed ? `${ICON_ITEM}` : `${ITEM} w-full`} cursor-pointer border-border bg-surface text-left shadow-arc-s active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-wait disabled:opacity-60`}
+                  className={`${collapsed ? `${ICON_ITEM} group/tip` : `${ITEM} w-full`} cursor-pointer border-border bg-surface text-left shadow-arc-s active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-wait disabled:opacity-60`}
                   type="button"
                   disabled={busy}
                   data-ui-guide="workspace.logout"
-                  title={collapsed ? t("logout") : undefined}
                   onClick={() => void signOut()}
                 >
                   <WorkspaceIcon name="logout" size={18} />
@@ -1016,6 +1027,7 @@ export function AppShell({
                   ) : (
                     t("logout")
                   )}
+                  {railTip(t("logout"))}
                 </button>
               </div>
             </div>
