@@ -485,7 +485,6 @@ const enMessages = {
   guide: "Guide",
   guideDone: "Done",
   guideNext: "Next",
-  guideOptional: "Optional",
   studentGuideAgent: "Build the Agent",
   studentGuideKnowledge: "Add the RAG",
   studentGuideVoice: "Upload the Voice",

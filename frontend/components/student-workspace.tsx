@@ -10,6 +10,7 @@ import {
   type PublishedAgentSummary,
   type AgentVersion,
   type ChatAgent,
+  type ConversationSession,
   type GroupDetail,
   type PlatformApi,
   type TeamSummaryDto,
@@ -135,6 +136,25 @@ function versionBubble(agent: AgentSummary, versions: AgentVersion[]) {
   };
 }
 
+/**
+ * Chats in the current course only: the conversations list spans every course
+ * the student is in. Agent chats carry agent.course_id, team chats
+ * team.course_id; with no current course nothing counts.
+ */
+export function courseChatCount(
+  chats: readonly ConversationSession[],
+  courseId: string | undefined,
+) {
+  if (!courseId) return 0;
+  return chats.filter((chat) =>
+    "team" in chat && chat.team
+      ? chat.team.course_id === courseId
+      : "agent" in chat && chat.agent
+        ? chat.agent.course_id === courseId
+        : false,
+  ).length;
+}
+
 export function StudentDashboard() {
   const t = useT();
   const { api, identityGeneration, user } = useSession();
@@ -162,8 +182,8 @@ export function StudentDashboard() {
               api.publishedAgents(courseId),
             )
           : Promise.resolve([]),
-        // "Start the Chat" is done once the student has any chat in their
-        // history (the list Chat with Agent reads). Only the guide uses it,
+        // "Start the Chat" is done once the student has a chat in this
+        // course (the list spans all courses, so it is filtered below). Only the guide uses it,
         // so a failed read leaves the step undone rather than the page.
         typeof api.conversations === "function"
           ? api.conversations().catch(() => [])
@@ -171,7 +191,7 @@ export function StudentDashboard() {
       ]);
       setGroups(overviews);
       setPublished(nextPublished);
-      setChatCount(chats.length);
+      setChatCount(courseChatCount(chats, courseId));
     } catch (cause) {
       setError(cause);
     } finally {
@@ -207,7 +227,6 @@ export function StudentDashboard() {
         {
           label: t("studentGuideVoice"),
           complete: primary.voiceCount > 0,
-          optional: true,
           href: `/student/groups/${primary.group.id}/voices?mode=new`,
         },
         {
@@ -265,7 +284,7 @@ export function StudentDashboard() {
             </h2>
             {/* The guide speaks from its gold portrait, as in the tour. */}
             <div className="flex items-start gap-5 max-[680px]:gap-3">
-              <GuidePortrait className="size-24" />
+              <GuidePortrait className="size-24 max-[680px]:size-14" />
               <div className="min-w-0 flex-1">
                 <HomeGuide steps={guide} />
               </div>
