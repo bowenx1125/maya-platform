@@ -507,18 +507,27 @@ export function RecordDetail({
   const average = averageRatio(team.attempts);
   return (
     <ClipboardBoard labelledBy="brainform-record-team">
-      <div className="mb-4 flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="mb-1 text-[11px] font-extrabold uppercase tracking-[1.4px] text-[#0E7490]">
-            Record
-          </p>
-          <h2
-            id="brainform-record-team"
-            className="m-0 text-[34px] font-extrabold leading-none"
-          >
-            {team.name}
-          </h2>
-        </div>
+      <div className="mb-5 flex flex-wrap items-start gap-3.5">
+        <h2
+          id="brainform-record-team"
+          className="m-0 inline-block max-w-full -rotate-[1.5deg] break-words rounded-md border-[3px] border-black border-l-[10px] border-l-[#FACC15] bg-white px-[18px] py-1 text-[34px] font-extrabold leading-none shadow-[4px_4px_0_#FFE14D]"
+        >
+          {team.name}
+        </h2>
+        <span
+          aria-hidden="true"
+          className="mt-2.5 h-5 w-16 shrink-0 rotate-6 rounded-sm border-2 border-[#67E8F9] bg-[rgba(103,232,249,0.9)] shadow-[2px_2px_0_#A5F3FC]"
+        />
+        <span
+          aria-hidden="true"
+          className={`ml-auto shrink-0 rounded-lg border-[3px] px-3.5 py-1.5 text-[13px] font-extrabold ${
+            own
+              ? "-rotate-6 border-[#16A34A] text-[#16A34A]"
+              : "rotate-8 border-[#EF4444] text-[#EF4444]"
+          } bg-white/85`}
+        >
+          {own ? "MY PROGRESS" : "CLASS ROSTER"}
+        </span>
         {onBack ? (
           <PageAction name="back" placement="page" onClick={onBack} />
         ) : null}
