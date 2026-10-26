@@ -1,4 +1,5 @@
 "use client";
+import { PRESS_MOTION } from "../ui/button";
 
 import {
   useEffect,
@@ -926,7 +927,7 @@ export function TeamEntryFlow({
                     {agentsHref ? (
                       <Link
                         href={agentsHref}
-                        className="inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] bg-[#A3E635] px-4 py-[7px] font-body text-sm font-extrabold text-[#111] no-underline shadow-[0_5px_0_#111] [&_svg]:size-4"
+                        className={`inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] bg-[#A3E635] px-4 py-[7px] font-body text-sm font-extrabold text-[#111] no-underline [&_svg]:size-4 ${PRESS_MOTION}`}
                         onClick={() => writeTeamDraft(draftKey, form)}
                       >
                         <WorkspaceIcon name="agent" />

@@ -1,3 +1,4 @@
+import { PRESS_MOTION } from "./ui/button";
 import { cn } from "../lib/utils";
 
 /*
@@ -38,8 +39,7 @@ export function agentCard(
 }
 
 /** Shared "+ New" (Button default, R2). */
-export const AGENT_NEW_BUTTON =
-  "m-0 inline-flex h-10 w-auto shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] bg-[#FF4D8D] px-3.5 py-0 font-body text-sm leading-none font-bold whitespace-nowrap text-[#111] shadow-[6px_6px_0_#111] hover:translate-x-0 hover:translate-y-0 hover:shadow-[6px_6px_0_#111] disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:stroke-3";
+export const AGENT_NEW_BUTTON = `m-0 inline-flex h-10 w-auto shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] bg-[#FF4D8D] px-3.5 py-0 font-body text-sm leading-none font-bold whitespace-nowrap text-[#111] disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:stroke-3 ${PRESS_MOTION}`;
 
 /** Shared 40px icon button (Button neutral size=icon, R2). */
 export const AGENT_ICON_BUTTON =
