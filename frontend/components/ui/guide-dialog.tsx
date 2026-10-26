@@ -29,7 +29,7 @@ export function GuidePortrait({
   );
 }
 
-/** Step HUD: one pip per step, the current one filled. */
+/** Step HUD (guide v3): one bar per step; done and current steps are pink. */
 export function GuideHud({
   total,
   index,
@@ -37,27 +37,23 @@ export function GuideHud({
 }: {
   total: number;
   index: number;
-  label: ReactNode;
+  label?: ReactNode;
 }) {
   return (
-    <span className="flex items-center gap-2">
-      <ol className="m-0 flex list-none gap-1.5 p-0" aria-hidden="true">
+    <span className="grid gap-1">
+      <ol className="m-0 flex list-none gap-[3px] p-0" aria-hidden="true">
         {Array.from({ length: total }, (_, at) => (
           <li
             key={at}
             data-state={at === index ? "now" : at < index ? "done" : "todo"}
             className={cn(
-              "h-2.5 w-4 rounded-full border-2 border-border",
-              at === index
-                ? "w-6 bg-main"
-                : at < index
-                  ? "bg-ink"
-                  : "bg-surface",
+              "h-2 flex-1 rounded-[2px] border-2 border-border",
+              at <= index ? "bg-[#FF4D8D]" : "bg-white",
             )}
           />
         ))}
       </ol>
-      <span className="text-xs font-bold text-arc-muted">{label}</span>
+      {label ? <span className="sr-only">{label}</span> : null}
     </span>
   );
 }
@@ -109,24 +105,33 @@ export const GuideDialog = forwardRef<
       data-side={side}
       style={style}
       className={cn(
-        "grid w-[min(560px,calc(100vw-24px))] grid-cols-[168px_1fr] gap-x-5 gap-y-3 rounded-arc border-[3px] border-border bg-surface p-5 font-body text-ink shadow-arc max-[680px]:grid-cols-[96px_1fr] max-[680px]:gap-x-3 max-[680px]:p-4",
+        "flex w-[min(600px,calc(100vw-24px))] rounded-[10px] border-[3px] border-border bg-white font-body text-ink shadow-[6px_6px_0_#111]",
         className,
       )}
     >
       {pointer}
-      <GuidePortrait className="row-span-2" />
-      <h2
-        id={titleId}
-        className="m-0 self-end font-display text-2xl font-extrabold leading-tight max-[680px]:text-xl"
+      {/* Guide v3: a 168px pale-gold panel with the full figure. */}
+      <span
+        aria-hidden="true"
+        className="flex w-[168px] flex-none items-end justify-center rounded-l-[7px] border-r-[3px] border-border bg-[#F3D58A] px-3.5 py-[18px] max-[680px]:w-24 max-[680px]:px-2 max-[680px]:py-3"
       >
-        {title}
-      </h2>
-      <p id={bodyId} className="m-0 self-start text-[15px] leading-normal">
-        {body}
-      </p>
-      <div className="col-span-2 flex flex-wrap items-center gap-2.5">
+        <MascotFigure
+          id="wave"
+          className="h-auto max-h-[190px] w-full drop-shadow-[3px_3px_0_#111]"
+        />
+      </span>
+      <div className="min-w-0 flex-1 px-4 py-3.5">
         {hud}
-        <span className="ml-auto flex items-center gap-2">{actions}</span>
+        <h2
+          id={titleId}
+          className="mt-1.5 mb-1 font-display text-xl leading-tight font-extrabold"
+        >
+          {title}
+        </h2>
+        <p id={bodyId} className="m-0 mb-3 text-sm leading-normal">
+          {body}
+        </p>
+        <div className="flex flex-wrap items-center gap-2.5">{actions}</div>
       </div>
     </div>
   );
