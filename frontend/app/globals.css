@@ -3116,3 +3116,12 @@ dd {
   margin-left: 6px;
   vertical-align: middle;
 }
+
+/* A role=alert line moved into the mascot tray: the bubble, full width. */
+.notice-tray > .dismissible-alert.dismissible-alert-tray {
+  display: flex;
+  width: 100%;
+  margin: 0;
+  color: #111;
+  font-size: 14px;
+}
