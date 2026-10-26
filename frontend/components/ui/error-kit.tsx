@@ -9,6 +9,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { cn } from "../../lib/utils";
+import { placeNoticeTray, revealNoticeTray } from "../notice-tray";
 
 /**
  * U3 "Icon by Kind" (proposals/15-unified-errors): one pink bubble for every
@@ -203,10 +204,50 @@ export function MascotBadge({
       aria-label={label}
       title={label}
       onClick={onOpen}
-      className="mascot-badge pointer-events-auto absolute right-[11px] bottom-[84px] z-[2] m-0 grid size-[30px] min-h-0 rotate-[-8deg] cursor-pointer place-items-center rounded-full border-2 border-border bg-[#EF4444] p-0 font-body text-[15px] font-black text-white shadow-[2px_2px_0_#111] max-[680px]:right-[6px] max-[680px]:bottom-[52px]"
+      className="mascot-badge pointer-events-auto absolute right-0 bottom-[52px] z-[2] m-0 grid size-[28px] min-h-0 rotate-[-8deg] cursor-pointer place-items-center rounded-full border-2 border-border bg-[#EF4444] p-0 font-body text-[15px] font-black text-white shadow-[2px_2px_0_#111] [body>.notice-tray>&]:right-3 min-[900px]:[body>.notice-tray>&]:right-0"
     >
       !
     </button>,
     tray,
   );
+}
+
+/**
+ * Where the shared tray sits in the page flow below 900px: the shell renders
+ * this right after its main panel. From 900px the tray is fixed, in <body>.
+ */
+export function NoticeTraySlot({ className }: { className?: string }) {
+  return (
+    <div
+      data-notice-tray-slot=""
+      className={className}
+      ref={(slot) => {
+        placeNoticeTray();
+        return () => {
+          // Leaving the page: hand the tray back to <body> before the slot
+          // goes, so open notices keep a connected tray.
+          const tray = slot?.querySelector<HTMLElement>(".notice-tray");
+          if (tray) document.body.append(tray);
+          placeNoticeTray();
+        };
+      }}
+    />
+  );
+}
+
+/**
+ * U3: when a new error is shown (a new `key`), make sure the reader sees it.
+ * Below 900px the tray is in the page flow and may be off screen; it is
+ * scrolled into view once, smoothly unless reduced motion is asked for.
+ */
+export function useRevealNotice(
+  tray: HTMLElement | null,
+  key: unknown,
+  enabled = true,
+) {
+  useEffect(() => {
+    if (!enabled || !tray) return;
+    const frame = requestAnimationFrame(() => revealNoticeTray(tray));
+    return () => cancelAnimationFrame(frame);
+  }, [tray, key, enabled]);
 }
