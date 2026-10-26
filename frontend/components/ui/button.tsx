@@ -12,6 +12,13 @@ import { cn } from "../../lib/utils";
 export const PRESS_MOTION =
   "shadow-[0_6px_0_#111] transition-[translate,box-shadow,background-color,color] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-0.5 active:translate-y-1.5 active:shadow-none active:duration-[80ms] motion-reduce:transition-colors motion-reduce:hover:translate-y-0 motion-reduce:active:translate-y-0 motion-reduce:active:shadow-[0_6px_0_#111]";
 
+/**
+ * DESIGN-RULES L44-49 for icon and ghost buttons: no shadow and no lift;
+ * a 2px #111 border shows on hover (rest colour is the button's own). Reduced motion keeps the colour change only.
+ */
+export const ICON_MOTION =
+  "shadow-none border-2 transition-[border-color,background-color,color] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:border-[#111] motion-reduce:transition-colors";
+
 export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius-base)] text-sm font-[700] font-[family-name:var(--arc-font-body)] cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
   {
@@ -21,9 +28,10 @@ export const buttonVariants = cva(
         noShadow:
           "text-[var(--main-foreground)] bg-[var(--main)] border-[3px] border-[var(--border)]",
         neutral:
-          "bg-[var(--secondary-background)] text-[var(--foreground)] border-2 border-[var(--border)] shadow-[3px_3px_0_0_var(--border)] hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none",
+          `bg-[var(--secondary-background)] text-[var(--foreground)] border-2 border-[var(--border)] ${PRESS_MOTION}`,
         reverse:
-          "text-[var(--main-foreground)] bg-[var(--main)] border-[3px] border-[var(--border)] hover:translate-x-[var(--reverse-box-shadow-x)] hover:translate-y-[var(--reverse-box-shadow-y)] hover:shadow-[var(--shadow)]",
+          `text-[var(--main-foreground)] bg-[var(--main)] border-[3px] border-[var(--border)] ${PRESS_MOTION}`,
+        ghost: `bg-transparent text-[var(--foreground)] border-transparent ${ICON_MOTION}`,
       },
       size: {
         default: "h-10 px-4 py-2",

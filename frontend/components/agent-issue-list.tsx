@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { cn } from "../lib/utils";
+import { PRESS_MOTION } from "./ui/button";
 import {
   NOTICE_TAIL_CLASS,
   STICKER,
@@ -231,8 +232,7 @@ export function ChecklistBadge({ entry }: { entry?: ChecklistEntry }) {
 }
 
 /** The pink pill jump button ("Show me" / "Edit Agent …") with its → arrow. */
-export const JUMP_BUTTON =
-  "inline-flex flex-none cursor-pointer items-center gap-[5px] whitespace-nowrap rounded-full border-2 border-border bg-[#FF4D8D] px-[11px] py-1 font-body text-xs font-bold text-ink no-underline shadow-[3px_3px_0_#111] hover:-translate-x-px hover:-translate-y-px hover:shadow-[4px_4px_0_#111] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main motion-reduce:hover:translate-0 motion-reduce:active:translate-0";
+export const JUMP_BUTTON = `inline-flex flex-none cursor-pointer items-center gap-[5px] whitespace-nowrap rounded-full border-2 border-border bg-[#FF4D8D] px-[11px] py-1 font-body text-xs font-bold text-ink no-underline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main ${PRESS_MOTION}`;
 
 export function JumpArrow() {
   return (

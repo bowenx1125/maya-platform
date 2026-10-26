@@ -36,7 +36,7 @@ import {
   SIDEBAR_MOBILE_QUERY,
   SIDEBAR_REVEAL_EVENT,
 } from "../lib/sidebar-reveal";
-import { PRESS_MOTION } from "./ui/button";
+import { ICON_MOTION, PRESS_MOTION } from "./ui/button";
 import { NoticeTraySlot } from "./ui/error-kit";
 
 type ActionRegistration = {
@@ -883,7 +883,7 @@ export function AppShell({
         <div className="sticky top-0 z-30 hidden h-[50px] items-center justify-center border-b-[3px] border-border bg-sidebar px-3 max-[900px]:flex">
           <button
             type="button"
-            className="absolute top-1/2 left-3 grid size-[30px] -translate-y-1/2 place-items-center rounded-[6px] border-[2px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] after:absolute after:-inset-[7px] after:content-[''] active:shadow-none"
+            className={`absolute top-1/2 left-3 grid size-[30px] -translate-y-1/2 place-items-center rounded-[6px] border-border bg-surface text-ink after:absolute after:-inset-[7px] after:content-[''] ${ICON_MOTION}`}
             aria-label={t("sidebarExpand")}
             aria-expanded={drawerOpen}
             aria-controls={SIDEBAR_ID}
@@ -915,7 +915,7 @@ export function AppShell({
             <button
               type="button"
               data-sidebar-toggle
-              className={`group/toggle absolute ${mobile ? "top-4 right-3 size-8 rounded-arc-s" : `top-[calc(50%-16px)] ${collapsed ? "-right-[26px]" : "-right-[22px]"} size-8 rounded-full`} z-10 grid place-items-center border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none`}
+              className={`group/toggle absolute ${mobile ? "top-4 right-3 size-8 rounded-arc-s" : `top-[calc(50%-16px)] ${collapsed ? "-right-[26px]" : "-right-[22px]"} size-8 rounded-full`} z-10 grid place-items-center border-border bg-surface text-ink ${ICON_MOTION}`}
               aria-label={toggleLabel}
               aria-expanded={mobile ? drawerOpen : !collapsed}
               aria-controls={SIDEBAR_ID}

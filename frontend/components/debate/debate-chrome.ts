@@ -1,4 +1,5 @@
 import { cn } from "../../lib/utils";
+import { PRESS_MOTION } from "../ui/button";
 
 /*
  * Debates chrome, ported from the approved final mockup
@@ -7,8 +8,7 @@ import { cn } from "../../lib/utils";
  */
 
 /** F `.bt`: flat outline pill, icon + text. */
-export const DEBATE_BUTTON =
-  "m-0 inline-flex h-auto w-auto shrink-0 cursor-pointer items-center gap-[7px] rounded-full border-2 border-[#111] bg-white py-[7px] pr-[15px] pl-[11px] font-body text-sm leading-[normal] font-bold whitespace-nowrap text-[#111] no-underline shadow-none transition-transform duration-[80ms] hover:bg-[#F1F7FF] disabled:cursor-default disabled:border-[#D6D3D1] disabled:bg-[#FAFAF9] disabled:text-[#A8A29E] disabled:opacity-100 [&_svg]:flex-none";
+export const DEBATE_BUTTON = `m-0 inline-flex h-auto w-auto shrink-0 cursor-pointer items-center gap-[7px] rounded-full border-2 border-[#111] bg-white py-[7px] pr-[15px] pl-[11px] font-body text-sm leading-[normal] font-bold whitespace-nowrap text-[#111] no-underline hover:bg-[#F1F7FF] disabled:cursor-default disabled:border-[#D6D3D1] disabled:bg-[#FAFAF9] disabled:text-[#A8A29E] disabled:opacity-100 disabled:shadow-none [&_svg]:flex-none ${PRESS_MOTION}`;
 
 /**
  * F `.bt.pri`: the single pink primary action. Applied on top of the shared

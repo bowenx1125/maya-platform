@@ -1,4 +1,4 @@
-import { PRESS_MOTION } from "./ui/button";
+import { ICON_MOTION, PRESS_MOTION } from "./ui/button";
 import { cn } from "../lib/utils";
 
 /*
@@ -42,8 +42,7 @@ export function agentCard(
 export const AGENT_NEW_BUTTON = `m-0 inline-flex h-10 w-auto shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] bg-[#FF4D8D] px-3.5 py-0 font-body text-sm leading-none font-bold whitespace-nowrap text-[#111] disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:stroke-3 ${PRESS_MOTION}`;
 
 /** Shared 40px icon button (Button neutral size=icon, R2). */
-export const AGENT_ICON_BUTTON =
-  "m-0 inline-grid size-10 min-h-0 shrink-0 cursor-pointer place-items-center rounded-[10px] border-2 border-[#111] bg-white p-0 text-[#111] shadow-[3px_3px_0_#111] hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-[18px] [&_svg]:stroke-[2.25]";
+export const AGENT_ICON_BUTTON = `m-0 inline-grid size-10 min-h-0 shrink-0 cursor-pointer place-items-center rounded-[10px] border-[#111] bg-white p-0 text-[#111] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-[18px] [&_svg]:stroke-[2.25] ${ICON_MOTION}`;
 
 /** Page body (.pg) and banner (.ph). */
 export const AGENT_PAGE =
