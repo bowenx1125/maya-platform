@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import { useT } from "../../lib/i18n";
 import type { AvatarConfig, AvatarState } from "./types";
 import { avatarAssetUrlForTemplate } from "./types";
-import styles from "./avatar.module.css";
 
 export type AvatarCanvasProps = {
   config: AvatarConfig;
@@ -168,7 +167,7 @@ export function AvatarCanvas({
 
   return (
     <div
-      className={`${styles.canvasFrame}${className ? ` ${className}` : ""}`}
+      className={`relative grid aspect-square min-h-[260px] w-full place-items-center overflow-hidden max-[620px]:min-h-[230px]${className ? ` ${className}` : ""}`}
       role="img"
       aria-label={`${fallback} ${t("avatarPreview")}`}
       data-avatar-status={resolvedAssetUrl ? status : "failed"}
@@ -182,21 +181,21 @@ export function AvatarCanvas({
     >
       <canvas
         ref={canvasRef}
-        className={styles.canvas}
+        className="block size-full"
         hidden={!resolvedAssetUrl || status !== "ready"}
       />
       {resolvedAssetUrl && status === "loading" ? (
-        <span className={styles.loading}>{t("avatarPreviewLoading")}</span>
+        <span className="absolute inset-0 grid place-items-center text-[0.86rem] text-(--muted,#62626a)">{t("avatarPreviewLoading")}</span>
       ) : null}
       <div
-        className={styles.fallback}
+        className="grid aspect-square w-[min(58%,12rem)] place-items-center rounded-full border border-[rgba(35,57,72,0.14)] bg-(--accent-soft,#f6ecd3) text-[clamp(2rem,8vw,4rem)] font-[720] tracking-[0.03em] text-(--accent,#76591f) shadow-[0_1rem_2rem_rgba(74,71,65,0.16)]"
         hidden={Boolean(resolvedAssetUrl) && status !== "failed"}
         aria-hidden="true"
       >
         {initials(fallback)}
       </div>
       {!resolvedAssetUrl || (status === "failed" && failure) ? (
-        <span className={styles.previewLabel}>
+        <span className="absolute right-[0.8rem] bottom-[0.8rem] max-w-[calc(100%-1.6rem)] overflow-hidden text-right text-[0.77rem] leading-[1.25] font-[650] text-(--ink,#1d1d1f) [overflow-wrap:anywhere] whitespace-normal line-clamp-2">
           {fallback} · {t("avatarStaticPreview")}
         </span>
       ) : null}

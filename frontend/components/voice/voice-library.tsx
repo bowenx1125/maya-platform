@@ -35,7 +35,6 @@ import { PageAction } from "../page-action";
 import { buttonVariants } from "../ui/button";
 import { AGENT_NEW_BUTTON, agentCard } from "../agent-chrome";
 import { cn } from "../../lib/utils";
-import styles from "./voice-library.module.css";
 import {
   AlbumMic,
   AlbumRings,
@@ -622,7 +621,7 @@ export function VoiceLibrary({
   }
 
   const form = (
-    <div className={styles.uploadCard}>
+    <div className={"grid gap-6"}>
       {failure ? (
         <ErrorNotice
           inline
@@ -632,9 +631,9 @@ export function VoiceLibrary({
           }
         />
       ) : null}
-      <div className={styles.uploadRow}>
+      <div className={"grid min-w-0 gap-2.5"}>
         <label
-          className={styles.uploadButton}
+          className={"inline-grid w-full min-h-11 place-items-center rounded-[10px] border border-(--workspace-border,var(--line)) bg-(--workspace-content,var(--surface-subtle)) text-(--ink) cursor-pointer hover:border-[#d8cfbd] hover:bg-[#f5eddc] focus-within:outline focus-within:outline-[3px] focus-within:outline-[#967c50] focus-within:outline-offset-2 has-[input:disabled]:text-[#8b887f] has-[input:disabled]:cursor-not-allowed"}
           data-ui-guide="voice.uploadSample"
           aria-busy={controlsDisabled || undefined}
         >
@@ -657,7 +656,7 @@ export function VoiceLibrary({
           />
         </label>
         {file ? (
-          <span className={styles.selectedFile} aria-live="polite">
+          <span className={"min-w-0 text-(--ink) text-[0.92rem] leading-[1.4] [overflow-wrap:anywhere]"} aria-live="polite">
             {file.name}
           </span>
         ) : null}
@@ -665,7 +664,7 @@ export function VoiceLibrary({
       {/* Confirming consent is the create step: no sidebar Done, and the
           sidebar never changes while this panel is open. */}
       <button
-        className={styles.consent}
+        className={"flex w-full min-h-11 items-center gap-2.5 px-[14px] py-2.5 rounded-[10px] border border-(--workspace-border,var(--line)) bg-(--workspace-content,var(--surface-subtle)) text-(--ink) font-[inherit] text-[0.9rem] leading-[1.6] text-left cursor-pointer hover:enabled:border-[#d8cfbd] hover:enabled:bg-[#f5eddc] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#967c50] focus-visible:outline-offset-2 disabled:text-[#8b887f] disabled:cursor-not-allowed"}
         type="button"
         disabled={!file || controlsDisabled || !canEnroll}
         aria-busy={busy || undefined}
@@ -679,7 +678,7 @@ export function VoiceLibrary({
       {/* Students read the grey button as "upload is broken" (2026-10-20):
           say why it is waiting. */}
       {!file ? (
-        <p id="voice-consent-hint" className={styles.consentHint}>
+        <p id="voice-consent-hint" className={"m-[4px_0_0] text-[0.85em] text-(--muted,#666)"}>
           {t("voiceSelectFileFirst")}
         </p>
       ) : null}
@@ -720,21 +719,21 @@ export function VoiceLibrary({
       <>
         <li
           className={
-            arcadePicker ? arcadeRow(selectedId === null) : styles.voiceRow
+            arcadePicker ? arcadeRow(selectedId === null) : "group flex min-w-0 flex-wrap items-center justify-between gap-x-2.5 gap-y-1 rounded-xl border border-[#ebe5df] bg-[#fdfaf3] px-[14px] py-1.5 transition-[box-shadow,border-color] duration-200 hover:border-[#ddd3c4] hover:shadow-[0_6px_18px_rgb(64_52_32/0.06)]"
           }
           data-choice="none"
           data-selected={selectedId === null ? "true" : undefined}
         >
-          <label className={arcadePicker ? arcadeChoice() : styles.voiceChoice}>
+          <label className={arcadePicker ? arcadeChoice() : "flex min-h-8 min-w-0 flex-[1_1_0] cursor-pointer items-center gap-2.5 has-[input:disabled]:cursor-default"}>
             <input
-              className={arcadePicker ? arcadeRadio() : styles.radio}
+              className={arcadePicker ? arcadeRadio() : "radio m-0 inline-grid size-[18px] shrink-0 appearance-none place-items-center rounded-full border-[1.5px] border-[#8b7d66] bg-transparent cursor-inherit before:size-2.5 before:rounded-full before:bg-(--gold,#967c50) before:content-[''] before:scale-0 before:transition-transform before:duration-150 checked:border-(--gold,#967c50) checked:before:scale-100 disabled:border-[#cfc8bb] focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-[3px]"}
               type="radio"
               name={pickerName}
               checked={selectedId === null}
               disabled={controlsDisabled}
               onChange={() => onSelect(null)}
             />
-            <span className={arcadePicker ? arcadeName() : styles.voiceName}>
+            <span className={arcadePicker ? arcadeName() : "m-0 min-w-0 flex-[1_1_0] overflow-hidden border-0 bg-transparent p-0 font-(family-name:--display-serif) text-[1.05rem] font-[650] leading-[1.25] tracking-[-0.01em] text-left text-ellipsis whitespace-nowrap text-inherit group-data-[status=failed]:text-[#8b887f] group-data-[status=deleting]:text-[#8b887f] group-data-[status=outcome_unknown]:text-[#8b887f] cursor-pointer disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-4"}>
               {t("voiceNoneOption")}
             </span>
             {arcadePicker && selectedId === null ? <VoiceEqualizer /> : null}
@@ -742,22 +741,22 @@ export function VoiceLibrary({
         </li>
         {selectedId && !selectedListed ? (
           <li
-            className={arcadePicker ? arcadeRow(true) : styles.voiceRow}
+            className={arcadePicker ? arcadeRow(true) : "group flex min-w-0 flex-wrap items-center justify-between gap-x-2.5 gap-y-1 rounded-xl border border-[#ebe5df] bg-[#fdfaf3] px-[14px] py-1.5 transition-[box-shadow,border-color] duration-200 hover:border-[#ddd3c4] hover:shadow-[0_6px_18px_rgb(64_52_32/0.06)]"}
             data-choice="current"
             data-selected="true"
           >
             <label
-              className={arcadePicker ? arcadeChoice() : styles.voiceChoice}
+              className={arcadePicker ? arcadeChoice() : "flex min-h-8 min-w-0 flex-[1_1_0] cursor-pointer items-center gap-2.5 has-[input:disabled]:cursor-default"}
             >
               <input
-                className={arcadePicker ? arcadeRadio() : styles.radio}
+                className={arcadePicker ? arcadeRadio() : "radio m-0 inline-grid size-[18px] shrink-0 appearance-none place-items-center rounded-full border-[1.5px] border-[#8b7d66] bg-transparent cursor-inherit before:size-2.5 before:rounded-full before:bg-(--gold,#967c50) before:content-[''] before:scale-0 before:transition-transform before:duration-150 checked:border-(--gold,#967c50) checked:before:scale-100 disabled:border-[#cfc8bb] focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-[3px]"}
                 type="radio"
                 name={pickerName}
                 checked
                 disabled={controlsDisabled}
                 onChange={() => undefined}
               />
-              <span className={arcadePicker ? arcadeName() : styles.voiceName}>
+              <span className={arcadePicker ? arcadeName() : "m-0 min-w-0 flex-[1_1_0] overflow-hidden border-0 bg-transparent p-0 font-(family-name:--display-serif) text-[1.05rem] font-[650] leading-[1.25] tracking-[-0.01em] text-left text-ellipsis whitespace-nowrap text-inherit group-data-[status=failed]:text-[#8b887f] group-data-[status=deleting]:text-[#8b887f] group-data-[status=outcome_unknown]:text-[#8b887f] cursor-pointer disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-4"}>
                 {t("currentVoiceBinding")}
               </span>
               {arcadePicker ? <VoiceEqualizer /> : null}
@@ -780,7 +779,7 @@ export function VoiceLibrary({
     if (editing && editingName) {
       return (
         <input
-          className={inAlbum ? voiceAlbum.nameInput : styles.nameInput}
+          className={inAlbum ? voiceAlbum.nameInput : "m-0 min-w-0 flex-[1_1_0] w-auto px-1 border border-(--workspace-border,var(--line)) rounded bg-(--workspace-content,var(--surface-subtle)) text-(--ink) font-[inherit] text-base font-semibold leading-normal text-left"}
           aria-label={t("voiceName")}
           value={editingName.value}
           readOnly={controlsDisabled}
@@ -808,14 +807,14 @@ export function VoiceLibrary({
     }
     if (!manageable) {
       return (
-        <span className={inAlbum ? voiceAlbum.vn : styles.voiceName}>
+        <span className={inAlbum ? voiceAlbum.vn : "m-0 min-w-0 flex-[1_1_0] overflow-hidden border-0 bg-transparent p-0 font-(family-name:--display-serif) text-[1.05rem] font-[650] leading-[1.25] tracking-[-0.01em] text-left text-ellipsis whitespace-nowrap text-inherit group-data-[status=failed]:text-[#8b887f] group-data-[status=deleting]:text-[#8b887f] group-data-[status=outcome_unknown]:text-[#8b887f] cursor-pointer disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-4"}>
           {name}
         </span>
       );
     }
     return (
       <button
-        className={inAlbum ? voiceAlbum.vn : styles.voiceName}
+        className={inAlbum ? voiceAlbum.vn : "m-0 min-w-0 flex-[1_1_0] overflow-hidden border-0 bg-transparent p-0 font-(family-name:--display-serif) text-[1.05rem] font-[650] leading-[1.25] tracking-[-0.01em] text-left text-ellipsis whitespace-nowrap text-inherit group-data-[status=failed]:text-[#8b887f] group-data-[status=deleting]:text-[#8b887f] group-data-[status=outcome_unknown]:text-[#8b887f] cursor-pointer disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-4"}
         type="button"
         disabled={controlsDisabled || profile.status === "deleted"}
         ref={(button) => {
@@ -908,7 +907,7 @@ export function VoiceLibrary({
     if (!preview[profile.id]) return null;
     return (
       <audio
-        className={inAlbum ? voiceAlbum.audio : styles.audio}
+        className={inAlbum ? voiceAlbum.audio : "col-span-full w-full min-w-0 flex-[1_0_100%]"}
         controls
         autoPlay
         preload="auto"
@@ -926,7 +925,7 @@ export function VoiceLibrary({
             ? voiceAlbum.grid
             : arcadePicker
               ? "m-0 grid list-none gap-3 p-0"
-              : styles.voiceList
+              : "m-0 grid list-none gap-2 p-0"
         }
         role={onSelect ? "radiogroup" : undefined}
         aria-label={onSelect ? t("voices") : undefined}
@@ -971,7 +970,7 @@ export function VoiceLibrary({
               className={
                 arcadePicker
                   ? arcadeRow(selectedId === profile.id)
-                  : styles.voiceRow
+                  : "group flex min-w-0 flex-wrap items-center justify-between gap-x-2.5 gap-y-1 rounded-xl border border-[#ebe5df] bg-[#fdfaf3] px-[14px] py-1.5 transition-[box-shadow,border-color] duration-200 hover:border-[#ddd3c4] hover:shadow-[0_6px_18px_rgb(64_52_32/0.06)]"
               }
               key={profile.id}
               data-status={profile.status}
@@ -984,10 +983,10 @@ export function VoiceLibrary({
                 nameField(profile, name, editing, manageable, false)
               ) : onSelect ? (
                 <label
-                  className={arcadePicker ? arcadeChoice() : styles.voiceChoice}
+                  className={arcadePicker ? arcadeChoice() : "flex min-h-8 min-w-0 flex-[1_1_0] cursor-pointer items-center gap-2.5 has-[input:disabled]:cursor-default"}
                 >
                   <input
-                    className={arcadePicker ? arcadeRadio() : styles.radio}
+                    className={arcadePicker ? arcadeRadio() : "radio m-0 inline-grid size-[18px] shrink-0 appearance-none place-items-center rounded-full border-[1.5px] border-[#8b7d66] bg-transparent cursor-inherit before:size-2.5 before:rounded-full before:bg-(--gold,#967c50) before:content-[''] before:scale-0 before:transition-transform before:duration-150 checked:border-(--gold,#967c50) checked:before:scale-100 disabled:border-[#cfc8bb] focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-[3px]"}
                     type="radio"
                     name={pickerName}
                     checked={selectedId === profile.id}
@@ -995,7 +994,7 @@ export function VoiceLibrary({
                     onChange={() => onSelect(profile.id)}
                   />
                   <span
-                    className={arcadePicker ? arcadeName() : styles.voiceName}
+                    className={arcadePicker ? arcadeName() : "m-0 min-w-0 flex-[1_1_0] overflow-hidden border-0 bg-transparent p-0 font-(family-name:--display-serif) text-[1.05rem] font-[650] leading-[1.25] tracking-[-0.01em] text-left text-ellipsis whitespace-nowrap text-inherit group-data-[status=failed]:text-[#8b887f] group-data-[status=deleting]:text-[#8b887f] group-data-[status=outcome_unknown]:text-[#8b887f] cursor-pointer disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-4"}
                   >
                     {name}
                   </span>
@@ -1010,7 +1009,7 @@ export function VoiceLibrary({
                 className={
                   arcadePicker
                     ? "ml-auto flex shrink-0 items-center gap-2.5"
-                    : styles.voiceActions
+                    : "flex shrink-0 items-center gap-0.5"
                 }
               >
                 {previewButton(profile, manageable, playable, false)}
@@ -1219,7 +1218,7 @@ export function VoiceLibrary({
 
   return (
     <div
-      className={arcadePicker ? "min-w-0" : styles.voicePanel}
+      className={arcadePicker ? "min-w-0" : "grid gap-6"}
       id={id}
       data-arcade-voices={arcadePicker ? "v2" : undefined}
     >

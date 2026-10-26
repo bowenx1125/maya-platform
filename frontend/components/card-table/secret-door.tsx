@@ -6,7 +6,6 @@ import { createPortal } from "react-dom";
 import type { Player } from "../../lib/poker/table";
 import { usePrefersReducedMotion } from "../academy/motion";
 import { useSession } from "../session-provider";
-import styles from "./entrance.module.css";
 // Loaded with the page: the door has to be up before the first paint of the
 // room behind it, or the room flashes through.
 import { VaultEntrance } from "./vault-entrance";
@@ -197,7 +196,7 @@ export function SecretDoor() {
     <>
       <div
         ref={room}
-        className={styles.room}
+        className="[--felt:#1f5a44] [--felt-dark:#1a4e3b] [--rail:#5b2a20] [--rail-dark:#3a1812] [--ink:#f4efe6] [--gold:#f0c040] fixed inset-0 z-[2147483000] overflow-hidden font-mono font-bold text-(--ink) bg-[radial-gradient(ellipse_60%_55%_at_50%_48%,#12302a_0%,#0a1412_55%,#050506_100%)] animate-room-in motion-reduce:animate-none outline-none data-[leaving]:animate-room-out after:pointer-events-none after:absolute after:inset-0 after:bg-[repeating-linear-gradient(to_bottom,rgba(255,255,255,0.035)_0_1px,transparent_1px_3px),radial-gradient(ellipse_at_center,transparent_55%,rgba(0,0,0,0.55)_100%)]"
         role="dialog"
         aria-modal="true"
         aria-label="Card room"
