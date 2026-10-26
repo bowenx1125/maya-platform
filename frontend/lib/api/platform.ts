@@ -117,50 +117,9 @@ export type ConfirmPersonaRequest = {
   persona_spec_hash: string;
   compiler_version: "persona_template_v1" | "persona_template_v2";
 };
-export type ProviderDataCallDisclosureResponse =
-  components["schemas"]["ProviderDataCallDisclosureResponseV1"];
-export type ProviderDataCallConfirmationRequest =
-  components["schemas"]["ProviderDataCallConfirmationRequestV1"];
-export type TeamStandingGrantRequest =
-  components["schemas"]["TeamStandingGrantRequestV1"];
-export type TeamStandingGrantPreview =
-  components["schemas"]["TeamStandingGrantPreviewV1"];
-export type TeamStandingGrantConfirmationRequest =
-  components["schemas"]["TeamStandingGrantConfirmationRequestV1"];
-export type TeamStandingGrantConfirmation =
-  components["schemas"]["TeamStandingGrantConfirmationV1"];
-export type ProviderDataCallManifestListResponse =
-  components["schemas"]["ProviderDataCallManifestListResponseV1"];
-export type ProviderDataCallPublicationManifestListResponse =
-  components["schemas"]["ProviderDataCallPublicationManifestListResponseV1"];
 export type ProviderDataCallReportManifestListResponse =
   components["schemas"]["ProviderDataCallReportManifestListResponseV1"];
 
-/**
- * Teacher-only, debate-scoped approval status for LLM turns.
- *
- * This endpoint is intentionally kept as a handwritten DTO until the main
- * window freezes its operationId and regenerates the shared OpenAPI client.
- * Keep this type limited to the opaque identifiers and CAS/status values the
- * teacher page needs; provider details and request data never cross this
- * boundary.
- */
-export type ProviderDataCallDebateManifestItem = {
-  turn_id: string;
-  manifest_hash: string;
-  confirmation_revision: number;
-  confirmed: boolean;
-};
-export type ProviderDataCallDebateManifestSummary =
-  ProviderDataCallDebateManifestItem;
-export type ProviderDataCallDebateManifestListResponse = {
-  debate_id: string;
-  items: ProviderDataCallDebateManifestSummary[];
-};
-export type ProviderDataCallDebateManifestSummaryV1 =
-  ProviderDataCallDebateManifestSummary;
-export type ProviderDataCallDebateManifestListResponseV1 =
-  ProviderDataCallDebateManifestListResponse;
 export type KnowledgeSnapshot = components["schemas"]["KnowledgeSnapshot"];
 export type BrainformKnowledge = {
   agent_id: string;
@@ -2085,88 +2044,6 @@ export class PlatformApi {
       body,
     });
     return unwrap(result);
-  }
-
-  async getProviderDataCallDisclosure(
-    manifestHash: string,
-  ): Promise<ProviderDataCallDisclosureResponse> {
-    return unwrap(
-      await this.client.GET("/provider/data-call/disclosure", {
-        params: { query: { manifest_hash: manifestHash } },
-      }),
-    );
-  }
-
-  async getChatStandingProviderDisclosure(
-    courseId: string,
-    providerOperation: TeamStandingGrantRequest["provider_operation"] = "llm_agent_chat",
-  ): Promise<ProviderDataCallDisclosureResponse> {
-    const query = `course_id=${encodeURIComponent(courseId)}`;
-    const operation =
-      providerOperation === "llm_agent_chat"
-        ? ""
-        : `&provider_operation=${encodeURIComponent(providerOperation)}`;
-    return this.getJson<ProviderDataCallDisclosureResponse>(
-      `provider/data-call/chat-standing/disclosure?${query}${operation}`,
-    );
-  }
-
-  async confirmProviderDataCallDisclosure(
-    body: ProviderDataCallConfirmationRequest,
-  ): Promise<ProviderDataCallDisclosureResponse> {
-    return this.postJson<ProviderDataCallDisclosureResponse>(
-      "provider/data-call/disclosure/confirm",
-      body,
-    );
-  }
-
-  async previewTeamProviderStandingGrant(
-    body: TeamStandingGrantRequest,
-  ): Promise<TeamStandingGrantPreview> {
-    return this.postJson<TeamStandingGrantPreview>(
-      "provider/data-call/team-standing-grants/preview",
-      body,
-    );
-  }
-
-  async confirmTeamProviderStandingGrant(
-    body: TeamStandingGrantConfirmationRequest,
-  ): Promise<TeamStandingGrantConfirmation> {
-    return this.postJson<TeamStandingGrantConfirmation>(
-      "provider/data-call/team-standing-grants/confirm",
-      body,
-    );
-  }
-
-  async listProviderDataCallManifests(
-    scopeId: string,
-  ): Promise<ProviderDataCallManifestListResponse> {
-    return unwrap(
-      await this.client.GET("/provider/data-call/pending", {
-        params: { query: { scope_id: scopeId } },
-      }),
-    );
-  }
-
-  async listProviderDataCallDebateManifests(
-    debateId: string,
-  ): Promise<ProviderDataCallDebateManifestListResponse> {
-    return this.getJson<ProviderDataCallDebateManifestListResponse>(
-      `provider/data-call/pending/debates/${encodeURIComponent(debateId)}`,
-    );
-  }
-
-  async listProviderDataCallPublicationManifests(
-    agentVersionId: string,
-  ): Promise<ProviderDataCallPublicationManifestListResponse> {
-    return unwrap(
-      await this.client.GET(
-        "/provider/data-call/pending/agent-versions/{agent_version_id}",
-        {
-          params: { path: { agent_version_id: agentVersionId } },
-        },
-      ),
-    );
   }
 
   async setDocuments(

@@ -35,10 +35,6 @@ const api: DebatePlaybackApi = {
   resumeDebate: vi.fn(),
   freezeFinalInput: vi.fn(),
   retryDebatePreparation: vi.fn(),
-  listProviderDataCallManifests: vi.fn().mockResolvedValue({
-    scope_id: debateId,
-    items: [],
-  }),
   replayDebate: vi.fn(),
 };
 

@@ -208,10 +208,6 @@ function fakeApi(initial: DebateDetail): DebatePlaybackApi {
       control_version: initial.playback.control_version + 1,
     }),
     freezeFinalInput: vi.fn(),
-    listProviderDataCallManifests: vi.fn().mockResolvedValue({
-      scope_id: initial.id,
-      items: [],
-    }),
     retryDebatePreparation: vi.fn().mockResolvedValue({
       ...initial.playback,
       status: "preparing",

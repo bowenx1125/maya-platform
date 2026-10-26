@@ -60,13 +60,6 @@ export const defaultPlaybackStageLabels: Required<PlaybackStageLabels> = {
   localizeCode: (code: string) => code,
   providerSetupIncomplete:
     "A real provider is selected but its reviewed policy is not installed. Retrying cannot help; an operator has to import it.",
-  providerGateTitle: "External query confirmation is required.",
-  providerGateLoading: "Loading the exact disclosure…",
-  providerGateEmpty: "No retryable external query is currently pending.",
-  providerGateReview: "Review exact disclosure",
-  providerGateReviewAll: "Review all turn approvals",
-  providerGateConfirmed: "Disclosure confirmed",
-  providerGateRetry: "Retry this turn",
   noPublishedSpeech: "The server has not published a speech for this turn yet.",
   audioNotRetained: "This audio is no longer retained.",
   selectedTurn: "Selected turn",

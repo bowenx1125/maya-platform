@@ -118,10 +118,6 @@ function api(): DebatePlaybackApi {
     freezeFinalInput: vi.fn(),
     retryDebatePreparation: vi.fn(),
     replayDebate: vi.fn(),
-    listProviderDataCallManifests: vi.fn().mockResolvedValue({
-      scope_id: debateId,
-      items: [],
-    }),
   };
 }
 

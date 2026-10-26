@@ -59,10 +59,6 @@ const api = {
   resumeDebate: vi.fn(),
   freezeFinalInput: vi.fn(),
   retryDebatePreparation: vi.fn(),
-  listProviderDataCallManifests: vi.fn().mockResolvedValue({
-    scope_id: debateId,
-    items: [],
-  }),
   replayDebate: vi.fn(),
 } as unknown as Parameters<typeof BetaDebateStage>[0]["api"];
 

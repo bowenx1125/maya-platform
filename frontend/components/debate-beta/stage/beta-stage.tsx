@@ -16,7 +16,6 @@ import type {
   DebatePlaybackState,
   DebateTurn,
   IdempotencyHandle,
-  ProviderDataCallManifestListResponse,
 } from "../../../lib/api";
 import { createIdempotencyHandle } from "../../../lib/api";
 import { markDebateNextClicked } from "../../../lib/client-metrics";
@@ -106,14 +105,6 @@ function atFinalBoundary(
       detail.participants.length * (detail.round_count - 1) - 1
   );
 }
-
-type ProviderGateState = {
-  code: "provider_confirmation_unavailable" | "provider_not_sent";
-  loading: boolean;
-  value: ProviderDataCallManifestListResponse | null;
-  error: string | null;
-  selectedManifestHash: string | null;
-};
 
 function visibleRoundPhase(
   turn: VisiblePlaybackTurn | null,
@@ -641,10 +632,6 @@ export function BetaDebateStage({
     topic: string;
   } | null>(null);
   const [endRunningBusy, setEndRunningBusy] = useState(false);
-  const [providerGate, setProviderGate] = useState<ProviderGateState | null>(
-    null,
-  );
-  const [providerRetryBusy, setProviderRetryBusy] = useState(false);
   const audioPointerInput =
     currentAudioDebateId !== undefined
       ? currentAudioDebateId
@@ -727,10 +714,6 @@ export function BetaDebateStage({
   const startIdempotencyRef = useRef<IdempotencyHandle | null>(null);
   const pauseIdempotencyRef = useRef<IdempotencyHandle | null>(null);
   const resumeIdempotencyRef = useRef<IdempotencyHandle | null>(null);
-  const providerRetryIdempotencyRef = useRef<{
-    turnId: string;
-    handle: IdempotencyHandle;
-  } | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [bubblePlayback, setBubblePlayback] = useState<{
     turnId: string;
@@ -839,8 +822,6 @@ export function BetaDebateStage({
   useEffect(() => {
     if (catalogDebateIdRef.current === debateId) return;
     catalogDebateIdRef.current = debateId;
-    providerRetryIdempotencyRef.current = null;
-    setProviderGate(null);
     replayCatalogRef.current = new Map(
       normalisePublicTurns(detail.public_turns).map((turn) => [
         turn.id,
@@ -2151,93 +2132,6 @@ export function BetaDebateStage({
     ],
   );
 
-  const refreshProviderGate = useCallback(
-    async (code: ProviderGateState["code"]) => {
-      setProviderGate((current) => ({
-        code,
-        loading: true,
-        value: current?.code === code ? current.value : null,
-        error: null,
-        selectedManifestHash:
-          current?.code === code ? current.selectedManifestHash : null,
-      }));
-      try {
-        const value = await api.listProviderDataCallManifests(debateId);
-        if (!mountedRef.current || closingRef.current) return;
-        setProviderGate((current) => {
-          const retained = current?.selectedManifestHash;
-          const selected =
-            (retained &&
-            value.items.some((item) => item.manifest_hash === retained)
-              ? retained
-              : null) ??
-            value.items.find((item) => !item.confirmed)?.manifest_hash ??
-            value.items.find(
-              (item) => item.turn_id === playbackRef.current.current_turn_id,
-            )?.manifest_hash ??
-            value.items[value.items.length - 1]?.manifest_hash ??
-            null;
-          return {
-            code,
-            loading: false,
-            value,
-            error: null,
-            selectedManifestHash: selected,
-          };
-        });
-      } catch (cause) {
-        if (!mountedRef.current || closingRef.current) return;
-        setProviderGate({
-          code,
-          loading: false,
-          value: null,
-          error: errorText(cause, labelsRef.current.connectionError),
-          selectedManifestHash: null,
-        });
-      }
-    },
-    [api, debateId],
-  );
-
-  useEffect(() => {
-    const code = providerGate?.code;
-    if (!code) return;
-    const syncApprovals = () => void refreshProviderGate(code);
-    window.addEventListener("focus", syncApprovals);
-    return () => window.removeEventListener("focus", syncApprovals);
-  }, [providerGate?.code, refreshProviderGate]);
-
-  const retryProviderPreparation = useCallback(
-    async (turnId: string) => {
-      if (readOnly || providerRetryBusy) return;
-      setProviderRetryBusy(true);
-      setControlError(null);
-      const current = providerRetryIdempotencyRef.current;
-      const idempotency =
-        current?.turnId === turnId ? current.handle : createIdempotencyHandle();
-      providerRetryIdempotencyRef.current = { turnId, handle: idempotency };
-      try {
-        const next = await api.retryDebatePreparation(
-          debateId,
-          {
-            expected_control_version: playbackRef.current.control_version,
-            turn_id: turnId,
-          },
-          { idempotency },
-        );
-        providerRetryIdempotencyRef.current = null;
-        setProviderGate(null);
-        setFailure(null);
-        applyPlayback(next, "running");
-      } catch (cause) {
-        setControlError(errorText(cause, labelsRef.current.connectionError));
-      } finally {
-        setProviderRetryBusy(false);
-      }
-    },
-    [api, applyPlayback, debateId, providerRetryBusy, readOnly],
-  );
-
   const handleEvent = useCallback(
     (event: PlaybackEvent) => {
       const recoveryFence = recoveryFenceRef.current;
@@ -2364,7 +2258,6 @@ export function BetaDebateStage({
                 playbackRef.current.status === "paused")
             )
           ) {
-            setProviderGate(null);
             pendingActionRef.current = "start";
             const readyParticipant = detailRef.current.participants.find(
               (participant) => participant.slot === payload.slot,
@@ -2683,7 +2576,6 @@ export function BetaDebateStage({
           );
           break;
         case "debate.failed":
-          setProviderGate(null);
           pauseAudio(true);
           setVisible(null);
           setAvatars([]);
@@ -2705,7 +2597,6 @@ export function BetaDebateStage({
           );
           break;
         case "debate.stopped": {
-          setProviderGate(null);
           pauseAudio(true);
           setVisible(null);
           setAvatars([]);
@@ -2737,20 +2628,10 @@ export function BetaDebateStage({
                   labelsRef.current.retryReason)
               : labelsRef.current.retryReason,
           );
-          if (
-            payload.code === "provider_confirmation_unavailable" ||
-            payload.code === "provider_not_sent"
-          ) {
-            const code = payload.code;
-            applyPlayback({ status: "preparing" });
-            void refreshProviderGate(code);
-          } else if (payload.recoverable === true) {
-            setProviderGate(null);
+          if (payload.recoverable === true) {
             setFailure(null);
             setMediaRetryNeeded(true);
             void recoverPlayback(true);
-          } else {
-            setProviderGate(null);
           }
           break;
         case "interaction.opened":
@@ -2804,7 +2685,6 @@ export function BetaDebateStage({
       setActiveParticipant,
       requestReconnect,
       refreshRecoverySnapshot,
-      refreshProviderGate,
       setAvatars,
       setVisible,
       updatePublicTurns,
@@ -3950,60 +3830,6 @@ export function BetaDebateStage({
       </div>
       <h1 className={BETA_TOPIC}>{detailState.topic}</h1>
       <div className={BETA_NOTICES}>
-        {providerGate ? (
-          <section
-            className={BETA_PROVIDER_GATE_CARD}
-            data-testid="provider-query-gate"
-            aria-label={labels.providerGateTitle}
-          >
-            <a
-              href={`/teacher/provider-approvals/debates/${debateId}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {labels.providerGateReviewAll}
-            </a>
-            {providerGate.loading ? (
-              <span>{labels.providerGateLoading}</span>
-            ) : providerGate.error ? null : providerGate.value?.items.length ? (
-              <ul>
-                {providerGate.value.items
-                  .filter(
-                    (item) =>
-                      item.manifest_hash === providerGate.selectedManifestHash,
-                  )
-                  .map((item) => (
-                    <li key={item.manifest_hash}>
-                      {item.confirmed ? null : (
-                        <a
-                          href={`/teacher/provider-disclosures/${item.manifest_hash}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {labels.providerGateReview}
-                        </a>
-                      )}
-                      {item.confirmed && item.turn_id ? (
-                        <button
-                          type="button"
-                          disabled={providerRetryBusy || readOnly}
-                          onClick={() =>
-                            void retryProviderPreparation(
-                              item.turn_id as string,
-                            )
-                          }
-                        >
-                          {labels.providerGateRetry}
-                        </button>
-                      ) : null}
-                    </li>
-                  ))}
-              </ul>
-            ) : (
-              <span>{labels.providerGateEmpty}</span>
-            )}
-          </section>
-        ) : null}
         {controlError ? (
           <DismissibleAlert
             as="div"
