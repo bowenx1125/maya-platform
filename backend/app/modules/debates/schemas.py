@@ -117,7 +117,7 @@ class DebateDraftRequest(_ClosedModel):
     participants: list[DebateParticipantInput] = Field(min_length=2, max_length=5)
     round_count: Literal[4] = 4
     output_language: Literal["en", "zh"] = "zh"
-    turn_protocol: Literal["segments_v2"] | None = None
+    turn_protocol: Literal["segments_v2"] | None = "segments_v2"
     rule_set_id: RuleSetId = NEW_DEBATE_RULE_SET_ID
     total_duration_seconds: None = None
     turn_duration_seconds: None = None
@@ -398,7 +398,10 @@ class DebateDetail(DebateSummary):
     background: str = ""
     teaching_protocol: Literal["four_round_v1"] | None = None
     output_language: Literal["en", "zh"] = "en"
-    turn_protocol: Literal["segments_v2"] | None = None
+    # Effective protocol. segments_v2 for every new debate; a pre-segments row
+    # reports what it really runs (legacy_v1) instead of a bare null.
+    # Nullable in the type only so existing clients keep compiling; never None.
+    turn_protocol: Literal["legacy_v1", "segments_v2"] | None = "segments_v2"
     preview_turns: list[PreviewTurn] = Field(default_factory=list)
     final_input_frozen: bool = False
     revision: int = Field(ge=0)
@@ -449,7 +452,7 @@ class DebateRuleSnapshot(_ClosedModel):
     rule_set_id: RuleSetId = "ordered_multi_expert_mutual_learning_v1"
     retrieval_policy_id: Literal["mock_lexical_anchor_v2"] | None = MOCK_RETRIEVAL_POLICY_ID
     round_count: int = Field(default=2, ge=2, le=5)
-    turn_protocol: Literal["segments_v2"] | None = None
+    turn_protocol: Literal["segments_v2"] | None = "segments_v2"
     teaching_protocol: Literal["four_round_v1"] | None = None
     min_participants: Literal[2] = 2
     max_participants: Literal[5] = 5

@@ -1149,7 +1149,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             "rule_set_id": debate.rule_set_id,
             "round_count": _round_count_from_snapshot(debate),
             "output_language": debate.output_language,
-            "turn_protocol": "segments_v2" if uses_segment_protocol(debate) else None,
+            "turn_protocol": "segments_v2" if uses_segment_protocol(debate) else "legacy_v1",
             "teaching_protocol": debate_teaching_protocol(debate),
             "final_input_frozen": bool(debate.final_input_json),
             # The list projection has carried these since pre-warm landed; the
@@ -1646,7 +1646,7 @@ def update_debate_draft(
             rule_snapshot_json=canonical_rule_snapshot_json(
                 rule_set_id=payload.rule_set_id,
                 round_count=payload.round_count,
-                turn_protocol="segments_v2" if teaching_protocol else payload.turn_protocol,
+                turn_protocol="segments_v2",
                 teaching_protocol=teaching_protocol,
                 frozen_teaching=frozen_teaching or None,
             ),

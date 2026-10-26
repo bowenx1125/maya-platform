@@ -13270,7 +13270,7 @@
               "segments_v2",
               null
             ],
-            "default": null,
+            "default": "segments_v2",
             "description": "New debates use the four-round teaching protocol with paragraph output."
           },
           "participants": {
@@ -14092,10 +14092,11 @@
                   "null"
                 ],
                 "enum": [
+                  "legacy_v1",
                   "segments_v2",
                   null
                 ],
-                "default": null
+                "default": "segments_v2"
               },
               "teaching_protocol": {
                 "type": [
