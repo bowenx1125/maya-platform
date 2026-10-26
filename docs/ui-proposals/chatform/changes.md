@@ -56,3 +56,6 @@ Open questions: (1) Move "Check status" into the error sticker or keep separate?
 ## FINAL draft (2026-10-27)
 
 See `final/FINAL.md`. Scheme A base + C radiant-disk empty panel + C peeking title row in A light colors. Check status inside U3 sticker (no auto-collapse). Audit 0 missing (`audit/FINAL-RESULT.txt`). PNGs under `final/`.
+
+## FINAL v2 (2026-10-27)
+Empty rejected (radiant-disk) → restored C original three-ghost empty. newconv radiant-disk re-centered. Two variants: `final/final-v2a/` (mascot disk) vs `final/final-v2b/` (larger disk + Socrates agent avatar, more air). See `final/FINAL-v2.md`. Audit 0.
