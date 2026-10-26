@@ -1,5 +1,6 @@
 "use client";
 
+import { LIST_CARD_LIFT } from "../agent-chrome";
 import type { ReactNode } from "react";
 
 import { cn } from "../../lib/utils";
@@ -26,7 +27,7 @@ export const knowledgeAlbum = {
   pink: "!bg-[#ff4d8d] hover:!bg-[#ff4d8d]",
   del: "!ml-auto !bg-[#ef4444] !text-white hover:!bg-[#ef4444]",
   grid: `grid grid-cols-[repeat(2,minmax(0,1fr))] gap-y-[30px] gap-x-[28px] m-0 p-0 list-none max-[960px]:grid-cols-[minmax(0,1fr)] max-[960px]:gap-[22px]`,
-  card: "relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[12px] shadow-[6px_6px_0_#111] [&:nth-child(4n+1)]:[transform:rotate(-1.2deg)] [&:nth-child(4n+2)]:[transform:rotate(1deg)] [&:nth-child(4n+3)]:[transform:rotate(-0.8deg)] [&:nth-child(4n)]:[transform:rotate(1.1deg)]",
+  card: `relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[12px] shadow-[6px_6px_0_#111] [&:nth-child(4n+1)]:[--r:-1.2deg] [&:nth-child(4n+2)]:[--r:1deg] [&:nth-child(4n+3)]:[--r:-0.8deg] [&:nth-child(4n)]:[--r:1.1deg] ${LIST_CARD_LIFT}`,
   art: "h-[104px] border-[3px] border-solid border-[#111] rounded-[8px] overflow-hidden bg-white",
   plate: "flex flex-col gap-[10px] p-[12px] bg-white border-2 border-solid border-[#111] rounded-[8px]",
   fn: "[font:700_16px_var(--font-lexend,'Lexend')] text-[#111] text-left [overflow-wrap:anywhere] whitespace-normal [background:none] border-0 p-0 cursor-pointer",
