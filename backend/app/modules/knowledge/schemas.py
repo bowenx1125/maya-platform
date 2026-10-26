@@ -43,6 +43,12 @@ class KnowledgeDocument(BaseModel):
     # Filled on the two library list endpoints only (null elsewhere): live Agents
     # whose current version uses this file, limited to Agents the caller may use.
     used_by_agents: list[AffectedAgentDTO] | None = None
+    # Library list endpoints only (null elsewhere): who created the latest
+    # content version and when. Covers create and replace; rename and reindex
+    # do not update it.
+    last_edited_by_user_id: UUID | None = None
+    last_edited_by_username: str | None = None
+    last_edited_at: datetime | None = None
 
 
 class UpdateKnowledgeDocumentVisibility(BaseModel):

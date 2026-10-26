@@ -7529,6 +7529,26 @@ components:
           - personal
           title: Ownership Scope
           type: string
+        last_edited_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Last Edited At
+          description: created_at of the latest content version (upload or replace); rename and reindex do not change it. Filled on the two library list endpoints; null elsewhere.
+        last_edited_by_user_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Last Edited By User Id
+          description: Who created the latest content version (upload or replace; the uploader when no version was recorded). Rename and reindex do not change it. Filled on the two library list endpoints; null elsewhere.
+        last_edited_by_username:
+          title: Last Edited By Username
+          type:
+          - string
+          - 'null'
+          description: Username of last_edited_by_user_id. Filled on the two library list endpoints; null elsewhere.
         owner_user_id:
           anyOf:
           - type: string
