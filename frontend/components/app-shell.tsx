@@ -799,7 +799,7 @@ export function AppShell({
             className="flex items-center gap-2 font-display text-lg font-extrabold text-ink"
             aria-hidden="true"
           >
-            <span className="size-3 rounded-full border-2 border-border bg-main" />
+            <span className="size-4 rounded-full border-2 border-border bg-[linear-gradient(90deg,#111_50%,var(--color-main)_50%)]" />
             {t("appName")}
           </span>
         </div>
@@ -819,7 +819,7 @@ export function AppShell({
             <button
               type="button"
               data-sidebar-toggle
-              className={`absolute top-[calc(50%-16px)] ${collapsed ? "-right-[26px]" : "-right-[22px]"} z-10 grid size-8 max-[900px]:top-5 max-[900px]:-right-[18px] place-items-center rounded-full border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none`}
+              className={`absolute ${mobile ? "top-4 right-3 size-8 rounded-arc-s" : `top-[6px] ${collapsed ? "-right-[26px]" : "-right-[22px]"} size-8 rounded-full`} z-10 grid place-items-center border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none`}
               aria-label={toggleLabel}
               aria-expanded={mobile ? drawerOpen : !collapsed}
               aria-controls={SIDEBAR_ID}
@@ -830,7 +830,9 @@ export function AppShell({
               }
             >
               <WorkspaceIcon
-                name={collapsed ? "chevronRight" : "chevronLeft"}
+                name={
+                  mobile ? "pin" : collapsed ? "chevronRight" : "chevronLeft"
+                }
                 size={16}
               />
             </button>
@@ -848,11 +850,11 @@ export function AppShell({
                   title={collapsed ? t("appName") : undefined}
                   data-tour="home"
                   data-lit={mayaformLit || undefined}
-                  className={`isolate ${collapsed ? `${ICON_ITEM} border-border bg-main shadow-arc-s` : `${ITEM} w-fit justify-self-start font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " active" : ""}`}
+                  className={`isolate ${collapsed ? `${ICON_ITEM} border-border bg-main shadow-arc-s` : mobile ? `${ITEM} w-fit justify-self-start border-transparent font-display text-lg font-extrabold` : `${ITEM} w-fit justify-self-start font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " active" : ""}`}
                 >
-                  {mayaformLit && !collapsed ? pill : null}
+                  {mayaformLit && !collapsed && !mobile ? pill : null}
                   <span
-                    className={`brand-dot size-3 shrink-0 rounded-full border-2 border-border ${collapsed ? "bg-surface" : "bg-main"}`}
+                    className={`brand-dot size-4 shrink-0 rounded-full border-2 border-border ${(collapsed || mayaformLit) && !mobile ? "bg-[linear-gradient(90deg,#111_50%,var(--color-surface)_50%)]" : "bg-[linear-gradient(90deg,#111_50%,var(--color-main)_50%)]"}`}
                     aria-hidden="true"
                   />
                   {collapsed ? null : <span>{t("appName")}</span>}

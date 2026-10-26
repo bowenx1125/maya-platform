@@ -18,6 +18,7 @@ export type WorkspaceIconName =
   | "chatTeam"
   | "mail"
   | "menu"
+  | "pin"
   | "chevronLeft"
   | "chevronRight";
 
@@ -45,6 +46,7 @@ const paths: Record<WorkspaceIconName, string> = {
     "M17 9a6 6 0 0 1-6 6H7l-4 3 1-4a6 6 0 0 1 7-11 6 6 0 0 1 6 6ZM20 12a5 5 0 0 1 1 6l1 3-4-2h-4",
   mail: "M3 5h18v14H3zm0 0 9 7 9-7",
   menu: "M4 6h16M4 12h16M4 18h16",
+  pin: "M12 17v5M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V17h14v-1.8a2 2 0 0 0-1.1-1.8l-1.8-.9a2 2 0 0 1-1.1-1.8V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z",
   chevronLeft: "m15 5-7 7 7 7",
   chevronRight: "m9 5 7 7-7 7",
 };
