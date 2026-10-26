@@ -91,6 +91,9 @@ describe("U3 tray: in flow below 900px, fixed from 900px", () => {
     expect(tray.parentElement).toBe(document.body);
     expect(tray.className).toContain("min-[900px]:fixed");
     expect(tray.className).toContain("min-[900px]:w-[380px]");
+    // body fallback padding is mobile-only, so the fixed tray is not inset at >=900px
+    expect(tray.className).toContain("max-[899px]:[body>&]:px-3");
+    expect(tray.className).not.toMatch(/(^| )\[body>&\]:px-3/);
   });
 
   it("scrolls a new off-screen error into view smoothly, once", async () => {
