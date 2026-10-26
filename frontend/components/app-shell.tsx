@@ -361,7 +361,9 @@ export function AppShell({
   // visit and removes that access.
   const visitPageGroupId =
     teacherSurface &&
-    (pathname === "/teacher/knowledge" || pathname === "/teacher/chat")
+    (pathname === "/teacher/knowledge" ||
+      pathname === "/teacher/record" ||
+      pathname === "/teacher/chat")
       ? new URLSearchParams(locationSearch).get("group_id")
       : null;
   const visitPage = Boolean(
@@ -405,6 +407,7 @@ export function AppShell({
     // visit.
     const reading =
       window.location.pathname === "/teacher/knowledge" ||
+      window.location.pathname === "/teacher/record" ||
       window.location.pathname === "/teacher/chat"
         ? new URLSearchParams(window.location.search).get("group_id")
         : null;
@@ -610,6 +613,11 @@ export function AppShell({
   const brainHref = visit ? `/teacher/knowledge?group_id=${visit}` : undefined;
   const chatHref = links.find((link) => link.icon === "chat")?.href ?? "";
   const brainItemHref = brainHref ?? studyformHref;
+  const recordHref = visit
+    ? `/teacher/record?group_id=${visit}`
+    : teacherSurface
+      ? "/teacher/record"
+      : "/student/record";
   const groups: SidebarGroup[] = [
     {
       key: "studyform",
@@ -652,7 +660,7 @@ export function AppShell({
         },
         {
           key: "record",
-          href: brainItemHref,
+          href: recordHref,
           label: t("sidebarRecord"),
           icon: "clock",
         },
@@ -745,7 +753,10 @@ export function AppShell({
     : collapsed
       ? t("sidebarExpand")
       : t("sidebarCollapse");
-  const mayaformLit = !agentsArea && activeHref === home;
+  // The Record page lights only its own row, as Agents does.
+  const recordArea =
+    pathname === "/student/record" || pathname === "/teacher/record";
+  const mayaformLit = !agentsArea && !recordArea && activeHref === home;
 
   function renderItem(group: SidebarGroup, item: SidebarItem, index: number) {
     const lit = litKey === `${group.key}:${item.key}`;
@@ -1089,6 +1100,8 @@ export function AppShell({
 const PAGE_ROW: Record<string, string> = {
   "/teacher/knowledge": "knowledge",
   "/student/knowledge": "knowledge",
+  "/teacher/record": "record",
+  "/student/record": "record",
 };
 
 /**

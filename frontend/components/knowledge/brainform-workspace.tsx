@@ -447,11 +447,14 @@ export function BrainformWorkspace({
   initialDocumentId,
   embedded = false,
   onPaneChange,
+  recordPage = false,
 }: {
   /** Rendered inside Studyform: RAG and Record join Studyform's grid. */
   embedded?: boolean;
   /** Embedded only: a RAG or Record page opened (true) or closed (false). */
   onPaneChange?: (open: boolean) => void;
+  /** Dedicated /student/record and /teacher/record: clipboard only. */
+  recordPage?: boolean;
   role: BrainformRole;
   initialAgentId?: string;
   initialSetId?: string;
@@ -567,6 +570,7 @@ export function BrainformWorkspace({
       initialDocumentId={initialDocumentId}
       embedded={embedded}
       onPaneChange={onPaneChange}
+      recordPage={recordPage}
       identityScope={dataScope}
       ragDraftScope={JSON.stringify([
         user?.id ?? null,
@@ -609,11 +613,13 @@ function BrainformWorkspaceBody({
   initialDocumentId,
   embedded = false,
   onPaneChange,
+  recordPage = false,
   identityScope,
   ragDraftScope,
 }: {
   embedded?: boolean;
   onPaneChange?: (open: boolean) => void;
+  recordPage?: boolean;
   role: BrainformRole;
   courseIds: string[];
   courseId: string;
@@ -2447,7 +2453,8 @@ function BrainformWorkspaceBody({
 
       {/* Embedded in Studyform each card paints on its own: RAG shows a
           loading line while its list arrives, Record never waits for it. */}
-      {!pane &&
+      {!recordPage &&
+      !pane &&
       !initialMode &&
       (!loading || embedded) &&
       !loadError &&
@@ -2826,6 +2833,24 @@ function BrainformWorkspaceBody({
               onOpen={(team) => setPane({ kind: "record", team })}
             />
           </div>
+        </div>
+      ) : null}
+
+      {recordPage &&
+      !pane &&
+      !initialMode &&
+      (!loading || embedded) &&
+      !loadError &&
+      courseId ? (
+        <div className={styles.recordSlot} data-studyform-slot="record">
+          <RecordSection
+            scope={recordScope}
+            teams={assessmentRecord.teams}
+            loaded={assessmentRecord.loaded}
+            error={assessmentRecord.error}
+            onRetry={() => void assessmentRecord.reload()}
+            onOpen={(team) => setPane({ kind: "record", team })}
+          />
         </div>
       ) : null}
 
