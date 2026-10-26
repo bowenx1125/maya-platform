@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Request, Response
-from sqlalchemy import case, delete, or_, select, update
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -301,14 +301,48 @@ def _library_dtos(
     """Library rows with the uploader and the Agents using each file, batched."""
 
     from app.modules.agents.cascade import agents_using_documents
+    from app.modules.knowledge_sets.models import KnowledgeDocumentVersion
 
-    owner_ids = {document.owner_user_id for document in documents if document.owner_user_id}
+    # Latest content version per document (create/replace), one query.
+    latest_versions: dict[str, tuple[str | None, datetime]] = {}  # doc -> (editor, at)
+    if documents:
+        ranked = (
+            select(
+                KnowledgeDocumentVersion.document_id,
+                KnowledgeDocumentVersion.created_by_user_id,
+                KnowledgeDocumentVersion.created_at,
+                func.row_number()
+                .over(
+                    partition_by=KnowledgeDocumentVersion.document_id,
+                    order_by=KnowledgeDocumentVersion.version_seq.desc(),
+                )
+                .label("rank"),
+            )
+            .where(KnowledgeDocumentVersion.document_id.in_([d.id for d in documents]))
+            .subquery()
+        )
+        latest_versions = {
+            document_id: (editor_id, created_at)
+            for document_id, editor_id, created_at in db.execute(
+                select(
+                    ranked.c.document_id, ranked.c.created_by_user_id, ranked.c.created_at
+                ).where(ranked.c.rank == 1)
+            ).all()
+        }
+    # Uploads do not write a version row, and a head backfilled before a
+    # rename records no creator; both are the original upload, by the owner.
+    for document in documents:
+        editor_id, edited_at = latest_versions.get(document.id, (None, document.created_at))
+        latest_versions[document.id] = (editor_id or document.owner_user_id, edited_at)
+    user_ids = {document.owner_user_id for document in documents if document.owner_user_id} | {
+        editor_id for editor_id, _ in latest_versions.values() if editor_id
+    }
     usernames: dict[str, str] = {}
-    if owner_ids:
+    if user_ids:
         usernames = {
             user_id: username
             for user_id, username in db.execute(
-                select(User.id, User.username).where(User.id.in_(owner_ids))
+                select(User.id, User.username).where(User.id.in_(user_ids))
             ).all()
         }
     used = agents_using_documents(
@@ -323,6 +357,11 @@ def _library_dtos(
                 AffectedAgentDTO(agent_id=UUID(item.agent_id), name=item.name)
                 for item in used.get(document.id, [])
             ],
+            last_edited_by_user_id=latest_versions.get(document.id, (None, None))[0],
+            last_edited_by_username=usernames.get(
+                latest_versions.get(document.id, (None, None))[0] or ""
+            ),
+            last_edited_at=latest_versions.get(document.id, (None, None))[1],
         )
         for document in documents
     ]

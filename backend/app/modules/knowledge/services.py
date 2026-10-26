@@ -1327,6 +1327,9 @@ def _document_dto(
     can_manage_visibility: bool = False,
     owner_username: str | None = None,
     used_by_agents: list[AffectedAgentDTO] | None = None,
+    last_edited_by_user_id: str | None = None,
+    last_edited_by_username: str | None = None,
+    last_edited_at: datetime | None = None,
 ) -> KnowledgeDocumentDTO:
     return KnowledgeDocumentDTO(
         id=UUID(document.id),
@@ -1348,6 +1351,9 @@ def _document_dto(
         owner_user_id=UUID(document.owner_user_id) if document.owner_user_id else None,
         owner_username=owner_username,
         used_by_agents=used_by_agents,
+        last_edited_by_user_id=UUID(last_edited_by_user_id) if last_edited_by_user_id else None,
+        last_edited_by_username=last_edited_by_username,
+        last_edited_at=last_edited_at,
     )
 
 
