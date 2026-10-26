@@ -11,7 +11,7 @@ import { ErrorNotice, Notice } from "../../ui";
 import { statusLabel, tm } from "../../../lib/i18n";
 import { cn } from "../../../lib/utils";
 import { buttonVariants } from "../../ui/button";
-import { IconBust, IconPlay, IconRefresh } from "../../quiet-icons";
+import { IconBust, IconEye, IconPlay, IconRefresh } from "../../quiet-icons";
 import {
   DEBATE_BUTTON,
   DEBATE_PAGE,
@@ -421,10 +421,16 @@ function RagCheck({
     sources.map((source) => [source.source_id, source]),
   );
   return (
-    <details className="mt-2.5 border-0 border-t-2 border-dashed border-[#111] pt-2.5 font-body">
-      <summary className="min-h-0 cursor-pointer p-0 text-[13px] font-extrabold text-[#111]">
+    <details className="mt-2.5 border-0 border-t-2 border-dashed border-[#111] pt-2.5 font-body [&_summary]:min-h-0 [&_summary]:p-0">
+      <summary
+        className={cn(
+          DEBATE_BUTTON,
+          "list-none py-1 pr-2.5 pl-2 text-xs leading-[normal] [&::-webkit-details-marker]:hidden",
+        )}
+      >
+        <IconEye size={18} />
         Check RAG
-        <span className="ml-1.5 inline-grid h-[1.35rem] min-w-[1.35rem] place-items-center rounded-full border-2 border-[#111] bg-[#FFE14D] text-[11px] font-extrabold">
+        <span className="ml-0.5 inline-grid h-[1.35rem] min-w-[1.35rem] place-items-center rounded-full border-2 border-[#111] bg-[#FFE14D] text-[11px] font-extrabold">
           {sourceById.size}
         </span>
       </summary>
