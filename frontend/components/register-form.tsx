@@ -241,47 +241,53 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
                 required
               />
             </label>
-            <label className="relative">
-              {passwordShort ? <StickerBadge n={1} /> : null}
+            <label>
               <span>{t("password")}</span>
-              <input
-                aria-invalid={passwordShort || undefined}
-                className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
-                aria-describedby={
-                  passwordShort
-                    ? "register-password-rule register-field-error"
-                    : "register-password-rule"
-                }
-                autoComplete="new-password"
-                type="password"
-                value={password}
-                minLength={PASSWORD_MIN}
-                maxLength={128}
-                onChange={(event) => setPassword(event.target.value)}
-                onFocus={() => setMood("discreet")}
-                onBlur={() => setMood("idle")}
-                required
-              />
+              <span className="relative block">
+                {passwordShort ? <StickerBadge n={1} /> : null}
+                <input
+                  aria-invalid={passwordShort || undefined}
+                  className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
+                  aria-describedby={
+                    passwordShort
+                      ? "register-password-rule register-field-error"
+                      : "register-password-rule"
+                  }
+                  autoComplete="new-password"
+                  type="password"
+                  value={password}
+                  minLength={PASSWORD_MIN}
+                  maxLength={128}
+                  onChange={(event) => setPassword(event.target.value)}
+                  onFocus={() => setMood("discreet")}
+                  onBlur={() => setMood("idle")}
+                  required
+                />
+              </span>
             </label>
             <small className="muted" id="register-password-rule">
               {t("passwordRule")}
             </small>
-            <label className="relative">
-              {mismatch ? <StickerBadge n={1} /> : null}
+            <label>
               <span>{t("registerConfirmPassword")}</span>
-              <input
-                aria-invalid={mismatch || undefined}
-                aria-describedby={mismatch ? "register-field-error" : undefined}
-                className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
-                autoComplete="new-password"
-                type="password"
-                value={confirmation}
-                maxLength={128}
-                onChange={(event) => setConfirmation(event.target.value)}
-                onFocus={() => setMood("discreet")}
-                onBlur={() => setMood("idle")}
-                required
-              />
+              <span className="relative block">
+                {mismatch ? <StickerBadge n={1} /> : null}
+                <input
+                  aria-invalid={mismatch || undefined}
+                  aria-describedby={
+                    mismatch ? "register-field-error" : undefined
+                  }
+                  className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
+                  autoComplete="new-password"
+                  type="password"
+                  value={confirmation}
+                  maxLength={128}
+                  onChange={(event) => setConfirmation(event.target.value)}
+                  onFocus={() => setMood("discreet")}
+                  onBlur={() => setMood("idle")}
+                  required
+                />
+              </span>
             </label>
             <button className="primary-action" type="submit" disabled={busy}>
               {t("registerNext")}
