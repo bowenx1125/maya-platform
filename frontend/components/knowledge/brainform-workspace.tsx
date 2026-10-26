@@ -49,6 +49,7 @@ import { useSession } from "../session-provider";
 import { WorkspaceAction } from "../workspace-actions";
 import { ModulePlus } from "../studyform-layout";
 import { ErrorNotice, isNotFound, LoadingCard } from "../ui";
+import { RetryPill } from "../ui/error-kit";
 import { ReportMarkdown } from "../report/report-markdown";
 import {
   RecordDetail,
@@ -2610,14 +2611,13 @@ function BrainformWorkspaceBody({
                           />
                         ) : null}
                         {pendingRagAction?.documentId === document.id ? (
-                          <button
-                            className={album.retry}
-                            type="button"
+                          <RetryPill
+                            className="ml-0"
                             disabled={Boolean(busyKey)}
                             onClick={retryRagAction}
                           >
                             {t("retry")}
-                          </button>
+                          </RetryPill>
                         ) : null}
                         <span className={album.sp} />
                         {canEdit ? (

@@ -163,6 +163,19 @@ describe("sidebar groups", () => {
     ).toBe("/teacher/chat?group_id=g");
   });
 
+  it("lights only RAG (or Knowledge) for a teacher, never Teams", () => {
+    state.user = teacher();
+    const lit = () =>
+      [...document.querySelectorAll("[data-lit]")].map((element) =>
+        element.getAttribute("data-sidebar-item"),
+      );
+    const rag = renderShell("teacher", "/teacher/rag");
+    expect(lit()).toEqual(["rag"]);
+    rag.unmount();
+    renderShell("teacher", "/teacher/knowledge");
+    expect(lit()).toEqual(["knowledge"]);
+  });
+
   it("lights one row: Voices on its page, else the first row for the page", () => {
     const view = renderShell("student", "/student/groups/group-a/voices");
     const lit = () =>

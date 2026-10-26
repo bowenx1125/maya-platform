@@ -304,15 +304,6 @@
   background: #ef4444;
   color: #fff;
 }
-.retry {
-  height: 40px;
-  padding: 0 12px;
-  background: #fff;
-  border: 2px solid #111;
-  border-radius: 10px;
-  box-shadow: 3px 3px 0 #111;
-  font: 700 13px var(--font-lexend, "Lexend");
-}
 /* product status-badge, pinned as a corner sticker; it stays last in the
    card so text-transform: capitalize sees a word start ("Failed"). */
 .fb {
