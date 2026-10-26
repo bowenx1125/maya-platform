@@ -1,5 +1,6 @@
 "use client";
 
+import { LIST_CARD_LIFT } from "../agent-chrome";
 import { useEffect, useState, type ReactNode } from "react";
 
 import type { AffectedAgent, VoiceProfile } from "../../lib/api/platform";
@@ -20,7 +21,7 @@ export const voiceAlbum = {
   tape: "w-[70px] h-[22px] bg-[rgb(103_232_249_/_0.7)] border-2 border-solid border-[#111] [transform:rotate(8deg)]",
   pn: "inline-flex items-center gap-[6px] h-[44px] py-0 px-[18px] bg-[#ff4d8d] text-[#111] border-[3px] border-solid border-[#111] rounded-[10px] shadow-[4px_4px_0_#111] [font:800_15px_var(--font-lexend,'Lexend')] cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
   grid: "grid grid-cols-[repeat(3,minmax(0,1fr))] gap-y-[34px] gap-x-[30px] m-0 p-0 list-none max-[960px]:grid-cols-[minmax(0,1fr)]",
-  card: "relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[14px] shadow-[6px_6px_0_#111] [&:nth-child(3n+1)]:[transform:rotate(-1.6deg)] [&:nth-child(3n+2)]:[transform:rotate(1.2deg)] [&:nth-child(3n)]:[transform:rotate(-0.6deg)] bg-[#c4b5fd] data-[status=enrolling]:bg-[#fde68a] data-[status=validating]:bg-[#fde68a]",
+  card: `relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[14px] shadow-[6px_6px_0_#111] [&:nth-child(3n+1)]:[--r:-1.6deg] [&:nth-child(3n+2)]:[--r:1.2deg] [&:nth-child(3n)]:[--r:-0.6deg] bg-[#c4b5fd] data-[status=enrolling]:bg-[#fde68a] data-[status=validating]:bg-[#fde68a] ${LIST_CARD_LIFT}`,
   art: "relative grid place-items-center h-[104px] overflow-hidden border-[3px] border-solid border-[#111] rounded-[8px] [background:linear-gradient(135deg,#fff_0%,#ede9fe_30%,#fbcfe8_55%,#fff_70%,#c7f9ff_100%)]",
   wv: "flex items-center gap-[3px] h-[60px] w-[78%] [&_i]:flex-1 [&_i]:bg-[#111] [&_i]:rounded-[3px] [&_i]:min-h-[4px]",
   ty: "absolute right-[46px] bottom-[6px] [font:800_20px_var(--font-bricolage,'Bricolage_Grotesque'),system-ui] text-white [-webkit-text-stroke:2px_#111] [paint-order:stroke] [text-shadow:2px_2px_0_#111]",
