@@ -21,13 +21,22 @@ import { NOTICE_TAIL_CLASS, noticeTray, useNoticeTray } from "./notice-tray";
 import {
   KindSticker,
   MascotBadge,
+  NoticeTraySlot,
   RetryPill,
   RoundX,
+  useRevealNotice,
   useTransientFold,
   type ErrorKind,
 } from "./ui/error-kit";
 
-export { KindSticker, RetryPill, RoundX, type ErrorKind };
+export {
+  KindSticker,
+  NoticeTraySlot,
+  RetryPill,
+  RoundX,
+  useRevealNotice,
+  type ErrorKind,
+};
 
 export { NOTICE_TAIL_CLASS, useNoticeTray };
 
@@ -150,6 +159,15 @@ export function Notice({
     transient && !inline,
     foldKey !== undefined ? foldKey : children,
   );
+  useRevealNotice(
+    tray,
+    foldKey !== undefined
+      ? foldKey
+      : typeof children === "string"
+        ? children
+        : SAME_NOTICE,
+    tone === "error" || tone === "warning",
+  );
   if (closed || (!inline && !tray)) return null;
   const sticker: ErrorKind | undefined =
     badge !== undefined
@@ -208,6 +226,8 @@ export function Notice({
     </>
   );
 }
+
+const SAME_NOTICE = {};
 
 function isRetryPill(node: ReactNode): boolean {
   return isValidElement(node) && node.type === RetryPill;
