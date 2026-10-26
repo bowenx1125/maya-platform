@@ -84,25 +84,28 @@ import {
 /** Create/Edit (O2, option A) card contents, ported from fin.mjs WB/R2/CMP. */
 const NAME_CARD = cn(
   agentCard("name"),
-  "[&_.stack-form]:grid [&_.stack-form]:gap-3.5 [&_.stack-form_label]:block",
-  "[&_input[aria-label]]:box-border [&_input[aria-label]]:w-full [&_input[aria-label]]:rounded-[10px] [&_input[aria-label]]:border-[3px] [&_input[aria-label]]:border-[#111] [&_input[aria-label]]:bg-white [&_input[aria-label]]:px-3.5 [&_input[aria-label]]:py-2.5 [&_input[aria-label]]:font-body [&_input[aria-label]]:text-lg [&_input[aria-label]]:font-semibold",
+  "[&_.stack-form]:grid [&_.stack-form]:gap-6 [&_.stack-form_label]:grid [&_.stack-form_label]:gap-2",
+  "[&_input[aria-label]]:box-border [&_input[aria-label]]:w-full [&_input[aria-label]]:rounded-[10px] [&_input[aria-label]]:border-[3px] [&_input[aria-label]]:border-[#111] [&_input[aria-label]]:bg-white [&_input[aria-label]]:px-3.5 [&_input[aria-label]]:py-2.5 [&_input[aria-label]]:font-body [&_input[aria-label]]:text-lg [&_input[aria-label]]:[line-height:normal] [&_input[aria-label]]:font-semibold",
   "[&_.visibility-toggle]:inline-flex [&_.visibility-toggle]:gap-0 [&_.visibility-toggle]:overflow-hidden [&_.visibility-toggle]:rounded-[10px] [&_.visibility-toggle]:border-[3px] [&_.visibility-toggle]:border-[#111] [&_.visibility-toggle]:bg-white [&_.visibility-toggle]:p-0 [&_.visibility-toggle]:shadow-[3px_3px_0_#111]",
   "[&_.visibility-toggle_button]:rounded-none [&_.visibility-toggle_button]:border-0 [&_.visibility-toggle_button]:bg-white [&_.visibility-toggle_button]:px-4 [&_.visibility-toggle_button]:py-1.5 [&_.visibility-toggle_button]:font-body [&_.visibility-toggle_button]:text-[13px] [&_.visibility-toggle_button]:font-extrabold [&_.visibility-toggle_button]:text-[#111] [&_.visibility-toggle_button]:shadow-none [&_.visibility-toggle_button+button]:border-l-[3px] [&_.visibility-toggle_button+button]:border-[#111] [&_.visibility-toggle_button[aria-pressed=true]]:bg-[#E5E7EB] [&_.visibility-toggle_button[aria-pressed=true]:last-child]:bg-[#22C55E]",
 );
 const MARKDOWN_CARD = cn(
   agentCard("markdown"),
   "[&_textarea.markdown-editor]:box-border [&_textarea.markdown-editor]:min-h-[240px] [&_textarea.markdown-editor]:w-full [&_textarea.markdown-editor]:rounded-[10px] [&_textarea.markdown-editor]:border-[3px] [&_textarea.markdown-editor]:border-[#111] [&_textarea.markdown-editor]:bg-white [&_textarea.markdown-editor]:font-mono [&_textarea.markdown-editor]:text-sm [&_textarea.markdown-editor]:leading-normal [&_textarea.markdown-editor]:font-medium",
-  "[&_.editor-footer]:mt-2 [&_.editor-footer]:font-body [&_.editor-footer]:text-xs [&_.editor-footer]:font-bold",
-  "[&_.button-row]:flex [&_.button-row]:items-center [&_.button-row]:gap-2.5",
+  "[&_.editor-footer]:mt-2 [&_.editor-footer]:font-body [&_.editor-footer]:text-xs [&_.editor-footer]:[line-height:normal] [&_.editor-footer]:font-bold",
+  "[&_.button-row]:flex [&_.button-row]:items-center [&_.button-row]:gap-1.5",
 );
 const BRAINFORM_ROWS =
   "[&_.brainform-source-group_h3]:font-display [&_.brainform-source-group_h3]:text-base [&_.brainform-source-group_h3]:font-extrabold [&_.brainform-source-group_h3]:tracking-normal [&_.brainform-source-group_h3]:text-[#111] " +
   "[&_.document-row]:mb-2 [&_.document-row]:rounded-[10px] [&_.document-row]:border-2 [&_.document-row]:border-[#111] [&_.document-row]:bg-white [&_.document-row]:shadow-[2px_2px_0_#111] " +
   "[&_.document-row_:is(span,strong,p)]:min-w-[6em] [&_.document-row_:is(span,strong,p)]:overflow-visible [&_.document-row_:is(span,strong,p)]:text-clip [&_.document-row_:is(span,strong,p)]:break-normal [&_.document-row_:is(span,strong,p)]:wrap-break-word [&_.document-row_:is(span,strong,p)]:whitespace-normal " +
-  "[&_.row-actions]:flex [&_.row-actions]:items-center [&_.row-actions]:gap-2.5";
+  "[&_.row-actions]:flex [&_.row-actions]:items-center [&_.row-actions]:gap-1.5";
+/** Filled Brainform: a hairline between the RAG and Knowledge groups, as in the mock. */
+const BRAINFORM_SPLIT =
+  "[&_.brainform-source-group+.brainform-source-group]:border-0 [&_.brainform-source-group+.brainform-source-group]:border-t [&_.brainform-source-group+.brainform-source-group]:border-solid [&_.brainform-source-group+.brainform-source-group]:border-[#E4E1D9]";
 const BRAINFORM_COMPACT =
   "[&_.brainform-source-group]:m-0 [&_.brainform-source-group]:flex [&_.brainform-source-group]:items-baseline [&_.brainform-source-group]:gap-2.5 [&_.brainform-source-group]:border-0 [&_.brainform-source-group]:border-t-2 [&_.brainform-source-group]:border-dashed [&_.brainform-source-group]:border-[#1144] [&_.brainform-source-group]:px-0.5 [&_.brainform-source-group]:py-2 " +
-  "[&_.brainform-source-group_h3]:m-0 [&_.brainform-source-group_h3]:min-w-[84px] [&_.brainform-source-group_h3]:text-sm " +
+  "[&_.brainform-source-group_h3]:m-0 [&_.brainform-source-group_h3]:min-w-[84px] [&_.brainform-source-group_h3]:text-sm [&_.brainform-source-group_h3]:leading-[1.5] " +
   "[&_.brainform-source-group_p]:m-0 [&_.brainform-source-group_p]:font-body [&_.brainform-source-group_p]:text-[13px] [&_.brainform-source-group_p]:[line-height:normal] [&_.brainform-source-group_p]:font-medium [&_.brainform-source-group_p]:text-[#1119]";
 const AVATAR_CARD = cn(
   agentCard("avatar"),
@@ -115,7 +118,7 @@ const AVATAR_CARD = cn(
   "max-[767px]:[&_[class*=canvasFrame]]:max-h-[300px]",
 );
 const TEMPLATE_BUTTON =
-  "inline-flex h-10 box-border cursor-pointer items-center rounded-[10px] border-2 border-[#111] bg-white px-3.5 font-body text-sm font-bold text-[#111] no-underline shadow-[3px_3px_0_#111] disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-11 box-border cursor-pointer items-center rounded-[10px] border-2 border-[#111] bg-white px-3.5 py-0 font-body text-sm font-bold text-[#111] no-underline shadow-[3px_3px_0_#111] disabled:cursor-not-allowed disabled:opacity-50";
 
 export function AgentOverview({ agentId }: { agentId: string }) {
   const t = useT();
@@ -1924,7 +1927,7 @@ export function AgentWorkbench({
                   className={cn(
                     agentCard("brainform", brainformEmpty),
                     BRAINFORM_ROWS,
-                    brainformEmpty && BRAINFORM_COMPACT,
+                    brainformEmpty ? BRAINFORM_COMPACT : BRAINFORM_SPLIT,
                     "[&_label[data-ui-guide='agent.uploadRag']]:shadow-[6px_6px_0_#111]",
                   )}
                   action={

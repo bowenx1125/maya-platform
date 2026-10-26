@@ -25,14 +25,14 @@ export function AgentsPage({
       <header
         className={cn(
           AGENT_BANNER,
-          "py-[45px] max-[767px]:flex-nowrap max-[767px]:pt-[36px] max-[767px]:pb-[35px]",
+          "py-[45px] max-[767px]:flex-nowrap max-[767px]:py-[18px]",
         )}
       >
         <h1
           id="studyform-agents"
           className={cn(
             AGENT_BANNER_TITLE,
-            "max-[767px]:order-none max-[767px]:basis-auto",
+            "max-[767px]:order-none max-[767px]:mt-[18px] max-[767px]:mb-5 max-[767px]:basis-auto",
           )}
         >
           {title}

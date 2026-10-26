@@ -276,7 +276,7 @@ export function AgentCard({
       data-card-footer
       className={
         listCard
-          ? "pointer-events-none relative z-[1] mx-2.5 block border-0 border-t-2 border-dashed border-[#1116] pt-[7px] pb-[9px] text-left text-[11px] font-medium text-[#111]"
+          ? "pointer-events-none relative z-[1] mx-2.5 block border-0 border-t-2 border-dashed border-[#1116] pt-[7px] pb-[9px] text-left text-[11px] font-medium text-[#111] [line-height:normal]"
           : "pointer-events-none relative z-[1] mt-auto border-t-2 border-dashed border-[#11111144] px-2.5 py-1.5 text-[11px] font-medium text-[#333]"
       }
     >
