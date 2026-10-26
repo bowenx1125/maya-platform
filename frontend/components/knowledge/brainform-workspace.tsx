@@ -46,6 +46,7 @@ import { runKnowledgeMutation } from "./knowledge-mutation";
 import { republishAgentsUsingDocument } from "./republish";
 import { useT } from "../../lib/i18n";
 import { useSession } from "../session-provider";
+import { PageAction } from "../page-action";
 import { WorkspaceAction } from "../workspace-actions";
 import { ModulePlus } from "../studyform-layout";
 import { ErrorNotice, isNotFound, LoadingCard } from "../ui";
@@ -2363,7 +2364,7 @@ function BrainformWorkspaceBody({
       data-studyform-embedded={embedded || undefined}
     >
       {ragPage ? <AlbumRings /> : null}
-      {pane?.kind === "rag-new" ? (
+      {pane?.kind === "rag-new" && !ragPage ? (
         <WorkspaceAction
           name="done"
           onClick={() => void saveNewRag()}
@@ -2386,7 +2387,14 @@ function BrainformWorkspaceBody({
           }
         />
       ) : null}
-      {pane || initialMode ? (
+      {(pane || initialMode) &&
+      !(
+        ragPage &&
+        (pane?.kind.startsWith("rag") ||
+          initialMode === "rag-view" ||
+          initialMode === "rag-edit" ||
+          initialMode === "rag-new")
+      ) ? (
         <WorkspaceAction
           name="back"
           onClick={closePane}
@@ -2402,7 +2410,7 @@ function BrainformWorkspaceBody({
           disabled={Boolean(busyKey)}
         />
       ) : null}
-      {pane?.kind === "rag-edit" && selectedDraft ? (
+      {pane?.kind === "rag-edit" && selectedDraft && !ragPage ? (
         <WorkspaceAction
           name="done"
           onClick={() => {
@@ -3071,6 +3079,45 @@ function BrainformWorkspaceBody({
       ) : null}
 
       {ragPage && pane?.kind.startsWith("rag") ? (
+        <>
+        <div className={album.top}>
+          <h2 id="brainform-rag-heading">RAG</h2>
+          <span className={album.tape} aria-hidden="true" />
+          <span className={album.sp} />
+          <PageAction
+            name="back"
+            placement="page"
+            onClick={closePane}
+            disabled={Boolean(busyKey)}
+          />
+          {pane.kind === "rag-new" ? (
+            <PageAction
+              name="done"
+              placement="page"
+              onClick={() => void saveNewRag()}
+              disabled={
+                Boolean(busyKey) ||
+                !newRag.name.trim() ||
+                (!newRag.file && !newRag.markdown.trim()) ||
+                (role !== "teacher" && !(initialGroupId ?? newRag.groupId))
+              }
+            />
+          ) : null}
+          {pane.kind === "rag-edit" && selectedDraft ? (
+            <PageAction
+              name="done"
+              placement="page"
+              onClick={() => {
+                const current = ragActionPane.current;
+                if (current?.kind !== "rag-edit") return;
+                const draft = ragActionDrafts.current[current.draftKey];
+                if (!draft) return;
+                saveRagAction.current(current.draftKey);
+              }}
+              disabled={Boolean(busyKey) || !selectedDraft.canEdit || !ragDirty}
+            />
+          ) : null}
+        </div>
         <div className={album.spread}>
           {pane.kind === "rag-view" ? (
             <div className={album.cardBig}>
@@ -3094,7 +3141,6 @@ function BrainformWorkspaceBody({
                 </span>
               </div>
               <div className={album.plate}>
-                <span className={album.eb}>RAG</span>
                 <h2 className={album.nmBig} id="brainform-editor-heading">
                   {pane.filename}
                 </h2>
@@ -3148,9 +3194,8 @@ function BrainformWorkspaceBody({
           ) : pane.kind === "rag-new" ? (
             <div className={album.blank}>
               <div className={album.in}>
-                <span className={album.eb}>RAG</span>
-                <h2 className={album.nm} id="brainform-editor-heading">
-                  {newRag.name.trim() || t("brainformNewRag")}
+                <h2 className="sr-only" id="brainform-editor-heading">
+                  {t("brainformRagCreateTitle")}
                 </h2>
                 {role !== "teacher" &&
                 !initialGroupId &&
@@ -3174,6 +3219,7 @@ function BrainformWorkspaceBody({
                   </label>
                 ) : null}
                 <KnowledgeFilenameField
+                  label={t("ragFilename")}
                   className={album.fl}
                   value={newRag.name}
                   disabled={busyKey === "rag-new"}
@@ -3205,11 +3251,11 @@ function BrainformWorkspaceBody({
           ) : pane.kind === "rag-edit" && selectedDraft ? (
             <div className={album.blank}>
               <div className={album.in}>
-                <span className={album.eb}>RAG</span>
-                <h2 className={album.nm} id="brainform-editor-heading">
+                <h2 className="sr-only" id="brainform-editor-heading">
                   {selectedDraft.filename}
                 </h2>
                 <KnowledgeFilenameField
+                  label={t("ragFilename")}
                   className={album.fl}
                   value={selectedDraft.filename}
                   disabled={busyKey === `import:${pane.draftKey}`}
@@ -3250,6 +3296,7 @@ function BrainformWorkspaceBody({
             <p className={album.eb}>{t("loading")}</p>
           )}
         </div>
+        </>
       ) : null}
       {pane &&
       pane.kind !== "record" &&

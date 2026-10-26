@@ -355,6 +355,7 @@ const enMessages = {
   knowledgeEditLede:
     "Editing creates a new immutable source and updates current drafts that reference the old source.",
   knowledgeFilename: "Filename",
+  ragFilename: "File Name",
   knowledgeContent: "Content",
   knowledgeHidden: "The source is hidden from the active Brainform library.",
   brainformUnavailable: "Brainform is not available for this course.",
@@ -409,6 +410,7 @@ const enMessages = {
   brainformKnowledgeDeleted: "Knowledge deleted.",
   brainformNewKnowledge: "New Knowledge",
   brainformNewRag: "New RAG",
+  brainformRagCreateTitle: "New",
   brainformUploadKnowledgeFile: "Upload a Markdown file as Knowledge",
   brainformReindexRagNamed: "Reindex {name}",
   brainformViewKnowledge: "View Knowledge",
