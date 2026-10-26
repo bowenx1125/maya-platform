@@ -10,7 +10,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BetaDebateStage } from "../components/debate-beta/stage";
 import {
-  DebateStage,
   type DebatePlaybackApi,
   type PlaybackSocket,
 } from "../components/debate/stage";
@@ -228,7 +227,7 @@ function acquired(): Record<string, unknown> {
 }
 
 function renderStage(
-  kind: "classic" | "beta",
+  kind: "beta",
   initial: DebateDetail,
   api: DebatePlaybackApi,
   socket: ReplaySocket,
@@ -239,11 +238,7 @@ function renderStage(
     detail: initial,
     socketFactory: () => socket,
   };
-  return kind === "classic" ? (
-    <DebateStage {...props} />
-  ) : (
-    <BetaDebateStage {...props} />
-  );
+  return <BetaDebateStage {...props} />;
 }
 
 describe("terminal segments replay controller", () => {
@@ -551,7 +546,7 @@ describe("terminal segments replay controller", () => {
     await waitFor(() => expect(api.replayDebate).toHaveBeenCalledTimes(1));
   });
 
-  it.each(["classic", "beta"] as const)(
+  it.each(["beta"] as const)(
     "%s waits for an opening socket before acquiring replay control",
     async (kind) => {
       const initial = detail();
@@ -594,7 +589,7 @@ describe("terminal segments replay controller", () => {
     },
   );
 
-  it.each(["classic", "beta"] as const)(
+  it.each(["beta"] as const)(
     "%s disables replay after its terminal socket is gone",
     async (kind) => {
       const initial = detail();
@@ -610,7 +605,7 @@ describe("terminal segments replay controller", () => {
     },
   );
 
-  it.each(["classic", "beta"] as const)(
+  it.each(["beta"] as const)(
     "%s offers reconnect when the network drops during retained replay",
     async (kind) => {
       const initial = detail();
@@ -654,7 +649,7 @@ describe("terminal segments replay controller", () => {
 });
 
 describe("saved media failure recovery", () => {
-  it.each(["classic", "beta"] as const)(
+  it.each(["beta"] as const)(
     "%s recovers a refused Next in place without regeneration",
     async (kind) => {
       const initial = detail();
@@ -683,11 +678,7 @@ describe("saved media failure recovery", () => {
         refreshSnapshot,
       };
       render(
-        kind === "beta" ? (
-          <BetaDebateStage {...props} />
-        ) : (
-          <DebateStage {...props} />
-        ),
+        <BetaDebateStage {...props} />,
       );
       await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
       act(() => socket.emitOpen());
@@ -713,7 +704,7 @@ describe("saved media failure recovery", () => {
     },
   );
 
-  it.each(["classic", "beta"] as const)(
+  it.each(["beta"] as const)(
     "%s ignores duplicated prepared media and retries a failed media ticket once",
     async (kind) => {
       const initial = detail();
@@ -746,11 +737,7 @@ describe("saved media failure recovery", () => {
         refreshSnapshot,
       };
       render(
-        kind === "beta" ? (
-          <BetaDebateStage {...props} />
-        ) : (
-          <DebateStage {...props} />
-        ),
+        <BetaDebateStage {...props} />,
       );
       await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
       act(() => socket.emitOpen());
@@ -824,7 +811,7 @@ describe("saved media failure recovery", () => {
 });
 
 describe("ready state media handoff", () => {
-  it.each(["classic", "beta"] as const)(
+  it.each(["beta"] as const)(
     "%s prepares the next saved audio when refreshed detail arrives before the REST callback",
     async (kind) => {
       const initial = detail();
@@ -865,11 +852,7 @@ describe("ready state media handoff", () => {
           socketFactory: factory,
           refreshSnapshot,
         };
-        return kind === "beta" ? (
-          <BetaDebateStage {...props} />
-        ) : (
-          <DebateStage {...props} />
-        );
+        return <BetaDebateStage {...props} />;
       };
       const rendered = render(view(initial));
       await waitFor(() => expect(socket.hasListeners("open")).toBe(true));

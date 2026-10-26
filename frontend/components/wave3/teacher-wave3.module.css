@@ -1,7 +1,0 @@
-@layer legacy {
-  .root {
-    display: grid;
-    gap: 24px;
-    margin-top: 24px;
-  }
-}

@@ -13,7 +13,6 @@ import type {
   DebatePlaybackApi,
   PlaybackSocket,
 } from "../components/debate/stage";
-import { DebateStage } from "../components/debate/stage";
 import { BetaDebateStage } from "../components/debate-beta/stage";
 import type { DebateDetail, DebatePlaybackState } from "../lib/api";
 
@@ -258,7 +257,6 @@ afterEach(() => {
 });
 
 describe.each([
-  ["classic", DebateStage],
   ["beta", BetaDebateStage],
 ] as const)("%s text-only publication", (_name, Stage) => {
   it.each(["preparing", "waiting_next"] as const)(
@@ -474,7 +472,6 @@ describe.each([
 });
 
 describe.each([
-  ["classic", DebateStage],
   ["beta", BetaDebateStage],
 ] as const)("%s next_not_ready visibility", (_name, Stage) => {
   it("surfaces next_not_ready instead of silently spinning", async () => {

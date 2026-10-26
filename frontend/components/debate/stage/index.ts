@@ -1,4 +1,3 @@
-export { DebateStage } from "./debate-stage";
 export {
   defaultPlaybackStageLabels,
   phaseLabel,
