@@ -73,7 +73,7 @@ import {
   fileExt,
   RagCard,
   ragAlbumClass,
-  useRagAgents,
+  ragAgents,
 } from "./rag-album";
 
 /**
@@ -424,8 +424,6 @@ function isGenerationActive(
 ): boolean {
   return state === "pending" || state === "running";
 }
-
-const NO_DOCUMENTS: KnowledgeDocument[] = [];
 
 function indexStatusText(
   document: KnowledgeDocument,
@@ -2356,7 +2354,6 @@ function BrainformWorkspaceBody({
   const canAddKnowledge = role === "teacher" && !teacherGroupView;
   const canAddRag =
     !teacherGroupView && (role === "teacher" || ragGroupIds.length > 0);
-  const ragAgents = useRagAgents(ragPage ? ragDocuments : NO_DOCUMENTS);
 
   return (
     <main
@@ -2516,7 +2513,7 @@ function BrainformWorkspaceBody({
                     key={document.id}
                     index={index}
                     document={document}
-                    agents={ragAgents[document.id]}
+                    agents={ragAgents(document)}
                     tone={failed ? "failed" : status ? "pending" : ""}
                     title={
                       renameDocumentId === document.id ? (
