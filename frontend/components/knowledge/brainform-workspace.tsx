@@ -2474,8 +2474,7 @@ function BrainformWorkspaceBody({
       !pane &&
       !initialMode &&
       !loading &&
-      // A failed open keeps the album that was already on screen.
-      (!loadError || ragDocuments.length > 0) &&
+      !loadError &&
       courseId ? (
         <section aria-labelledby="brainform-rag-heading">
           <div className={album.top}>
