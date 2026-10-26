@@ -6,7 +6,7 @@ import type { ChatAttachment } from "../../lib/api/platform";
 import { localizeError } from "../../lib/i18n";
 import { useT } from "../../lib/i18n";
 import { IconClose } from "../quiet-icons";
-import { Notice } from "../ui";
+import { Notice, StickerBadge } from "../ui";
 import { useSession } from "../session-provider";
 import styles from "../agent-chat.module.css";
 
@@ -107,6 +107,7 @@ export function ChatAttachments({
         <Notice
           id="chat-attachment-error"
           tone="error"
+          badge={1}
           onClose={() => setError(null)}
         >
           {localizeError(error, "errorFileOperationFailed")}
@@ -114,7 +115,7 @@ export function ChatAttachments({
       ) : null}
       <button
         type="button"
-        className={`${styles.attachButton} ${error ? "border-err! shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!" : ""}`}
+        className={`${styles.attachButton} relative ${error ? "border-err! shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!" : ""}`}
         aria-label={t("chatAttach")}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? "chat-attachment-error" : undefined}
@@ -122,6 +123,7 @@ export function ChatAttachments({
         disabled={disabled || uploading}
         onClick={() => input.current?.click()}
       >
+        {error ? <StickerBadge n={1} /> : null}
         <svg
           viewBox="0 0 24 24"
           width="18"

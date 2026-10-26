@@ -5,7 +5,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { cn } from "../lib/utils";
-import { NOTICE_TAIL_CLASS, useNoticeTray } from "./ui";
+import {
+  NOTICE_TAIL_CLASS,
+  STICKER,
+  STICKER_TONE,
+  StickerBadge,
+  useNoticeTray,
+} from "./ui";
 
 import {
   AGENT_ISSUE_MESSAGES,
@@ -217,50 +223,35 @@ export function useCreateChecklist(
 
 export const checklistLineId = (n: number) => `create-issue-${n}`;
 
-/** Keycap (14 option B): black key on a red key-shadow; pressed green ✓ when fixed. */
-const KEYCAP =
-  "flex-none rounded-[7px] border-2 border-border text-center font-body font-extrabold";
-const KEYCAP_TONE = (done: boolean) =>
-  done
-    ? "grid place-items-center bg-[#22C55E] text-ink shadow-[0_1px_0_#111]"
-    : "bg-[#111] text-white";
-
-/** The number on a field or Agent card; pressed green ✓ once its line is fixed. */
+/** The number sticker on a field or Agent card; ✓ once its line is fixed. */
 export function ChecklistBadge({ entry }: { entry?: ChecklistEntry }) {
   if (!entry) return null;
+  return <StickerBadge n={entry.n} done={entry.done} />;
+}
+
+/** The pink pill jump button ("Show me" / "Edit Agent …") with its → arrow. */
+export const JUMP_BUTTON =
+  "inline-flex flex-none cursor-pointer items-center gap-[5px] whitespace-nowrap rounded-full border-2 border-border bg-[#FF4D8D] px-[11px] py-1 font-body text-xs font-bold text-ink no-underline shadow-[3px_3px_0_#111] hover:-translate-x-px hover:-translate-y-px hover:shadow-[4px_4px_0_#111] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main motion-reduce:hover:translate-0 motion-reduce:active:translate-0";
+
+export function JumpArrow() {
   return (
-    <span
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
       aria-hidden="true"
-      data-checklist-badge
-      data-done={entry.done || undefined}
-      className={cn(
-        KEYCAP,
-        "absolute -top-3 -left-3 z-[5] h-7 min-w-7 px-1 text-[13px] leading-6",
-        KEYCAP_TONE(entry.done),
-        entry.done ? "translate-y-[3px]" : "shadow-[0_4px_0_#EF4444]",
-      )}
     >
-      {entry.done ? "✓" : entry.n}
-    </span>
+      <path d="M5 12h13M13 6l6 6-6 6" />
+    </svg>
   );
 }
 
-/** The white keycap jump button with its aria-hidden ↵ key. */
-export const KEYCAP_BUTTON =
-  "mb-[3px] inline-flex flex-none cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border-2 border-border bg-surface px-2.5 py-[5px] font-body text-xs font-bold text-ink no-underline shadow-[0_4px_0_#111] hover:bg-[#FFE14D] active:translate-y-1 active:bg-[#FFE14D] active:shadow-[0_0_0_#111] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main motion-reduce:active:translate-y-0";
-
-export function KeycapGlyph() {
-  return (
-    <kbd
-      aria-hidden="true"
-      className="border-l-2 border-border pl-1.5 font-body text-[11px] font-extrabold"
-    >
-      ↵
-    </kbd>
-  );
-}
-
-/** One checklist line: a key-row card that sinks flat, struck in red, when fixed. */
+/** One checklist line: dashed rule between lines; grey with a black strike once fixed. */
 export function ChecklistLine({
   entry,
   children,
@@ -273,19 +264,17 @@ export function ChecklistLine({
       id={checklistLineId(entry.n)}
       data-done={entry.done || undefined}
       className={cn(
-        "mb-[7px] flex items-center gap-2.5 rounded-[10px] border-2 px-2 py-[7px] max-[680px]:flex-wrap",
-        entry.done
-          ? "translate-y-[3px] border-[#9CA3AF] bg-[#F1F5F9]"
-          : "border-border bg-surface shadow-[0_3px_0_#111] hover:bg-[#FFF7CC] active:translate-y-[3px] active:shadow-none motion-reduce:active:translate-y-0",
+        "group/line flex items-center gap-2.5 border-t-2 border-dashed border-[#11111833] py-[7px] first:border-t-0 max-[680px]:flex-wrap",
+        !entry.done &&
+          "active:-mx-2 active:rounded-lg active:bg-[#FFD0D0] active:px-2",
       )}
     >
       <span
         aria-hidden="true"
         className={cn(
-          KEYCAP,
-          "size-[26px] text-xs leading-[22px]",
-          KEYCAP_TONE(entry.done),
-          entry.done ? "translate-y-0.5" : "shadow-[0_3px_0_#EF4444]",
+          STICKER,
+          "size-6 text-[11px] leading-5",
+          STICKER_TONE(entry.done),
         )}
       >
         {entry.done ? "✓" : entry.n}
@@ -293,8 +282,9 @@ export function ChecklistLine({
       <span
         className={cn(
           "flex-1 max-[680px]:basis-[calc(100%-40px)]",
-          entry.done &&
-            "text-[#6B7280] line-through decoration-[#EF4444] decoration-[3px]",
+          entry.done
+            ? "text-[#6B7280] line-through decoration-ink decoration-2"
+            : "decoration-[#FF4D8D] decoration-2 underline-offset-[3px] group-hover/line:underline",
         )}
       >
         {entry.text}
@@ -346,21 +336,21 @@ export function CreateChecklist({
           <ChecklistLine key={entry.key} entry={entry}>
             {entry.href ? (
               <Link
-                className={cn(KEYCAP_BUTTON, "max-[680px]:ml-[34px]")}
+                className={cn(JUMP_BUTTON, "max-[680px]:ml-[34px]")}
                 href={entry.href}
                 aria-label={entry.editLabel}
               >
                 {entry.editLabel}
-                <KeycapGlyph />
+                <JumpArrow />
               </Link>
             ) : entry.target ? (
               <button
                 type="button"
-                className={cn(KEYCAP_BUTTON, "max-[680px]:ml-[34px]")}
+                className={cn(JUMP_BUTTON, "max-[680px]:ml-[34px]")}
                 onClick={() => show(entry.target!)}
               >
                 {t("debateShowMe")}
-                <KeycapGlyph />
+                <JumpArrow />
               </button>
             ) : null}
           </ChecklistLine>
