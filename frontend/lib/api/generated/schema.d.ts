@@ -4930,6 +4930,16 @@ export interface components {
             /** Can Edit */
             can_edit: boolean;
             /**
+             * Can Delete
+             * @description Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group).
+             */
+            can_delete: boolean;
+            /**
+             * Last Edited By Name
+             * @description No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone.
+             */
+            last_edited_by_name: string | null;
+            /**
              * Created At
              * Format: date-time
              */
@@ -5040,6 +5050,21 @@ export interface components {
             member_count: number;
             /** Can Edit */
             can_edit: boolean;
+            /**
+             * Can Delete
+             * @description Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group).
+             */
+            can_delete: boolean;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Last Edited By Name
+             * @description No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone.
+             */
+            last_edited_by_name: string | null;
         };
         /** PublishedAgentAuthor */
         PublishedAgentAuthor: {

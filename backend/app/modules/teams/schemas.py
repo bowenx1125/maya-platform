@@ -80,6 +80,13 @@ class TeamSummary(StrictModel):
     current_version_seq: int = Field(ge=1)
     member_count: int = Field(ge=2)
     can_edit: bool
+    # Same rule as DELETE /teams/{team_id}: the owner, still in the course and,
+    # for a group Team, still inside that group.
+    can_delete: bool
+    updated_at: datetime
+    # No per-edit author is stored; only the owner can edit, so this is the
+    # owner's display name (null when the owner account is gone).
+    last_edited_by_name: str | None
 
 
 class SharedKnowledgeSetDTO(StrictModel):
@@ -89,7 +96,6 @@ class SharedKnowledgeSetDTO(StrictModel):
 
 class TeamDetail(TeamSummary):
     created_at: datetime
-    updated_at: datetime
     members: list[TeamMemberDTO]
     shared_knowledge_set_ids: list[UUID]
     shared_knowledge_sets: list[SharedKnowledgeSetDTO] = Field(default_factory=list)
