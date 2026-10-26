@@ -1,5 +1,7 @@
 "use client";
 
+import { STUDYFORM_NEW_CLASS } from "./agent-chrome";
+import { safeTeamsReturn } from "../lib/team-return";
 import { agentLastEditedTitle } from "../lib/agent-tooltip";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -59,13 +61,9 @@ import {
   VersionTile,
   teamVersionLabel,
 } from "./studyform-layout";
-import {
-  AGENTS_NEW_CLASS,
-  AgentsEmpty,
-  NewButton,
-  type AgentRename,
-} from "./ui/agent-card";
+import { AgentsEmpty, NewButton, type AgentRename } from "./ui/agent-card";
 import { AgentsPage } from "./agents-page";
+import { TeamsPage } from "./teams-page";
 import { GuidePortrait } from "./ui/guide-dialog";
 import {
   EmptyCard,
@@ -357,6 +355,46 @@ export function StudentAgentsPage({ groupId }: { groupId?: string }) {
   return <GroupWorkspace key={target} groupId={target} view="agents" />;
 }
 
+/** Where a group's Teams page lives (sidebar Teams); list, create and edit. */
+export function studentTeamsHref(
+  groupId: string,
+  mode?: "team-new" | "team-edit",
+  teamId?: string,
+) {
+  const params = new URLSearchParams({ group_id: groupId });
+  if (mode) params.set("mode", mode);
+  if (teamId) params.set("team_id", teamId);
+  return `/student/teams?${params.toString()}`;
+}
+
+/**
+ * The Teams page; ?group_id picks the group, else the first membership.
+ * ?mode=team-new / team-edit&team_id open the form; no mode (or the
+ * mode=teams TeamEntryFlow leaves behind) is the list.
+ */
+export function StudentTeamsPage({
+  groupId,
+  mode,
+  teamId,
+}: {
+  groupId?: string;
+  mode?: string;
+  teamId?: string;
+}) {
+  const { user } = useSession();
+  const target = groupId ?? user?.groups?.[0]?.group_id;
+  if (!target) return <LoadingCard />;
+  return (
+    <GroupWorkspace
+      key={target}
+      groupId={target}
+      view="teams"
+      initialMode={mode}
+      initialTeamId={teamId}
+    />
+  );
+}
+
 export function GroupWorkspace({
   groupId,
   initialVoiceCreate = false,
@@ -366,8 +404,8 @@ export function GroupWorkspace({
   initialDocumentId,
   view,
 }: {
-  /** "agents": the Agents page alone (the sidebar's Agents item). */
-  view?: "agents";
+  /** "agents" / "teams": that page alone (the sidebar's item). */
+  view?: "agents" | "teams";
   groupId: string;
   initialVoiceCreate?: boolean;
   focusVoices?: boolean;
@@ -416,7 +454,7 @@ function GroupWorkspaceSession({
   initialTeamId?: string;
   initialDocumentId?: string;
   scope: string;
-  view?: "agents";
+  view?: "agents" | "teams";
 }) {
   const t = useT();
   // Team modes swap the whole page; any other mode belongs to the embedded
@@ -718,12 +756,12 @@ function GroupWorkspaceSession({
   // a teacher looking round the group sees the group's work alone.
   const sharedAgents = teacherIdentity ? [] : courseAgents;
   const teamForm =
-    initialMode === "team-edit" ||
-    (!teacherIdentity && initialMode === "team-new");
+    view === "teams" &&
+    (initialMode === "team-edit" ||
+      (!teacherIdentity && initialMode === "team-new"));
   if (teamForm)
     return (
       <>
-        <PageIntro title={t("studyform")} />
         <TeamEntryFlow
           key={scope}
           api={api}
@@ -732,7 +770,12 @@ function GroupWorkspaceSession({
           variant="team"
           groupId={groupId}
           standalone
-          backHref={`/student/groups/${groupId}`}
+          backHref={studentTeamsHref(groupId)}
+          agentCreateHref={
+            teacherIdentity
+              ? undefined
+              : `/student/groups/${groupId}/agents/new`
+          }
           initialRouteMode={
             initialMode === "team-new" ? "team-new" : "team-edit"
           }
@@ -776,7 +819,7 @@ function GroupWorkspaceSession({
               <NewButton
                 href={`/student/groups/${groupId}/agents/new`}
                 label={t("newAgent")}
-                className={AGENTS_NEW_CLASS}
+                className={STUDYFORM_NEW_CLASS}
               />
             )
           }
@@ -863,6 +906,24 @@ function GroupWorkspaceSession({
           )}
         </AgentsPage>
       </>
+    );
+
+  // /student/teams (where Team Back / Done return): the Teams page.
+  if (view === "teams")
+    return (
+      <TeamsPage
+        deleting={deleting !== null}
+        newHref={
+          teacherIdentity ? undefined : studentTeamsHref(groupId, "team-new")
+        }
+        teams={teams.map((team) => ({
+          team,
+          href: studentTeamsHref(groupId, "team-edit", team.id),
+          onDelete: team.can_edit
+            ? () => void deleteOwnedTeam(team.id)
+            : undefined,
+        }))}
+      />
     );
 
   return (
@@ -982,9 +1043,12 @@ function GroupAgentRow({
 export function CreateAgentForm({
   groupId,
   courseId,
+  returnHref,
 }: {
   groupId?: string;
   courseId?: string;
+  /** ?return= from Create/Edit Team; Back and Done go there instead. */
+  returnHref?: string;
 }) {
   const { identityGeneration, user } = useSession();
   const actorScopeKey = `${user?.id ?? "anonymous"}:${courseId ?? groupId ?? "none"}:${identityGeneration}`;
@@ -994,6 +1058,7 @@ export function CreateAgentForm({
       actorScopeKey={actorScopeKey}
       courseId={courseId}
       groupId={groupId}
+      returnHref={safeTeamsReturn(returnHref)}
     />
   );
 }
@@ -1002,9 +1067,11 @@ function CreateAgentFormSession({
   groupId,
   courseId,
   actorScopeKey,
+  returnHref,
 }: {
   groupId?: string;
   courseId?: string;
+  returnHref?: string;
   actorScopeKey: string;
 }) {
   const { api } = useSession();
@@ -1046,7 +1113,8 @@ function CreateAgentFormSession({
     <AgentWorkbench
       publishOnDone
       backHref={
-        groupId ? `/student/agents?group_id=${groupId}` : "/teacher/agents"
+        returnHref ??
+        (groupId ? `/student/agents?group_id=${groupId}` : "/teacher/agents")
       }
       unsavedCreate={{
         groupId,

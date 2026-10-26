@@ -168,11 +168,15 @@ describe("sidebar groups", () => {
     expect(lit()).toEqual(["voices"]);
     view.unmount();
     const studyform = renderShell("student", "/student/groups/group-a");
-    // Agents has its own page now; Studyform lights its first row, Teams.
-    expect(lit()).toEqual(["teams"]);
+    // The Studyform grid lights no row; Teams lights on ?mode=teams only.
+    expect(lit()).toEqual([]);
     studyform.unmount();
-    renderShell("student", "/student/agents");
+    const agents = renderShell("student", "/student/agents");
     expect(lit()).toEqual(["agents"]);
+    agents.unmount();
+    // Teams lights alone; the Mayaform pill stays on home.
+    renderShell("student", "/student/teams");
+    expect(lit()).toEqual(["teams"]);
   });
 });
 
