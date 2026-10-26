@@ -34,13 +34,13 @@ export function KnowledgeFilenameField({
   className?: string;
   describedBy?: string;
   invalid?: boolean;
-  /** U3: the file sticker on the field a filename error points at. */
+  /** U3: the number sticker on the field a filename error points at. */
   fileError?: boolean;
 }) {
   const t = useT();
   return (
     <label className={fileError ? `relative ${className ?? ""}` : className}>
-      {fileError ? <KindSticker kind="file" on /> : null}
+      {fileError ? <KindSticker kind="field" n={1} on /> : null}
       <span>{t("knowledgeFilename")}</span>
       <input
         type="text"

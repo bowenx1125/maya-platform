@@ -121,8 +121,11 @@ export function Notice({
   badge,
   kind,
   transient = false,
+  foldKey,
 }: {
   id?: string;
+  /** What counts as the same error for folding (default: the children). */
+  foldKey?: unknown;
   /** A field error: the sticker number its field wears, instead of the dot. */
   badge?: number;
   /** U3: the sticker shape that tells the error's kind (default: server). */
@@ -142,7 +145,10 @@ export function Notice({
   // in the tray; only success/info lines may stay inline.
   inline = inline && (tone === "success" || tone === "info");
   const tray = useNoticeTray(!inline);
-  const fold = useTransientFold(transient && !inline, children);
+  const fold = useTransientFold(
+    transient && !inline,
+    foldKey !== undefined ? foldKey : children,
+  );
   if (closed || (!inline && !tray)) return null;
   const sticker: ErrorKind | undefined =
     badge !== undefined
@@ -301,6 +307,7 @@ export function ErrorNotice({
       kind={kind ?? (isFileError(error) ? "file" : "server")}
       badge={badge}
       transient={transient}
+      foldKey={error}
       onClose={() => {
         setDismissed(error);
         onClosed?.();

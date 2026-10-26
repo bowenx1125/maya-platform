@@ -2423,7 +2423,7 @@ function BrainformWorkspaceBody({
       {loadError ? (
         <ErrorNotice
           error={loadError}
-          kind={filenameError ? "file" : undefined}
+          badge={filenameError ? 1 : undefined}
           onRetry={() =>
             pendingRagAction ? retryRagAction() : void loadWorkspace()
           }
