@@ -280,9 +280,9 @@ export function TeacherStudyformWorkspace({
   const teamMode =
     view === "teams" &&
     (initialMode === "team-new" ||
-    initialMode === "team-edit" ||
-    initialMode === "maya-new" ||
-    initialMode === "maya-edit");
+      initialMode === "team-edit" ||
+      initialMode === "maya-new" ||
+      initialMode === "maya-edit");
   const pageMode = teamMode ? initialMode : "";
   const brainformMode = teamMode ? undefined : initialMode;
   const [brainformPane, setBrainformPane] = useState(false);

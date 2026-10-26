@@ -451,7 +451,8 @@ export function AppShell({
         ? `/student/teams?group_id=${encodeURIComponent(groupId)}`
         : "/student#student-groups";
   // The Teams list, Create Team and Edit Team all light Teams.
-  const teamsPage = pathname === "/student/teams" || pathname === "/teacher/teams";
+  const teamsPage =
+    pathname === "/student/teams" || pathname === "/teacher/teams";
   // The sidebar's Agents item opens the Agents page.
   const agentsHref = visit
     ? `/student/agents?group_id=${visit}`

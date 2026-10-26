@@ -26,10 +26,7 @@ export function AgentsPage({
   return (
     <div className={AGENT_PAGE}>
       <header className={STUDYFORM_BANNER}>
-        <h1
-          id="studyform-agents"
-          className={STUDYFORM_BANNER_TITLE}
-        >
+        <h1 id="studyform-agents" className={STUDYFORM_BANNER_TITLE}>
           {title}
         </h1>
         {action}

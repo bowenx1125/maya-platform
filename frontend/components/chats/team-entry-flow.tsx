@@ -28,7 +28,7 @@ import { useT } from "../../lib/i18n";
 import { PageAction } from "../page-action";
 import { teamVersionLabel } from "../studyform-layout";
 import { useSession } from "../session-provider";
-import { Notice, SectionCard } from "../ui";
+import { Notice, RetryPill, SectionCard, StickerBadge } from "../ui";
 import { cn } from "../../lib/utils";
 import {
   clearTeamDraft,
@@ -695,6 +695,12 @@ export function TeamEntryFlow({
           : t("teamSaveFailed")
       : "");
 
+  // U3: a validation hint is a field error; its field wears sticker 1.
+  const hintField = !submitHint
+    ? null
+    : submitHint === t("teamNameRequired")
+      ? "name"
+      : "members";
   const busy = readOnly || saving || mutationUnknown;
   const teamsReturnHref = (() => {
     const params = new URLSearchParams();
@@ -787,14 +793,12 @@ export function TeamEntryFlow({
             tone="warning"
             onClose={() => setTeamListRefreshError(false)}
             action={
-              <button
-                className="inline-button"
-                type="button"
+              <RetryPill
                 disabled={teamListRefreshing}
                 onClick={() => void refreshTeamList()}
               >
                 {teamListRefreshing ? t("loading") : t("retryTeamList")}
-              </button>
+              </RetryPill>
             }
           >
             {t("teamListRefreshFailed")}
@@ -810,6 +814,7 @@ export function TeamEntryFlow({
               <Notice
                 inline
                 tone="error"
+                badge={hintField ? 1 : undefined}
                 onClose={() => {
                   setSubmitHint("");
                   if (error) setDismissedError(error);
@@ -819,14 +824,13 @@ export function TeamEntryFlow({
               </Notice>
             ) : null}
             <div className="grid grid-cols-[1.05fr_1fr] items-start gap-7 max-[767px]:grid-cols-1">
-              <section
-                className="relative mt-[22px] min-h-[260px] rounded-[12px] border-[3px] border-[#111] bg-[#E8D5B5] px-5 py-7 shadow-[0_0_0_3px_#67E8F9,7px_7px_0_3px_#111] [background-image:radial-gradient(#0001_1px,transparent_1.5px)] [background-size:14px_14px] [&>div:first-child]:mt-[-44px]"
-              >
+              <section className="relative mt-[22px] min-h-[260px] rounded-[12px] border-[3px] border-[#111] bg-[#E8D5B5] px-5 py-7 shadow-[0_0_0_3px_#67E8F9,7px_7px_0_3px_#111] [background-image:radial-gradient(#0001_1px,transparent_1.5px)] [background-size:14px_14px] [&>div:first-child]:mt-[-44px]">
                 {sectionHead(
                   t("teamMembers"),
                   "chat.teamMembers",
                   t("teamMembersHelp"),
                 )}
+                {hintField === "members" ? <StickerBadge n={1} /> : null}
                 {memberChoices.length ? (
                   <div
                     className="flex flex-wrap gap-x-4 gap-y-[22px]"
@@ -935,20 +939,23 @@ export function TeamEntryFlow({
               <div className="min-w-0">
                 <section className={cardClass}>
                   {sectionHead(t("teamName"))}
-                  <input
-                    className="box-border w-full rounded-[10px] border-[3px] border-[#111] bg-white px-3.5 py-2.5 font-body text-lg font-semibold text-[#111]"
-                    aria-label={t("teamName")}
-                    value={form.name}
-                    maxLength={120}
-                    disabled={busy}
-                    onChange={(event) => {
-                      setSubmitHint("");
-                      setForm((current) => ({
-                        ...current,
-                        name: event.target.value,
-                      }));
-                    }}
-                  />
+                  <div className="relative">
+                    {hintField === "name" ? <StickerBadge n={1} /> : null}
+                    <input
+                      className="box-border w-full rounded-[10px] border-[3px] border-[#111] bg-white px-3.5 py-2.5 font-body text-lg font-semibold text-[#111]"
+                      aria-label={t("teamName")}
+                      value={form.name}
+                      maxLength={120}
+                      disabled={busy}
+                      onChange={(event) => {
+                        setSubmitHint("");
+                        setForm((current) => ({
+                          ...current,
+                          name: event.target.value,
+                        }));
+                      }}
+                    />
+                  </div>
                   {!editing ? (
                     <div
                       className="mt-3 inline-flex overflow-hidden rounded-[10px] border-[3px] border-[#111] bg-white shadow-[3px_3px_0_#111]"
@@ -961,7 +968,8 @@ export function TeamEntryFlow({
                           type="button"
                           className={cn(
                             "m-0 min-h-0 cursor-pointer rounded-none border-0 bg-white px-4 py-1.5 font-body text-[13px] leading-normal font-extrabold text-[#111] shadow-none",
-                            option === "public" && "border-l-[3px] border-[#111]",
+                            option === "public" &&
+                              "border-l-[3px] border-[#111]",
                             form.visibility === option &&
                               (option === "public"
                                 ? "bg-[#22C55E]"
@@ -993,10 +1001,7 @@ export function TeamEntryFlow({
                     t("teamSharedKnowledgeHelp"),
                   )}
                   {knowledgeChoices.length ? (
-                    <div
-                      role="group"
-                      aria-label={t("teamSharedKnowledge")}
-                    >
+                    <div role="group" aria-label={t("teamSharedKnowledge")}>
                       {knowledgeChoices.map((set) => {
                         const on = form.sharedSetIds.includes(set.id);
                         return (
@@ -1106,14 +1111,12 @@ export function TeamEntryFlow({
             tone="warning"
             onClose={() => setTeamListRefreshError(false)}
             action={
-              <button
-                className="inline-button"
-                type="button"
+              <RetryPill
                 disabled={teamListRefreshing}
                 onClick={() => void refreshTeamList()}
               >
                 {teamListRefreshing ? t("loading") : t("retryTeamList")}
-              </button>
+              </RetryPill>
             }
           >
             {t("teamListRefreshFailed")}
@@ -1136,6 +1139,7 @@ export function TeamEntryFlow({
               <Notice
                 inline
                 tone="error"
+                badge={hintField ? 1 : undefined}
                 onClose={() => {
                   setSubmitHint("");
                   if (error) setDismissedError(error);
@@ -1146,7 +1150,8 @@ export function TeamEntryFlow({
             ) : null}
             <SectionCard title={t("teamName")}>
               <div className="stack-form wide-form quiet-create">
-                <label>
+                <label className="relative">
+                  {hintField === "name" ? <StickerBadge n={1} /> : null}
                   <input
                     aria-label={t("teamName")}
                     value={form.name}

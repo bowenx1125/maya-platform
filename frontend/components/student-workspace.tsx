@@ -61,11 +61,7 @@ import {
   VersionTile,
   teamVersionLabel,
 } from "./studyform-layout";
-import {
-  AgentsEmpty,
-  NewButton,
-  type AgentRename,
-} from "./ui/agent-card";
+import { AgentsEmpty, NewButton, type AgentRename } from "./ui/agent-card";
 import { AgentsPage } from "./agents-page";
 import { TeamsPage } from "./teams-page";
 import { GuidePortrait } from "./ui/guide-dialog";
@@ -776,7 +772,9 @@ function GroupWorkspaceSession({
           standalone
           backHref={studentTeamsHref(groupId)}
           agentCreateHref={
-            teacherIdentity ? undefined : `/student/groups/${groupId}/agents/new`
+            teacherIdentity
+              ? undefined
+              : `/student/groups/${groupId}/agents/new`
           }
           initialRouteMode={
             initialMode === "team-new" ? "team-new" : "team-edit"

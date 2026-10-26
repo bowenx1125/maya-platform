@@ -4,9 +4,9 @@ import { safeTeamsReturn, teamDraftKey } from "../lib/team-return";
 
 describe("Create Agent ?return= from Teams", () => {
   it("accepts only Teams page paths", () => {
-    expect(
-      safeTeamsReturn("/student/teams?group_id=g1&mode=team-new"),
-    ).toBe("/student/teams?group_id=g1&mode=team-new");
+    expect(safeTeamsReturn("/student/teams?group_id=g1&mode=team-new")).toBe(
+      "/student/teams?group_id=g1&mode=team-new",
+    );
     expect(safeTeamsReturn("/teacher/teams")).toBe("/teacher/teams");
     for (const bad of [
       "https://evil.example/teacher/teams",
