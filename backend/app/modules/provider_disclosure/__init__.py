@@ -1,10 +1,5 @@
 """Teacher-only ProviderDataCallV1 disclosure and confirmation seam."""
 
-from .router import (
-    provider_data_call_agent_version_manifests,
-    provider_data_call_debate_manifests,
-    router,
-)
 from .schemas import (
     DisclosureFieldClass,
     ProviderDataCallAgentVersionManifestListResponseV1,
@@ -73,7 +68,4 @@ __all__ = [
     "ProviderDisclosureStore",
     "ProviderDisclosureStoreError",
     "SqlAlchemyProviderDisclosureStore",
-    "provider_data_call_agent_version_manifests",
-    "provider_data_call_debate_manifests",
-    "router",
 ]
