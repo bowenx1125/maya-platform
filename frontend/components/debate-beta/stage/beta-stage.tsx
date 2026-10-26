@@ -3849,12 +3849,14 @@ export function BetaDebateStage({
                 className={`${stage3d.joinCard} ${styles.joinCard}`}
                 id="classroom-join-code"
               >
-                {/* QrCode brings its own caption with the URL under it, so the
-                    card adds only the running count beside the symbol. */}
-                <QrCode label={beta.joinLabel} value={joinUrl} />
-                <span className={stage3d.joinCount}>
-                  {beta.barrageCount(barrages.length)}
-                </span>
+                {/* A1 yellow ticket: stick header + body QR (count on stick). */}
+                <div className={styles.joinStick}>
+                  <span>{beta.joinLabel}</span>
+                  <em>{beta.barrageCount(barrages.length)}</em>
+                </div>
+                <div className={styles.joinBody}>
+                  <QrCode label={beta.joinLabel} value={joinUrl} />
+                </div>
               </div>
             ) : null}
           </>
@@ -3923,8 +3925,8 @@ export function BetaDebateStage({
           onTimeUpdate={onAudioTimeUpdate}
         />
       </div>
+      <h1 className={styles.stageTopic}>{detailState.topic}</h1>
       <div className={styles.notices}>
-        <h1 className={styles.stageTopic}>{detailState.topic}</h1>
         {providerGate ? (
           <section
             className={styles.providerGateCard}

@@ -279,9 +279,9 @@
   max-width: min(420px, calc(100% - 48px));
 }
 .notices {
-  /* A1: title top-left; recovery cards stack below it. Dock is bottom candy. */
+  /* A1: recovery cards below the absolute title. Dock is bottom candy. */
   z-index: auto;
-  top: max(20px, env(safe-area-inset-top));
+  top: max(72px, calc(env(safe-area-inset-top) + 52px));
   right: auto;
   bottom: auto;
   left: max(22px, env(safe-area-inset-left));
@@ -298,11 +298,14 @@
 .notices > * {
   pointer-events: auto;
 }
+/* A1 title: top-left white pill capsule (not a dark full-width bar). */
 .stageTopic {
-  position: relative;
+  position: absolute;
   z-index: 4;
+  top: max(20px, env(safe-area-inset-top));
+  left: max(22px, env(safe-area-inset-left));
   width: fit-content;
-  max-width: 100%;
+  max-width: min(560px, 58vw);
   margin: 0;
   padding: 8px 14px;
   border: 2.5px solid #111;
@@ -310,8 +313,8 @@
   background: #fff;
   box-shadow: 4px 5px 0 #111;
   color: #111;
-  font-family: var(--font-display, var(--font-ui, system-ui));
-  font-size: clamp(0.95rem, 1.4vw, 1.125rem);
+  font-family: var(--font-bricolage, var(--font-display, var(--font-ui, system-ui)));
+  font-size: clamp(0.95rem, 1.4vw, 1.0625rem);
   font-weight: 800;
   letter-spacing: -0.01em;
   line-height: 1.3;
@@ -375,21 +378,76 @@
   padding: 8px 16px;
   cursor: pointer;
 }
-/* A1 ticket QR — bottom-left above candy dock */
+/* A1 yellow ticket QR — bottom-left above candy dock */
+.joinCard,
 .stage .joinCard {
   top: auto;
   right: auto;
   bottom: max(110px, calc(env(safe-area-inset-bottom) + 88px));
   left: max(22px, env(safe-area-inset-left));
+  display: grid;
+  align-items: stretch;
+  justify-items: stretch;
   width: min(200px, calc(100% - 44px));
   transform: rotate(-1deg);
-  gap: 8px;
+  gap: 0;
   padding: 0;
   overflow: hidden;
   border: 2.5px solid #111;
   border-radius: 18px;
   background: #fff;
   box-shadow: 5px 6px 0 #67e8f9;
+}
+.joinStick {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 2.5px solid #111;
+  background: #ffe14d;
+  color: #111;
+  font: 800 13px/1.2 var(--font-ui, system-ui);
+}
+.joinStick em {
+  flex: none;
+  padding: 1px 8px;
+  border: 2px solid #111;
+  border-radius: 999px;
+  background: #fff;
+  font: 800 11px/1.2 var(--font-ui, system-ui);
+  font-style: normal;
+}
+.joinBody {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 14px;
+}
+.joinBody svg {
+  display: block;
+  width: 140px !important;
+  height: auto !important;
+  border: 2.5px solid #111;
+  border-radius: 12px;
+  background: #fff;
+}
+/* QrCode caption: keep URL, hide duplicate label (stick owns it). */
+.joinBody strong {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.joinBody code {
+  display: block;
+  max-width: 160px;
+  color: #4b5563;
+  font: 500 10px/1.35 var(--font-ui, system-ui);
+  text-align: center;
+  word-break: break-all;
 }
 @media (max-width: 600px) {
   .notices {
@@ -399,6 +457,10 @@
     max-width: none;
   }
   .stageTopic {
+    left: max(10px, env(safe-area-inset-left));
+    right: max(10px, env(safe-area-inset-right));
+    top: max(12px, env(safe-area-inset-top));
+    max-width: none;
     padding: 8px 12px;
     font-size: 14px;
   }
