@@ -31,9 +31,7 @@ export function AgentsPage({
         </h1>
         {action}
       </header>
-      <section aria-labelledby="studyform-agents">
-        {children}
-      </section>
+      <section aria-labelledby="studyform-agents">{children}</section>
     </div>
   );
 }
