@@ -283,9 +283,7 @@ describe("Wave 1C real workbench boundary", () => {
       api.publish.mock.invocationCallOrder[0],
     );
     expect(api.agent).toHaveBeenCalledTimes(2);
-    expect(
-      screen.getByRole("heading", { name: "Local Agent · V1.0" }),
-    ).toBeTruthy();
+    // The read-only version view was removed (ui-release); Done hands off.
     expect(navigation.replace).toHaveBeenCalledWith("/student/agents/agent-id");
     expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
   });

@@ -234,15 +234,6 @@ export function AgentOverview({ agentId }: { agentId: string }) {
       />
     );
   }
-  if (editorVersion) {
-    return (
-      <AgentReadOnly
-        agent={agent}
-        version={editorVersion}
-        backHref={entryBack}
-      />
-    );
-  }
   const actions = canDelete ? (
     <div className="button-row">
       <button
@@ -269,22 +260,13 @@ export function AgentOverview({ agentId }: { agentId: string }) {
           }
         />
       ) : null}
-      {visible ? (
-        <ReadOnlyVersion
-          version={visible}
-          agent={agent}
-          actions={actions}
-          backHref={`/student/agents?group_id=${agent.group_id}`}
+      <SectionCard action={actions}>
+        <PageAction
+          name="back"
+          href={`/student/agents?group_id=${agent.group_id}`}
         />
-      ) : (
-        <SectionCard action={actions}>
-          <PageAction
-            name="back"
-            href={`/student/agents?group_id=${agent.group_id}`}
-          />
-          <EmptyCard title={t("noVersions")} />
-        </SectionCard>
-      )}
+        <EmptyCard title={t("noVersions")} />
+      </SectionCard>
     </>
   );
 }
@@ -841,10 +823,9 @@ export function AgentWorkbench({
     );
   const currentVersion = version;
   const currentAgent = agent;
-  if (version.state !== "draft" && !publishOnDone)
-    return (
-      <ReadOnlyVersion version={version} agent={agent} backHref={backHref} />
-    );
+  // A published version outside publishOnDone is only a hand-off: Done has
+  // already sent the user to the agent overview (the read-only view is gone).
+  if (version.state !== "draft" && !publishOnDone) return <LoadingCard />;
 
   function stashLocalDraft() {
     if (!agent?.id) return;
@@ -2233,153 +2214,6 @@ export function DraftConflictNotice() {
   );
 }
 
-export function AgentReadOnly({
-  agent,
-  version,
-  backHref,
-}: {
-  agent: AgentDetail;
-  version: AgentVersion;
-  backHref: string;
-}) {
-  const t = useT();
-  const { api } = useSession();
-  const [sets, setSets] = useState<KnowledgeSetSummary[]>([]);
-  const { check, busy, error, viewMarkdown, downloadMarkdown, closeCheck } =
-    useKnowledgeCheck();
-
-  useEffect(() => {
-    let active = true;
-    if (typeof api.agentKnowledgeSets !== "function") return;
-    void api
-      .agentKnowledgeSets(agent.id)
-      .then((result) => {
-        if (active) setSets(result.sets ?? []);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [agent.id, api]);
-
-  const documents = version.enabled_documents ?? [];
-
-  return (
-    <>
-      <PageIntro title={`${agent.name} · ${version.version_label}`} />
-      <PageAction name="back" href={backHref} />
-      {error ? <ErrorNotice error={error} /> : null}
-      <div className="agent-entry">
-        <SectionCard
-          title={t("agentMd")}
-          guide="agent.markdown"
-          action={
-            <button
-              className="icon-action"
-              type="button"
-              disabled={busy}
-              aria-label={`${t("download")} AGENT.md`}
-              onClick={() =>
-                void downloadMarkdown("AGENT.md", async () => {
-                  const downloaded = await api.downloadAgentMd(version.id);
-                  return downloaded.content;
-                })
-              }
-            >
-              <IconDownload />
-            </button>
-          }
-        >
-          <ReportMarkdown label="AGENT.md">
-            {version.agent_md || t("noPrompt")}
-          </ReportMarkdown>
-        </SectionCard>
-        <SectionCard title={t("brainform")} guide="agent.brainform">
-          <div className="brainform-source-group">
-            <h3>{t("rag")}</h3>
-            {documents.length === 0 ? (
-              <p className="muted-copy">{t("noEvidence")}</p>
-            ) : (
-              <div className="document-list">
-                {documents.map((document) => (
-                  <div className="document-row" key={document.id}>
-                    <span className="document-main">
-                      <strong>{document.source_filename}</strong>
-                      <small>
-                        {document.char_count.toLocaleString()} {t("characters")}
-                      </small>
-                    </span>
-                    <div className="row-actions">
-                      <KnowledgeRowActions
-                        name={document.source_filename}
-                        disabled={busy}
-                        onView={() =>
-                          void viewMarkdown(
-                            document.source_filename,
-                            loadDocumentMarkdown(api, document),
-                          )
-                        }
-                        onDownload={() =>
-                          void downloadMarkdown(
-                            document.source_filename,
-                            loadDocumentMarkdown(api, document),
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="brainform-source-group">
-            <h3>{t("brainformKnowledgeHeading")}</h3>
-            {sets.length === 0 ? (
-              <p className="muted-copy">{t("brainformKnowledgeEmpty")}</p>
-            ) : (
-              <div className="document-list">
-                {sets.map((set) => (
-                  <div className="document-row" key={set.id}>
-                    <span className="document-main">
-                      <strong>{set.display_name}</strong>
-                    </span>
-                    <div className="row-actions">
-                      <KnowledgeRowActions
-                        name={set.display_name}
-                        disabled={busy}
-                        onView={() =>
-                          void viewMarkdown(
-                            set.display_name,
-                            loadSetMarkdown(api, set.id),
-                          )
-                        }
-                        onDownload={() =>
-                          void downloadMarkdown(
-                            `${set.display_name}.md`,
-                            loadSetMarkdown(api, set.id),
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </SectionCard>
-        <SectionCard title={t("avatarDesign")}>
-          <AvatarPreview
-            config={version.avatar_config}
-            fallbackLabel={agent.name}
-            framing="full-body"
-          />
-        </SectionCard>
-      </div>
-      <KnowledgeCheckOverlay check={check} onClose={closeCheck} />
-    </>
-  );
-}
-
 type KnowledgeCheckApi = {
   downloadKnowledge(
     documentId: string,
@@ -2408,192 +2242,6 @@ function loadSetMarkdown(api: KnowledgeCheckApi, setId: string) {
     const document = await api.knowledgeMarkdown(setId);
     return document.markdown;
   };
-}
-
-function ReadOnlyVersion({
-  version,
-  agent,
-  actions,
-  backHref,
-}: {
-  version: AgentVersion;
-  agent: AgentDetail;
-  actions?: ReactNode;
-  backHref?: string;
-}) {
-  const t = useT();
-  const { api } = useSession();
-  const [agentMdBusy, setAgentMdBusy] = useState(false);
-  const [agentMdError, setAgentMdError] = useState<unknown>(null);
-
-  async function downloadAgentMd() {
-    setAgentMdBusy(true);
-    setAgentMdError(null);
-    try {
-      const downloaded = await api.downloadAgentMd(version.id);
-      downloadText(downloaded.content, downloaded.filename);
-    } catch (cause) {
-      setAgentMdError(cause);
-    } finally {
-      setAgentMdBusy(false);
-    }
-  }
-
-  async function downloadEvidence() {
-    const documents = version.enabled_documents ?? [];
-    if (documents.length === 0) return;
-    setAgentMdBusy(true);
-    setAgentMdError(null);
-    try {
-      for (const document of documents) {
-        const downloaded = await api.downloadKnowledge(
-          document.id,
-          document.source_filename,
-        );
-        downloadText(downloaded.content, downloaded.filename);
-      }
-    } catch (cause) {
-      setAgentMdError(cause);
-    } finally {
-      setAgentMdBusy(false);
-    }
-  }
-
-  const downloadAction = (
-    <button
-      className="icon-action"
-      type="button"
-      disabled={agentMdBusy}
-      aria-label={`${t("download")} AGENT.md`}
-      data-ui-guide="agent.download"
-      onClick={() => void downloadAgentMd()}
-    >
-      <IconDownload />
-    </button>
-  );
-
-  return (
-    <>
-      <PageIntro title={`${agent.name} · ${version.version_label}`} />
-      <PageAction
-        name="back"
-        href={backHref ?? `/student/agents?group_id=${agent.group_id}`}
-      />
-      <div className="workbench-grid">
-        <div className="workbench-main">
-          <SectionCard
-            title={t("agentMd")}
-            guide="agent.markdown"
-            action={
-              <>
-                {actions}
-                {downloadAction}
-              </>
-            }
-          >
-            <ReportMarkdown className="read-only-markdown rendered-persona">
-              {version.agent_md || t("noPrompt")}
-            </ReportMarkdown>
-            {agentMdError ? <ErrorNotice error={agentMdError} /> : null}
-          </SectionCard>
-          <SectionCard
-            title={t("enabledEvidence")}
-            guide="agent.evidence"
-            action={
-              (version.enabled_documents ?? []).length > 0 ? (
-                <button
-                  className="icon-action"
-                  type="button"
-                  disabled={agentMdBusy}
-                  aria-label={t("download")}
-                  data-ui-guide="agent.download"
-                  onClick={() => void downloadEvidence()}
-                >
-                  <IconDownload />
-                </button>
-              ) : null
-            }
-          >
-            <div className="document-list">
-              {(version.enabled_documents ?? []).map((document) => (
-                <div className="document-row" key={document.id}>
-                  <span className="document-main">
-                    <strong>{document.source_filename}</strong>
-                    <small>
-                      {document.char_count.toLocaleString()} {t("characters")}
-                    </small>
-                  </span>
-                  <StatusBadge status={document.index_status} />
-                </div>
-              ))}
-              {(version.enabled_documents ?? []).length === 0 ? (
-                <p className="muted-copy">{t("noEvidence")}</p>
-              ) : null}
-            </div>
-          </SectionCard>
-        </div>
-        <aside className="workbench-side">
-          <SectionCard title={t("releaseState")}>
-            <div className="check-item check-good">
-              <span aria-hidden="true">✓</span>
-              <div>
-                <strong>{statusLabel(version.state)}</strong>
-                <small>
-                  {t("revision")} {version.revision}
-                </small>
-              </div>
-            </div>
-          </SectionCard>
-          {version.knowledge_snapshot_id ? (
-            <StudentSnapshot snapshotId={version.knowledge_snapshot_id} />
-          ) : null}
-        </aside>
-      </div>
-    </>
-  );
-}
-
-export function StudentPublishedVersion({ versionId }: { versionId: string }) {
-  const t = useT();
-  const { api } = useSession();
-  const [version, setVersion] = useState<AgentVersion | null>(null);
-  const [agent, setAgent] = useState<AgentDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<unknown>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const nextVersion = await api.version(versionId);
-      const nextAgent = await api.agent(nextVersion.agent_id);
-      setVersion(nextVersion);
-      setAgent(nextAgent);
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setLoading(false);
-    }
-  }, [api, versionId]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void load();
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [load]);
-
-  if (loading) return <LoadingCard />;
-  if (error || !version || !agent)
-    return (
-      <ErrorNotice
-        inline
-        notFound="publishedVersionNotFound"
-        error={error ?? new Error(t("publishedVersionNotFound"))}
-        onRetry={() => void load()}
-      />
-    );
-  return <ReadOnlyVersion version={version} agent={agent} />;
 }
 
 function StudentSnapshot({ snapshotId }: { snapshotId: string }) {

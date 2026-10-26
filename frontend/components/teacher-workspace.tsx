@@ -51,7 +51,7 @@ import {
 } from "../lib/request-cache";
 import { AccountSettings } from "./account-settings";
 import { UserAvatar } from "./user-avatar";
-import { AgentReadOnly, AgentWorkbench } from "./agent-workspace";
+import { AgentWorkbench } from "./agent-workspace";
 import { CreateAgentForm } from "./student-workspace";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
 import { BrainformWorkspace } from "./knowledge/brainform-workspace";
@@ -834,10 +834,6 @@ export function TeacherAgentDetail({
     );
   }
   return (
-    <AgentReadOnly
-      agent={currentAgent}
-      version={selectedVersion}
-      backHref="/teacher/agents"
-    />
+    <ErrorNotice inline error={new Error(t("publishedAgentNotFound"))} />
   );
 }
