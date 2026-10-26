@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 
 import {
@@ -14,8 +14,22 @@ import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import { ScholarScene } from "./stage3d/scholar-scene";
 import type { StageCharacter } from "./stage3d/scholar-stage";
-import { EmptyCard, ErrorNotice, LoadingCard, PageIntro } from "./ui";
+import { ErrorNotice, PageIntro } from "./ui";
 import styles from "./classroom-live.module.css";
+
+/** Speaker tones, by participant order (Arcade category colours + main). */
+const SPEAKER_TONES = ["#FF4D8D", "#67E8F9", "#A3E635", "#FDBA74"];
+
+/** A row of cabinet marquee LEDs; decoration only. */
+function Leds({ count, className }: { count: number; className: string }) {
+  return (
+    <div className={className} aria-hidden="true">
+      {Array.from({ length: count }, (_, index) => (
+        <i key={index} />
+      ))}
+    </div>
+  );
+}
 
 export function ClassroomLive() {
   const { api, user } = useSession();
@@ -240,6 +254,23 @@ function ClassroomLiveSession({
     transcript?.scrollTo?.({ top: transcript.scrollHeight });
   }, [snapshot?.turns.length]);
 
+  // Keep the lit (current) turn in view when it is not the latest one.
+  const currentId = current?.id;
+  useEffect(() => {
+    const transcript = transcriptRef.current;
+    const turn = transcript?.querySelector<HTMLElement>(
+      ':scope > article[aria-current="true"]',
+    );
+    if (!transcript || !turn) return;
+    const top = turn.offsetTop - 8;
+    const bottom = turn.offsetTop + turn.offsetHeight;
+    if (
+      top < transcript.scrollTop ||
+      bottom > transcript.scrollTop + transcript.clientHeight
+    )
+      transcript.scrollTo?.({ top });
+  }, [currentId, snapshot?.turns.length]);
+
   const characters: StageCharacter[] = (snapshot?.participants ?? []).map(
     (participant, index) => ({
       id: participant.id,
@@ -256,16 +287,65 @@ function ClassroomLiveSession({
   );
 
   return (
-    <>
+    <div className={styles.root}>
       <PageIntro title="Live" />
       {error ? <ErrorNotice error={error} /> : null}
       {loading ? (
-        <LoadingCard />
+        <section
+          className={`${styles.cabinet} ${styles.loading}`}
+          role="status"
+        >
+          <Leds count={12} className={styles.leds} />
+          <div className={styles.screen}>
+            <div className={styles.scan} aria-hidden="true" />
+            <div className={styles.loadingBody}>
+              {/* The sign-in's four scholar blocks, still waiting their turn. */}
+              <span className={styles.blocks} aria-hidden="true">
+                <i />
+                <i />
+                <i />
+                <i />
+              </span>
+              <b>{t("loading")}</b>
+            </div>
+          </div>
+          <div className={styles.knobs} aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </div>
+        </section>
       ) : !snapshot?.active ? (
-        <EmptyCard title="Live offline" />
+        <section className={styles.offline}>
+          {/* The cabinet sleeps: marquee off, eyes closed, cord unplugged. */}
+          <div className={styles.cabinet}>
+            <Leds count={12} className={`${styles.leds} ${styles.ledsOff}`} />
+            <div className={styles.screen}>
+              <div className={styles.scan} aria-hidden="true" />
+              <div className={styles.decor} aria-hidden="true">
+                <span className={styles.eye} />
+                <span className={styles.eye} />
+                <span className={styles.crt} />
+                <i className={styles.bubble} />
+                <i className={styles.bubble} />
+                <i className={styles.bubble} />
+              </div>
+            </div>
+            <div className={styles.knobs} aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </div>
+            <span className={styles.plug} aria-hidden="true" />
+          </div>
+          <div className={styles.sign}>
+            <h2>Live offline</h2>
+          </div>
+        </section>
       ) : (
         <div className={styles.layout}>
           <div className={styles.scene}>
+            <Leds count={14} className={styles.marquee} />
             <ScholarScene
               layout="preview"
               characters={characters}
@@ -324,25 +404,33 @@ function ClassroomLiveSession({
             </header>
             <div
               ref={transcriptRef}
+              className={styles.log}
               role="log"
               aria-live="polite"
               aria-relevant="additions"
             >
-              {snapshot.turns.map((turn) => (
-                <article
-                  key={turn.id}
-                  aria-current={turn.id === current?.id ? "true" : undefined}
-                >
-                  <strong>
-                    {
-                      snapshot.participants.find(
-                        (person) => person.id === turn.participant_id,
-                      )?.name
-                    }
-                  </strong>
-                  <ReportMarkdown>{turn.speech}</ReportMarkdown>
-                </article>
-              ))}
+              {snapshot.turns.map((turn, index) => {
+                const speaker = snapshot.participants.findIndex(
+                  (person) => person.id === turn.participant_id,
+                );
+                const tone = {
+                  "--speaker": SPEAKER_TONES[Math.max(speaker, 0) % 4],
+                  "--meter": `${Math.max(90 - index * 17, 10)}%`,
+                } as CSSProperties;
+                return (
+                  <article
+                    key={turn.id}
+                    className={styles.turn}
+                    style={tone}
+                    aria-current={turn.id === current?.id ? "true" : undefined}
+                  >
+                    <span className={styles.portrait} aria-hidden="true" />
+                    <strong>{snapshot.participants[speaker]?.name}</strong>
+                    <span className={styles.meter} aria-hidden="true" />
+                    <ReportMarkdown>{turn.speech}</ReportMarkdown>
+                  </article>
+                );
+              })}
             </div>
           </section>
         </div>
@@ -357,6 +445,6 @@ function ClassroomLiveSession({
           setAudioBlocked(true);
         }}
       />
-    </>
+    </div>
   );
 }
