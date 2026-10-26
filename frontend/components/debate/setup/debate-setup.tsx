@@ -663,19 +663,10 @@ export function TeacherDebateCreate({
       : null;
   const editAgentHref = (agentId: string) =>
     `/teacher/agents/${encodeURIComponent(agentId)}`;
+  // In page order: the topic, then each Agent row top to bottom.
   const checklistItems: ChecklistItem[] = [
     ...(topicError
       ? [{ key: "topic", text: topicError, target: "debate-topic" }]
-      : []),
-    ...(formError
-      ? [
-          {
-            key: `form:${formError}`,
-            text: formError,
-            target: formAgent ? `debate-stance-${formAgent}` : "debate-agents",
-            agentId: formAgent ?? undefined,
-          },
-        ]
       : []),
     ...fieldLines.map((line) => ({
       key: `field:${line.text}`,
@@ -689,6 +680,16 @@ export function TeacherDebateCreate({
       href: editAgentHref(item.agent_id),
       editLabel: t("agentIssueEdit", { name: item.agent_name }),
     })),
+    ...(formError
+      ? [
+          {
+            key: `form:${formError}`,
+            text: formError,
+            target: formAgent ? `debate-stance-${formAgent}` : "debate-agents",
+            agentId: formAgent ?? undefined,
+          },
+        ]
+      : []),
   ];
   const entries = useCreateChecklist(checklistItems, validationAttempt);
   const topicEntry = entries.find((entry) => entry.key === "topic");
