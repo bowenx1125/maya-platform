@@ -989,10 +989,6 @@ const enMessages = {
     "This Team member could not save the summary. Send a new message to try again.",
   teamReplyCutOff:
     "The reply was cut off before it finished, so nothing was saved. Please send your message again.",
-  teamProviderConfirmationStudent:
-    "A Team member could not reply because the current Team data-use authorization needs Teacher confirmation. Ask a Teacher to review and confirm it, then explicitly send a new message.",
-  teamProviderConfirmationTeacher:
-    "A Team member could not reply because the current Team data-use authorization needs confirmation. Review and confirm it, then explicitly send a new message.",
   teamChatReadOnly: "This Public Team Chat is read-only.",
   chatAgentDeleted:
     "The publisher deleted this Agent. This chat can't continue; its history is kept.",

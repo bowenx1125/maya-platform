@@ -676,10 +676,10 @@ def _raise_embedding_publication_error(
 ) -> NoReturn:
     """Expose only stable product-safe real-publication failures."""
 
-    if error.code == "provider_confirmation_required":
+    if error.code == "provider_confirmation_missing":
         raise conflict(
-            "provider_confirmation_required",
-            "The course teacher must confirm the exact provider disclosure.",
+            "provider_confirmation_unavailable",
+            "The exact provider disclosure confirmation could not be recorded.",
         ) from error
     if error.code == "persona_confirmation_required":
         raise validation_failure(
@@ -770,7 +770,7 @@ def _publish_real_embedding_snapshot(
             )
         except ProductPublicationError as error:
             if error.code not in {
-                "provider_confirmation_required",
+                "provider_confirmation_missing",
                 "provider_confirmation_stale",
             }:
                 raise

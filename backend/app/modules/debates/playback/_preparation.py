@@ -1158,6 +1158,7 @@ class PlaybackPreparationMixin(PlaybackCore):
 
         recoverable_provider_error = error_code in {
             "provider_confirmation_required",
+            "provider_confirmation_unavailable",
             "provider_not_sent",
             "acceptance_unknown",
             "question_route_invalid",
@@ -1291,8 +1292,12 @@ class PlaybackPreparationMixin(PlaybackCore):
                     {
                         "code": code,
                         "message": (
-                            "Teacher confirmation is required before this turn can continue."
-                            if code == "provider_confirmation_required"
+                            "The provider confirmation could not be recorded; the turn will retry."
+                            if code
+                            in {
+                                "provider_confirmation_required",
+                                "provider_confirmation_unavailable",
+                            }
                             else (
                                 "The provider acceptance is unknown and requires reconciliation."
                                 if code == "acceptance_unknown"

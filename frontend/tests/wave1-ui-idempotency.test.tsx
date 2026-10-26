@@ -249,7 +249,7 @@ describe("Wave 1A UI idempotency wiring", () => {
       }),
       publish: vi.fn().mockRejectedValue(
         new PlatformApiError(409, "Teacher confirmation required.", {
-          code: "provider_confirmation_required",
+          code: "provider_confirmation_unavailable",
           message: "Teacher confirmation required.",
         }),
       ),
@@ -265,7 +265,7 @@ describe("Wave 1A UI idempotency wiring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain(
-      errorCopyFor("provider_confirmation_required") ?? "<missing copy>",
+      errorCopyFor("provider_confirmation_unavailable") ?? "<missing copy>",
     );
     expect(api.publish).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("link", { name: "Review" })).toBeNull();

@@ -111,7 +111,7 @@ def _team_query_embeddings(
     confirmation = repository.get_export_confirmation(plan.manifest.manifest_hash)
     if confirmation is None:
         raise PlatformError(
-            "provider_confirmation_required", "Team retrieval authorization is unavailable.", 409
+            "provider_confirmation_unavailable", "Team retrieval authorization is unavailable.", 409
         )
     try:
         validate_provider_preflight(
@@ -268,7 +268,7 @@ def load_member_context(
                 or selected_binding_ids is None
             ):
                 raise PlatformError(
-                    "provider_confirmation_required",
+                    "provider_confirmation_unavailable",
                     "The exact Team query authorization is unavailable.",
                     409,
                 )

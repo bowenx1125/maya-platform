@@ -2456,62 +2456,6 @@ describe("Chatform", () => {
     expect(within(log).getAllByRole("heading")).toHaveLength(1);
   });
 
-  it.each([
-    [
-      "student",
-      "A Team member could not reply because the current Team data-use authorization needs Teacher confirmation. Ask a Teacher to review and confirm it, then explicitly send a new message.",
-    ],
-    [
-      "teacher",
-      "A Team member could not reply because the current Team data-use authorization needs confirmation. Review and confirm it, then explicitly send a new message.",
-    ],
-  ] as const)(
-    "explains a provider confirmation failure safely to a %s without retrying",
-    async (role, expectedGuidance) => {
-      state.role = role;
-      state.api.streamTeamConversation.mockResolvedValueOnce({
-        ...teamSession,
-        revision: 1,
-        turns: [
-          {
-            id: "provider-confirmation-turn",
-            user_text: "Compare the two approaches",
-            assistant_text: null,
-            mode: "real" as const,
-            state: "partial" as const,
-            sources: [],
-            safe_error_code: null,
-            routing: { mode: "all" as const, participant_ids: [] },
-            member_results: [
-              {
-                id: "provider-confirmation-result",
-                participant_id: "participant-1",
-                speaker_name: "Bowen",
-                ordinal: 0,
-                state: "failed" as const,
-                assistant_text: null,
-                sources: [],
-                safe_error_code: "provider_confirmation_required",
-              },
-            ],
-          },
-        ],
-      });
-
-      renderChats();
-      await startMayaTeamChat("Compare the two approaches");
-
-      expect(await screen.findByText(expectedGuidance)).toBeTruthy();
-      expect(screen.queryByText("provider_confirmation_required")).toBeNull();
-      expect(
-        screen.queryByText(
-          "Team Chat sending is unavailable in the current runtime.",
-        ),
-      ).toBeNull();
-      expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(1);
-    },
-  );
-
   it("sends only from the Send button, never from Enter", async () => {
     renderChats();
     await chooseTarget(/Course Dialogue Team/);

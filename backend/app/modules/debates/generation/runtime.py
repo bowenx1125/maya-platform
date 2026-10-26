@@ -263,7 +263,7 @@ class LLMRunOutcomeV1:
     status: Literal[
         "succeeded",
         "prepared",
-        "provider_confirmation_required",
+        "provider_confirmation_unavailable",
         "not_sent",
         "acceptance_unknown",
         "failed",
@@ -1650,13 +1650,13 @@ class LLMTurnRuntime:
                 prepared.operation_id,
                 False,
                 "none",
-                "provider_confirmation_required",
+                "provider_confirmation_unavailable",
             )
             return LLMRunOutcomeV1(
-                "provider_confirmation_required",
+                "provider_confirmation_unavailable",
                 attempts=(trace,),
                 operation=prepared.operation,
-                safe_error_code="provider_confirmation_required",
+                safe_error_code="provider_confirmation_unavailable",
                 retry_allowed=True,
             )
         current = prepared

@@ -100,7 +100,7 @@ async def test_confirmation_required_is_nonterminal_and_explicit_retry_resumes(
     error_payload = events[-1].payload
     assert error_payload == {
         "code": "provider_confirmation_required",
-        "message": "Teacher confirmation is required before this turn can continue.",
+        "message": "The provider confirmation could not be recorded; the turn will retry.",
         "request_id": None,
         "recoverable": True,
     }
