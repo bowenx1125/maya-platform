@@ -242,7 +242,7 @@ const ZIG = "M2 18 12 4 22 18 32 4 42 18 52 4 62 18";
 function CreateDeco({ hasFile }: { hasFile: boolean }) {
   return (
     <div
-      className="pointer-events-none absolute inset-0 z-0"
+      className="pointer-events-none absolute inset-0 z-0 max-md:[zoom:0.57]"
       aria-hidden="true"
     >
       <span className="absolute top-0 left-0 h-[430px] w-[470px] rounded-[22px] border-4 border-solid border-[#111] bg-[#ff4d8d] shadow-[8px_8px_0_#111] before:absolute before:inset-[14px] before:rounded-[14px] before:border-[3px] before:border-dashed before:border-[rgb(17_17_17_/_0.35)] before:content-['']" />
@@ -252,8 +252,8 @@ function CreateDeco({ hasFile }: { hasFile: boolean }) {
       <span
         className={`absolute top-[30px] left-[400px] h-[230px] w-[16px] origin-[8px_8px] rounded-[8px] border-[3px] border-solid border-[#111] bg-[#e5e7eb] ${hasFile ? "[transform:rotate(34deg)]" : "[transform:rotate(18deg)]"}`}
       />
-      <span className="absolute top-[330px] left-[870px] h-[110px] w-[110px] rounded-[50%] border-4 border-solid border-[#111] shadow-[5px_5px_0_#111] [background:radial-gradient(circle,#111_0_14%,#4b5563_15%_40%,#111_41%_46%,#9ca3af_47%_100%)]" />
-      <span className="absolute top-[390px] left-[560px] flex h-[70px] items-end gap-[5px]">
+      <span className="absolute top-[330px] left-[870px] max-md:top-auto max-md:bottom-[10px] max-md:left-[330px] h-[110px] w-[110px] rounded-[50%] border-4 border-solid border-[#111] shadow-[5px_5px_0_#111] [background:radial-gradient(circle,#111_0_14%,#4b5563_15%_40%,#111_41%_46%,#9ca3af_47%_100%)]" />
+      <span className="absolute top-[390px] left-[560px] max-md:top-auto max-md:bottom-[20px] max-md:left-[10px] flex h-[70px] items-end gap-[5px]">
         {EQ_HEIGHTS.map((height, index) => (
           <i
             key={index}
@@ -266,7 +266,7 @@ function CreateDeco({ hasFile }: { hasFile: boolean }) {
         ))}
       </span>
       <svg
-        className="absolute top-[10px] left-[1000px] [transform:rotate(14deg)]"
+        className="absolute top-[10px] left-[1000px] max-md:top-[-22px] max-md:left-[330px] [transform:rotate(14deg)]"
         width="44"
         height="44"
         viewBox="0 0 24 24"
@@ -279,10 +279,10 @@ function CreateDeco({ hasFile }: { hasFile: boolean }) {
           strokeLinejoin="round"
         />
       </svg>
-      <i className="absolute top-[20px] left-[520px] h-[24px] w-[24px] rounded-[50%] border-[3px] border-solid border-[#111] bg-[#67e8f9]" />
-      <i className="absolute top-[250px] left-[960px] h-[26px] w-[26px] rounded-[6px] border-[3px] border-solid border-[#111] bg-[#c4b5fd] [transform:rotate(18deg)]" />
+      <i className="absolute top-[20px] left-[520px] max-md:top-[150px] max-md:left-[440px] h-[24px] w-[24px] rounded-[50%] border-[3px] border-solid border-[#111] bg-[#67e8f9]" />
+      <i className="absolute top-[250px] left-[960px] max-md:top-auto max-md:bottom-[40px] max-md:left-[200px] h-[26px] w-[26px] rounded-[6px] border-[3px] border-solid border-[#111] bg-[#c4b5fd] [transform:rotate(18deg)]" />
       <svg
-        className="absolute top-[350px] left-[700px] [transform:rotate(-6deg)]"
+        className="absolute top-[350px] left-[700px] max-md:top-auto max-md:bottom-[100px] max-md:left-[230px] [transform:rotate(-6deg)]"
         width="70"
         height="22"
         viewBox="0 0 70 22"
@@ -320,17 +320,17 @@ export function VoiceAlbumCreate({
 }) {
   const hasFile = Boolean(fileName);
   return (
-    <div className="relative grid grid-cols-[auto_1fr] items-center gap-[56px] px-[30px] pt-[20px] pb-[30px] [&>*:not([aria-hidden])]:relative [&>*:not([aria-hidden])]:z-[1]">
+    <div className="relative grid grid-cols-[auto_1fr] items-center gap-[56px] px-[30px] pt-[20px] pb-[30px] max-md:grid-cols-[minmax(0,1fr)] max-md:gap-[26px] max-md:px-0 max-md:pt-[4px] max-md:pb-[96px] [&>*:not([aria-hidden])]:relative [&>*:not([aria-hidden])]:z-[1]">
       <CreateDeco hasFile={hasFile} />
       <label
-        className={`mt-[44px] ml-[44px] grid h-[340px] w-[340px] cursor-pointer place-items-center rounded-[50%] border-4 border-solid border-[#111] [background:repeating-radial-gradient(circle,#111_0_3px,#2a2a2a_3px_7px)] ${hasFile ? "shadow-[8px_8px_0_#111,0_0_0_10px_#a3e635]" : "shadow-[8px_8px_0_#111]"}`}
+        className={`mt-[44px] ml-[44px] grid h-[340px] w-[340px] max-md:mt-[25px] max-md:ml-[25px] max-md:mb-[30px] max-md:h-[194px] max-md:w-[194px] cursor-pointer place-items-center rounded-[50%] border-4 border-solid border-[#111] [background:repeating-radial-gradient(circle,#111_0_3px,#2a2a2a_3px_7px)] ${hasFile ? "shadow-[8px_8px_0_#111,0_0_0_10px_#a3e635]" : "shadow-[8px_8px_0_#111]"}`}
       >
         <span
-          className={`grid h-[150px] w-[150px] place-items-center rounded-[50%] border-4 border-solid border-[#111] p-[14px] text-center ${hasFile ? "bg-[#ff4d8d]" : "bg-[#ffe14d]"}`}
+          className={`grid h-[150px] w-[150px] max-md:h-[88px] max-md:w-[88px] max-md:p-[8px] place-items-center rounded-[50%] border-4 border-solid border-[#111] p-[14px] text-center ${hasFile ? "bg-[#ff4d8d]" : "bg-[#ffe14d]"}`}
         >
           {fileName ? (
             <b
-              className="[font:800_15px/1.25_var(--font-lexend,'Lexend')] [overflow-wrap:anywhere]"
+              className="[font:800_15px/1.25_var(--font-lexend,'Lexend')] max-md:text-[12px] [overflow-wrap:anywhere]"
               aria-live="polite"
             >
               {fileName}
@@ -354,7 +354,7 @@ export function VoiceAlbumCreate({
         {input}
       </label>
       <div className="flex flex-col gap-[18px]">
-        <div className="relative mt-[6px] mb-[4px] ml-[18px] max-w-[520px] self-start rounded-[6px_22px_6px_6px] border-[3px] border-solid border-[#111] bg-[#fff8e7] py-[18px] pr-[22px] pl-[48px] shadow-[6px_6px_0_#111] [transform:rotate(-1.5deg)]">
+        <div className="relative mt-[6px] mb-[4px] ml-[18px] max-w-[520px] self-start max-md:ml-[12px] max-md:max-w-none max-md:self-stretch max-md:pl-[40px] max-md:pr-[16px] max-md:py-[16px] rounded-[6px_22px_6px_6px] border-[3px] border-solid border-[#111] bg-[#fff8e7] py-[18px] pr-[22px] pl-[48px] shadow-[6px_6px_0_#111] [transform:rotate(-1.5deg)]">
           <span
             className="absolute top-[-3px] bottom-[-3px] left-[-3px] w-[24px] rounded-[6px_0_0_6px] border-[3px] border-solid border-[#111] bg-[#ff4d8d]"
             aria-hidden="true"
@@ -365,7 +365,7 @@ export function VoiceAlbumCreate({
           />
           <p
             id="voice-sample-req"
-            className="[font:700_17px/1.45_var(--font-lexend,'Lexend')] text-[#111]"
+            className="[font:700_17px/1.45_var(--font-lexend,'Lexend')] max-md:text-[15px] text-[#111]"
           >
             {requirement}
           </p>
@@ -384,7 +384,7 @@ export function VoiceAlbumCreate({
         </div>
         <p
           id="voice-consent-text"
-          className={`flex items-start gap-[12px] rounded-[14px] border-[3px] border-[#111] px-[22px] py-[20px] [font:800_22px/1.35_var(--font-bricolage,'Bricolage_Grotesque'),system-ui] ${hasFile ? "border-solid bg-white text-[#111] shadow-[6px_6px_0_#111]" : "border-dashed bg-transparent text-[#9ca3af]"}`}
+          className={`flex items-start gap-[12px] rounded-[14px] border-[3px] border-[#111] px-[22px] py-[20px] max-md:px-[16px] max-md:py-[16px] max-md:text-[18px] [font:800_22px/1.35_var(--font-bricolage,'Bricolage_Grotesque'),system-ui] ${hasFile ? "border-solid bg-white text-[#111] shadow-[6px_6px_0_#111]" : "border-dashed bg-transparent text-[#9ca3af]"}`}
         >
           <span
             className={`mt-[2px] grid h-[30px] w-[30px] flex-none place-items-center rounded-[8px] border-[3px] border-solid border-[#111] text-[#111] ${hasFile ? "bg-[#67e8f9]" : "bg-[#e5e7eb]"}`}
