@@ -1053,7 +1053,11 @@ export function AppShell({
                   <>
                     {action.busy ? (
                       <span className="spinner" aria-hidden="true" />
-                    ) : null}
+                    ) : (
+                      // Back/Done are always icon + text sitewide, the same
+                      // arrow-left / check as the Agents page actions.
+                      <WorkspaceIcon name={name} size={16} />
+                    )}
                     <span>{label}</span>
                   </>
                 );

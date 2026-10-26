@@ -473,6 +473,10 @@ describe("Studyform Teams", () => {
       }),
     ).toBeNull();
     expect(sidebarButton("Back")).toBeTruthy();
+    // Back/Done are icon + text sitewide; the icon is hidden from the name.
+    const back = sidebarButton("Back");
+    expect(back.querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+    expect(back.textContent).toBe("Back");
     expect(screen.queryByRole("button", { name: "Public" })).toBeNull();
   });
 
