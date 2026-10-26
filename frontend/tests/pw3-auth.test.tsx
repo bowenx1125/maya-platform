@@ -514,3 +514,37 @@ describe("PW3-A SessionProvider operation fences", () => {
     );
   });
 });
+
+describe("U3 login field stickers", () => {
+  afterEach(() => cleanup());
+
+  it("gives both empty fields the same sticker number as the one bubble line", async () => {
+    const api = {
+      me: vi.fn(async () => {
+        throw new PlatformApiError(401, "Authentication is required.");
+      }),
+      demoIdentities: vi.fn(async () => []),
+      getCsrfToken: vi.fn(() => ""),
+    } as unknown as PlatformApi;
+    render(
+      <>
+        <SessionProvider api={api}>
+          <LoginForm />
+        </SessionProvider>
+      </>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in" }));
+    const line = await screen.findByRole("alert");
+    const lineN = line
+      .querySelector('[data-sticker="field"]')
+      ?.getAttribute("data-n");
+    expect(lineN).toBe("1");
+    const badges = Array.from(
+      document.querySelectorAll("form [data-checklist-badge]"),
+    ).map((badge) => badge.textContent);
+    expect(badges).toEqual(["1", "1"]);
+    for (const input of document.querySelectorAll("form input")) {
+      expect(input.getAttribute("aria-describedby")).toBe(line.id);
+    }
+  });
+});
