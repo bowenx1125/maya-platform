@@ -101,7 +101,7 @@
     gap: 12px;
   }
 
-  .surface :global(.list-row),
+  .surface :global(.list-row):not(:global(.account-row)),
   .surface :global(.agent-row),
   .surface :global(.document-row),
   .surface :global(.snapshot-file),
@@ -227,28 +227,10 @@
     box-shadow: none;
   }
 
-  .surface :global(.account-row) {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 16px;
-  }
+  /* account-row chrome is owned by roster-workspace.module.css */
 
-  .surface :global(.account-row) > :global(.button-row) {
-    justify-content: flex-end;
-    padding-left: 12px;
-    border-left: 1px solid var(--workspace-divider);
-  }
-
-  /* A member row carries a name, a status and three actions, so a third of the
-   page left the buttons on top of the name. Members take two of the three
-   columns, and a row that is still narrow puts its actions under the name. */
-  @media (min-width: 961px) {
-    .surface
-      :global(.account-layout)
-      section[aria-labelledby="accounts-members"] {
-      grid-column: span 2;
-    }
-  }
+  /* Members/Groups share a 2-col grid in roster-workspace.module.css;
+   do not span Members across both columns. */
 
   .surface :global(.account-layout) :global(.compact-list) {
     container-type: inline-size;
@@ -268,17 +250,7 @@
     min-width: 0;
   }
 
-  @container (max-width: 460px) {
-    .surface :global(.account-row) {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .surface :global(.account-row) > :global(.button-row) {
-      justify-content: flex-start;
-      padding: 10px 0 0;
-      border-left: 0;
-      border-top: 1px solid var(--workspace-divider);
-    }
-  }
+  /* account-row responsive layout owned by roster-workspace.module.css */
 
   /* "removed", in the italic the home uses for "member" and "leader". */
   .surface :global(.roster-status) {
@@ -288,12 +260,11 @@
     font-style: italic;
   }
 
-  /* Removed accounts fold away under the members, one click from Restore. */
-  /* Accounts lists members group by group. Each group is named the way the
-   folded Removed heading is, quietly, with its head count beside it. */
+  /* Roster fused look lives in roster-workspace.module.css; keep only
+   layout helpers here so serif/italic defaults do not fight the tapes. */
   .surface :global(.roster-sections) {
     display: grid;
-    gap: 16px;
+    gap: 14px;
   }
 
   .surface :global(.roster-section) {
@@ -301,42 +272,10 @@
     gap: 8px;
   }
 
-  .surface :global(.roster-section-title) {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    margin: 0;
-    padding: 0 2px;
-    color: var(--muted, #62626a);
-    font-family: var(--display-serif);
-    font-size: 0.95rem;
-    font-style: italic;
-    font-weight: 400;
-  }
-
-  .surface :global(.roster-section-title) > small {
-    font-family: inherit;
-    font-size: 0.8rem;
-    font-style: normal;
-  }
-
-  .surface :global(.roster-removed) {
-    margin-top: 14px;
-  }
-
-  .surface :global(.roster-removed) > summary {
-    width: fit-content;
-    padding: 6px 2px;
-    color: var(--muted, #62626a);
-    cursor: pointer;
-    font-family: var(--display-serif);
-    font-size: 0.95rem;
-    font-style: italic;
-  }
-
   .surface :global(.roster-removed) > :global(.compact-list) {
-    margin-top: 8px;
+    margin-top: 0;
   }
+
 
   .surface :global(.account-edit) {
     grid-column: 1 / -1;

@@ -1,0 +1,411 @@
+/* Accounts fused final: Members = A; Groups = B polaroids. Shell untilted. */
+
+.layout {
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+  /* Arcade blue grid (Members design A) behind the cream cards. */
+  padding: 4px;
+  border-radius: 14px;
+  background-color: #dcebff;
+  background-image:
+    linear-gradient(#cddbee 1px, transparent 1px),
+    linear-gradient(90deg, #cddbee 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px 18px 16px;
+  border: 3px solid #111;
+  border-radius: 12px;
+  background: #fff8e7;
+  box-shadow: 6px 6px 0 #111;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+
+.tapeTitle {
+  margin: 0;
+  display: inline-block;
+  font-family: var(--font-display, "Bricolage Grotesque", system-ui, sans-serif);
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.15;
+  background: #ffe14d;
+  border: 2.5px solid #111;
+  border-radius: 8px;
+  padding: 4px 14px;
+  box-shadow: 3px 3px 0 #111;
+  transform: rotate(-1.5deg);
+}
+
+@media (max-width: 960px) {
+  .tapeTitle {
+    font-size: 22px;
+  }
+}
+
+.badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 2.5px solid #111;
+  background: #a3e635;
+  font-size: 14px;
+  font-weight: 800;
+  box-shadow: 2px 2px 0 #111;
+}
+
+.badgeCyan {
+  background: #67e8f9;
+}
+
+.empty {
+  margin: 0;
+  color: #4b5563;
+  font-size: 0.9rem;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.sectionTape {
+  display: inline-block;
+  background: #67e8f9;
+  border: 2px solid #111;
+  border-radius: 4px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 2px 2px 0 #111;
+  transform: rotate(-1deg);
+}
+
+.sectionCount {
+  font-size: 11px;
+  font-weight: 700;
+  color: #4b5563;
+  border: 2px solid #111;
+  border-radius: 999px;
+  background: #fff;
+  padding: 1px 7px;
+  box-shadow: 1px 1px 0 #111;
+  font-style: normal;
+}
+
+.sections {
+  display: grid;
+  gap: 14px;
+}
+
+.section {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fff;
+  border: 2px solid #111;
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 3px 3px 0 #111;
+  min-width: 0;
+}
+
+@media (max-width: 560px) {
+  .row {
+    flex-wrap: wrap;
+  }
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.identityMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.identity :global(.user-avatar) {
+  border-radius: 10px;
+  border: 2.5px solid #111;
+  box-shadow: 2px 2px 0 #111;
+  background: #fff8e7;
+  overflow: hidden;
+  flex: none;
+}
+
+.headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1.2;
+}
+
+.headline strong {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.username {
+  font-size: 12px;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.status {
+  font-size: 12px;
+  color: #4b5563;
+  font-style: italic;
+}
+
+.groupLabel {
+  color: #4b5563;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.acts {
+  display: flex;
+  gap: 6px;
+  flex: none;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 560px) {
+  .acts {
+    width: 100%;
+  }
+
+  .acts .sticker {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+.sticker {
+  font-size: 12px;
+  font-weight: 800;
+  border: 2px solid #111;
+  border-radius: 6px;
+  padding: 5px 10px;
+  background: #fff;
+  box-shadow: 2px 2px 0 #111;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1;
+  color: #111;
+  font-family: inherit;
+}
+
+.sticker:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.sticker:not(:disabled):active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #111;
+}
+
+.stickerEdit {
+  background: #fff;
+}
+
+.stickerRem {
+  background: #ffe4e4;
+  color: #b91c1c;
+}
+
+.stickerReset {
+  background: #fff7cc;
+}
+
+.stickerRestore {
+  background: #e8fce8;
+  color: #166534;
+}
+
+.removed {
+  margin-top: 14px;
+  border: 2.5px dashed #111;
+  border-radius: 10px;
+  background: #fff7cc;
+  padding: 0;
+  box-shadow: 2px 2px 0 #111;
+}
+
+.removed > summary {
+  width: auto;
+  padding: 8px 12px;
+  color: #111;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  font-style: normal;
+  font-family: inherit;
+  list-style: none;
+}
+
+.removed > summary::-webkit-details-marker {
+  display: none;
+}
+
+.removed > summary::before {
+  content: "▶";
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 10px;
+}
+
+.removed[open] > summary::before {
+  content: "▼";
+}
+
+.removedBody {
+  padding: 0 12px 12px;
+}
+
+.polarList {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  padding: 4px 2px 8px;
+  margin: 0;
+  list-style: none;
+}
+
+.polar {
+  position: relative;
+  border: 3px solid #111;
+  border-radius: 6px;
+  box-shadow: 5px 5px 0 #111;
+  padding: 28px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font: inherit;
+  color: #111;
+  width: 100%;
+  transform: rotate(-1.2deg);
+}
+
+.polarList > li:nth-child(2) .polar {
+  transform: rotate(1.4deg);
+}
+
+.polarList > li:nth-child(3) .polar {
+  transform: rotate(-0.8deg);
+}
+
+.polarList > li:nth-child(3n + 4) .polar {
+  transform: rotate(1deg);
+}
+
+.polar:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.polar:not(:disabled):active {
+  box-shadow: 3px 3px 0 #111;
+}
+
+.polarTape {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-3deg);
+  width: 54px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 2px solid #111;
+}
+
+.polarName {
+  font-family: var(--font-display, "Bricolage Grotesque", system-ui, sans-serif);
+  font-size: 16px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.polarArrow {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  border: 2px solid #111;
+  border-radius: 10px;
+  box-shadow: 2px 2px 0 #111;
+}
+
+.editForm {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.editForm > :global(.button-row) {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+@media (max-width: 560px) {
+  .editForm {
+    grid-template-columns: 1fr;
+  }
+}
