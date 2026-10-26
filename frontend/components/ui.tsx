@@ -17,6 +17,16 @@ import { cn } from "../lib/utils";
 import { IconClose, IconEdit } from "./quiet-icons";
 import { buttonVariants } from "./ui/button";
 import { NOTICE_TAIL_CLASS, noticeTray, useNoticeTray } from "./notice-tray";
+import {
+  KindSticker,
+  MascotBadge,
+  RetryPill,
+  RoundX,
+  useTransientFold,
+  type ErrorKind,
+} from "./ui/error-kit";
+
+export { KindSticker, RetryPill, RoundX, type ErrorKind };
 
 export { NOTICE_TAIL_CLASS, useNoticeTray };
 
@@ -109,10 +119,16 @@ export function Notice({
   inline = false,
   onClose,
   badge,
+  kind,
+  transient = false,
 }: {
   id?: string;
   /** A field error: the sticker number its field wears, instead of the dot. */
   badge?: number;
+  /** U3: the sticker shape that tells the error's kind (default: server). */
+  kind?: ErrorKind;
+  /** Chat and live classroom errors fold into the mascot badge after 6 s. */
+  transient?: boolean;
   tone: "error" | "warning" | "success" | "info";
   title?: ReactNode;
   children?: ReactNode;
@@ -126,7 +142,14 @@ export function Notice({
   // in the tray; only success/info lines may stay inline.
   inline = inline && (tone === "success" || tone === "info");
   const tray = useNoticeTray(!inline);
+  const fold = useTransientFold(transient && !inline, children);
   if (closed || (!inline && !tray)) return null;
+  const sticker: ErrorKind | undefined =
+    badge !== undefined
+      ? "field"
+      : tone === "error"
+        ? (kind ?? "server")
+        : undefined;
   const notice = (
     <div
       id={id}
@@ -134,38 +157,39 @@ export function Notice({
         `notice notice-${tone}`,
         "relative my-4 flex w-full items-start gap-2.5 rounded-[18px] border-[3px] border-border bg-surface py-3 pr-[42px] pl-3.5 text-left font-body text-sm leading-[1.45] font-medium text-ink shadow-[4px_4px_0_#111] max-[680px]:flex-wrap",
         // Status dot instead of an icon font; the colour carries the tone.
-        badge === undefined &&
-          "before:mt-1 before:size-3.5 before:flex-none before:rotate-[-8deg] before:rounded-full before:border-2 before:border-border before:bg-main before:shadow-[2px_2px_0_#111] before:content-['']",
+        sticker
+          ? "items-center pr-[46px] pl-4"
+          : "before:mt-1 before:size-3.5 before:flex-none before:rotate-[-8deg] before:rounded-full before:border-2 before:border-border before:bg-main before:shadow-[2px_2px_0_#111] before:content-['']",
         NOTICE_TONE[tone],
+        fold.folded && "hidden",
         !inline && cn("pointer-events-auto my-0 flex-none", NOTICE_TAIL_CLASS),
       )}
       role={tone === "error" || tone === "warning" ? "alert" : "status"}
     >
-      {badge !== undefined ? (
-        <span
-          data-n={badge}
-          aria-hidden="true"
-          className={cn(
-            STICKER,
-            "size-6 text-[11px] leading-5 before:content-[attr(data-n)]",
-            STICKER_TONE(false),
-          )}
-        />
-      ) : null}
+      {sticker ? <KindSticker kind={sticker} n={badge} /> : null}
       {title ? <strong className="whitespace-nowrap">{title}</strong> : null}
       {children ? <span className="min-w-0 flex-1">{children}</span> : null}
       {action}
-      <button
-        type="button"
-        className="notice-close absolute top-2 right-2.5 inline-grid size-6 text-[13px] flex-none cursor-pointer place-items-center rounded-full border-2 border-border bg-surface text-ink hover:bg-err hover:text-white focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
+      <RoundX
+        className="notice-close absolute top-[9px] right-[10px]"
         aria-label={t("noticeDismiss")}
         onClick={() => (onClose ? onClose() : setClosed(true))}
-      >
-        <IconClose />
-      </button>
+      />
     </div>
   );
-  return inline || !tray ? notice : createPortal(notice, tray);
+  if (inline || !tray) return notice;
+  return (
+    <>
+      {createPortal(notice, tray)}
+      {fold.folded ? (
+        <MascotBadge
+          tray={tray}
+          label={t("noticeReopen")}
+          onOpen={fold.reopen}
+        />
+      ) : null}
+    </>
+  );
 }
 
 /** Sticker (14 option A): a tilted round red number; green with ✓ once fixed. */
@@ -214,6 +238,13 @@ export const NOTICE_ACTION_CLASS = cn(
   "h-8 px-3 text-[13px]",
 );
 
+/** U3: an upload or filename refusal wears the file sticker. */
+function isFileError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const { code } = error as { code?: unknown };
+  return typeof code === "string" && /file|upload|attachment/.test(code);
+}
+
 /** A missing record, as opposed to one the server named a reason for. */
 export function isNotFound(error: unknown) {
   if (!error || typeof error !== "object") return false;
@@ -233,8 +264,15 @@ export function ErrorNotice({
   inline = false,
   notFound,
   onClosed,
+  kind,
+  transient,
+  badge,
 }: {
   id?: string;
+  kind?: ErrorKind;
+  /** U3: the number of the field this error describes. */
+  badge?: number;
+  transient?: boolean;
   /** Runs after the X closes it, e.g. to give focus back to a field. */
   onClosed?: () => void;
   error: unknown;
@@ -254,6 +292,9 @@ export function ErrorNotice({
       tone={conflict ? "warning" : "error"}
       title={conflict ? t("revisionConflict") : undefined}
       inline={inline}
+      kind={kind ?? (isFileError(error) ? "file" : "server")}
+      badge={badge}
+      transient={transient}
       onClose={() => {
         setDismissed(error);
         onClosed?.();
@@ -262,22 +303,12 @@ export function ErrorNotice({
         // Retrying with the stale revision would only conflict again: offer
         // a reload, which reads the latest revision from the server.
         conflict ? (
-          <button
-            className={NOTICE_ACTION_CLASS}
-            type="button"
-            onClick={() => window.location.reload()}
-          >
+          <RetryPill onClick={() => window.location.reload()}>
             {t("refreshPage")}
-          </button>
+          </RetryPill>
         ) : // Asking again for a deleted record cannot succeed.
         onRetry && !missing ? (
-          <button
-            className={NOTICE_ACTION_CLASS}
-            type="button"
-            onClick={onRetry}
-          >
-            {t("retry")}
-          </button>
+          <RetryPill onClick={onRetry}>{t("retry")}</RetryPill>
         ) : null
       }
     >
