@@ -129,7 +129,7 @@ function TeamPolaroid({
       style={{ "--r": `${TILTS[index % TILTS.length]}deg` } as CSSProperties}
     >
       <Link href={href} className="block text-[#111] no-underline">
-        <span className={cn(TAPE, "text-[13px] max-[767px]:max-w-[80%]")}>{team.display_name}</span>
+        <span className={cn(TAPE, "text-[13px] max-[767px]:max-w-[80%] max-[767px]:text-[11px]")}>{team.display_name}</span>
         <span className="absolute -top-2.5 -left-2.5 z-[3] -rotate-4 rounded-[6px] border-2 border-[#111] bg-white px-2 py-px font-body text-[11px] font-extrabold text-[#111] shadow-[2px_2px_0_#111]">
           {teamVersionLabel(team.current_version_seq)}
         </span>
