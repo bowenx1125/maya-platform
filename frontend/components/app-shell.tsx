@@ -717,12 +717,17 @@ export function AppShell({
   // The pink pill marks one row: Voices on its own page, otherwise the first
   // row that opens the active page; that row carries aria-current.
   const onVoices = Boolean(studentVoicesHref && pathname === studentVoicesHref);
-  // Teams stays lit on Studyform itself, as before its href moved.
+  // Teams lights only on the Teams page; the Studyform grid lights no row
+  // (owner decision 2026-10-26), so rows sharing its href stay unlit too.
   let litKey: string | undefined = agentsArea
     ? "studyform:agents"
-    : !onVoices && (teamsPage || activeHref === studyformHref)
-      ? "studyform:teams"
-      : undefined;
+    : onVoices
+      ? undefined
+      : teamsPage
+        ? "studyform:teams"
+        : activeHref === studyformHref
+          ? "none"
+          : undefined;
   for (const group of groups) {
     for (const item of group.items) {
       if (litKey) break;
