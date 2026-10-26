@@ -427,9 +427,10 @@ function RagCheck({
           DEBATE_BUTTON,
           "list-none py-1 pr-2.5 pl-2 text-xs leading-[normal] [&::-webkit-details-marker]:hidden",
         )}
+        data-testid="preview-check-rag"
       >
         <IconEye size={18} />
-        Check RAG
+        <span>Check RAG</span>
         <span className="ml-0.5 inline-grid h-[1.35rem] min-w-[1.35rem] place-items-center rounded-full border-2 border-[#111] bg-[#FFE14D] text-[11px] font-extrabold">
           {sourceById.size}
         </span>
