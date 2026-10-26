@@ -264,7 +264,7 @@ export function ChecklistLine({
       id={checklistLineId(entry.n)}
       data-done={entry.done || undefined}
       className={cn(
-        "group/line flex items-center gap-2.5 border-0! border-t-2! border-dashed! border-[#11111833] py-[7px] first:border-t-0 max-[680px]:flex-wrap",
+        "group/line flex items-center gap-2.5 border-0! border-t-2! border-dashed! border-[#11111833] py-[7px] first:border-t-0! max-[680px]:flex-wrap",
         !entry.done &&
           "active:-mx-2 active:rounded-lg active:bg-[#FFD0D0] active:px-2",
       )}
