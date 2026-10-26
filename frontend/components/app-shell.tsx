@@ -186,8 +186,14 @@ export function AppShell({
     scope: string;
     groupId: string | null;
   } | null>(null);
-  const [, routeGroupId] =
+  const [, groupRouteId] =
     pathname.match(/^\/(?:student|teacher)\/groups\/([^/]+)/) ?? [];
+  // The Agents page names its group in ?group_id.
+  const routeGroupId =
+    groupRouteId ??
+    (pathname === "/student/agents"
+      ? (new URLSearchParams(locationSearch).get("group_id") ?? undefined)
+      : undefined);
   const [agentRoute, agentRouteKind, agentRouteId] =
     pathname.match(/^\/student\/(agents|agent-versions)\/([^/]+)/) ?? [];
   const lookUpAgentGroup =
@@ -364,6 +370,7 @@ export function AppShell({
   const visitingGroup =
     teacherSurface &&
     (pathname.startsWith("/student/groups/") ||
+      pathname === "/student/agents" ||
       Boolean(agentRoute) ||
       visitPage);
   const visitGroupId =
@@ -437,6 +444,21 @@ export function AppShell({
       : groupId
         ? `/student/groups/${groupId}`
         : "/student#student-groups";
+  // The sidebar's Agents item opens the Agents page.
+  const agentsHref = visit
+    ? `/student/agents?group_id=${visit}`
+    : teacherSurface
+      ? `/teacher/agents${routeGroupId && !visitingGroup ? `?group_id=${encodeURIComponent(routeGroupId)}` : ""}`
+      : groupId
+        ? `/student/agents?group_id=${encodeURIComponent(groupId)}`
+        : "/student#student-groups";
+  // The list, an Agent, and New all light Agents.
+  const agentsArea =
+    pathname === "/student/agents" ||
+    pathname === "/teacher/agents" ||
+    pathname.startsWith("/teacher/agents/") ||
+    Boolean(agentRoute) ||
+    /^\/student\/groups\/[^/]+\/agents\/new$/.test(pathname);
   const links: {
     href: string;
     label: string;
@@ -599,7 +621,7 @@ export function AppShell({
       items: [
         {
           key: "agents",
-          href: studyformHref,
+          href: agentsHref,
           label: t("agents"),
           icon: "agent",
         },
@@ -688,7 +710,9 @@ export function AppShell({
   ];
   // The pink pill marks the one row for the current page; that row carries
   // aria-current. litSidebarKey prefers the most specific match.
-  const litKey = litSidebarKey(groups, pathname, activeHref, studentVoicesHref);
+  const litKey = agentsArea
+    ? "studyform:agents"
+    : litSidebarKey(groups, pathname, activeHref, studentVoicesHref);
   const pill = (
     <ViewTransition name="nav-active" share="nav-pill" default="none">
       <span
@@ -721,7 +745,7 @@ export function AppShell({
     : collapsed
       ? t("sidebarExpand")
       : t("sidebarCollapse");
-  const mayaformLit = activeHref === home;
+  const mayaformLit = !agentsArea && activeHref === home;
 
   function renderItem(group: SidebarGroup, item: SidebarItem, index: number) {
     const lit = litKey === `${group.key}:${item.key}`;
@@ -984,8 +1008,10 @@ export function AppShell({
           tabIndex={-1}
           className={`relative mx-auto w-[min(100%,1320px)] min-w-0 px-[clamp(24px,4vw,64px)] pt-12 max-[900px]:px-6 max-[900px]:pt-8 max-[480px]:px-4 max-[480px]:pt-7 ${workspaceStyles.surface} ${pathname === "/teacher/chat" || pathname === "/student/chat" ? "pb-[max(24px,env(safe-area-inset-bottom))]" : "pb-20 max-[900px]:pb-16 max-[480px]:pb-12"}`}
         >
-          {actions.back || actions.done || actions.new ? (
-            // The page header's own Back / Done, top-right (14 option A
+          {(actions.back && actions.back.placement !== "page") ||
+          (actions.done && actions.done.placement !== "page") ||
+          (actions.new && actions.new.placement !== "page") ? (
+            // Agents banners own theirs (placement "page"). The page header's own Back / Done / New, top-right (14 option A
             // "New Debate" header, the Agents pattern). Same handlers.
             <div
               data-page-actions
@@ -999,7 +1025,7 @@ export function AppShell({
                 ] as const
               ).map(([name, label]) => {
                 const action = actions[name];
-                if (!action) return null;
+                if (!action || action.placement === "page") return null;
                 const faded = Boolean(action.disabled);
                 const cls = `inline-flex items-center gap-1.5 rounded-[10px] border-[3px] border-border px-[18px] py-2 font-body text-sm font-bold text-ink no-underline ${PRESS_MOTION} max-[480px]:px-3 max-[480px]:py-1.5 max-[480px]:text-[13px] ${name === "back" ? "bg-surface" : "bg-main"}`;
                 const content = (

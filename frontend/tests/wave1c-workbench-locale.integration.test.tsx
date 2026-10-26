@@ -501,7 +501,7 @@ describe("Wave 1C real workbench boundary", () => {
     fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
       target: { value: "# Unsaved" },
     });
-    // Back sits in the page header (top-right of main), not in the sidebar.
+    // Back leads the page banner, not the sidebar.
     expect(back.closest("main")).not.toBeNull();
     expect(back.closest("nav")).toBeNull();
     expect(back.getAttribute("href")).toBe("/student/agents/agent-id");

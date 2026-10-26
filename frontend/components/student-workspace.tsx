@@ -59,7 +59,13 @@ import {
   VersionTile,
   teamVersionLabel,
 } from "./studyform-layout";
-import { AgentsEmpty, NewButton, type AgentRename } from "./ui/agent-card";
+import {
+  AGENTS_NEW_CLASS,
+  AgentsEmpty,
+  NewButton,
+  type AgentRename,
+} from "./ui/agent-card";
+import { AgentsPage } from "./agents-page";
 import { GuidePortrait } from "./ui/guide-dialog";
 import {
   EmptyCard,
@@ -343,6 +349,14 @@ export function StudentDashboard() {
   );
 }
 
+/** The Agents page; ?group_id picks the group, else the first membership. */
+export function StudentAgentsPage({ groupId }: { groupId?: string }) {
+  const { user } = useSession();
+  const target = groupId ?? user?.groups?.[0]?.group_id;
+  if (!target) return <LoadingCard />;
+  return <GroupWorkspace key={target} groupId={target} view="agents" />;
+}
+
 export function GroupWorkspace({
   groupId,
   initialVoiceCreate = false,
@@ -350,7 +364,10 @@ export function GroupWorkspace({
   initialMode,
   initialTeamId,
   initialDocumentId,
+  view,
 }: {
+  /** "agents": the Agents page alone (the sidebar's Agents item). */
+  view?: "agents";
   groupId: string;
   initialVoiceCreate?: boolean;
   focusVoices?: boolean;
@@ -377,11 +394,13 @@ export function GroupWorkspace({
       initialTeamId={initialTeamId}
       initialDocumentId={initialDocumentId}
       scope={scope}
+      view={view}
     />
   );
 }
 
 function GroupWorkspaceSession({
+  view,
   groupId,
   initialVoiceCreate,
   focusVoices,
@@ -397,6 +416,7 @@ function GroupWorkspaceSession({
   initialTeamId?: string;
   initialDocumentId?: string;
   scope: string;
+  view?: "agents";
 }) {
   const t = useT();
   // Team modes swap the whole page; any other mode belongs to the embedded
@@ -721,9 +741,8 @@ function GroupWorkspaceSession({
       </>
     );
 
-  return (
+  const agentNotices = (
     <>
-      <PageIntro title={t("studyform")} />
       {error ? (
         <ErrorNotice
           error={error}
@@ -743,32 +762,31 @@ function GroupWorkspaceSession({
           }}
         />
       ) : null}
-      <ModuleGrid
-        variant={teacherIdentity ? undefined : "studyform"}
-        paneOpen={brainformPane}
-      >
-        <ModuleCard
+    </>
+  );
+  if (view === "agents")
+    return (
+      <>
+        {agentNotices}
+        <AgentsPage
           title={t("agents")}
-          labelledBy="studyform-agents"
-          empty={
-            items.length || sharedAgents.length || !teacherIdentity
-              ? undefined
-              : t("noAgents")
-          }
           action={
             // With no Agents yet, New sits inside the empty card instead.
             teacherIdentity || !(items.length || sharedAgents.length) ? null : (
               <NewButton
                 href={`/student/groups/${groupId}/agents/new`}
                 label={t("newAgent")}
+                className={AGENTS_NEW_CLASS}
               />
             )
           }
         >
           {items.length ? (
-            <ModuleTiles>
-              {items.map(({ agent, versions }) => (
+            <ModuleTiles variant="list">
+              {items.map(({ agent, versions }, index) => (
                 <GroupAgentRow
+                  variant="list"
+                  index={index}
                   agent={agent}
                   key={agent.id}
                   versions={versions}
@@ -796,8 +814,10 @@ function GroupWorkspaceSession({
                   }
                 />
               ))}
-              {sharedAgents.map((item) => (
+              {sharedAgents.map((item, index) => (
                 <VersionTile
+                  variant="list"
+                  index={items.length + index}
                   key={item.agent.id}
                   id={item.agent.id}
                   editedBy={item.agent.last_edited_by_name}
@@ -819,9 +839,11 @@ function GroupWorkspaceSession({
               ))}
             </ModuleTiles>
           ) : sharedAgents.length ? (
-            <ModuleTiles>
-              {sharedAgents.map((item) => (
+            <ModuleTiles variant="list">
+              {sharedAgents.map((item, index) => (
                 <VersionTile
+                  variant="list"
+                  index={index}
                   key={item.agent.id}
                   name={item.agent.name}
                   href={`/student/agents/${item.agent.id}`}
@@ -839,7 +861,17 @@ function GroupWorkspaceSession({
               newLabel={t("newAgent")}
             />
           )}
-        </ModuleCard>
+        </AgentsPage>
+      </>
+    );
+
+  return (
+    <>
+      <PageIntro title={t("studyform")} />
+      <ModuleGrid
+        variant={teacherIdentity ? undefined : "studyform"}
+        paneOpen={brainformPane}
+      >
         <ModuleCard
           title={t("chatTargetTeams")}
           labelledBy="studyform-teams"
@@ -911,7 +943,12 @@ function GroupAgentRow({
   canDelete = true,
   onDelete,
   rename,
+  variant,
+  index,
 }: {
+  variant?: "list";
+  /** List position: picks the card tone as the mocks cycle it. */
+  index?: number;
   agent: AgentSummary;
   versions: AgentVersion[];
   deleting: boolean;
@@ -936,6 +973,8 @@ function GroupAgentRow({
       deleting={deleting}
       deleteLabel={t("deleteAgent")}
       onDelete={canDelete ? onDelete : undefined}
+      variant={variant}
+      index={index}
     />
   );
 }
@@ -1006,7 +1045,9 @@ function CreateAgentFormSession({
   return (
     <AgentWorkbench
       publishOnDone
-      backHref={groupId ? `/student/groups/${groupId}` : "/teacher/studyform"}
+      backHref={
+        groupId ? `/student/agents?group_id=${groupId}` : "/teacher/agents"
+      }
       unsavedCreate={{
         groupId,
         courseId,

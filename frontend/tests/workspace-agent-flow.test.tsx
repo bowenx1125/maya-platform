@@ -129,17 +129,17 @@ describe("Workspace Agent flow", () => {
     expect(screen.queryByText("Info")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Versions" })).toBeNull();
     const nav = within(screen.getByRole("navigation"));
+    const main = within(screen.getByRole("main"));
+    // Back and Done lead the page banner, not the sidebar.
     expect(
-      (
-        await within(screen.getByRole("main")).findByRole("link", {
-          name: "Back",
-        })
-      ).getAttribute("href"),
-    ).toBe("/student/groups/group-id");
+      (await main.findByRole("link", { name: "Back" })).getAttribute("href"),
+    ).toBe("/student/agents?group_id=group-id");
+    expect(nav.queryByRole("link", { name: "Back" })).toBeNull();
     expect(nav.queryByRole("button", { name: "New" })).toBeNull();
-    expect(
-      within(screen.getByRole("main")).getByRole("button", { name: "Done" }),
-    ).toHaveProperty("disabled", true);
+    expect(main.getByRole("button", { name: "Done" })).toHaveProperty(
+      "disabled",
+      true,
+    );
     expect(api.nextVersion).not.toHaveBeenCalled();
   });
 
@@ -157,7 +157,7 @@ describe("Workspace Agent flow", () => {
           name: "Back",
         })
       ).getAttribute("href"),
-    ).toBe("/student/groups/group-id");
+    ).toBe("/student/agents?group_id=group-id");
     expect(nav.queryByRole("button", { name: "New" })).toBeNull();
     expect(api.nextVersion).not.toHaveBeenCalled();
   });
@@ -184,7 +184,7 @@ describe("Workspace Agent flow", () => {
         name: "Back",
       });
       expect(backs.map((link) => link.getAttribute("href"))).toContain(
-        "/teacher/studyform",
+        "/teacher/agents",
       );
     });
     expect(navigation.queryByRole("button", { name: "New" })).toBeNull();
@@ -281,7 +281,7 @@ describe("Workspace Agent flow", () => {
     api.agents.mockResolvedValue([agent()]);
     render(
       <AppShell role="student">
-        <GroupWorkspace groupId="group-id" />
+        <GroupWorkspace groupId="group-id" view="agents" />
       </AppShell>,
     );
     const link = await within(screen.getByRole("main")).findByRole("link", {
@@ -338,7 +338,7 @@ describe("Workspace Agent flow", () => {
       .mockResolvedValue(undefined);
     render(
       <AppShell role="student">
-        <GroupWorkspace groupId="group-id" />
+        <GroupWorkspace groupId="group-id" view="agents" />
       </AppShell>,
     );
     const button = await screen.findByRole("button", { name: "Delete" });
@@ -371,7 +371,7 @@ describe("Workspace Agent flow", () => {
     ]);
     render(
       <AppShell role="student">
-        <GroupWorkspace groupId="group-id" />
+        <GroupWorkspace groupId="group-id" view="agents" />
       </AppShell>,
     );
     await screen.findByRole("link", { name: /Shared/ });

@@ -133,12 +133,17 @@ function groupPageHref(): string | null {
     '[data-tour="knowledge"]',
   );
   const href = link?.getAttribute("href") ?? "";
-  return href.includes("/student/groups/") ? href.split("#")[0] : null;
+  // #280: Studyform's Agents item opens /student/agents?group_id=…, where
+  // the E2 empty card (and its New) now lives.
+  return href.includes("/student/groups/") ||
+    href.startsWith("/student/agents?group_id=")
+    ? href.split("#")[0]
+    : null;
 }
 
 function onPage(page: Page, pathname: string) {
   return page === "group"
-    ? pathname.startsWith("/student/groups/")
+    ? pathname.startsWith("/student/groups/") || pathname === "/student/agents"
     : pathname === "/student" || pathname === "/student/";
 }
 
