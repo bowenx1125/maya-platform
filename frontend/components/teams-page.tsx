@@ -12,6 +12,7 @@ import {
   STUDYFORM_BANNER,
   STUDYFORM_BANNER_TITLE,
   STUDYFORM_NEW_CLASS,
+  LIST_CARD_LIFT,
 } from "./agent-chrome";
 import { teamVersionLabel } from "./studyform-layout";
 import {
@@ -131,7 +132,11 @@ function TeamPolaroid({
   const isPublic = team.visibility === "public";
   return (
     <li
-      className={cn(POLAROID, "w-[200px] max-[767px]:w-[calc(50%-10px)]")}
+      className={cn(
+        POLAROID,
+        LIST_CARD_LIFT,
+        "w-[200px] max-[767px]:w-[calc(50%-10px)]",
+      )}
       style={{ "--r": `${TILTS[index % TILTS.length]}deg` } as CSSProperties}
     >
       <Link href={href} className="block text-[#111] no-underline">
