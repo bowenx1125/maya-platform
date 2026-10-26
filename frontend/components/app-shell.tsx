@@ -25,6 +25,7 @@ import {
 } from "../lib/teacher-visit";
 import { useSession } from "./session-provider";
 import { OnboardingTour } from "./onboarding-tour";
+import { NoticeTraySlot } from "./ui/error-kit";
 
 type ActionRegistration = {
   owner: string;
@@ -577,6 +578,7 @@ export function AppShell({
           className={`${styles.main} ${workspaceStyles.surface} ${pathname === "/teacher/chat" || pathname === "/student/chat" ? styles.chatMain : ""}`}
         >
           <ViewTransition>{children}</ViewTransition>
+          <NoticeTraySlot />
         </main>
         <SecretDoor />
         {isStudent && user ? (
