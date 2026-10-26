@@ -1,13 +1,12 @@
 "use client";
 
-import { StickerBadge } from "../ui";
 import Link from "next/link";
 import { useRef, useState, type ReactNode } from "react";
 
 import { cn } from "../../lib/utils";
 import { MascotFigure, MASCOT_IDS, type MascotId } from "../academy/mascots";
 import { FitTitle } from "../fit-title";
-import { RoundX } from "./error-kit";
+import { KindSticker, RoundX } from "./error-kit";
 
 /** Material theme of the Agent's avatar → the mascot on its card. */
 const THEME_MASCOT: Record<string, MascotId> = {
@@ -259,13 +258,15 @@ export function AgentCard({
             data-ui-guide={guideText ? "agent.lastEdited" : undefined}
             data-ui-guide-text={guideText}
           />
+          {/* A failed rename is a server error: the black "!" of its bubble,
+              on the card corner so the frame's overflow cannot clip it. */}
+          {renameInvalid ? <KindSticker kind="server" on /> : null}
           <span className={cn(FRAME_CLASS, "pointer-events-none")}>
             <span
               data-card-band
               className={cn(BAND_CLASS, "pointer-events-auto")}
               style={{ backgroundColor: tone }}
             >
-              {renameInvalid ? <StickerBadge n={1} /> : null}
               {editing ? (
                 <input
                   ref={bindInput}
