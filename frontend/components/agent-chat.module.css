@@ -1,23 +1,23 @@
 @layer legacy {
   .layout {
     display: grid;
-    grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+    grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
     gap: 0;
     min-width: 0;
     overflow: hidden;
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    background: var(--surface);
-    box-shadow: none;
+    border: 3px solid #111;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 6px 6px 0 #111;
   }
   .sidebar {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
     min-width: 0;
-    padding: 24px;
-    border-right: 1px solid var(--line);
-    background: var(--surface-subtle);
+    padding: 18px 14px;
+    border-right: 3px solid #111;
+    background: #fff;
   }
   .historyHead {
     display: flex;
@@ -28,10 +28,10 @@
   }
   .historyHead h2 {
     margin: 0;
-    color: var(--ink);
-    font-family: var(--display-serif);
-    font-size: 1.15rem;
-    font-weight: 600;
+    color: #111;
+    font-family: var(--font-display, inherit);
+    font-size: 1rem;
+    font-weight: 800;
   }
   /* Like Studyform's empty Agents and Teams: a dashed box, here the size of
    one history entry, in the first row under History. */
@@ -42,20 +42,20 @@
     min-height: 44px;
     margin: 0;
     padding: 10px 12px;
-    border: 1px dashed #d9d0e2;
+    border: 2px dashed #1116;
     border-radius: 10px;
     background: transparent;
-    color: var(--muted, #706b82);
-    font-size: 14px;
-    font-weight: 650;
+    color: #4b5563;
+    font-size: 13px;
+    font-weight: 700;
     line-height: 1.5;
     text-align: center;
   }
   .history {
     display: grid;
     align-content: start;
-    gap: 4px;
-    max-height: calc(100dvh - 180px);
+    gap: 8px;
+    max-height: calc(100dvh - 220px);
     overflow: auto;
   }
   .historyRow {
@@ -64,25 +64,29 @@
     align-items: center;
     gap: 4px;
     min-width: 0;
+    padding: 4px;
+    border: 3px solid #111;
     border-radius: 10px;
+    background: #fff;
   }
   .historyRow:hover,
   .historyRow:has(:focus-visible) {
-    background: var(--surface-hover);
+    background: #fff7cc;
   }
   .historySelect {
     display: flex;
     align-items: center;
     min-width: 0;
-    min-height: 44px;
-    padding: 10px 8px 10px 12px;
+    min-height: 40px;
+    padding: 8px 6px 8px 8px;
     border: 0;
-    border-radius: 10px;
+    border-radius: 8px;
     background: transparent;
-    color: var(--muted);
+    color: #111;
     text-align: left;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 13px;
+    font-weight: 800;
   }
   .historySelect span {
     min-width: 0;
@@ -91,11 +95,16 @@
     white-space: nowrap;
   }
   .historySelect[aria-current="page"] {
-    color: var(--ink);
-    font-weight: 650;
+    color: #111;
+    font-weight: 800;
   }
   .historyRow:has(.historySelect[aria-current="page"]) {
-    background: var(--accent-soft);
+    background: #ff4d8d;
+    box-shadow: 3px 3px 0 #111;
+  }
+  .historyRow:has(.historySelect[aria-current="page"]) .historySelect,
+  .historyRow:has(.historySelect[aria-current="page"]) .historyDate {
+    color: #111;
   }
   .historyMeta {
     position: relative;
@@ -201,43 +210,45 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    height: max(600px, calc(100dvh - 74px));
+    height: max(600px, calc(100dvh - 140px));
     overflow: hidden;
-    background: #fdfaf3;
+    background: #fff;
   }
   .chatHeader {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
+    align-items: flex-end;
+    gap: 12px;
     min-height: 64px;
-    padding: 14px 28px;
-    border-bottom: 1px solid var(--line);
+    padding: 8px 16px 0;
+    border-bottom: 2px solid #111;
+    background: #fff;
   }
   .chatTitle {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 10px;
     min-width: 0;
+    padding-bottom: 10px;
   }
   .chatTitle h2 {
-    margin: 0;
+    margin: 0 0 4px;
     overflow: hidden;
-    font-family: var(--display-serif);
-    font-size: 1.2rem;
-    font-weight: 650;
+    max-width: 100%;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .kindChip {
     flex: 0 0 auto;
-    padding: 3px 10px;
-    border-radius: 999px;
-    background: var(--surface-subtle);
-    color: var(--muted);
-    font-size: 12px;
-    font-weight: 650;
+    margin-bottom: 6px;
+    padding: 2px 6px;
+    border: 2px solid #111;
+    border-radius: 4px;
+    background: #fff;
+    color: #111;
+    font-size: 11px;
+    font-weight: 800;
     letter-spacing: 0.02em;
+    box-shadow: 2px 2px 0 #111;
   }
   .pickTile {
     position: relative;
@@ -455,11 +466,14 @@
   .userMessage {
     justify-self: end;
     max-width: 85%;
-    padding: 12px 18px;
-    border-radius: 18px 18px 5px 18px;
-    background: var(--accent-soft);
+    padding: 10px 14px;
+    border: 2px solid #111;
+    border-radius: 10px;
+    background: #fff;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    font-size: 14px;
+    line-height: 1.5;
   }
   .reply {
     min-width: 0;
@@ -507,20 +521,15 @@
     width: min(100% - 40px, 720px);
     margin: 8px auto 22px;
     padding: 14px 14px 10px;
-    border: 1px solid #e4ddd2;
-    border-radius: 22px;
-    background: #fffcf7;
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.8) inset,
-      0 10px 28px rgba(52, 45, 30, 0.06);
+    border: 3px solid #111;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 4px 4px 0 #111;
   }
   .composer:focus-within {
     outline: none;
-    border-color: #c9b896;
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.8) inset,
-      0 0 0 2px rgba(118, 89, 31, 0.18),
-      0 10px 28px rgba(52, 45, 30, 0.07);
+    border-color: #111;
+    box-shadow: 4px 4px 0 #111;
   }
   .composer :global(#chat-message) {
     grid-area: text;
@@ -856,7 +865,7 @@
       align-items: start;
       gap: 12px 16px;
       border-right: 0;
-      border-bottom: 1px solid var(--line);
+      border-bottom: 3px solid #111;
     }
     .history {
       max-height: 104px;
@@ -925,10 +934,177 @@
   }
 
   .blankHint {
-    margin: auto;
-    padding: 24px;
-    color: var(--muted, #777);
-    font-size: 0.9rem;
+    margin: 0;
+    max-width: 300px;
+    padding: 0;
+    color: #4b5563;
+    font-size: 0.875rem;
+    font-weight: 700;
     text-align: center;
   }
+
+  .pickLayout {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    min-width: 0;
+  }
+  .pickCol {
+    min-width: 0;
+    padding: 18px 16px 20px;
+    border: 3px solid #111;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 6px 6px 0 #111;
+  }
+  .pickColTitle {
+    display: inline-block;
+    margin: 0 0 18px;
+    padding: 2px 12px;
+    border: 2.5px solid #111;
+    border-radius: 4px;
+    background: #a3e635;
+    color: #111;
+    font-family: var(--font-display, inherit);
+    font-size: 1.25rem;
+    font-weight: 800;
+    transform: rotate(-1deg);
+    box-shadow: 2px 2px 0 #111;
+  }
+  .pickGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 22px 16px;
+    margin: 0;
+    padding: 8px 4px 4px;
+    list-style: none;
+  }
+  .pickCardWrap {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .pickCard {
+    position: relative;
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    padding: 28px 10px 10px;
+    border: 3px solid #111;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 6px 6px 0 #111;
+    color: #111;
+    font: inherit;
+    cursor: pointer;
+  }
+  .pickCard:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+  .pickCardPicked {
+    outline: 4px solid #ff4d8d;
+    outline-offset: 2px;
+  }
+  .pickVersion {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    padding: 1px 6px;
+    border: 2px solid #111;
+    border-radius: 5px;
+    background: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    transform: rotate(-3deg);
+    box-shadow: 2px 2px 0 #111;
+  }
+  .pickName {
+    position: absolute;
+    top: -12px;
+    right: 12px;
+    left: 36px;
+    overflow: hidden;
+    padding: 2px 8px;
+    border: 2.5px solid #111;
+    background: #ffe14d;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transform: rotate(-2deg);
+    box-shadow: 2px 2px 0 #111;
+  }
+  .pickArt {
+    display: grid;
+    height: 112px;
+    place-items: end center;
+    overflow: hidden;
+    border: 3px solid #111;
+  }
+  .pickTeamFaces {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+  }
+  .pickFace {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    margin-left: -12px;
+    place-items: end center;
+    overflow: hidden;
+    border: 2.5px solid #111;
+    border-radius: 999px;
+    background: #fff;
+  }
+  .pickFace:first-child {
+    margin-left: 0;
+  }
+  .pickEmpty {
+    margin: 8px 0 0;
+    color: #4b5563;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .pickMark {
+    position: absolute;
+    top: -12px;
+    right: -12px;
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border: 3px solid #111;
+    border-radius: 999px;
+    background: #ff4d8d;
+    color: #111;
+  }
+  @media (max-width: 680px) {
+    .pickLayout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .blankState {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 32px;
+    text-align: center;
+  }
+  .messagesNewConv {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 24px;
+  }
 }
+

@@ -81,10 +81,20 @@ import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import { PageAction } from "./page-action";
 import {
+  ChatEmptyGhosts,
+  ChatPeekAvatar,
+  ChatRadiantDisk,
+  chatKindChipClass,
+  chatTapeTitleClass,
+} from "./chatform-chrome";
+import { AGENT_BANNER, AGENT_BANNER_TITLE } from "./agent-chrome";
+import { buttonVariants } from "./ui/button";
+import { cn } from "../lib/utils";
+import {
   ErrorNotice,
+  NOTICE_ACTION_CLASS,
   LoadingCard,
   Notice,
-  PageIntro,
   useNoticeTrayAbove,
 } from "./ui";
 import { WorkspaceAction } from "./workspace-actions";
@@ -2749,9 +2759,31 @@ function AgentChatScope({
         visibility: "public" as const,
       })),
   ];
-  const chatTitle = selectedTeam?.team.name ?? character?.name ?? "";
+  const chatTitle =
+    selectedTeam?.team.name ??
+    (selected?.title && selected.title.trim() ? selected.title : null) ??
+    character?.name ??
+    "";
   const chatKind = teamMode ? "Team" : "Agent";
   const hasTarget = Boolean(selected || selectedTeam || versionId);
+  const peekAgentId =
+    character?.agent_id ??
+    selected?.agent.agent_id ??
+    selectedTeam?.team.id ??
+    "chat";
+  const peekTheme =
+    character?.avatar_config?.material_theme ??
+    selected?.agent.avatar_config?.material_theme ??
+    null;
+  const isNewConv =
+    hasTarget &&
+    !newChatRoute &&
+    !pendingMessage &&
+    (selected
+      ? selected.turns.length === 0
+      : selectedTeam
+        ? selectedTeam.turns.length === 0
+        : Boolean(versionId));
   // Inside an open Chat, errors sit under the latest message, not above the page.
   const showConversation = hasTarget && !newChatRoute;
   const deletedMember = selectedTeam?.team.members.find(
@@ -2867,26 +2899,33 @@ function AgentChatScope({
 
   return (
     <>
-      <PageIntro title="Chatform" />
-      <WorkspaceAction
-        name="new"
-        disabled={busy || teamBusy || newChatRoute}
-        onClick={openNewEntry}
-      />
-      {newChatRoute ? (
-        <>
+      <header className={cn(AGENT_BANNER, "mb-5")}>
+        {newChatRoute ? (
           <PageAction
             name="back"
+            placement="page"
             disabled={creating}
             onClick={() => closeNewEntry()}
           />
+        ) : null}
+        <h1 className={AGENT_BANNER_TITLE}>Chatform</h1>
+        {newChatRoute ? (
           <PageAction
             name="done"
+            placement="page"
             disabled={!pick || creating || busy || teamBusy}
             onClick={() => void createPicked()}
           />
-        </>
-      ) : null}
+        ) : (
+          <PageAction
+            name="new"
+            placement="page"
+            className="bg-[#FF4D8D]"
+            disabled={busy || teamBusy}
+            onClick={openNewEntry}
+          />
+        )}
+      </header>
       {/* Owner decision (2026-10-13): opening Memory shows no status line
           and no "continue" button; the Chat itself shows what happened. */}
       {invalidMemoryRoute ? (
@@ -2894,9 +2933,10 @@ function AgentChatScope({
           {t("brainformMemoryInvalid")}
         </DismissibleAlert>
       ) : null}
-      {error && !showConversation ? (
+      {error && !showConversation && requestState?.status !== "uncertain" ? (
         <ErrorNotice
           error={error}
+          kind="chat"
           onRetry={
             historyRefreshTarget
               ? () => void openHistory(historyRefreshTarget)
@@ -2905,13 +2945,22 @@ function AgentChatScope({
         />
       ) : null}
       {requestState?.status === "uncertain" && requestState.sessionId ? (
-        <button
-          className="inline-button"
-          type="button"
-          onClick={() => void checkUncertainRequestStatus()}
+        <Notice
+          tone="error"
+          kind="chat"
+          transient={false}
+          action={
+            <button
+              type="button"
+              className={NOTICE_ACTION_CLASS}
+              onClick={() => void checkUncertainRequestStatus()}
+            >
+              {t("chatCheckStatus")}
+            </button>
+          }
         >
-          {t("chatCheckStatus")}
-        </button>
+          {t("errorChatTransportUncertain")}
+        </Notice>
       ) : null}
       {newChatRoute ? (
         <ChatTargetPicker
@@ -2925,7 +2974,7 @@ function AgentChatScope({
         <div className={styles.layout}>
           <aside className={styles.sidebar}>
             <div className={styles.historyHead}>
-              <h2>{t("chatHistory")}</h2>
+              <h2 className={chatTapeTitleClass("text-base")}>{t("chatHistory")}</h2>
             </div>
             <div className={styles.history} aria-label="History">
               {historyItems.length === 0 ? (
@@ -3041,22 +3090,37 @@ function AgentChatScope({
           >
             {!hasTarget ? (
               // A blank pane read as "still loading" (2026-10-20 audit):
-              // say what to do instead.
-              <p className={styles.blankHint}>{t("chatPickOrNew")}</p>
+              // say what to do instead. FINAL v2b: C ghost character-select.
+              <div className={styles.blankState}>
+                <ChatEmptyGhosts />
+                <p className={styles.blankHint}>{t("chatPickOrNew")}</p>
+              </div>
             ) : (
               <>
                 <header className={styles.chatHeader}>
+                  <ChatPeekAvatar
+                    agentId={peekAgentId}
+                    materialTheme={peekTheme}
+                  />
                   <div className={styles.chatTitle}>
-                    <h2>{chatTitle || t("chatNewTitle")}</h2>
-                    <span className={styles.kindChip}>{chatKind}</span>
+                    <h2 className={chatTapeTitleClass()}>
+                      {chatTitle || t("chatNewTitle")}
+                    </h2>
+                    <span className={chatKindChipClass()}>{chatKind}</span>
                   </div>
                 </header>
                 <div
-                  className={styles.messages}
+                  className={cn(styles.messages, isNewConv && styles.messagesNewConv)}
                   role="log"
                   aria-live="polite"
                   aria-relevant="additions text"
                 >
+                  {isNewConv ? (
+                    <ChatRadiantDisk
+                      agentId={peekAgentId}
+                      materialTheme={peekTheme}
+                    />
+                  ) : null}
                   {selected?.turns.map((turn) => (
                     <div key={turn.id} className={styles.exchange}>
                       {turn.user_text ? (
@@ -3248,7 +3312,9 @@ function AgentChatScope({
                       </div>
                     </div>
                   ) : null}
-                  {error && !sendRefusalHint(error) ? (
+                  {error &&
+                  !sendRefusalHint(error) &&
+                  requestState?.status !== "uncertain" ? (
                     <ErrorNotice
                       error={error}
                       transient

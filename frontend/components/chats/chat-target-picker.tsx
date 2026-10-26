@@ -4,7 +4,10 @@ import { FitTitle } from "../fit-title";
 import type { ChatAgent } from "../../lib/api";
 import { useT } from "../../lib/i18n";
 import { IconCheck } from "../quiet-icons";
-import { ModuleCard, ModuleGrid, teamVersionLabel } from "../studyform-layout";
+import { MascotFigure } from "../academy/mascots";
+import { agentMascot, agentTone } from "../ui/agent-card";
+import { teamVersionLabel } from "../studyform-layout";
+import { cn } from "../../lib/utils";
 import styles from "../agent-chat.module.css";
 
 export type ChatTargetTeam = {
@@ -15,9 +18,7 @@ export type ChatTargetTeam = {
 };
 
 /**
- * The New page: one Studyform-style list of Agents and Teams to chat with.
- * Agents come first (the left column on wide screens, the top card when the
- * grid stacks), Teams second.
+ * The New page: Scheme A sticker cards for Agents and Teams.
  */
 export function ChatTargetPicker({
   teams,
@@ -33,31 +34,42 @@ export function ChatTargetPicker({
   onPick: (value: string) => void;
 }) {
   const t = useT();
-  const tile = (
-    key: string,
-    name: string,
-    label: string | null,
-    visibility?: "private" | "public",
-    unavailable = false,
-  ) => {
+
+  const agentTile = (agent: ChatAgent, index: number) => {
+    const key = `agent:${agent.version_id}`;
     const picked = value === key;
+    const unavailable = agent.available === false;
+    const tone = agentTone(agent.agent_id, index);
+    const mascot = agentMascot(
+      agent.agent_id,
+      agent.avatar_config?.material_theme,
+    );
     return (
-      <li key={key}>
+      <li key={key} className={styles.pickCardWrap}>
         <button
           type="button"
-          className={`agent-tile ${styles.pickTile}`}
+          className={cn(styles.pickCard, picked && styles.pickCardPicked)}
+          style={{ transform: `rotate(${index % 2 ? 1.2 : -1.2}deg)` }}
           aria-pressed={picked}
           disabled={disabled || unavailable}
           onClick={() => onPick(picked ? "" : key)}
         >
-          <span className="agent-tile-name">
-            <FitTitle text={name} />
-          </span>
-          {label ? (
-            <span className="agent-pill" data-visibility={visibility}>
-              {label}
-            </span>
+          {agent.version_label ? (
+            <span className={styles.pickVersion}>{agent.version_label}</span>
           ) : null}
+          <span className={styles.pickName}>
+            <FitTitle text={agent.name} />
+          </span>
+          <span
+            className={styles.pickArt}
+            style={{
+              backgroundColor: tone,
+              backgroundImage:
+                "repeating-conic-gradient(from 0deg at 50% 50%,#fff9 0 10deg,transparent 10deg 20deg)",
+            }}
+          >
+            <MascotFigure id={mascot} className="h-24 w-auto" />
+          </span>
           {picked ? (
             <span className={styles.pickMark} aria-hidden="true">
               <IconCheck size={14} />
@@ -67,47 +79,74 @@ export function ChatTargetPicker({
       </li>
     );
   };
+
+  const teamTile = (team: ChatTargetTeam, index: number) => {
+    const key = `team:${team.id}`;
+    const picked = value === key;
+    const label = team.current_version_seq
+      ? teamVersionLabel(team.current_version_seq)
+      : null;
+    return (
+      <li key={key} className={styles.pickCardWrap}>
+        <button
+          type="button"
+          className={cn(styles.pickCard, picked && styles.pickCardPicked)}
+          style={{
+            transform: `rotate(${index % 2 ? 1.2 : -1.2}deg)`,
+            backgroundColor: "#C9D3F0",
+          }}
+          aria-pressed={picked}
+          disabled={disabled}
+          onClick={() => onPick(picked ? "" : key)}
+        >
+          {label ? <span className={styles.pickVersion}>{label}</span> : null}
+          <span className={styles.pickName}>
+            <FitTitle text={team.display_name} />
+          </span>
+          <span
+            className={styles.pickArt}
+            style={{ backgroundColor: "#C9D3F0" }}
+          >
+            <span className={styles.pickTeamFaces} aria-hidden="true">
+              {(["wave", "wreath", "scroll"] as const).map((id) => (
+                <span key={id} className={styles.pickFace}>
+                  <MascotFigure id={id} className="h-10 w-auto" />
+                </span>
+              ))}
+            </span>
+          </span>
+          {picked ? (
+            <span className={styles.pickMark} aria-hidden="true">
+              <IconCheck size={14} />
+            </span>
+          ) : null}
+        </button>
+      </li>
+    );
+  };
+
   return (
-    <ModuleGrid>
-      <ModuleCard
-        title={t("agents")}
-        labelledBy="chat-pick-agents"
-        empty={agents.length ? undefined : t("noAgents")}
-      >
+    <div className={styles.pickLayout}>
+      <section className={styles.pickCol} aria-labelledby="chat-pick-agents">
+        <h2 id="chat-pick-agents" className={styles.pickColTitle}>
+          {t("agents")}
+        </h2>
         {agents.length ? (
-          <ul className="agent-tile-grid module-tile-grid">
-            {agents.map((agent) =>
-              tile(
-                `agent:${agent.version_id}`,
-                agent.name,
-                agent.version_label,
-                agent.visibility,
-                agent.available === false,
-              ),
-            )}
-          </ul>
-        ) : undefined}
-      </ModuleCard>
-      <ModuleCard
-        title={t("chatTargetTeams")}
-        labelledBy="chat-pick-teams"
-        empty={teams.length ? undefined : t("teamNoneYet")}
-      >
+          <ul className={styles.pickGrid}>{agents.map(agentTile)}</ul>
+        ) : (
+          <p className={styles.pickEmpty}>{t("noAgents")}</p>
+        )}
+      </section>
+      <section className={styles.pickCol} aria-labelledby="chat-pick-teams">
+        <h2 id="chat-pick-teams" className={styles.pickColTitle}>
+          {t("chatTargetTeams")}
+        </h2>
         {teams.length ? (
-          <ul className="agent-tile-grid module-tile-grid">
-            {teams.map((team) =>
-              tile(
-                `team:${team.id}`,
-                team.display_name,
-                team.current_version_seq
-                  ? teamVersionLabel(team.current_version_seq)
-                  : null,
-                team.visibility,
-              ),
-            )}
-          </ul>
-        ) : undefined}
-      </ModuleCard>
-    </ModuleGrid>
+          <ul className={styles.pickGrid}>{teams.map(teamTile)}</ul>
+        ) : (
+          <p className={styles.pickEmpty}>{t("teamNoneYet")}</p>
+        )}
+      </section>
+    </div>
   );
 }
