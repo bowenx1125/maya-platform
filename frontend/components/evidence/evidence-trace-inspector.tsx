@@ -5,7 +5,6 @@ import {
   evidenceGrade,
 } from "../../lib/evidence-grading";
 import { useT } from "../../lib/i18n";
-import styles from "./evidence-trace-inspector.module.css";
 
 export type EvidenceTraceClaimType =
   "factual" | "background" | "value_judgement" | "proposal";
@@ -179,7 +178,7 @@ export function EvidenceTraceInspector({
   );
   if (rows.length === 0) {
     return (
-      <p className={styles.absent} data-testid="evidence-trace-absent">
+      <p className="m-0 text-[0.78rem] text-(--muted)" data-testid="evidence-trace-absent">
         {all.length === 0
           ? "No snapshot evidence was cited in this turn."
           : `Evidence lineage recorded (${all.length}) but it no longer aligns with this speech.`}
@@ -189,13 +188,13 @@ export function EvidenceTraceInspector({
 
   return (
     <details
-      className={styles.inspector}
+      className="mt-3 rounded-[12px] border border-(--line) bg-(--surface-subtle,#f5f5f7) px-[11px] py-[9px] [&_summary]:cursor-pointer [&_summary]:text-[0.84rem] [&_summary]:font-bold [&_summary]:text-(--indigo-dark)"
       data-testid="evidence-trace-inspector"
     >
       <summary>
-        Check RAG <span className={styles.count}>{rows.length}</span>
+        Check RAG <span className="ml-1 inline-grid size-[1.35rem] min-w-[1.35rem] place-items-center rounded-full bg-(--accent-soft,#f6ecd3) text-[0.72rem] text-(--indigo-dark)">{rows.length}</span>
       </summary>
-      <ol className={styles.claimList}>
+      <ol className="mt-2.5 mb-0 grid list-none gap-2 p-0">
         {rows.map((row, index) => {
           const highlighted = speechSpanText(speech, row.speech_span);
           const hasSource = Boolean(
@@ -203,31 +202,31 @@ export function EvidenceTraceInspector({
           );
           return (
             <li
-              className={styles.claim}
+              className="rounded-[10px] border border-(--line,#dedee3) bg-[rgba(255,255,255,0.66)] p-[9px]"
               data-support-mode={row.support_mode}
               key={`${row.claim_id}:${row.evidence_id ?? "none"}:${index}`}
             >
-              <div className={styles.claimHeader}>
+              <div className="flex flex-wrap items-baseline justify-between gap-1.5 text-[0.78rem] text-(--ink)">
                 <strong>{claimTypeLabel(row.claim_type)}</strong>
                 {/* The grade and what it is worth, in one pill: green for
                     direct, amber for indirect, plain for no evidence. The
                     number is the same one the Agent score sums. */}
                 <span
-                  className={styles.mode}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-(--line) bg-(--panel) px-2.5 py-0.5 text-[0.74rem] text-(--muted) data-[grade=direct]:border-transparent data-[grade=direct]:bg-[rgba(45,138,104,0.14)] data-[grade=direct]:text-(--green) data-[grade=indirect]:border-transparent data-[grade=indirect]:bg-(--gold-soft) data-[grade=indirect]:text-(--ink,#1d1d1f)"
                   data-grade={evidenceGrade(row.support_mode)}
                 >
                   {supportLabel(row.support_mode)}
-                  <span className={styles.modeScore}>
+                  <span className="font-bold">
                     +{EVIDENCE_GRADE_POINTS[evidenceGrade(row.support_mode)]}
                   </span>
                 </span>
               </div>
-              <p className={styles.highlightedSpeech}>
+              <p className="mt-2 mb-0 leading-[1.55] [&_mark]:rounded [&_mark]:bg-(--gold-soft) [&_mark]:px-[3px] [&_mark]:py-0.5 [&_mark]:text-(--ink)">
                 <mark>{highlighted}</mark>
               </p>
               {row.query_text ? (
-                <p className={styles.detail}>
-                  <span className={styles.detailLabel}>Retrieval query</span>
+                <p className="mt-2 mb-0 text-[0.78rem] leading-[1.5] text-(--muted)">
+                  <span className="mr-[5px] font-bold text-(--ink)">Retrieval query</span>
                   {queryKindLabel(row.query_kind)}
                 </p>
               ) : null}
@@ -235,20 +234,20 @@ export function EvidenceTraceInspector({
                 // The exact string that was embedded stays reachable: it is the
                 // receipt for this retrieval, and the rows above are a reading
                 // of it, not a replacement.
-                <details className={styles.rawQuery}>
+                <details className="mt-1 text-[0.78rem] text-(--muted) [&_summary]:cursor-pointer [&_p]:mt-1 [&_p]:mb-0 [&_p]:whitespace-pre-wrap">
                   <summary>Actual retrieval text</summary>
                   <p>{row.query_text}</p>
                 </details>
               ) : null}
               {hasSource ? (
-                <dl className={styles.source}>
-                  <div>
-                    <dt>Source</dt>
-                    <dd>{row.source_filename}</dd>
+                <dl className="mt-2 mb-0 grid gap-[5px]">
+                  <div className="grid grid-cols-[4.7rem_minmax(0,1fr)] gap-2">
+                    <dt className="text-[0.74rem] text-(--muted)">Source</dt>
+                    <dd className="m-0 text-[0.76rem] text-(--ink) [overflow-wrap:anywhere]">{row.source_filename}</dd>
                   </div>
-                  <div>
-                    <dt>Locator</dt>
-                    <dd>{row.source_locator}</dd>
+                  <div className="grid grid-cols-[4.7rem_minmax(0,1fr)] gap-2">
+                    <dt className="text-[0.74rem] text-(--muted)">Locator</dt>
+                    <dd className="m-0 text-[0.76rem] text-(--ink) [overflow-wrap:anywhere]">{row.source_locator}</dd>
                   </div>
                 </dl>
               ) : null}
