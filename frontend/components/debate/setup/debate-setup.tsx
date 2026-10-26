@@ -718,6 +718,8 @@ export function TeacherDebateCreate({
         />
       ) : null}
       <form
+        // Option A: the mascot checklist names every problem; no browser popup.
+        noValidate
         ref={formRef}
         id="create-debate-form"
         className={styles.pageStack}
