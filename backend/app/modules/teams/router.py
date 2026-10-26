@@ -71,9 +71,13 @@ def _idempotent_mutation[T: BaseModel](
 
 
 def _replay_team_detail(db: Session, context: AuthContext, response: dict[str, Any]) -> TeamDetail:
-    saved = TeamDetail.model_validate(response)
-    service.get_team_detail(db, context, str(saved.id))
-    return saved
+    current = service.get_team_detail(db, context, str(response["id"]))
+    # Replies saved before can_delete/updated_at/last_edited_by_name existed
+    # replay with those three filled from the Team as it is now.
+    backfill = current.model_dump(
+        mode="json", include={"can_delete", "updated_at", "last_edited_by_name"}
+    )
+    return TeamDetail.model_validate({**backfill, **response})
 
 
 @router.post(

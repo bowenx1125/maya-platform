@@ -14,6 +14,40 @@
     "/api/v1/conversations": {
       "get": {
         "operationId": "listConversations",
+        "description": "The caller's own non-withdrawn Chats in courses they belong to, newest first. Optional filters narrow the list; without them the list is unchanged. Invalid filter values return 422 conversation_filter_invalid.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "entry_kind",
+            "required": false,
+            "description": "agent, or team (Team and Maya Team Chats). Omit for all.",
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "agent",
+                "team"
+              ],
+              "title": "Entry Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "course_id",
+            "required": false,
+            "description": "Only Chats in this course.",
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid",
+              "title": "Course Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -83,6 +117,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid entry_kind or course_id (conversation_filter_invalid)."
           }
         },
         "security": [
@@ -3293,7 +3337,7 @@
         }
       },
       "patch": {
-        "description": "CAS-update description without touching any versioned Agent data.",
+        "description": "CAS-update name and/or description without touching versioned Agent data.",
         "operationId": "updateAgentMetadata",
         "parameters": [
           {
@@ -3357,6 +3401,16 @@
               }
             },
             "description": "Metadata revision conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "agent_name_required or agent_name_too_long (max 120 characters)."
           }
         },
         "security": [
@@ -10708,6 +10762,17 @@
                 "type": "null"
               }
             ]
+          },
+          "student_count": {
+            "description": "Active students (role student, account active) in the course. Course teachers only; null for students.",
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -11313,6 +11378,61 @@
             "title": "Ownership Scope",
             "type": "string"
           },
+          "last_edited_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Edited At",
+            "description": "created_at of the latest content version (upload or replace); rename and reindex do not change it. Filled on the two library list endpoints; null elsewhere."
+          },
+          "last_edited_by_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Edited By User Id",
+            "description": "Who created the latest content version (upload or replace; the uploader when no version was recorded). Rename and reindex do not change it. Filled on the two library list endpoints; null elsewhere."
+          },
+          "last_edited_by_username": {
+            "title": "Last Edited By Username",
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Username of last_edited_by_user_id. Filled on the two library list endpoints; null elsewhere."
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id",
+            "description": "The uploader."
+          },
+          "owner_username": {
+            "title": "Owner Username",
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The uploader's username. Filled on the two library list endpoints (GET /groups/{group_id}/knowledge-documents, GET /courses/{course_id}/workspace-documents); null elsewhere."
+          },
           "safe_error_code": {
             "title": "Safe Error Code",
             "type": [
@@ -11331,6 +11451,21 @@
             ],
             "title": "Source Owner Role",
             "type": "string"
+          },
+          "used_by_agents": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AffectedAgent"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used By Agents",
+            "description": "Live Agents whose current published version uses this file, limited to Agents the caller may use (same filter as GET /knowledge-documents/{document_id}/affected-agents). Filled on the two library list endpoints; null elsewhere."
           },
           "visibility": {
             "enum": [
@@ -12319,6 +12454,14 @@
             "minimum": 0,
             "title": "Expected Metadata Revision",
             "type": "integer"
+          },
+          "name": {
+            "default": null,
+            "title": "Name",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "visibility": {
             "enum": [
@@ -15530,7 +15673,6 @@
             "type": "string"
           },
           "name": {
-            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
@@ -17511,6 +17653,19 @@
             "type": "boolean",
             "title": "Can Edit"
           },
+          "can_delete": {
+            "type": "boolean",
+            "title": "Can Delete",
+            "description": "Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group)."
+          },
+          "last_edited_by_name": {
+            "title": "Last Edited By Name",
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone."
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -17568,6 +17723,8 @@
           "current_version_seq",
           "member_count",
           "can_edit",
+          "can_delete",
+          "last_edited_by_name",
           "created_at",
           "updated_at",
           "members",
@@ -17651,6 +17808,44 @@
         ],
         "title": "TeamMemberInput"
       },
+      "TeamFaceMember": {
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id",
+            "description": "Null once the Agent itself is deleted; the Team version keeps its snapshot."
+          },
+          "material_theme": {
+            "title": "Material Theme",
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "avatar_config.material_theme of the Team version's member snapshot."
+          },
+          "is_leader": {
+            "type": "boolean",
+            "title": "Is Leader"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "agent_id",
+          "material_theme",
+          "is_leader"
+        ],
+        "title": "TeamFaceMember",
+        "description": "One face on a Team card: the member's Agent and its frozen avatar theme."
+      },
       "TeamSummary": {
         "properties": {
           "id": {
@@ -17728,6 +17923,33 @@
           "can_edit": {
             "type": "boolean",
             "title": "Can Edit"
+          },
+          "can_delete": {
+            "type": "boolean",
+            "title": "Can Delete",
+            "description": "Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group)."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "last_edited_by_name": {
+            "title": "Last Edited By Name",
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone."
+          },
+          "members": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "$ref": "#/components/schemas/TeamFaceMember"
+            },
+            "title": "Members",
+            "description": "Up to four members of the current version, Leader first, then by position. Read-only card faces; TeamDetail.members keeps the full list."
           }
         },
         "additionalProperties": false,
@@ -17745,7 +17967,11 @@
           "current_version_id",
           "current_version_seq",
           "member_count",
-          "can_edit"
+          "can_edit",
+          "can_delete",
+          "updated_at",
+          "last_edited_by_name",
+          "members"
         ],
         "title": "TeamSummary"
       },

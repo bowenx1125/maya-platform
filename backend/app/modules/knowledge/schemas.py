@@ -9,6 +9,13 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
+class AffectedAgentDTO(BaseModel):
+    """An Agent that gets a new version when a RAG file or Voice is deleted."""
+
+    agent_id: UUID
+    name: str
+
+
 class KnowledgeDocument(BaseModel):
     id: UUID
     group_id: UUID | None
@@ -30,6 +37,18 @@ class KnowledgeDocument(BaseModel):
     workspace_state: Literal["active", "hidden"]
     safe_error_code: str | None = None
     created_at: datetime
+    # The uploader. owner_username is filled on the two library list endpoints.
+    owner_user_id: UUID | None = None
+    owner_username: str | None = None
+    # Filled on the two library list endpoints only (null elsewhere): live Agents
+    # whose current version uses this file, limited to Agents the caller may use.
+    used_by_agents: list[AffectedAgentDTO] | None = None
+    # Library list endpoints only (null elsewhere): who created the latest
+    # content version and when. Covers create and replace; rename and reindex
+    # do not update it.
+    last_edited_by_user_id: UUID | None = None
+    last_edited_by_username: str | None = None
+    last_edited_at: datetime | None = None
 
 
 class UpdateKnowledgeDocumentVisibility(BaseModel):
@@ -42,10 +61,3 @@ class JobStatus(BaseModel):
     kind: str
     status: Literal["pending", "running", "completed", "failed", "interrupted"]
     safe_error_code: str | None = None
-
-
-class AffectedAgentDTO(BaseModel):
-    """An Agent that gets a new version when a RAG file or Voice is deleted."""
-
-    agent_id: UUID
-    name: str
