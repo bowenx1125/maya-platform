@@ -2572,18 +2572,12 @@ function BrainformWorkspaceBody({
                     }
                     status={
                       status ? (
-                        <p
-                          className={`${album.stk} ${album.warn}`}
-                          role="status"
-                        >
+                        <p className={album.stkWarn} role="status">
                           <i className={album.spin} aria-hidden="true" />
                           {status}
                         </p>
                       ) : failed ? (
-                        <p
-                          className={`${album.stk} ${album.bad}`}
-                          role="status"
-                        >
+                        <p className={album.stkBad} role="status">
                           {ragIndexFailureReason(document, t)}
                         </p>
                       ) : null
@@ -2656,7 +2650,7 @@ function BrainformWorkspaceBody({
             </ul>
           ) : (
             <div className={album.grid}>
-              <div className={`${album.ghost} ${album.ghostFirst}`}>
+              <div className={album.ghostFirst}>
                 <svg
                   width="64"
                   height="64"
@@ -3092,8 +3086,8 @@ function BrainformWorkspaceBody({
       {ragPage && pane?.kind.startsWith("rag") ? (
         <div className={album.spread}>
           {pane.kind === "rag-view" ? (
-            <div className={`${album.card} ${album.big}`}>
-              <div className={album.art}>
+            <div className={album.cardBig}>
+              <div className={album.artBig}>
                 <span className={album.no} aria-hidden="true">
                   #
                   {String(
@@ -3105,7 +3099,7 @@ function BrainformWorkspaceBody({
                     ) + 1,
                   ).padStart(2, "0")}
                 </span>
-                <span className={album.ty} aria-hidden="true">
+                <span className={album.tyBig} aria-hidden="true">
                   {fileExt(
                     ragDocuments.find((item) => item.id === pane.documentId)
                       ?.source_filename ?? pane.filename,
@@ -3114,7 +3108,7 @@ function BrainformWorkspaceBody({
               </div>
               <div className={album.plate}>
                 <span className={album.eb}>RAG</span>
-                <h2 className={album.nm} id="brainform-editor-heading">
+                <h2 className={album.nmBig} id="brainform-editor-heading">
                   {pane.filename}
                 </h2>
               </div>
@@ -3201,7 +3195,7 @@ function BrainformWorkspaceBody({
                   }
                 />
                 {newRag.file ? (
-                  <p className={`${album.stk} ${album.warn}`} role="status">
+                  <p className={album.stkWarn} role="status">
                     {t("brainformRagFileStaged", {
                       filename: newRag.file.name,
                     })}{" "}
@@ -3242,7 +3236,7 @@ function BrainformWorkspaceBody({
                   }}
                 />
                 {selectedRagFile ? (
-                  <p className={`${album.stk} ${album.warn}`} role="status">
+                  <p className={album.stkWarn} role="status">
                     {t("brainformRagFileStaged", {
                       filename: selectedRagFile.name,
                     })}{" "}
