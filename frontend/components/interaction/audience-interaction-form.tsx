@@ -24,9 +24,12 @@ import type { AudienceInteractionApi } from "./types";
  * Approved 02-audience family A, "cabinet controller": the phone is the pad
  * for the Student Live cabinet. Every decoration is aria-hidden, and the root
  * stops all animation under prefers-reduced-motion.
+ * geometricPrecision: the self-hosted Lexend is hinted, so Chrome rounds each
+ * glyph advance to whole pixels at small sizes (+23px on the 11px eyebrow);
+ * this keeps fractional advances, as in the approved mock.
  */
 const PAGE =
-  "min-h-dvh bg-arc-bg bg-[linear-gradient(#00000010_1px,transparent_1px),linear-gradient(90deg,#00000010_1px,transparent_1px)] bg-size-[32px_32px] font-body leading-[normal] tracking-normal text-ink motion-reduce:[&_*]:animate-none motion-reduce:[&_*]:transition-none";
+  "min-h-dvh bg-arc-bg bg-[linear-gradient(#00000010_1px,transparent_1px),linear-gradient(90deg,#00000010_1px,transparent_1px)] bg-size-[32px_32px] font-body leading-[normal] tracking-normal [text-rendering:geometricPrecision] text-ink motion-reduce:[&_*]:animate-none motion-reduce:[&_*]:transition-none";
 const WRAP =
   "mx-auto max-w-[1180px] px-3.5 pt-[22px] pb-10 min-[900px]:px-10 min-[900px]:pt-10 min-[900px]:pb-[60px]";
 const PAD =
