@@ -81,10 +81,8 @@ function DeleteX({
         event.stopPropagation();
         onClick();
       }}
-      className={cn(
-        buttonVariants({ variant: "neutral", size: "icon" }),
-        "absolute -top-4 -right-4 z-[3] m-0 min-h-0 rounded-[10px] p-0 text-ink hover:bg-err hover:text-white focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main disabled:cursor-not-allowed",
-      )}
+      // The shared round × (the notice / mascot bubble close), card-sized.
+      className="absolute -top-3 -right-3 z-[3] m-0 inline-grid size-8 min-h-0 cursor-pointer place-items-center rounded-full border-[3px] border-border bg-surface p-0 text-ink shadow-[2px_2px_0_#111] hover:bg-err hover:text-white focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main disabled:cursor-not-allowed disabled:opacity-50"
     >
       <IconClose size={14} />
     </button>
