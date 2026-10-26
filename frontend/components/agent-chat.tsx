@@ -607,13 +607,6 @@ function AgentChatScope({
     if (code === "assessment_executor_write_required")
       return t("teamSummaryNotSaved");
     if (code === "team_response_truncated") return t("teamReplyCutOff");
-    if (code === "provider_confirmation_required") {
-      return t(
-        role === "teacher"
-          ? "teamProviderConfirmationTeacher"
-          : "teamProviderConfirmationStudent",
-      );
-    }
     if (
       code === "authorization_revoked" ||
       code === "provider_authorization_revoked" ||

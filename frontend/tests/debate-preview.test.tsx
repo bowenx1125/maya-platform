@@ -189,7 +189,7 @@ describe("teacher debate preview", () => {
     },
   );
 
-  it.each(["provider_not_sent", "provider_confirmation_required"])(
+  it.each(["provider_not_sent", "provider_confirmation_unavailable"])(
     "offers Retry on text-fallback and hard-failed turns: %s",
     (code) => {
       const onRetry = vi.fn();

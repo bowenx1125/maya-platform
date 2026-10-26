@@ -3213,7 +3213,7 @@ function BrainformWorkspaceBody({
                             >
                               {generationErrorCode &&
                               generationErrorCode !==
-                                "provider_confirmation_required"
+                                "provider_confirmation_unavailable"
                                 ? t("brainformGenerationFailedReason", {
                                     reason: generationErrorCode.replaceAll(
                                       "_",
