@@ -461,6 +461,12 @@ div.dismissible-alert[role="alert"] {
   text-align: left;
 }
 
+/* U3 tray (audience mocks .bub): a tray bubble has no extra line padding. */
+.notice-tray p.dismissible-alert[role="alert"],
+.notice-tray div.dismissible-alert[role="alert"] {
+  padding: 12px 46px 12px 14px;
+}
+
 p.dismissible-alert[role="alert"] > .alert-dismiss,
 div.dismissible-alert[role="alert"] > .alert-dismiss {
   position: absolute;
