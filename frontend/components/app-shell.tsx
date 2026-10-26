@@ -190,7 +190,7 @@ export function AppShell({
   // The Agents page names its group in ?group_id.
   const routeGroupId =
     groupRouteId ??
-    (pathname === "/student/agents"
+    (pathname === "/student/agents" || pathname === "/student/teams"
       ? (new URLSearchParams(locationSearch).get("group_id") ?? undefined)
       : undefined);
   const [agentRoute, agentRouteKind, agentRouteId] =
@@ -443,6 +443,17 @@ export function AppShell({
       : groupId
         ? `/student/groups/${groupId}`
         : "/student#student-groups";
+  // The sidebar's Teams item opens the Teams page, like Agents.
+  const teamsHref = visit
+    ? `/student/teams?group_id=${visit}`
+    : teacherSurface
+      ? `/teacher/teams${routeGroupId && !visitingGroup ? `?group_id=${encodeURIComponent(routeGroupId)}` : ""}`
+      : groupId
+        ? `/student/teams?group_id=${encodeURIComponent(groupId)}`
+        : "/student#student-groups";
+  // The Teams list, Create Team and Edit Team all light Teams.
+  const teamsPage =
+    pathname === "/student/teams" || pathname === "/teacher/teams";
   // The sidebar's Agents item opens the Agents page.
   const agentsHref = visit
     ? `/student/agents?group_id=${visit}`
@@ -626,7 +637,7 @@ export function AppShell({
         },
         {
           key: "teams",
-          href: studyformHref,
+          href: teamsHref,
           label: t("sidebarTeams"),
           icon: "team",
         },
@@ -708,10 +719,18 @@ export function AppShell({
     },
   ];
   // The pink pill marks the one row for the current page; that row carries
-  // aria-current. litSidebarKey prefers the most specific match.
+  // aria-current. litSidebarKey prefers the most specific match. Teams lights
+  // only on the Teams page; the Studyform grid itself lights no row (owner
+  // decision 2026-10-26).
+  const onStudyformGrid =
+    !teamsPage && pathname === studyformHref.split(/[?#]/, 1)[0];
   const litKey = agentsArea
     ? "studyform:agents"
-    : litSidebarKey(groups, pathname, activeHref, studentVoicesHref);
+    : teamsPage
+      ? "studyform:teams"
+      : onStudyformGrid
+        ? undefined
+        : litSidebarKey(groups, pathname, activeHref, studentVoicesHref);
   const pill = (
     <ViewTransition name="nav-active" share="nav-pill" default="none">
       <span
@@ -744,7 +763,10 @@ export function AppShell({
     : collapsed
       ? t("sidebarExpand")
       : t("sidebarCollapse");
-  const mayaformLit = !agentsArea && activeHref === home;
+  // The Mayaform pill lights on home only, not on pages nested under it.
+  const teamsArea =
+    pathname === "/student/teams" || pathname === "/teacher/teams";
+  const mayaformLit = !agentsArea && !teamsArea && activeHref === home;
 
   function renderItem(group: SidebarGroup, item: SidebarItem, index: number) {
     const lit = litKey === `${group.key}:${item.key}`;
@@ -820,7 +842,7 @@ export function AppShell({
   return (
     <WorkspaceActionsContext.Provider value={actionRegistry}>
       <div
-        className={`grid min-h-dvh max-[900px]:grid-cols-1 ${pathname === "/student" || pathname === "/teacher" || pathname === "/student/live" || agentsArea ? "bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px]" : ""} ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[220px_minmax(0,1fr)]"}`}
+        className={`grid min-h-dvh max-[900px]:grid-cols-1 ${pathname === "/student" || pathname === "/teacher" || pathname === "/student/live" || agentsArea || teamsPage ? "bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px]" : ""} ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[220px_minmax(0,1fr)]"}`}
       >
         <div className="sticky top-0 z-30 hidden h-[50px] items-center justify-center border-b-[3px] border-border bg-sidebar px-3 max-[900px]:flex">
           <button
