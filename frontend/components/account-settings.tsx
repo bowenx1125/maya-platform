@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import { cachedCall, requestCacheIdentity } from "../lib/request-cache";
+import { PlatformApiError } from "../lib/api/platform";
 import { useT } from "../lib/i18n";
 import { useSession } from "./session-provider";
 import { ErrorNotice, SectionCard, StickerBadge } from "./ui";
@@ -226,6 +227,13 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
     }
   }
 
+  // U3: a wrong current password is a field error on that field, not the
+  // server "!".
+  const wrongCurrent =
+    !mismatch &&
+    error instanceof PlatformApiError &&
+    error.code === "password_incorrect";
+
   if (!user) return null;
 
   return (
@@ -237,7 +245,7 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
         <ErrorNotice
           id={mismatch ? "password-field-error" : undefined}
           error={error}
-          badge={mismatch ? 1 : undefined}
+          badge={mismatch || wrongCurrent ? 1 : undefined}
         />
       ) : null}
       <div className="grid grid-cols-2 max-[640px]:grid-cols-1">
@@ -379,17 +387,21 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
           <h3 className={HEADING}>{t("changePassword")}</h3>
           <label className={LABEL}>
             <span>{t("currentPassword")}</span>
-            <input
-              className={FIELD}
-              type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              minLength={5}
-              maxLength={128}
-              required
-              disabled={busy !== null}
-              onChange={(event) => setCurrentPassword(event.target.value)}
-            />
+            <span className="relative block">
+              {wrongCurrent ? <StickerBadge n={1} /> : null}
+              <input
+                aria-invalid={wrongCurrent || undefined}
+                className={`${FIELD} aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!`}
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                minLength={5}
+                maxLength={128}
+                required
+                disabled={busy !== null}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+              />
+            </span>
           </label>
           <label className={LABEL}>
             <span>{t("newPassword")}</span>
@@ -405,22 +417,24 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
               onChange={(event) => setNewPassword(event.target.value)}
             />
           </label>
-          <label className={`relative ${LABEL}`}>
-            {mismatch ? <StickerBadge n={1} /> : null}
+          <label className={LABEL}>
             <span>{t("registerConfirmPassword")}</span>
-            <input
-              aria-invalid={mismatch || undefined}
-              aria-describedby={mismatch ? "password-field-error" : undefined}
-              className={`${FIELD} aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!`}
-              type="password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              minLength={5}
-              maxLength={128}
-              required
-              disabled={busy !== null}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-            />
+            <span className="relative block">
+              {mismatch ? <StickerBadge n={1} /> : null}
+              <input
+                aria-invalid={mismatch || undefined}
+                aria-describedby={mismatch ? "password-field-error" : undefined}
+                className={`${FIELD} aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!`}
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                minLength={5}
+                maxLength={128}
+                required
+                disabled={busy !== null}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+              />
+            </span>
           </label>
           <div className="flex min-h-[30px] items-center gap-3">
             <button

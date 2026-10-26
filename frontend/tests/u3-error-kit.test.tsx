@@ -151,15 +151,52 @@ describe("U3 file errors", () => {
     expect(line.querySelector('[data-sticker="file"]')).toBeTruthy();
     expect(line.querySelector('[data-sticker="server"]')).toBeNull();
   });
-  it("puts the file sticker on the filename field only when asked", () => {
+  it("numbers the filename field and its error line alike", () => {
     const { rerender, container } = render(
       <KnowledgeFilenameField value="a.md" onChange={() => {}} />,
     );
-    expect(container.querySelector('[data-sticker="file"]')).toBeNull();
+    expect(container.querySelector("[data-sticker]")).toBeNull();
     rerender(
       <KnowledgeFilenameField value="a.md" onChange={() => {}} fileError />,
     );
-    expect(container.querySelector('[data-sticker="file"]')).toBeTruthy();
+    const onField = container.querySelector('[data-sticker="field"]');
+    expect(onField?.getAttribute("data-n")).toBe("1");
+    expect(container.querySelector('[data-sticker="file"]')).toBeNull();
     expect(screen.getByRole("textbox").getAttribute("aria-invalid")).toBeNull();
+    render(<ErrorNotice error={new Error("bad name")} badge={1} />);
+    const line = screen.getByRole("alert");
+    expect(
+      line.querySelector('[data-sticker="field"]')?.getAttribute("data-n"),
+    ).toBe("1");
+    expect(line.querySelector('[data-sticker="server"]')).toBeNull();
+  });
+});
+
+describe("U3 chat server errors", () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    document.querySelector(".notice-tray")?.remove();
+  });
+  it("folds a transient server error after 6 s even across re-renders", () => {
+    vi.useFakeTimers();
+    const error = new Error("send failed");
+    const { rerender } = render(
+      <ErrorNotice error={error} transient onRetry={() => {}} />,
+    );
+    const alert = screen.getByRole("alert");
+    expect(alert.querySelector('[data-sticker="server"]')).toBeTruthy();
+    act(() => {
+      vi.advanceTimersByTime(TRANSIENT_FOLD_MS / 2);
+    });
+    rerender(<ErrorNotice error={error} transient onRetry={() => {}} />);
+    act(() => {
+      vi.advanceTimersByTime(TRANSIENT_FOLD_MS / 2);
+    });
+    expect(alert.className.split(" ")).toContain("hidden");
+    const badge = screen.getByRole("button", { name: "Show the message" });
+    expect(badge.textContent).toBe("!");
+    fireEvent.click(badge);
+    expect(alert.className.split(" ")).not.toContain("hidden");
   });
 });
