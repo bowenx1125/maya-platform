@@ -207,15 +207,22 @@ def test_stream_worker_handoff_rechecks_the_request_session_for_every_member(
         assert row.active_request_id is None
         assert [result.participant_id for result in results] == member_ids
         if session_change == "none":
-            assert [result.state for result in results] == ["failed"] * 4
-            assert [result.safe_error_code for result in results] == [
-                "provider_confirmation_required"
-            ] * 4
+            # Disclosures are always auto-confirmed, so every member is
+            # dispatched instead of parking on a teacher confirmation.
+            assert all(
+                result.safe_error_code != "provider_confirmation_required" for result in results
+            )
+            assert [result.state for result in results] == ["acceptance_unknown"] * 4
             assert selected_members == member_ids
         else:
             assert [result.state for result in results] == ["failed"] * 4
             assert [result.safe_error_code for result in results] == ["not_found"] * 4
             assert selected_members == []
+        if session_change == "none":
+            # Each member reached the Provider ledger (the test transport
+            # refuses the send, so the attempts stay acceptance_unknown).
+            assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 4
+            return
         assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
         assert (
             db.scalar(select(func.coalesce(func.sum(ProviderOperation.charged_request_count), 0)))

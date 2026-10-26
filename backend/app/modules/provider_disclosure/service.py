@@ -1043,7 +1043,7 @@ class ProviderDisclosureService:
             confirmation, policy, manifest, revision
         ):
             raise ProviderDisclosureError(
-                "provider_confirmation_required",
+                "provider_confirmation_unavailable",
                 "Confirm the exact provider disclosure before any external request.",
             )
         try:

@@ -154,18 +154,13 @@ def confirm_manifest(
             and turn_id is not None
         ):
             raise PlatformError(
-                "provider_confirmation_required",
-                "A current Embedding purpose grant is required.",
+                "provider_confirmation_unavailable",
+                "The Embedding query confirmation could not be recorded.",
                 409,
                 {"manifest_hash": manifest.manifest_hash},
             )
-        if not standing_consent_enabled(settings):
-            raise PlatformError(
-                "provider_confirmation_required",
-                "The teacher must confirm this disclosure.",
-                409,
-                {"manifest_hash": manifest.manifest_hash},
-            )
+        # Provider disclosures are always auto-confirmed: the exact
+        # confirmation row below is the same one standing consent wrote.
         repository.save_export_confirmation(
             manifest_id,
             confirm_export_manifest(
@@ -563,7 +558,7 @@ def real_reply(
             confirmation = repository.get_export_confirmation(manifest.manifest_hash)
             if confirmation is None:
                 raise PlatformError(
-                    "provider_confirmation_required", "Confirmation is required.", 409
+                    "provider_confirmation_unavailable", "Confirmation could not be recorded.", 409
                 )
             # Chat content and tool schemas are educational text. Authorization
             # headers carry credentials separately from this exact request body.
@@ -586,7 +581,7 @@ def real_reply(
                 field_classes=field_classes,
             ):
                 raise PlatformError(
-                    "provider_confirmation_required",
+                    "provider_authorization_revoked",
                     "The Provider authorization is no longer current.",
                     409,
                 )

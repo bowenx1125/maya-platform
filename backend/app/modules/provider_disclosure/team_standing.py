@@ -939,7 +939,7 @@ def _authorize_revoked_assessment_dispatch(
     )
     if standing_grant is None:
         raise PlatformError(
-            "provider_confirmation_required",
+            "provider_authorization_revoked",
             "The published Team's current Provider authorization is unavailable.",
             409,
         )
@@ -1061,7 +1061,7 @@ def authorize_team_dispatch(
                 )
             if standing_grant is None:
                 raise PlatformError(
-                    "provider_confirmation_required",
+                    "provider_authorization_revoked",
                     "The published Team's current Provider authorization is unavailable.",
                     409,
                 )

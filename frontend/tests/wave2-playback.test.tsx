@@ -384,7 +384,7 @@ describe("Wave 2 M12 playback stage", () => {
     await act(async () => {
       socket.emit("message", {
         ...envelope("error", 1, {
-          code: "provider_confirmation_required",
+          code: "provider_confirmation_unavailable",
           message: "Teacher confirmation is required.",
           recoverable: true,
         }),

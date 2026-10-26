@@ -604,6 +604,13 @@ def _target_asset_heads(db: Session, set_row: KnowledgeSet) -> str:
     return _canonical_json(heads)
 
 
+# ``provider_confirmation_required`` is only read for runs parked before
+# disclosures were always auto-confirmed; new runs record the unavailable code.
+_UNCONFIRMED_BLOCK_CODES = frozenset(
+    {"provider_confirmation_required", "provider_confirmation_unavailable"}
+)
+
+
 def _resume_unconfirmed_blocked_generation(
     db: Session,
     run: KnowledgeGenerationRun,
@@ -622,9 +629,9 @@ def _resume_unconfirmed_blocked_generation(
         job is None
         or job.operation != GENERATION_OPERATION
         or job.state != "failed"
-        or job.safe_error_code != "provider_confirmation_required"
+        or job.safe_error_code not in _UNCONFIRMED_BLOCK_CODES
         or run.state != "blocked"
-        or run.safe_error_code != "provider_confirmation_required"
+        or run.safe_error_code not in _UNCONFIRMED_BLOCK_CODES
         or run.owner_user_id != owner_user_id
         or run.agent_id != agent.id
         or run.course_id != agent.course_id
@@ -1028,7 +1035,7 @@ def enqueue_generation_for_existing_set(
                 KnowledgeGenerationRun.knowledge_set_id == set_id,
                 KnowledgeGenerationRun.owner_user_id == owner_user_id,
                 KnowledgeGenerationRun.state == "blocked",
-                KnowledgeGenerationRun.safe_error_code == "provider_confirmation_required",
+                KnowledgeGenerationRun.safe_error_code.in_(_UNCONFIRMED_BLOCK_CODES),
             )
             .order_by(KnowledgeGenerationRun.created_at.desc(), KnowledgeGenerationRun.id.desc())
             .limit(1)

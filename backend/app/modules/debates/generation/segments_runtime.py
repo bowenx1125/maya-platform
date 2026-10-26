@@ -123,7 +123,7 @@ class SegmentPreparedAttempt:
 class SegmentRunOutcome:
     status: Literal[
         "succeeded",
-        "provider_confirmation_required",
+        "provider_confirmation_unavailable",
         "not_sent",
         "acceptance_unknown",
         "failed",
@@ -592,7 +592,7 @@ class SegmentLLMRuntime:
     ) -> SegmentRunOutcome:
         if not self._confirmed(prepared, confirmed):
             return SegmentRunOutcome(
-                "provider_confirmation_required",
+                "provider_confirmation_unavailable",
                 attempts=(
                     SegmentAttempt(
                         prepared.attempt_no,
@@ -600,12 +600,12 @@ class SegmentLLMRuntime:
                         prepared.operation_id,
                         False,
                         "none",
-                        "provider_confirmation_required",
+                        "provider_confirmation_unavailable",
                     ),
                 ),
                 operation=prepared.operation,
                 retry_allowed=True,
-                safe_error_code="provider_confirmation_required",
+                safe_error_code="provider_confirmation_unavailable",
             )
         current = prepared
         traces: list[SegmentAttempt] = []

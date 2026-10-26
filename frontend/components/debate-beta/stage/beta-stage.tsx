@@ -90,7 +90,7 @@ function atFinalBoundary(
 }
 
 type ProviderGateState = {
-  code: "provider_confirmation_required" | "provider_not_sent";
+  code: "provider_confirmation_unavailable" | "provider_not_sent";
   loading: boolean;
   value: ProviderDataCallManifestListResponse | null;
   error: string | null;
@@ -2720,7 +2720,7 @@ export function BetaDebateStage({
               : labelsRef.current.retryReason,
           );
           if (
-            payload.code === "provider_confirmation_required" ||
+            payload.code === "provider_confirmation_unavailable" ||
             payload.code === "provider_not_sent"
           ) {
             const code = payload.code;

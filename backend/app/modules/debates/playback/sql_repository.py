@@ -567,7 +567,8 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "SELECT DISTINCT turn_id FROM jobs "
                         "WHERE turn_id IS NOT NULL AND state IN ('pending','running') "
                         "AND safe_error_code IN "
-                        "('provider_confirmation_required','provider_not_sent',"
+                        "('provider_confirmation_required','provider_confirmation_unavailable',"
+                        "'provider_not_sent',"
                         "'acceptance_unknown')"
                     )
                 ).all()
@@ -3525,6 +3526,7 @@ class SqlPlaybackRepository(PlaybackRepository):
         }
         retry_codes = {
             "provider_confirmation_required",
+            "provider_confirmation_unavailable",
             "provider_not_sent",
             "turn_generation_failed",
             _PREPARATION_TIMEOUT_CODE,
@@ -3683,6 +3685,7 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if claim_token is None or code not in {
             "provider_confirmation_required",
+            "provider_confirmation_unavailable",
             "provider_not_sent",
             "acceptance_unknown",
             "tts_timeout",

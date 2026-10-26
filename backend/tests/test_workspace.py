@@ -261,116 +261,6 @@ def test_real_chat_keeps_decimal_budget_stable_across_messages(
             assert "max_tokens" not in json.loads(stage.request_json)
 
 
-def test_exact_student_chat_confirmation_does_not_expand_into_a_course_grant(
-    workspace: Any, monkeypatch: Any
-) -> None:
-    app, database, client = workspace
-    adapter = _adapter(None)
-    policy = replace(_valid_policy(), endpoint=adapter.config.resolved_endpoint)
-    ProviderRepository(database).save_policy_snapshot(policy)
-    app.state.settings = app.state.settings.model_copy(
-        update={
-            "llm_provider": "dashscope",
-            "llm_provider_policy_hash": policy.policy_hash,
-            "demo_auto_confirm_provider": False,
-        }
-    )
-    monkeypatch.setattr("app.modules.workspace.chat_provider.llm_provider", lambda _: adapter)
-    monkeypatch.setattr("app.modules.workspace.chat.retrieve_sources", lambda *a, **kw: [])
-    transport = Mock(
-        return_value=Response(
-            200,
-            json={
-                "choices": [
-                    {
-                        "message": {"role": "assistant", "content": "A considered reply"},
-                        "finish_reason": "stop",
-                    }
-                ],
-                "usage": None,
-            },
-        )
-    )
-    monkeypatch.setattr(
-        "app.modules.workspace.chat_provider.HttpxLLMTransport.post_bytes", transport
-    )
-
-    _, csrf = login(client, "bowen")
-    student_headers = {"X-CSRF-Token": csrf}
-    created = client.post(
-        "/api/v1/conversations",
-        headers=student_headers,
-        json={"version_id": BASELINE_VERSION_ID},
-    ).json()
-    conversation_url = f"/api/v1/conversations/{created['id']}"
-    first = post_message(
-        client,
-        f"{conversation_url}/messages",
-        headers=student_headers,
-        json={
-            "request_id": str(uuid4()),
-            "expected_revision": 0,
-            "message": "A private first question",
-        },
-    )
-    assert first.status_code == 200
-    assert first.json()["turns"][0]["safe_error_code"] == "provider_confirmation_required"
-    assert transport.call_count == 0
-    with database.session() as db:
-        manifest = db.scalar(
-            select(ProviderExportManifest).where(
-                ProviderExportManifest.scope_id == created["id"],
-                ProviderExportManifest.provider_operation == "llm_agent_chat",
-            )
-        )
-        assert manifest is not None
-        manifest_hash = manifest.manifest_hash
-        assert {item["field_class"] for item in json.loads(manifest.fields_json)} == {
-            "authorized_courseware_text",
-            "private_conversation_messages",
-            "teacher_agent_instructions",
-            "topic_and_platform_rules",
-        }
-
-    _, teacher_csrf = login(client)
-    teacher_headers = {"X-CSRF-Token": teacher_csrf}
-    disclosure = client.get(
-        "/api/v1/provider/data-call/disclosure",
-        headers=teacher_headers,
-        params={"manifest_hash": manifest_hash},
-    )
-    assert disclosure.status_code == 200
-    reviewed = disclosure.json()
-    assert "A private first question" not in disclosure.text
-    confirmed = client.post(
-        "/api/v1/provider/data-call/disclosure/confirm",
-        headers=teacher_headers,
-        json={
-            "policy_hash": policy.policy_hash,
-            "manifest_hash": manifest_hash,
-            "expected_revision": 1,
-        },
-    )
-    assert confirmed.status_code == 200, confirmed.text
-    confirmed_again = client.post(
-        "/api/v1/provider/data-call/disclosure/confirm",
-        headers=teacher_headers,
-        json={
-            "policy_hash": reviewed["policy_hash"],
-            "manifest_hash": manifest_hash,
-            "expected_revision": reviewed["confirmation_revision"],
-        },
-    )
-    assert confirmed_again.status_code == 200, confirmed_again.text
-    with database.session() as db:
-        grant = db.scalar(select(ChatProviderStandingGrant))
-        binding = db.get(ChatProviderConsentBinding, manifest_hash)
-        assert grant is None
-        assert binding is not None and binding.standing_grant_id is None
-        assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
-    assert transport.call_count == 0
-
-
 def test_static_course_chat_disclosure_creates_standing_grant_before_any_student_chat(
     workspace: Any, monkeypatch: Any
 ) -> None:
@@ -540,11 +430,8 @@ def test_operator_standing_consent_records_course_chat_grant_without_disclosure_
         bindings = db.scalar(select(func.count()).select_from(ChatProviderConsentBinding))
         operations = db.scalar(select(func.count()).select_from(ProviderOperation))
     assert sent.status_code == 200, sent.text
-    if not operator_consent:
-        assert sent.json()["turns"][0]["safe_error_code"] == "provider_confirmation_required"
-        assert transport.call_count == 0
-        assert (len(grants), bindings, operations) == (0, 0, 0)
-        return
+    # PROVIDER_STANDING_CONSENT is a no-op: the turn auto-confirms and writes
+    # the same standing grant, consent binding and Provider operation either way.
     assert sent.json()["turns"][0]["state"] == "ready"
     assert transport.call_count == 1
     assert [(grant.course_id, grant.confirmed_by_user_id) for grant in grants] == [
