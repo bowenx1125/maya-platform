@@ -29,16 +29,24 @@ export function PageAction({
   form,
   onClick,
   disabled,
+  busy,
   placement,
   className,
+  guide,
+  describedBy,
 }: {
   name: WorkspaceActionName;
   href?: string;
   form?: string;
   onClick?: MouseEventHandler<HTMLAnchorElement | HTMLButtonElement>;
   disabled?: boolean;
+  busy?: boolean;
   placement?: "page";
   className?: string;
+  /** data-ui-guide override (default workspace.<name>). */
+  guide?: string;
+  /** aria-describedby for the in-page button. */
+  describedBy?: string;
 }) {
   const registration = (
     <WorkspaceAction
@@ -47,7 +55,10 @@ export function PageAction({
       form={form}
       onClick={onClick}
       disabled={disabled}
+      busy={busy}
       placement={placement}
+      guide={guide}
+      describedBy={describedBy}
     />
   );
   if (placement !== "page") return registration;
@@ -57,21 +68,28 @@ export function PageAction({
     name === "done" ? "bg-[#FF4D8D]" : "bg-white",
     className,
   );
+  const faded = Boolean(disabled || busy);
   const content = (
     <>
-      <WorkspaceIcon name={name} size={16} />
+      {busy ? (
+        <span className="spinner" aria-hidden="true" />
+      ) : (
+        <WorkspaceIcon name={name} size={16} />
+      )}
       <span>{label}</span>
     </>
   );
+  const guideAttr = guide ?? `workspace.${name}`;
   return (
     <>
       {registration}
-      {href && !disabled ? (
+      {href && !faded ? (
         <Link
           className={classes}
           href={href}
           onClick={onClick}
-          data-ui-guide={`workspace.${name}`}
+          aria-describedby={describedBy}
+          data-ui-guide={guideAttr}
         >
           {content}
         </Link>
@@ -80,9 +98,11 @@ export function PageAction({
           className={classes}
           type={form ? "submit" : "button"}
           form={form}
-          disabled={disabled}
+          disabled={faded}
+          aria-busy={busy || undefined}
+          aria-describedby={describedBy}
           onClick={onClick}
-          data-ui-guide={`workspace.${name}`}
+          data-ui-guide={guideAttr}
         >
           {content}
         </button>

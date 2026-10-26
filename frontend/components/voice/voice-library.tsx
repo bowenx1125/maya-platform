@@ -31,7 +31,7 @@ import {
 import { IconClose, IconPlay, IconPlus, IconUpload } from "../quiet-icons";
 import { ModuleCard } from "../studyform-layout";
 import { WorkspaceIcon } from "../workspace-icon";
-import { WorkspaceAction } from "../workspace-actions";
+import { PageAction } from "../page-action";
 import { buttonVariants } from "../ui/button";
 import { AGENT_NEW_BUTTON, agentCard } from "../agent-chrome";
 import { cn } from "../../lib/utils";
@@ -1100,22 +1100,7 @@ export function VoiceLibrary({
         id={id}
         data-voice-album="v2"
         data-voice-create="p2-tab"
-        className="-mt-8"
       >
-        {/* Back / Done in the shared page header (icon + text). */}
-        <WorkspaceAction
-          name="back"
-          onClick={cancelCreate}
-          disabled={controlsDisabled}
-          guide="voice.cancelCreate"
-        />
-        <WorkspaceAction
-          name="done"
-          onClick={() => void submitEnrollment()}
-          disabled={!file || controlsDisabled || !canEnroll}
-          busy={busy}
-          describedBy="voice-sample-req voice-consent-text"
-        />
         <section className={voiceAlbum.alb} aria-labelledby={titleId}>
           <AlbumRings />
           <div className={voiceAlbum.top}>
@@ -1123,6 +1108,23 @@ export function VoiceLibrary({
               {t("voices")}
             </h2>
             <span className={voiceAlbum.tape} aria-hidden="true" />
+            <span className="flex-1" />
+            {/* Back / Done inside the album top row (same band as list New). */}
+            <PageAction
+              name="back"
+              placement="page"
+              onClick={cancelCreate}
+              disabled={controlsDisabled}
+              guide="voice.cancelCreate"
+            />
+            <PageAction
+              name="done"
+              placement="page"
+              onClick={() => void submitEnrollment()}
+              disabled={!file || controlsDisabled || !canEnroll}
+              busy={busy}
+              describedBy="voice-sample-req voice-consent-text"
+            />
           </div>
           {failure ? (
             <ErrorNotice
