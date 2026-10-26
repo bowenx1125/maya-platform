@@ -68,6 +68,7 @@ import {
   PageIntro,
   SectionCard,
   StatusBadge,
+  StickerBadge,
 } from "./ui";
 
 export function AgentOverview({ agentId }: { agentId: string }) {
@@ -1616,6 +1617,7 @@ export function AgentWorkbench({
             <Notice
               id="agent-submit-hint"
               tone="error"
+              badge={nameMissing ? 1 : undefined}
               onClose={() => {
                 const field = nameMissing ? nameField.current : null;
                 setSubmitHint("");
@@ -1651,7 +1653,8 @@ export function AgentWorkbench({
                   void publish();
                 }}
               >
-                <label>
+                <label className="relative">
+                  {nameMissing ? <StickerBadge n={1} /> : null}
                   <input
                     ref={nameField}
                     aria-label={t("agentName")}
