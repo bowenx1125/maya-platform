@@ -113,7 +113,7 @@ describe("sidebar groups", () => {
     expect(groupRows("Classroom")).toEqual(["Live"]);
     expect(
       nav().getByRole("link", { name: "Voices" }).getAttribute("href"),
-    ).toBe("/student/groups/group-a/voices");
+    ).toBe("/student/voices?group_id=group-a");
     expect(
       nav().getByRole("link", { name: "Chat with Team" }).getAttribute("href"),
     ).toBe("/student/chat");
@@ -139,7 +139,10 @@ describe("sidebar groups", () => {
     expect(
       nav().getByRole("link", { name: "Agents" }).getAttribute("href"),
     ).toBe("/teacher/agents");
-    for (const name of ["RAG", "Voices", "Knowledge"])
+    expect(
+      nav().getByRole("link", { name: "Voices" }).getAttribute("href"),
+    ).toBe("/teacher/voices");
+    for (const name of ["RAG", "Knowledge"])
       expect(nav().getByRole("link", { name }).getAttribute("href")).toBe(
         "/teacher/studyform",
       );

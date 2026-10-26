@@ -360,7 +360,9 @@ export function AppShell({
   // visit and removes that access.
   const visitPageGroupId =
     teacherSurface &&
-    (pathname === "/teacher/knowledge" || pathname === "/teacher/chat")
+    (pathname === "/teacher/knowledge" ||
+      pathname === "/teacher/voices" ||
+      pathname === "/teacher/chat")
       ? new URLSearchParams(locationSearch).get("group_id")
       : null;
   const visitPage = Boolean(
@@ -404,6 +406,7 @@ export function AppShell({
     // visit.
     const reading =
       window.location.pathname === "/teacher/knowledge" ||
+      window.location.pathname === "/teacher/voices" ||
       window.location.pathname === "/teacher/chat"
         ? new URLSearchParams(window.location.search).get("group_id")
         : null;
@@ -609,6 +612,13 @@ export function AppShell({
   const brainHref = visit ? `/teacher/knowledge?group_id=${visit}` : undefined;
   const chatHref = links.find((link) => link.icon === "chat")?.href ?? "";
   const brainItemHref = brainHref ?? studyformHref;
+  const voicesHref = visit
+    ? `/teacher/voices?group_id=${visit}`
+    : teacherSurface
+      ? "/teacher/voices"
+      : groupId
+        ? `/student/voices?group_id=${groupId}`
+        : "/student/voices";
   const groups: SidebarGroup[] = [
     {
       key: "studyform",
@@ -645,7 +655,7 @@ export function AppShell({
         { key: "rag", href: brainItemHref, label: t("rag"), icon: "file" },
         {
           key: "voices",
-          href: studentVoicesHref ?? brainItemHref,
+          href: voicesHref,
           label: t("voices"),
           icon: "mic",
         },
@@ -744,7 +754,10 @@ export function AppShell({
     : collapsed
       ? t("sidebarExpand")
       : t("sidebarCollapse");
-  const mayaformLit = !agentsArea && activeHref === home;
+  // The Voices page lights only its own row, as Agents does.
+  const voicesArea =
+    pathname === "/student/voices" || pathname === "/teacher/voices";
+  const mayaformLit = !agentsArea && !voicesArea && activeHref === home;
 
   function renderItem(group: SidebarGroup, item: SidebarItem, index: number) {
     const lit = litKey === `${group.key}:${item.key}`;
@@ -1131,6 +1144,8 @@ export function AppShell({
 const PAGE_ROW: Record<string, string> = {
   "/teacher/knowledge": "knowledge",
   "/student/knowledge": "knowledge",
+  "/teacher/voices": "voices",
+  "/student/voices": "voices",
 };
 
 /**
