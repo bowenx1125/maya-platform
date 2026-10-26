@@ -9,7 +9,12 @@ import {
   HomeHero,
   HomeStat,
 } from "./home/home-hero";
-import { AgentCard, agentMascot } from "./ui/agent-card";
+import {
+  AgentCard,
+  AgentsEmpty,
+  NewButton,
+  agentMascot,
+} from "./ui/agent-card";
 
 import {
   useCallback,
@@ -443,8 +448,9 @@ export function TeacherStudyformWorkspace({
               : t("noPersonalAgents")
           }
           action={
-            teacherCourseId ? (
-              <ModulePlus href="/teacher/agents/new" label={t("newAgent")} />
+            // With no Agents yet, New sits inside the empty card instead.
+            teacherCourseId && (personalAgents.length || ownedAgents.length) ? (
+              <NewButton href="/teacher/agents/new" label={t("newAgent")} />
             ) : null
           }
         >
@@ -497,7 +503,13 @@ export function TeacherStudyformWorkspace({
                 );
               })}
             </ModuleTiles>
-          ) : undefined}
+          ) : (
+            <AgentsEmpty
+              title={t("noPersonalAgents")}
+              newHref={teacherCourseId ? "/teacher/agents/new" : undefined}
+              newLabel={t("newAgent")}
+            />
+          )}
         </ModuleCard>
         <ModuleCard
           title={t("chatTargetTeams")}

@@ -6,7 +6,8 @@ import { useRef, useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { MascotFigure, MASCOT_IDS, type MascotId } from "../academy/mascots";
 import { FitTitle } from "../fit-title";
-import { IconClose } from "../quiet-icons";
+import { IconClose, IconPlus } from "../quiet-icons";
+import { buttonVariants } from "./button";
 
 /** Material theme of the Agent's avatar → the mascot on its card. */
 const THEME_MASCOT: Record<string, MascotId> = {
@@ -66,7 +67,10 @@ function DeleteX({
         event.stopPropagation();
         onClick();
       }}
-      className="absolute -top-3 -right-3 z-[3] m-0 inline-grid size-8 min-h-0 cursor-pointer place-items-center rounded-full border-[3px] border-border bg-surface p-0 text-ink shadow-[2px_2px_0_#111] hover:bg-err hover:text-white focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main disabled:cursor-not-allowed disabled:opacity-50"
+      className={cn(
+        buttonVariants({ variant: "neutral", size: "icon" }),
+        "absolute -top-4 -right-4 z-[3] m-0 min-h-0 rounded-[10px] p-0 text-ink hover:bg-err hover:text-white focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main disabled:cursor-not-allowed",
+      )}
     >
       <IconClose size={14} />
     </button>
@@ -332,7 +336,62 @@ export function AgentCard({
 }
 
 /** Sunburst behind the empty card's mascot. */
-function Sunburst() {
+/**
+ * E2 Spotlight empty state: an enlarged yellow card A on a sunburst holds the
+ * existing empty copy and "+ New"; two dashed card-A ghosts fan out behind.
+ */
+export function AgentsEmpty({
+  title,
+  newHref,
+  newLabel,
+}: {
+  title: string;
+  newHref?: string;
+  newLabel: string;
+  /** Kept for callers; E2 always shows two fanned ghosts. */
+  ghosts?: number;
+}) {
+  return (
+    <div className="relative isolate grid min-h-[360px] place-items-center overflow-hidden px-4 pt-8 pb-10 max-[680px]:min-h-[320px]">
+      <span
+        aria-hidden="true"
+        className="absolute bottom-0 left-1/2 -z-10 h-[150px] w-[300px] -translate-x-1/2 rounded-t-full bg-[#FFF3B0]"
+      />
+      <ul className="relative m-0 grid list-none place-items-center p-0">
+        <GhostSlot fan="left" />
+        <GhostSlot fan="right" />
+        <li className="relative z-[2] flex w-[188px] flex-col overflow-hidden rounded-[12px] border-[3px] border-border bg-surface font-body text-ink shadow-[6px_6px_0_#111] [grid-area:1/1]">
+          <p className="m-0 flex min-h-16 items-center border-b-[3px] border-border bg-[#FFE14D] px-3 font-display text-xl font-extrabold">
+            {title}
+          </p>
+          <div className="relative h-[160px] overflow-hidden border-b-[3px] border-border bg-[#FFE7A3]">
+            <EmptyRays />
+          </div>
+          <div className="grid min-h-[60px] place-items-center p-3">
+            {newHref ? (
+              <Link
+                href={newHref}
+                aria-label={newLabel}
+                data-tour="new"
+                data-tour-empty="true"
+                className={cn(
+                  buttonVariants({ variant: "default", size: "sm" }),
+                  "gap-1.5 font-display text-base font-extrabold no-underline",
+                )}
+              >
+                <IconPlus size={14} />
+                {newLabel}
+              </Link>
+            ) : null}
+          </div>
+        </li>
+      </ul>
+    </div>
+  );
+}
+
+/** Pink-and-yellow rays with a pale sun, behind the empty card's art. */
+function EmptyRays() {
   return (
     <svg
       viewBox="0 0 200 200"
@@ -340,115 +399,71 @@ function Sunburst() {
       aria-hidden="true"
       preserveAspectRatio="xMidYMid slice"
     >
-      {Array.from({ length: 16 }, (_, index) => (
+      {Array.from({ length: 18 }, (_, index) => (
         <path
           key={index}
-          d="M100 100 L92 -40 L108 -40 Z"
-          fill="#ffffff66"
-          transform={`rotate(${index * 22.5} 100 100)`}
+          d="M100 100 L93 -60 L107 -60 Z"
+          fill="#FFD6E5"
+          transform={`rotate(${index * 20} 100 100)`}
         />
       ))}
+      <circle cx="100" cy="100" r="34" fill="#ffffffaa" />
     </svg>
   );
 }
 
-/**
- * Canonical empty state: a lime card that says so and holds New, then dashed
- * ghost slots (with ghost ×) showing where the cards will go.
- */
-export function AgentsEmpty({
-  title,
-  newHref,
-  newLabel,
-  ghosts = 3,
-}: {
-  title: string;
-  newHref?: string;
-  newLabel: string;
-  ghosts?: number;
-}) {
-  return (
-    <ul className={AGENT_GRID_CLASS}>
-      <li className="relative flex min-h-[248px] flex-col rounded-[14px] border-[3px] border-border bg-studyform p-2 font-body text-ink shadow-[6px_6px_0_#111]">
-        <div className="flex flex-1 flex-col overflow-hidden rounded-[9px] border-[3px] border-border bg-studyform">
-          <p className="m-0 flex h-16 items-center border-b-[3px] border-border px-3 font-display text-xl font-extrabold">
-            {title}
-          </p>
-          <div className="relative grid min-h-[200px] flex-1 place-items-center p-5">
-            <Sunburst />
-            {newHref ? (
-              <Link
-                href={newHref}
-                aria-label={newLabel}
-                data-tour="new"
-                data-tour-empty="true"
-                className="relative inline-flex h-10 items-center rounded-arc-s border-[3px] border-border bg-main px-5 font-display text-base font-extrabold text-ink no-underline shadow-arc-s transition-transform hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-ink"
-              >
-                {newLabel}
-              </Link>
-            ) : null}
-          </div>
-        </div>
-      </li>
-      {Array.from({ length: ghosts }, (_, index) => (
-        <GhostSlot key={index} narrowHidden={index > 0} />
-      ))}
-    </ul>
-  );
-}
-
-/** A dashed placeholder card: grey skeleton of where an Agent will sit. */
-function GhostSlot({ narrowHidden }: { narrowHidden: boolean }) {
+/** A dashed card-A ghost fanned behind the spotlight card. */
+function GhostSlot({ fan }: { fan: "left" | "right" }) {
   return (
     <li
       aria-hidden="true"
       className={cn(
-        "relative flex min-h-[248px] flex-col rounded-[14px] border-[3px] border-dashed border-[#11111133] p-2",
-        narrowHidden && "max-[680px]:hidden",
+        "relative flex h-[200px] w-[150px] flex-col rounded-[12px] border-[3px] border-dashed border-[#11111133] bg-[#ffffffb3] p-1.5 [grid-area:1/1]",
+        fan === "left"
+          ? "-translate-x-[130px] -rotate-[8deg] max-[680px]:-translate-x-[70px]"
+          : "translate-x-[130px] rotate-[8deg] max-[680px]:translate-x-[70px]",
       )}
     >
-      <span className="flex flex-1 flex-col rounded-[9px] border-[3px] border-dashed border-[#11111155]">
-        <span className="flex h-16 items-center border-b-[3px] border-dashed border-[#11111133] px-3">
-          <span className="block h-3 w-3/5 rounded-full bg-[#0000000f]" />
+      <span className="flex flex-1 flex-col rounded-[8px] border-2 border-dashed border-[#11111144]">
+        <span className="flex h-10 items-center border-b-2 border-dashed border-[#11111133] px-2">
+          <span className="block h-2.5 w-3/5 rounded-full bg-[#0000000f]" />
         </span>
-        <span className="flex h-[150px] items-end justify-center border-b-[3px] border-dashed border-[#11111133]">
-          <span className="block h-[96px] w-[72px] rounded-t-full bg-[#0000000f]" />
+        <span className="flex flex-1 items-end justify-center border-b-2 border-dashed border-[#11111133]">
+          <span className="block h-[70px] w-[54px] rounded-t-full bg-[#0000000f]" />
         </span>
-        <span className="flex p-2.5">
-          <span className="inline-flex h-5 overflow-hidden rounded-md border-2 border-dashed border-[#11111133]">
-            <span className="w-11" />
-            <span className="w-14 border-l-2 border-dashed border-[#11111133] bg-[#0000000a]" />
-          </span>
-        </span>
-        <span className="mt-auto block border-t-2 border-dashed border-[#11111122] px-2.5 py-2">
+        <span className="block px-2 py-2">
           <span className="block h-2 w-[70%] rounded-full bg-[#0000000f]" />
         </span>
       </span>
-      <span className="absolute -top-3 -right-3 size-8 rounded-full border-[3px] border-dashed border-[#11111133] bg-surface" />
+      <span className="absolute -top-3 -right-3 size-7 rounded-[8px] border-2 border-dashed border-[#11111133] bg-surface" />
     </li>
   );
 }
 
-/** Header New: the page's New button next to the page title. */
+/** Header New: the page's New button next to the page title ("+ New"). */
 export function NewButton({
   href,
   label,
   className,
+  tour = true,
 }: {
   href: string;
   label: string;
   className?: string;
+  tour?: boolean;
 }) {
   return (
     <Link
       href={href}
       aria-label={label}
-      data-tour="new"
+      data-tour={tour ? "new" : undefined}
       className={cn(
-        "inline-flex h-10 items-center rounded-full border-[3px] border-border bg-main px-5 font-display text-base font-extrabold text-ink no-underline shadow-arc-s transition-transform hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-ink",
+        buttonVariants({ variant: "default" }),
+        "gap-1.5 font-display text-base font-extrabold no-underline",
         className,
       )}
     >
+      <IconPlus size={16} />
       {label}
     </Link>
   );
