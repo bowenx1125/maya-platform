@@ -13,6 +13,7 @@ const teacher = [
     key: "brainform",
     items: [
       { key: "rag", href: "/teacher/studyform" },
+      { key: "record", href: "/teacher/record" },
       { key: "knowledge", href: "/teacher/studyform" },
     ],
   },
@@ -31,6 +32,12 @@ describe("litSidebarKey", () => {
     expect(
       litSidebarKey(teacher, "/teacher/knowledge", "/teacher/studyform"),
     ).toBe("brainform:knowledge");
+  });
+
+  it("lights Record on /teacher/record, not Teams or Knowledge", () => {
+    expect(
+      litSidebarKey(teacher, "/teacher/record", "/teacher/studyform"),
+    ).toBe("brainform:record");
   });
   it("lights the first row opening the active page", () => {
     expect(

@@ -463,6 +463,7 @@ export function BrainformWorkspace({
   embedded = false,
   ragPage = false,
   onPaneChange,
+  recordPage = false,
 }: {
   /** Rendered inside Studyform: RAG and Record join Studyform's grid. */
   embedded?: boolean;
@@ -470,6 +471,8 @@ export function BrainformWorkspace({
   ragPage?: boolean;
   /** Embedded only: a RAG or Record page opened (true) or closed (false). */
   onPaneChange?: (open: boolean) => void;
+  /** Dedicated /student/record and /teacher/record: clipboard only. */
+  recordPage?: boolean;
   role: BrainformRole;
   initialAgentId?: string;
   initialSetId?: string;
@@ -586,6 +589,7 @@ export function BrainformWorkspace({
       embedded={embedded}
       ragPage={ragPage}
       onPaneChange={onPaneChange}
+      recordPage={recordPage}
       identityScope={dataScope}
       ragDraftScope={JSON.stringify([
         user?.id ?? null,
@@ -629,12 +633,14 @@ function BrainformWorkspaceBody({
   embedded = false,
   ragPage = false,
   onPaneChange,
+  recordPage = false,
   identityScope,
   ragDraftScope,
 }: {
   embedded?: boolean;
   ragPage?: boolean;
   onPaneChange?: (open: boolean) => void;
+  recordPage?: boolean;
   role: BrainformRole;
   courseIds: string[];
   courseId: string;
@@ -2388,6 +2394,7 @@ function BrainformWorkspaceBody({
         />
       ) : null}
       {(pane || initialMode) &&
+      !(recordPage && pane?.kind === "record") &&
       !(
         ragPage &&
         (pane?.kind.startsWith("rag") ||
@@ -2678,6 +2685,7 @@ function BrainformWorkspaceBody({
         </section>
       ) : null}
       {!ragPage &&
+      !recordPage &&
       !pane &&
       !initialMode &&
       (!loading || embedded) &&
@@ -3060,10 +3068,29 @@ function BrainformWorkspaceBody({
         </div>
       ) : null}
 
+      {recordPage &&
+      !pane &&
+      !initialMode &&
+      (!loading || embedded) &&
+      !loadError &&
+      courseId ? (
+        <div className={styles.recordSlot} data-studyform-slot="record">
+          <RecordSection
+            scope={recordScope}
+            teams={assessmentRecord.teams}
+            loaded={assessmentRecord.loaded}
+            error={assessmentRecord.error}
+            onRetry={() => void assessmentRecord.reload()}
+            onOpen={(team) => setPane({ kind: "record", team })}
+          />
+        </div>
+      ) : null}
+
       {pane?.kind === "record" ? (
         <RecordDetail
           scope={recordScope}
           team={assessmentRecord.teams.find((team) => team.name === pane.team)}
+          onBack={recordPage ? closePane : undefined}
           onDelete={
             role === "teacher"
               ? async (attempt) => {
@@ -3080,222 +3107,224 @@ function BrainformWorkspaceBody({
 
       {ragPage && pane?.kind.startsWith("rag") ? (
         <>
-        <div className={album.top}>
-          <h2 id="brainform-rag-heading">RAG</h2>
-          <span className={album.tape} aria-hidden="true" />
-          <span className={album.sp} />
-          <PageAction
-            name="back"
-            placement="page"
-            onClick={closePane}
-            disabled={Boolean(busyKey)}
-          />
-          {pane.kind === "rag-new" ? (
+          <div className={album.top}>
+            <h2 id="brainform-rag-heading">RAG</h2>
+            <span className={album.tape} aria-hidden="true" />
+            <span className={album.sp} />
             <PageAction
-              name="done"
+              name="back"
               placement="page"
-              onClick={() => void saveNewRag()}
-              disabled={
-                Boolean(busyKey) ||
-                !newRag.name.trim() ||
-                (!newRag.file && !newRag.markdown.trim()) ||
-                (role !== "teacher" && !(initialGroupId ?? newRag.groupId))
-              }
+              onClick={closePane}
+              disabled={Boolean(busyKey)}
             />
-          ) : null}
-          {pane.kind === "rag-edit" && selectedDraft ? (
-            <PageAction
-              name="done"
-              placement="page"
-              onClick={() => {
-                const current = ragActionPane.current;
-                if (current?.kind !== "rag-edit") return;
-                const draft = ragActionDrafts.current[current.draftKey];
-                if (!draft) return;
-                saveRagAction.current(current.draftKey);
-              }}
-              disabled={Boolean(busyKey) || !selectedDraft.canEdit || !ragDirty}
-            />
-          ) : null}
-        </div>
-        <div className={album.spread}>
-          {pane.kind === "rag-view" ? (
-            <div className={album.cardBig}>
-              <div className={album.artBig}>
-                <span className={album.no} aria-hidden="true">
-                  #
-                  {String(
-                    Math.max(
-                      0,
-                      ragDocuments.findIndex(
-                        (item) => item.id === pane.documentId,
-                      ),
-                    ) + 1,
-                  ).padStart(2, "0")}
-                </span>
-                <span className={album.tyBig} aria-hidden="true">
-                  {fileExt(
-                    ragDocuments.find((item) => item.id === pane.documentId)
-                      ?.source_filename ?? pane.filename,
-                  )}
-                </span>
-              </div>
-              <div className={album.plate}>
-                <h2 className={album.nmBig} id="brainform-editor-heading">
-                  {pane.filename}
-                </h2>
-              </div>
-            </div>
-          ) : pane.kind === "rag-edit" && !selectedDraft?.canEdit ? (
-            <div />
-          ) : (
-            <label
-              className={album.pack}
-              aria-busy={
-                pane.kind === "rag-new"
-                  ? busyKey === "rag-new"
-                  : busyKey ===
-                    `import:${pane.kind === "rag-edit" ? pane.draftKey : ""}`
-              }
-            >
-              <span className={album.disc}>
-                <AlbumIcon name="upload" size={56} stroke={3} />
-              </span>
-              <span className={album.types} aria-hidden="true">
-                <i>MD</i>
-                <i>PDF</i>
-                <i>DOCX</i>
-              </span>
-              <input
-                className="sr-only"
-                type="file"
-                aria-label={
-                  pane.kind === "rag-new"
-                    ? t("uploadRag")
-                    : t("knowledgeImportFile")
+            {pane.kind === "rag-new" ? (
+              <PageAction
+                name="done"
+                placement="page"
+                onClick={() => void saveNewRag()}
+                disabled={
+                  Boolean(busyKey) ||
+                  !newRag.name.trim() ||
+                  (!newRag.file && !newRag.markdown.trim()) ||
+                  (role !== "teacher" && !(initialGroupId ?? newRag.groupId))
                 }
-                accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                disabled={Boolean(busyKey)}
-                onChange={(event) => {
-                  const file = event.currentTarget.files?.[0];
-                  event.currentTarget.value = "";
-                  if (!file) return;
-                  if (pane.kind === "rag-new") void importNewRag(file);
-                  else if (pane.kind === "rag-edit")
-                    void importRag(pane.draftKey, file);
-                }}
               />
-            </label>
-          )}
-          {pane.kind === "rag-view" ? (
-            <div className={album.page2}>
-              <ReportMarkdown>{pane.markdown}</ReportMarkdown>
-            </div>
-          ) : pane.kind === "rag-new" ? (
-            <div className={album.blank}>
-              <div className={album.in}>
-                <h2 className="sr-only" id="brainform-editor-heading">
-                  {t("brainformRagCreateTitle")}
-                </h2>
-                {role !== "teacher" &&
-                !initialGroupId &&
-                ragGroupIds.length > 1 ? (
-                  <label className={album.fl}>
-                    <span>{t("group")}</span>
-                    <select
-                      value={newRag.groupId}
-                      disabled={busyKey === "rag-new"}
-                      onChange={(event) => {
-                        const groupId = event.target.value;
-                        setNewRag((current) => ({ ...current, groupId }));
-                      }}
-                    >
-                      {groups.map((group) => (
-                        <option key={group.id} value={group.id}>
-                          {group.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-                <KnowledgeFilenameField
-                  label={t("ragFilename")}
-                  className={album.fl}
-                  value={newRag.name}
-                  disabled={busyKey === "rag-new"}
-                  onChange={(name) =>
-                    setNewRag((current) => ({ ...current, name }))
-                  }
-                />
-                {newRag.file ? (
-                  <p className={album.stkWarn} role="status">
-                    {t("brainformRagFileStaged", {
-                      filename: newRag.file.name,
-                    })}{" "}
-                    {t("brainformNotMarkdownEditor")}
-                  </p>
-                ) : (
-                  <KnowledgeMarkdownField
-                    className={album.fl}
-                    value={newRag.markdown}
-                    disabled={busyKey === "rag-new"}
-                    readOnly={busyKey === "rag-new"}
-                    rows={10}
-                    onChange={(markdown) =>
-                      setNewRag((current) => ({ ...current, markdown }))
-                    }
-                  />
-                )}
+            ) : null}
+            {pane.kind === "rag-edit" && selectedDraft ? (
+              <PageAction
+                name="done"
+                placement="page"
+                onClick={() => {
+                  const current = ragActionPane.current;
+                  if (current?.kind !== "rag-edit") return;
+                  const draft = ragActionDrafts.current[current.draftKey];
+                  if (!draft) return;
+                  saveRagAction.current(current.draftKey);
+                }}
+                disabled={
+                  Boolean(busyKey) || !selectedDraft.canEdit || !ragDirty
+                }
+              />
+            ) : null}
+          </div>
+          <div className={album.spread}>
+            {pane.kind === "rag-view" ? (
+              <div className={album.cardBig}>
+                <div className={album.artBig}>
+                  <span className={album.no} aria-hidden="true">
+                    #
+                    {String(
+                      Math.max(
+                        0,
+                        ragDocuments.findIndex(
+                          (item) => item.id === pane.documentId,
+                        ),
+                      ) + 1,
+                    ).padStart(2, "0")}
+                  </span>
+                  <span className={album.tyBig} aria-hidden="true">
+                    {fileExt(
+                      ragDocuments.find((item) => item.id === pane.documentId)
+                        ?.source_filename ?? pane.filename,
+                    )}
+                  </span>
+                </div>
+                <div className={album.plate}>
+                  <h2 className={album.nmBig} id="brainform-editor-heading">
+                    {pane.filename}
+                  </h2>
+                </div>
               </div>
-            </div>
-          ) : pane.kind === "rag-edit" && selectedDraft ? (
-            <div className={album.blank}>
-              <div className={album.in}>
-                <h2 className="sr-only" id="brainform-editor-heading">
-                  {selectedDraft.filename}
-                </h2>
-                <KnowledgeFilenameField
-                  label={t("ragFilename")}
-                  className={album.fl}
-                  value={selectedDraft.filename}
-                  disabled={busyKey === `import:${pane.draftKey}`}
-                  readOnly={!selectedDraft.canEdit}
-                  onChange={(filename) => {
-                    if (!selectedDraft.canEdit) return;
-                    updateRagDraft(pane.draftKey, {
-                      ...selectedDraft,
-                      filename,
-                    });
+            ) : pane.kind === "rag-edit" && !selectedDraft?.canEdit ? (
+              <div />
+            ) : (
+              <label
+                className={album.pack}
+                aria-busy={
+                  pane.kind === "rag-new"
+                    ? busyKey === "rag-new"
+                    : busyKey ===
+                      `import:${pane.kind === "rag-edit" ? pane.draftKey : ""}`
+                }
+              >
+                <span className={album.disc}>
+                  <AlbumIcon name="upload" size={56} stroke={3} />
+                </span>
+                <span className={album.types} aria-hidden="true">
+                  <i>MD</i>
+                  <i>PDF</i>
+                  <i>DOCX</i>
+                </span>
+                <input
+                  className="sr-only"
+                  type="file"
+                  aria-label={
+                    pane.kind === "rag-new"
+                      ? t("uploadRag")
+                      : t("knowledgeImportFile")
+                  }
+                  accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  disabled={Boolean(busyKey)}
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    event.currentTarget.value = "";
+                    if (!file) return;
+                    if (pane.kind === "rag-new") void importNewRag(file);
+                    else if (pane.kind === "rag-edit")
+                      void importRag(pane.draftKey, file);
                   }}
                 />
-                {selectedRagFile ? (
-                  <p className={album.stkWarn} role="status">
-                    {t("brainformRagFileStaged", {
-                      filename: selectedRagFile.name,
-                    })}{" "}
-                    {t("brainformNotMarkdownEditor")}
-                  </p>
-                ) : (
-                  <KnowledgeMarkdownField
+              </label>
+            )}
+            {pane.kind === "rag-view" ? (
+              <div className={album.page2}>
+                <ReportMarkdown>{pane.markdown}</ReportMarkdown>
+              </div>
+            ) : pane.kind === "rag-new" ? (
+              <div className={album.blank}>
+                <div className={album.in}>
+                  <h2 className="sr-only" id="brainform-editor-heading">
+                    {t("brainformRagCreateTitle")}
+                  </h2>
+                  {role !== "teacher" &&
+                  !initialGroupId &&
+                  ragGroupIds.length > 1 ? (
+                    <label className={album.fl}>
+                      <span>{t("group")}</span>
+                      <select
+                        value={newRag.groupId}
+                        disabled={busyKey === "rag-new"}
+                        onChange={(event) => {
+                          const groupId = event.target.value;
+                          setNewRag((current) => ({ ...current, groupId }));
+                        }}
+                      >
+                        {groups.map((group) => (
+                          <option key={group.id} value={group.id}>
+                            {group.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  <KnowledgeFilenameField
+                    label={t("ragFilename")}
                     className={album.fl}
-                    value={selectedDraft.markdown}
-                    disabled={busyKey === `import:${pane.draftKey}`}
-                    rows={16}
-                    readOnly={!selectedDraft.canEdit}
-                    onChange={(markdown) =>
-                      updateRagDraft(pane.draftKey, {
-                        ...selectedDraft,
-                        markdown,
-                      })
+                    value={newRag.name}
+                    disabled={busyKey === "rag-new"}
+                    onChange={(name) =>
+                      setNewRag((current) => ({ ...current, name }))
                     }
                   />
-                )}
+                  {newRag.file ? (
+                    <p className={album.stkWarn} role="status">
+                      {t("brainformRagFileStaged", {
+                        filename: newRag.file.name,
+                      })}{" "}
+                      {t("brainformNotMarkdownEditor")}
+                    </p>
+                  ) : (
+                    <KnowledgeMarkdownField
+                      className={album.fl}
+                      value={newRag.markdown}
+                      disabled={busyKey === "rag-new"}
+                      readOnly={busyKey === "rag-new"}
+                      rows={10}
+                      onChange={(markdown) =>
+                        setNewRag((current) => ({ ...current, markdown }))
+                      }
+                    />
+                  )}
+                </div>
               </div>
-            </div>
-          ) : (
-            <p className={album.eb}>{t("loading")}</p>
-          )}
-        </div>
+            ) : pane.kind === "rag-edit" && selectedDraft ? (
+              <div className={album.blank}>
+                <div className={album.in}>
+                  <h2 className="sr-only" id="brainform-editor-heading">
+                    {selectedDraft.filename}
+                  </h2>
+                  <KnowledgeFilenameField
+                    label={t("ragFilename")}
+                    className={album.fl}
+                    value={selectedDraft.filename}
+                    disabled={busyKey === `import:${pane.draftKey}`}
+                    readOnly={!selectedDraft.canEdit}
+                    onChange={(filename) => {
+                      if (!selectedDraft.canEdit) return;
+                      updateRagDraft(pane.draftKey, {
+                        ...selectedDraft,
+                        filename,
+                      });
+                    }}
+                  />
+                  {selectedRagFile ? (
+                    <p className={album.stkWarn} role="status">
+                      {t("brainformRagFileStaged", {
+                        filename: selectedRagFile.name,
+                      })}{" "}
+                      {t("brainformNotMarkdownEditor")}
+                    </p>
+                  ) : (
+                    <KnowledgeMarkdownField
+                      className={album.fl}
+                      value={selectedDraft.markdown}
+                      disabled={busyKey === `import:${pane.draftKey}`}
+                      rows={16}
+                      readOnly={!selectedDraft.canEdit}
+                      onChange={(markdown) =>
+                        updateRagDraft(pane.draftKey, {
+                          ...selectedDraft,
+                          markdown,
+                        })
+                      }
+                    />
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className={album.eb}>{t("loading")}</p>
+            )}
+          </div>
         </>
       ) : null}
       {pane &&
