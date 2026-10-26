@@ -31,7 +31,7 @@ import type { AudienceInteractionApi } from "./types";
 const PAGE =
   "min-h-dvh bg-arc-bg bg-[linear-gradient(#00000010_1px,transparent_1px),linear-gradient(90deg,#00000010_1px,transparent_1px)] bg-size-[32px_32px] font-body leading-[normal] tracking-normal [text-rendering:geometricPrecision] text-ink motion-reduce:[&_*]:animate-none motion-reduce:[&_*]:transition-none";
 const WRAP =
-  "mx-auto max-w-[1180px] px-3.5 pt-[22px] pb-10 min-[900px]:px-10 min-[900px]:pt-10 min-[900px]:pb-[60px]";
+  "mx-auto max-w-[1180px] px-3.5 pt-[22px] pb-[39px] min-[900px]:px-10 min-[900px]:pt-10 min-[900px]:pb-[60px]";
 const PAD =
   "relative rounded-[26px] border-3 border-ink bg-ink px-3.5 pt-[34px] pb-[18px] text-white shadow-[6px_6px_0_#FF4D8D] min-[900px]:rounded-[30px] min-[900px]:px-[26px] min-[900px]:pt-10 min-[900px]:pb-[26px]";
 const SCREEN =
