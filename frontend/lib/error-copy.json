@@ -645,6 +645,7 @@
     "provider_authorization_revoked": "aiStepFailed",
     "provider_choice_index_invalid": "aiStepFailed",
     "provider_choices_invalid": "aiStepFailed",
+    "provider_confirmation_required": "aiStepFailed",
     "provider_confirmation_unavailable": "aiStepFailed",
     "provider_content_invalid": "aiStepFailed",
     "provider_endpoint_policy_stale": "aiStepFailed",
