@@ -2879,7 +2879,7 @@ function BrainformWorkspaceBody({
                         resetKey={`${row.generation_state}:${generationErrorCode ?? ""}`}
                       >
                         {generationErrorCode &&
-                        generationErrorCode !== "provider_confirmation_required"
+                        generationErrorCode !== "provider_confirmation_unavailable"
                           ? t("brainformGenerationFailedReason", {
                               reason: generationErrorCode.replaceAll("_", " "),
                             })
