@@ -286,40 +286,47 @@ export function AgentCard({
     </span>
   ) : (
     <span className="pointer-events-none relative z-[1] block">
+      {/* The scholar stands on the sign-in page's lime stage. Without a group
+          line under it, the art runs to the card's rounded bottom. */}
       <span
         data-card-art
         aria-hidden="true"
-        className="flex h-[96px] items-center justify-center overflow-hidden"
+        className={cn(
+          "relative flex h-[112px] items-end justify-center overflow-hidden",
+          !caption && "rounded-b-[9px]",
+        )}
         style={sunburst}
       >
-        <MascotFigure id={mascot} className="h-[100px] w-auto" />
+        <span className="absolute inset-x-0 bottom-0 h-3.5 border-t-[3px] border-[#111] bg-[#A3E635]" />
+        <MascotFigure id={mascot} className="relative mb-1 h-[104px] w-auto" />
       </span>
       {ribbon}
     </span>
   );
-  // The home shows no "Last edited by"; its foot is the group or a sliver.
+  // The home shows no "Last edited by"; its foot is the group, when shown.
   const editedLine = listCard ? footer : null;
-  const foot = (
-    <span
-      data-card-footer={caption || editedLine ? "" : undefined}
-      className={cn(
-        "pointer-events-none relative z-[1] grid gap-0.5 rounded-b-[9px] border-0 border-t-2 border-dashed border-[#1116] bg-[#FFF8E7] text-left font-body text-[#111]",
-        listCard ? "mt-2.5 px-2.5 pt-[7px] pb-[9px]" : "px-2 py-1.5",
-        !caption && !editedLine && (listCard ? "min-h-3" : "min-h-2.5 py-0"),
-      )}
-    >
-      {caption ? (
-        <span className="truncate text-xs leading-tight font-extrabold">
-          {caption}
-        </span>
-      ) : null}
-      {editedLine ? (
-        <span className="text-[11px] leading-tight font-medium wrap-break-word text-[#6B7280]">
-          {editedLine}
-        </span>
-      ) : null}
-    </span>
-  );
+  const foot =
+    !listCard && !caption ? null : (
+      <span
+        data-card-footer={caption || editedLine ? "" : undefined}
+        className={cn(
+          "pointer-events-none relative z-[1] grid gap-0.5 rounded-b-[9px] border-0 border-t-2 border-dashed border-[#1116] bg-[#FFF8E7] text-left font-body text-[#111]",
+          listCard ? "mt-2.5 px-2.5 pt-[7px] pb-[9px]" : "px-2 py-1.5",
+          !caption && !editedLine && "min-h-3",
+        )}
+      >
+        {caption ? (
+          <span className="truncate text-xs leading-tight font-extrabold">
+            {caption}
+          </span>
+        ) : null}
+        {editedLine ? (
+          <span className="text-[11px] leading-tight font-medium wrap-break-word text-[#6B7280]">
+            {editedLine}
+          </span>
+        ) : null}
+      </span>
+    );
   const tilt = (index ?? 0) % 2 ? 1.2 : -1.2;
 
   return (
