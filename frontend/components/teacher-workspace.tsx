@@ -180,6 +180,12 @@ export function TeacherDashboard() {
                 // Same fallback as Studyform's tile: a draft reads V1.0.
                 label="V1.0"
                 pending={false}
+                visibility={agent.visibility}
+                visibilityLabel={t(
+                  agent.visibility === "public"
+                    ? "publicOption"
+                    : "privateOption",
+                )}
                 mascot={agentMascot(agent.id, undefined)}
                 deleteLabel={t("deleteAgent")}
                 caption={
@@ -219,6 +225,10 @@ function PublishedAgentCard({
       href={`/teacher/agents/${item.agent.id}`}
       label={item.current_version.version_label}
       pending={hasUnpublishedWork}
+      visibility={item.agent.visibility}
+      visibilityLabel={t(
+        item.agent.visibility === "public" ? "publicOption" : "privateOption",
+      )}
       mascot={agentMascot(
         item.agent.id,
         item.current_version.avatar_config?.material_theme,
@@ -234,6 +244,7 @@ type TeacherStudyformSnapshot = {
   ownedAgents: AgentSummary[];
   chatAgents: ChatAgent[];
   teams: TeamSummaryDto[];
+  groups: Group[];
 };
 
 export function TeacherStudyformWorkspace({
@@ -283,6 +294,7 @@ export function TeacherStudyformWorkspace({
     snapshot?.chatAgents ?? [],
   );
   const [teams, setTeams] = useState<TeamSummaryDto[]>(snapshot?.teams ?? []);
+  const [groups, setGroups] = useState<Group[]>(snapshot?.groups ?? []);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadedScope, setLoadedScope] = useState<string | null>(
     snapshot ? scope : null,
@@ -304,6 +316,7 @@ export function TeacherStudyformWorkspace({
         setOwnedAgents([]);
         setChatAgents([]);
         setTeams([]);
+        setGroups([]);
         setLoadedScope(requestScope);
         return;
       }
@@ -325,34 +338,48 @@ export function TeacherStudyformWorkspace({
         typeof api.workspaceAgents === "function"
           ? read("workspaceAgents", () => api.workspaceAgents(courseId))
           : Promise.resolve([]),
+        // Group names only label the cards; without them the cards still work.
+        typeof api.groups === "function"
+          ? read("groups", () => api.groups(courseId)).catch(() => [])
+          : Promise.resolve([]),
       ])
-        .then(([nextPersonalAgents, nextChatAgents, nextTeams, nextOwned]) => {
-          if (!active) return;
-          const publishedIds = new Set(
-            nextPersonalAgents.map((item) => item.agent.id),
-          );
-          const next: TeacherStudyformSnapshot = {
-            personalAgents: nextPersonalAgents,
-            ownedAgents: nextOwned.filter(
-              (agent) => !publishedIds.has(agent.id),
-            ),
-            chatAgents: nextChatAgents,
-            teams: nextTeams,
-          };
-          setPersonalAgents(next.personalAgents);
-          setOwnedAgents(next.ownedAgents);
-          setChatAgents(next.chatAgents);
-          setTeams(next.teams);
-          setLoadedScope(requestScope);
-          setError(null);
-          rememberRequestCache(
-            api,
-            cacheIdentity,
-            snapshotKey,
-            next,
-            generation,
-          );
-        })
+        .then(
+          ([
+            nextPersonalAgents,
+            nextChatAgents,
+            nextTeams,
+            nextOwned,
+            nextGroups,
+          ]) => {
+            if (!active) return;
+            const publishedIds = new Set(
+              nextPersonalAgents.map((item) => item.agent.id),
+            );
+            const next: TeacherStudyformSnapshot = {
+              personalAgents: nextPersonalAgents,
+              ownedAgents: nextOwned.filter(
+                (agent) => !publishedIds.has(agent.id),
+              ),
+              chatAgents: nextChatAgents,
+              teams: nextTeams,
+              groups: nextGroups,
+            };
+            setPersonalAgents(next.personalAgents);
+            setOwnedAgents(next.ownedAgents);
+            setChatAgents(next.chatAgents);
+            setTeams(next.teams);
+            setGroups(next.groups);
+            setLoadedScope(requestScope);
+            setError(null);
+            rememberRequestCache(
+              api,
+              cacheIdentity,
+              snapshotKey,
+              next,
+              generation,
+            );
+          },
+        )
         .catch((cause) => {
           if (!active) return;
           // Busy server during a quiet refresh: keep the page on screen.
@@ -468,6 +495,7 @@ export function TeacherStudyformWorkspace({
                   variant="list"
                   index={index}
                   editedBy={item.agent.last_edited_by_name}
+                  group={item.group_name}
                   key={item.agent.id}
                   name={item.agent.name}
                   href={`/teacher/agents/${item.agent.id}`}
@@ -493,6 +521,9 @@ export function TeacherStudyformWorkspace({
                     variant="list"
                     index={personalAgents.length + index}
                     editedBy={agent.last_edited_by_name}
+                    group={
+                      groups.find((group) => group.id === agent.group_id)?.name
+                    }
                     key={agent.id}
                     name={agent.name}
                     href={`/teacher/agents/${agent.id}`}

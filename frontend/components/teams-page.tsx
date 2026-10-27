@@ -11,14 +11,14 @@ import { AGENT_PAGE, LIST_CARD_LIFT } from "./agent-chrome";
 import { PageAction } from "./page-action";
 import { PageBanner } from "./page-banner";
 import { teamVersionLabel } from "./studyform-layout";
-import { AGENTS_NEW_CLASS, agentMascot, DeleteX } from "./ui/agent-card";
-import { IconPlus } from "./quiet-icons";
+import { AgentsEmpty, agentMascot, DeleteX } from "./ui/agent-card";
 
 /*
  * Teams page, approved fusion F1 (proposals/13-teams-fusion/src/gen.mjs
  * listF / emptyF): the Agents sunburst banner over a grid of C polaroids
  * (tilted tape name, coloured photo well with Agent faces, "member(s) |
- * visibility" footer), or the Spotlight starter polaroid when empty.
+ * visibility" footer) three to a row, or, when empty, the Agents page's
+ * own empty card so both sit in the same place (proposals/37 final-v2).
  */
 
 /** F1 tilt cycle (≤1.5°, card walls only). */
@@ -100,8 +100,6 @@ const TAPE =
   "absolute -top-3 left-1/2 w-max max-w-[88%] -translate-x-1/2 -rotate-2 border-2 border-[#111] bg-[#FFE14D] px-3.5 py-0.5 text-center font-display leading-[1.15] font-extrabold text-[#111] shadow-[2px_2px_0_#111]";
 const PHOTO =
   "mt-2.5 flex items-center justify-center border-[3px] border-[#111]";
-const SUN =
-  "[background:radial-gradient(circle_at_50%_50%,#FFE14D_0_24%,transparent_25%),repeating-conic-gradient(from_0deg_at_50%_50%,#FFF7CC_0_9deg,#fff_9deg_18deg)]";
 
 function TeamPolaroid({
   team,
@@ -123,11 +121,7 @@ function TeamPolaroid({
   const isPublic = team.visibility === "public";
   return (
     <li
-      className={cn(
-        POLAROID,
-        LIST_CARD_LIFT,
-        "w-[200px] max-[767px]:w-[calc(50%-10px)]",
-      )}
+      className={cn(POLAROID, LIST_CARD_LIFT, "min-w-0")}
       style={{ "--r": `${TILTS[index % TILTS.length]}deg` } as CSSProperties}
     >
       <Link
@@ -139,7 +133,7 @@ function TeamPolaroid({
         <span
           className={cn(
             TAPE,
-            "text-[13px] max-[767px]:max-w-[80%] max-[767px]:text-[11px]",
+            "text-sm max-[767px]:max-w-[80%] max-[767px]:text-[11px]",
           )}
         >
           {team.display_name}
@@ -148,7 +142,7 @@ function TeamPolaroid({
           {teamVersionLabel(team.current_version_seq)}
         </span>
         <span
-          className={cn(PHOTO, "h-[130px] max-[767px]:h-[110px]")}
+          className={cn(PHOTO, "h-[150px] max-[767px]:h-[110px]")}
           style={{ backgroundColor: WELLS[index % WELLS.length] }}
         >
           <Faces faces={faces} more={Math.max(team.member_count - 4, 0)} />
@@ -173,20 +167,6 @@ function TeamPolaroid({
         <DeleteX label={deleteLabel} disabled={deleting} onClick={onDelete} />
       ) : null}
     </li>
-  );
-}
-
-function GhostPolaroid({ side }: { side: "left" | "right" }) {
-  return (
-    <div
-      aria-hidden="true"
-      className={cn(
-        "box-border h-[200px] w-[170px] rounded-[4px] border-[3px] border-dashed border-[#1117] bg-[#fff8] opacity-55 max-[767px]:hidden",
-        side === "left"
-          ? "[transform:rotate(-8deg)_translateX(28px)]"
-          : "[transform:rotate(7deg)_translateX(-28px)]",
-      )}
-    />
   );
 }
 
@@ -224,7 +204,7 @@ export function TeamsPage({
         </PageBanner>
         <section aria-labelledby="studyform-teams">
           {teams.length ? (
-            <ul className="m-0 flex list-none flex-wrap gap-x-7 gap-y-[34px] p-0 pt-[30px] max-[767px]:gap-x-5 max-[767px]:gap-y-7">
+            <ul className="m-0 grid w-full list-none grid-cols-3 gap-x-[26px] gap-y-[44px] p-0 pt-[18px] max-[767px]:grid-cols-2 max-[767px]:gap-x-5 max-[767px]:gap-y-7 max-[767px]:pt-6">
               {teams.map(({ team, href, onDelete }, index) => (
                 <TeamPolaroid
                   key={team.id}
@@ -238,43 +218,13 @@ export function TeamsPage({
               ))}
             </ul>
           ) : (
-            <div className="relative flex min-h-[360px] items-center justify-center pt-10 pb-5">
-              <GhostPolaroid side="left" />
-              <div className="relative z-[2] w-[240px] max-[767px]:w-full">
-                <div
-                  className={cn(POLAROID, "w-[240px] max-[767px]:w-full")}
-                  style={{ "--r": "-1.5deg" } as CSSProperties}
-                >
-                  <p className={cn(TAPE, "m-0 text-[13px]")}>
-                    {t("teamNoneYet")}
-                  </p>
-                  <div
-                    className={cn(
-                      PHOTO,
-                      SUN,
-                      "h-[130px] max-[767px]:h-[100px]",
-                    )}
-                  >
-                    <Faces faces={["scroll", "wreath", "tablet"]} />
-                  </div>
-                  <div className="mt-2.5 flex justify-center">
-                    {newHref ? (
-                      <Link
-                        href={newHref}
-                        aria-label={newLabel}
-                        data-tour="new"
-                        data-tour-empty="true"
-                        className={AGENTS_NEW_CLASS}
-                      >
-                        <IconPlus size={16} />
-                        {newLabel}
-                      </Link>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-              <GhostPolaroid side="right" />
-            </div>
+            <AgentsEmpty
+              title={t("teamNoneYet")}
+              newHref={newHref}
+              newLabel={newLabel}
+            >
+              <Faces faces={["scroll", "wreath", "tablet"]} />
+            </AgentsEmpty>
           )}
         </section>
       </div>

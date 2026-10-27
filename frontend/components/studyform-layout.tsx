@@ -67,7 +67,7 @@ export function ModuleTiles({
   variant,
 }: {
   children: ReactNode;
-  /** "list": the Agents page grid of 186px card A columns. */
+  /** "list": the Agents page grid, four columns as wide as the banner. */
   variant?: "list";
 }) {
   return (
@@ -110,6 +110,7 @@ export function VersionTile({
   deleteLabel,
   title: _title,
   editedBy,
+  group,
   materialTheme,
   rename,
   variant,
@@ -125,6 +126,8 @@ export function VersionTile({
   title?: string;
   /** Last editor's name for the card footer. */
   editedBy?: string | null;
+  /** The Agent's group, shown to teachers above "Last edited by". */
+  group?: string | null;
   /** avatar_config.material_theme of the current version. */
   materialTheme?: string | null;
   label: string;
@@ -156,6 +159,7 @@ export function VersionTile({
       }
       mascot={agentMascot(id ?? href, materialTheme)}
       footer={editedBy ? t("agentLastEditedBy", { name: editedBy }) : null}
+      caption={group || undefined}
       deleting={deleting}
       onDelete={onDelete}
       deleteLabel={deleteLabel}

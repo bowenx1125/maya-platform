@@ -830,6 +830,11 @@ function GroupWorkspaceSession({
                   variant="list"
                   index={index}
                   key={item.agent.id}
+                  id={item.agent.id}
+                  editedBy={item.agent.last_edited_by_name}
+                  materialTheme={
+                    item.current_version.avatar_config?.material_theme
+                  }
                   name={item.agent.name}
                   href={`/student/agents/${item.agent.id}`}
                   label={item.current_version.version_label}
