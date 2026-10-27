@@ -102,8 +102,9 @@ describe("PW3-A anonymous Demo login", () => {
       </>,
     );
 
+    // The page shows the loading card until the session check settles.
     expect(
-      screen.getByRole("heading", {
+      await screen.findByRole("heading", {
         name: "Mayaform",
       }),
     ).toBeTruthy();

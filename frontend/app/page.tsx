@@ -2,24 +2,31 @@
 
 import { useState } from "react";
 
-import { AcademyIntro } from "../components/academy/intro";
 import { AcademyMoodProvider } from "../components/academy/mood";
 import {
   Burst,
   SignInBackdrop,
   SignInStage,
 } from "../components/academy/sign-in-stage";
+import { LoadingCard } from "../components/ui";
 import { useT } from "../lib/i18n";
 import { RegisterForm } from "../components/register-form";
-import { LoginForm } from "../components/session-provider";
+import { LoginForm, useSession } from "../components/session-provider";
 
 export default function HomePage() {
   const t = useT();
+  const { status } = useSession();
   const [registering, setRegistering] = useState(false);
   const [step, setStep] = useState(1);
+  // The same card guarded pages show while the session is being checked.
+  if (status === "loading")
+    return (
+      <main className="shell">
+        <LoadingCard />
+      </main>
+    );
   return (
     <AcademyMoodProvider>
-      <AcademyIntro />
       <main className="auth-arcade relative min-h-screen overflow-hidden bg-[#FFF7CC] bg-[repeating-conic-gradient(from_0deg_at_30%_78%,#FFE14D_0_7deg,#FFF7CC_7deg_14deg)] text-[#111]">
         <SignInBackdrop />
         <div className="relative mx-auto grid min-h-screen max-w-[1440px] grid-cols-[1.15fr_1fr] max-[767px]:grid-cols-1">
