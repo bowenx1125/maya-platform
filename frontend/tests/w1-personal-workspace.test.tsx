@@ -15,6 +15,7 @@ import {
   TeacherPersonalAgentCreate,
   TeacherStudyformWorkspace,
 } from "../components/teacher-workspace";
+import { VoicesPage } from "../components/voice/voices-page";
 import { useSession } from "../components/session-provider";
 import type {
   AgentDetail,
@@ -443,7 +444,7 @@ describe("W1 teacher personal workspace", () => {
   });
 
   // Owner decision (2026-10-12): a teacher creates personal voices that only
-  // that teacher may choose; Studyform lists those, never a group's.
+  // that teacher may choose; the Voices page lists those, never a group's.
   it("lists and creates a teacher's own personal voices", async () => {
     const api = {
       workspaceAgents: vi.fn().mockResolvedValue([]),
@@ -478,27 +479,21 @@ describe("W1 teacher personal workspace", () => {
     render(
       <>
         <AppShell role="teacher">
-          <TeacherStudyformWorkspace />
+          <VoicesPage role="teacher" />
         </AppShell>
       </>,
     );
 
     const heading = await screen.findByRole("heading", { name: "Voices" });
-    const voices = heading.closest("section") as HTMLElement;
-    expect(await within(voices).findByText("teacher-voice.wav")).toBeTruthy();
+    const voices = heading.closest("section") ?? heading.parentElement;
     expect(
-      within(voices).getByRole("button", { name: "Preview" }),
+      await within(voices as HTMLElement).findByText("teacher-voice.wav"),
+    ).toBeTruthy();
+    expect(
+      within(voices as HTMLElement).getByRole("button", { name: "Preview" }),
     ).toBeTruthy();
     expect(api.personalVoiceProfiles).toHaveBeenCalledWith(courseId);
     expect(api.voiceProfiles).not.toHaveBeenCalled();
-    // Owner request (2026-10-20): teacher Studyform holds six cards,
-    // Agents / Teams / Record over RAG / Knowledge / Voices.
-    // Agents has its own page now (2026-10-26).
-    expect(screen.queryByRole("heading", { name: "Agents" })).toBeNull();
-    for (const name of ["Teams", "Record", "RAG", "Knowledge"])
-      expect(await screen.findByRole("heading", { name })).toBeTruthy();
-    expect(document.querySelector('[data-tour="brain"]')).toBeNull();
-    // The embedded Brainform cards read groups for RAG; Voices does not.
     expect(api.enrollVoice).not.toHaveBeenCalled();
   });
 
@@ -519,7 +514,7 @@ describe("W1 teacher personal workspace", () => {
     render(
       <>
         <AppShell role="teacher">
-          <TeacherStudyformWorkspace />
+          <VoicesPage role="teacher" />
         </AppShell>
       </>,
     );

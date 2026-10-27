@@ -1,6 +1,7 @@
 "use client";
 
 import { LIST_CARD_LIFT } from "./agent-chrome";
+import { PRESS_MOTION } from "./ui/button";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type Group,
@@ -282,7 +283,7 @@ export function RosterWorkspace() {
         {entry.editable ? (
           <div className={`button-row ${styles.acts}`}>
             <button
-              className={`${styles.sticker} ${styles.stickerEdit}`}
+              className={`${styles.sticker} ${styles.stickerEdit} ${PRESS_MOTION}`}
               type="button"
               disabled={pending}
               onClick={() => {
@@ -302,7 +303,7 @@ export function RosterWorkspace() {
                   entry.status === "active"
                     ? styles.stickerRem
                     : styles.stickerRestore
-                }`}
+                } ${PRESS_MOTION}`}
                 type="button"
                 disabled={pending}
                 onClick={() => {
@@ -330,7 +331,7 @@ export function RosterWorkspace() {
               </button>
             )}
             <button
-              className={`${styles.sticker} ${styles.stickerReset}`}
+              className={`${styles.sticker} ${styles.stickerReset} ${PRESS_MOTION}`}
               type="button"
               disabled={pending}
               onClick={() => void resetPassword(entry)}

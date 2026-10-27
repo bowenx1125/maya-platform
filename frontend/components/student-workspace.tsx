@@ -29,13 +29,8 @@ import {
   requestCacheGeneration,
   requestCacheIdentity,
 } from "../lib/request-cache";
-import {
-  fetchVoiceList,
-  prefetchVoiceList,
-  voiceListIdentity,
-} from "../lib/voice-list-cache";
+import { fetchVoiceList, voiceListIdentity } from "../lib/voice-list-cache";
 import { AccountSettings } from "./account-settings";
-import { GroupOverview } from "./group-overview";
 import { HomeGuide } from "./home-guide";
 import { HomeAgentRow } from "./home/agent-row";
 import {
@@ -50,28 +45,13 @@ import { AgentWorkbench } from "./agent-workspace";
 import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
-import { VoiceLibrary } from "./voice/voice-library";
-import { BrainformWorkspace } from "./knowledge/brainform-workspace";
 import { assessmentAttemptsRead } from "./knowledge/assessment-record";
-import {
-  ModuleCard,
-  ModuleGrid,
-  ModulePlus,
-  ModuleTiles,
-  VersionTile,
-  teamVersionLabel,
-} from "./studyform-layout";
+import { ModuleTiles, VersionTile } from "./studyform-layout";
 import { AgentsEmpty, NewButton, type AgentRename } from "./ui/agent-card";
 import { AgentsPage } from "./agents-page";
 import { TeamsPage } from "./teams-page";
 import { GuidePortrait } from "./ui/guide-dialog";
-import {
-  EmptyCard,
-  ErrorNotice,
-  LoadingCard,
-  PageIntro,
-  SectionCard,
-} from "./ui";
+import { EmptyCard, ErrorNotice, LoadingCard, SectionCard } from "./ui";
 
 type GroupOverview = {
   group: GroupDetail;
@@ -221,7 +201,7 @@ export function StudentDashboard() {
         {
           label: t("studentGuideAgent"),
           complete: primary.agentCount > 0,
-          href: `/student/groups/${primary.group.id}`,
+          href: `/student/agents?group_id=${encodeURIComponent(primary.group.id)}`,
         },
         {
           label: t("studentGuideKnowledge"),
@@ -231,7 +211,7 @@ export function StudentDashboard() {
         {
           label: t("studentGuideVoice"),
           complete: primary.voiceCount > 0,
-          href: `/student/groups/${primary.group.id}/voices?mode=new`,
+          href: `/student/voices?group_id=${encodeURIComponent(primary.group.id)}&mode=new`,
         },
         {
           label: t("studentGuideChat"),
@@ -397,26 +377,17 @@ export function StudentTeamsPage({
 
 export function GroupWorkspace({
   groupId,
-  initialVoiceCreate = false,
-  focusVoices = false,
   initialMode,
   initialTeamId,
-  initialDocumentId,
   view,
 }: {
-  /** "agents" / "teams": that page alone (the sidebar's item). */
-  view?: "agents" | "teams";
+  /** Split Studyform pages: Agents or Teams. */
+  view: "agents" | "teams";
   groupId: string;
-  initialVoiceCreate?: boolean;
-  focusVoices?: boolean;
   initialMode?: string;
   initialTeamId?: string;
-  /** A RAG file a ?mode=rag-view / rag-edit link opens. */
-  initialDocumentId?: string;
 }) {
   const { identityGeneration, user } = useSession();
-  // Only Team modes swap the page; RAG modes open inside the embedded
-  // Brainform cards and must not remount Studyform.
   const pageMode =
     initialMode === "team-new" || initialMode === "team-edit"
       ? initialMode
@@ -426,11 +397,8 @@ export function GroupWorkspace({
     <GroupWorkspaceSession
       key={scope}
       groupId={groupId}
-      initialVoiceCreate={initialVoiceCreate}
-      focusVoices={focusVoices}
       initialMode={initialMode}
       initialTeamId={initialTeamId}
-      initialDocumentId={initialDocumentId}
       scope={scope}
       view={view}
     />
@@ -440,30 +408,17 @@ export function GroupWorkspace({
 function GroupWorkspaceSession({
   view,
   groupId,
-  initialVoiceCreate,
-  focusVoices,
   initialMode,
   initialTeamId,
-  initialDocumentId,
   scope,
 }: {
   groupId: string;
-  initialVoiceCreate: boolean;
-  focusVoices: boolean;
   initialMode?: string;
   initialTeamId?: string;
-  initialDocumentId?: string;
   scope: string;
-  view?: "agents" | "teams";
+  view: "agents" | "teams";
 }) {
   const t = useT();
-  // Team modes swap the whole page; any other mode belongs to the embedded
-  // RAG / Record cards, which open it as their own page.
-  const brainformMode =
-    initialMode === "team-new" || initialMode === "team-edit"
-      ? undefined
-      : initialMode;
-  const [brainformPane, setBrainformPane] = useState(false);
   const { api, identityGeneration, user } = useSession();
   const cacheIdentity = requestCacheIdentity(user?.id, identityGeneration);
   const snapshotKey = `page:studyform-group:${groupId}`;
@@ -517,7 +472,6 @@ function GroupWorkspaceSession({
       }
       // The Voices panel mounts only after this page loads; start its list
       // now so it is not a second wait after the first.
-      prefetchVoiceList(api, cacheIdentity, "group", groupId);
       const generation = requestCacheGeneration(api);
       const read = <T,>(
         name: string,
@@ -537,7 +491,7 @@ function GroupWorkspaceSession({
           typeof api.courses === "function" &&
           typeof api.knowledge === "function"
         ) {
-          // The RAG and Record cards (Brainform's, embedded) mount after
+          // Warm caches used by Agents / Teams tiles.
           // this page loads; warm the same cached reads now so they do not
           // add round trips of their own (same endpoints, same cache keys).
           void read("courses", [], () => api.courses()).catch(() => undefined);
@@ -655,13 +609,6 @@ function GroupWorkspaceSession({
     }, 0);
     return () => window.clearTimeout(timer);
   }, [load, snapshot]);
-
-  useEffect(() => {
-    if (loading || !(initialVoiceCreate || focusVoices)) return;
-    document.getElementById("studyform-voices")?.scrollIntoView({
-      block: "start",
-    });
-  }, [focusVoices, initialVoiceCreate, loading]);
 
   if (loading) return <LoadingCard />;
   async function deleteAgent(agentId: string, retry = false) {
@@ -926,75 +873,7 @@ function GroupWorkspaceSession({
       />
     );
 
-  return (
-    <>
-      <PageIntro title={t("studyform")} />
-      <ModuleGrid
-        variant={teacherIdentity ? undefined : "studyform"}
-        paneOpen={brainformPane}
-      >
-        <ModuleCard
-          title={t("chatTargetTeams")}
-          labelledBy="studyform-teams"
-          empty={teams.length ? undefined : t("teamNoneYet")}
-          action={
-            teacherIdentity ? null : (
-              <ModulePlus
-                href={`/student/groups/${groupId}?mode=team-new`}
-                label={t("newAgent")}
-              />
-            )
-          }
-        >
-          {teams.length ? (
-            <ModuleTiles>
-              {teams.map((team) => (
-                <VersionTile
-                  key={team.id}
-                  name={team.display_name}
-                  href={`/student/groups/${groupId}?mode=team-edit&team_id=${encodeURIComponent(team.id)}`}
-                  label={teamVersionLabel(team.current_version_seq)}
-                  pending={false}
-                  visibility={team.visibility}
-                  deleting={deleting !== null}
-                  deleteLabel={t("deleteAgent")}
-                  onDelete={
-                    team.can_edit
-                      ? () => void deleteOwnedTeam(team.id)
-                      : undefined
-                  }
-                />
-              ))}
-            </ModuleTiles>
-          ) : undefined}
-        </ModuleCard>
-        <VoiceLibrary
-          id="studyform-voices"
-          key={`${scope}:voices:${initialVoiceCreate ? "new" : "list"}:${teacherIdentity ? "listen" : "own"}`}
-          groupId={groupId}
-          listenOnly={teacherIdentity}
-          moduleCard
-          initialCreate={teacherIdentity ? false : initialVoiceCreate}
-        />
-        {/* Owner request (2026-10-20): Brainform's RAG and Record cards
-            moved here for students; same component, same API calls. */}
-        {teacherIdentity ? null : (
-          <BrainformWorkspace
-            role="student"
-            embedded
-            initialGroupId={groupId}
-            initialCourseId={group.course_id}
-            initialMode={brainformMode}
-            initialDocumentId={initialDocumentId}
-            onPaneChange={setBrainformPane}
-          />
-        )}
-      </ModuleGrid>
-      {/* A visiting teacher also sees who is in the group, how their tests
-          went and what happened lately. */}
-      {teacherIdentity ? <GroupOverview groupId={groupId} /> : null}
-    </>
-  );
+  return <LoadingCard />;
 }
 
 function GroupAgentRow({

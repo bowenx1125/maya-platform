@@ -360,7 +360,7 @@ describe("specific errors with a way to fix them", () => {
     );
     const link = screen.getByRole("link", { name: "Edit Team “伦理圈”" });
     expect(link.getAttribute("href")).toBe(
-      "/teacher/studyform?mode=team-edit&team_id=t-1",
+      "/teacher/teams?mode=team-edit&team_id=t-1",
     );
   });
 

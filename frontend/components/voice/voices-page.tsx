@@ -12,9 +12,12 @@ import { VoiceLibrary } from "./voice-library";
 export function VoicesPage({
   role,
   groupId,
+  initialCreate = false,
 }: {
   role: "student" | "teacher";
   groupId?: string;
+  /** Open the create form (legacy ?mode=new). */
+  initialCreate?: boolean;
 }) {
   const { user, identityGeneration } = useSession();
   const membershipGroupIds = [
@@ -51,11 +54,12 @@ export function VoicesPage({
         : null;
   return (
     <VoiceLibrary
-      key={`${scope}:${studentGroupId ?? "all"}`}
+      key={`${scope}:${studentGroupId ?? "all"}:${initialCreate ? "new" : "list"}`}
       id="voices"
       album
       groupId={studentGroupId}
       membershipGroupIds={studentGroupId ? [] : membershipGroupIds}
+      initialCreate={initialCreate}
     />
   );
 }

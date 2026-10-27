@@ -402,8 +402,8 @@ function ErrorFixLinks({ error }: { error: unknown }) {
       links.push({
         href:
           student && typeof groupId === "string"
-            ? `/student/groups/${encodeURIComponent(groupId)}?${query}`
-            : `/teacher/studyform?${query}`,
+            ? `/student/teams?group_id=${encodeURIComponent(groupId)}&${query}`
+            : `/teacher/teams?${query}`,
         label: t("errorEditTeam", { name: teamName }),
       });
     }

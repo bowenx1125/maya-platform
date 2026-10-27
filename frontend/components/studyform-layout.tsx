@@ -16,28 +16,14 @@ import { WorkspaceIcon } from "./workspace-icon";
 
 export function ModuleGrid({
   children,
-  variant,
   paneOpen = false,
 }: {
   children: ReactNode;
   /** A RAG or Record page is open: only it shows, as on Brainform. */
   paneOpen?: boolean;
-  /** "studyform": the 2-top / 3-bottom Studyform layout. */
-  /** "teacherStudyform": Agents / Teams / Record over RAG / Knowledge /
-      Voices, three columns a row. */
-  variant?: "studyform" | "teacherStudyform";
 }) {
   return (
-    <div
-      className={
-        variant === "studyform"
-          ? styles.studyformGrid
-          : variant === "teacherStudyform"
-            ? `${styles.studyformGrid} ${styles.teacherStudyformGrid}`
-            : styles.sections
-      }
-      data-pane-open={paneOpen || undefined}
-    >
+    <div className={styles.sections} data-pane-open={paneOpen || undefined}>
       {children}
     </div>
   );

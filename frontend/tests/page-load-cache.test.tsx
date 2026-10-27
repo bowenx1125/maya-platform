@@ -66,7 +66,7 @@ function signIn(userId = "student-a") {
 function show() {
   return render(
     <>
-      <GroupWorkspace groupId="group-1" />
+      <GroupWorkspace groupId="group-1" view="teams" />
     </>,
   );
 }

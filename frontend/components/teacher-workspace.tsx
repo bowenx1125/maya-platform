@@ -36,7 +36,6 @@ import {
   type KnowledgeSnapshot,
   type PublishedAgentSummary,
 } from "../lib/api";
-import { prefetchVoiceList } from "../lib/voice-list-cache";
 import { useT } from "../lib/i18n";
 import { useSession } from "./session-provider";
 import {
@@ -54,19 +53,10 @@ import { UserAvatar } from "./user-avatar";
 import { AgentWorkbench } from "./agent-workspace";
 import { CreateAgentForm } from "./student-workspace";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
-import { BrainformWorkspace } from "./knowledge/brainform-workspace";
-import {
-  ModuleCard,
-  ModuleGrid,
-  ModulePlus,
-  ModuleTiles,
-  VersionTile,
-  teamVersionLabel,
-} from "./studyform-layout";
-import { VoiceLibrary } from "./voice/voice-library";
+import { ModuleTiles, VersionTile } from "./studyform-layout";
 import { AgentsPage } from "./agents-page";
 import { TeamsPage } from "./teams-page";
-import { EmptyCard, ErrorNotice, LoadingCard, PageIntro } from "./ui";
+import { EmptyCard, ErrorNotice, LoadingCard } from "./ui";
 
 export function TeacherDashboard() {
   const t = useT();
@@ -258,25 +248,19 @@ export function TeacherStudyformWorkspace({
   initialGroupId,
   initialMode,
   initialTeamId,
-  initialDocumentId,
   view,
 }: {
-  /** "agents": the Agents page alone (the sidebar's Agents item). */
-  view?: "agents" | "teams";
+  /** Split Studyform pages: Agents or Teams. */
+  view: "agents" | "teams";
   initialGroupId?: string;
   initialMode?: string;
   initialTeamId?: string;
-  /** A RAG file a ?mode=rag-view / rag-edit link opens. */
-  initialDocumentId?: string;
 }) {
   const t = useT();
   const { api, identityGeneration, user } = useSession();
   const teacherCourseId = user?.courses.find(
     (membership) => membership.role === "teacher",
   )?.course_id;
-  // Owner request (2026-10-20): the teacher's Brainform cards (RAG,
-  // Knowledge, Record) joined Studyform. Only Team modes swap the page; any
-  // other mode belongs to the embedded cards and must not reload Studyform.
   const teamMode =
     view === "teams" &&
     (initialMode === "team-new" ||
@@ -284,8 +268,6 @@ export function TeacherStudyformWorkspace({
       initialMode === "maya-new" ||
       initialMode === "maya-edit");
   const pageMode = teamMode ? initialMode : "";
-  const brainformMode = teamMode ? undefined : initialMode;
-  const [brainformPane, setBrainformPane] = useState(false);
   const scope = `${user?.id ?? "anonymous"}:${teacherCourseId ?? "none"}:${initialGroupId ?? "all"}:${pageMode}:${initialTeamId ?? ""}:${identityGeneration}`;
   const cacheIdentity = requestCacheIdentity(user?.id, identityGeneration);
   const snapshotKey = `page:studyform-teacher:${teacherCourseId ?? "none"}`;
@@ -333,9 +315,6 @@ export function TeacherStudyformWorkspace({
         setLoadedScope(requestScope);
         return;
       }
-      // The Voices panel mounts only after this page loads; start its list
-      // now so it is not a second wait after the first.
-      prefetchVoiceList(api, cacheIdentity, "personal", teacherCourseId);
       const generation = requestCacheGeneration(api);
       const courseId = teacherCourseId;
       const read = <T,>(
@@ -575,70 +554,7 @@ export function TeacherStudyformWorkspace({
       </>
     );
 
-  return (
-    <>
-      <PageIntro title={t("studyform")} />
-      {error ? <ErrorNotice error={error} /> : null}
-      <ModuleGrid variant="teacherStudyform" paneOpen={brainformPane}>
-        <ModuleCard
-          title={t("chatTargetTeams")}
-          labelledBy="studyform-teams"
-          empty={teams.length ? undefined : t("teamNoneYet")}
-          action={
-            teacherCourseId ? (
-              <ModulePlus
-                href="/teacher/studyform?mode=team-new"
-                label={t("newAgent")}
-              />
-            ) : null
-          }
-        >
-          {teams.length ? (
-            <ModuleTiles>
-              {teams.map((team) => (
-                <VersionTile
-                  key={team.id}
-                  name={team.display_name}
-                  href={`/teacher/studyform?mode=team-edit&team_id=${encodeURIComponent(team.id)}`}
-                  label={teamVersionLabel(team.current_version_seq)}
-                  pending={false}
-                  visibility={team.visibility}
-                  deleting={deletingId !== null}
-                  deleteLabel={t("deleteAgent")}
-                  onDelete={
-                    team.can_edit
-                      ? () =>
-                          void deleteOwnedTeam(
-                            team.id,
-                            t("deletePrivateTeamConfirm"),
-                          )
-                      : undefined
-                  }
-                />
-              ))}
-            </ModuleTiles>
-          ) : undefined}
-        </ModuleCard>
-        <VoiceLibrary
-          id="studyform-voices"
-          key={`${scope}:voices`}
-          groupId={null}
-          courseId={teacherCourseId ?? null}
-          moduleCard
-        />
-        {teacherCourseId ? (
-          <BrainformWorkspace
-            role="teacher"
-            embedded
-            initialCourseId={teacherCourseId}
-            initialMode={brainformMode}
-            initialDocumentId={initialDocumentId}
-            onPaneChange={setBrainformPane}
-          />
-        ) : null}
-      </ModuleGrid>
-    </>
-  );
+  return <LoadingCard />;
 }
 
 export function TeacherPersonalAgentCreate({
