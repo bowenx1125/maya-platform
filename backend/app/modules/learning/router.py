@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import Response
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.errors import Error
@@ -22,6 +24,7 @@ from .reports import (
     list_my_assessment_attempts,
 )
 
+LOGGER = logging.getLogger("maya.assessment")
 router = APIRouter(prefix="/learning", tags=["learning"])
 
 
@@ -67,10 +70,18 @@ def list_my_assessment_attempts_route(
 ) -> list[OverviewResult]:
     """The signed-in student's own formal attempts, for the student's Record."""
 
-    return [
-        OverviewResult.model_validate(row)
-        for row in list_my_assessment_attempts(db, actor, course_id=str(course_id))
-    ]
+    # One bad row must not 500 the whole Record list (prod 2026-10-27).
+    results: list[OverviewResult] = []
+    for row in list_my_assessment_attempts(db, actor, course_id=str(course_id)):
+        try:
+            results.append(OverviewResult.model_validate(row))
+        except ValidationError:
+            LOGGER.exception(
+                "Skipping invalid student Record row attempt_id=%s course_id=%s",
+                row.get("attempt_id") if isinstance(row, dict) else None,
+                course_id,
+            )
+    return results
 
 
 @router.delete(

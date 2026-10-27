@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections import defaultdict
 from collections.abc import Callable
@@ -47,6 +48,8 @@ from .schemas import (
     BoundarySummaryContent,
 )
 from .service import _canonical, _hash, _now
+
+LOGGER = logging.getLogger("maya.assessment")
 
 
 def _validated_activity(
@@ -1186,7 +1189,7 @@ def _attempt_rows(
                 "team_name": team_name,
                 "status": status,
                 "phase": phase,
-                "conversation_id": attempt.source_conversation_id,
+                "conversation_id": _optional_id(attempt.source_conversation_id),
                 "group_id": group[0],
                 "group_name": group[1],
                 "started_at": attempt.started_at,
@@ -1284,6 +1287,15 @@ def list_course_assessment_attempts(
     return rows
 
 
+def _optional_id(value: str | None) -> str | None:
+    """Treat blank / whitespace UUID strings as missing (Record must not 500)."""
+
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
 def list_my_assessment_attempts(
     db: Session,
     actor: AuthContext,
@@ -1318,8 +1330,12 @@ def list_my_assessment_attempts(
             _record_visible(),
             AssessmentActivity.course_id == course_id,
             # A deleted Chat keeps its attempt in Record (owner, 2026-10-20).
+            # Keep the attempt when the chat row is gone but the FK was not
+            # nulled (orphan). A live chat must still belong to this student
+            # in this course. Teacher Record has no chat join.
             or_(
                 AssessmentAttempt.source_conversation_id.is_(None),
+                Conversation.id.is_(None),
                 and_(Conversation.user_id == own_id, Conversation.course_id == course_id),
             ),
         )
@@ -1334,51 +1350,65 @@ def list_my_assessment_attempts(
     ).first()
     results: list[dict[str, Any]] = []
     for attempt in attempts:
-        activity = db.get(AssessmentActivity, attempt.activity_id)
-        team_version = (
-            db.get(TeamVersion, activity.team_version_id)
-            if activity is not None and activity.team_version_id
-            else None
-        )
-        if activity is None or (
-            team_version is None and not (activity.team_name_snapshot or "").strip()
-        ):
-            continue
-        sheet = attempt_answer_sheet(db, attempt)
-        status, phase = _presented_status(attempt, sheet["phase"])
-        if phase not in _TEACHER_PHASES:
-            continue
-        team_name = (
-            team_version.display_name
-            if team_version is not None
-            else activity.team_name_snapshot.strip()
-        )
-        test_name = (
-            _activity_label(db, activity, team_version) if team_version is not None else team_name
-        )
-        results.append(
-            {
-                "attempt_id": attempt.id,
-                "user_id": attempt.actor_user_id,
-                "student_name": sheet["student_name"],
-                "test_name": test_name,
-                "team_name": team_name,
-                "status": status,
-                "phase": phase,
-                "conversation_id": attempt.source_conversation_id,
-                "group_id": group[0] if group else None,
-                "group_name": group[1] if group else None,
-                "started_at": attempt.started_at,
-                "ended_at": attempt.completed_at,
-                "points_awarded": None,
-                "points_total": None,
-                "questions": [
-                    {**question, "points_awarded": None, "points_total": None, "feedback": ""}
-                    for question in sheet["questions"]
-                ],
-                "report_download_path": None,
-            }
-        )
+        try:
+            activity = db.get(AssessmentActivity, attempt.activity_id)
+            team_version = (
+                db.get(TeamVersion, activity.team_version_id)
+                if activity is not None and activity.team_version_id
+                else None
+            )
+            if activity is None or (
+                team_version is None and not (activity.team_name_snapshot or "").strip()
+            ):
+                continue
+            sheet = attempt_answer_sheet(db, attempt)
+            status, phase = _presented_status(attempt, sheet["phase"])
+            if phase not in _TEACHER_PHASES:
+                continue
+            team_name = (
+                team_version.display_name
+                if team_version is not None
+                else activity.team_name_snapshot.strip()
+            )
+            test_name = (
+                _activity_label(db, activity, team_version)
+                if team_version is not None
+                else team_name
+            )
+            results.append(
+                {
+                    "attempt_id": attempt.id,
+                    "user_id": attempt.actor_user_id,
+                    "student_name": sheet["student_name"],
+                    "test_name": test_name,
+                    "team_name": team_name,
+                    "status": status,
+                    "phase": phase,
+                    "conversation_id": _optional_id(attempt.source_conversation_id),
+                    "group_id": _optional_id(group[0]) if group else None,
+                    "group_name": group[1] if group else None,
+                    "started_at": attempt.started_at,
+                    "ended_at": attempt.completed_at,
+                    "points_awarded": None,
+                    "points_total": None,
+                    "questions": [
+                        {
+                            **question,
+                            "points_awarded": None,
+                            "points_total": None,
+                            "feedback": "",
+                        }
+                        for question in sheet["questions"]
+                    ],
+                    "report_download_path": None,
+                }
+            )
+        except Exception:
+            LOGGER.exception(
+                "Skipping broken student Record row attempt_id=%s course_id=%s",
+                getattr(attempt, "id", None),
+                course_id,
+            )
     return results
 
 

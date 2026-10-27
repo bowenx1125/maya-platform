@@ -20,7 +20,7 @@ from app.modules.learning.models import (
 from app.modules.teams.models import CourseTeamPublication, Team, TeamVersion
 from app.modules.workspace.models import Conversation
 from app.seed import COURSE_ID, TEACHER_ID
-from sqlalchemy import event, select
+from sqlalchemy import event, select, text
 
 from tests.test_mayaform_assessment_attempts import (
     _answer_current,
@@ -32,6 +32,10 @@ from tests.test_mayaform_learning_evidence import STUDENT_ID, _context, _login
 
 TEACHER_URL = f"/api/v1/learning/courses/{COURSE_ID}/assessment-attempts"
 STUDENT_URL = f"/api/v1/learning/courses/{COURSE_ID}/my-assessment-attempts"
+
+_DROP_ATTEMPT_CONVERSATION_FK = (
+    "ALTER TABLE assessment_attempts DROP CONSTRAINT fk_assessment_attempt_conversation"
+)
 
 
 def _attempt(database: Any, settings: Any, client: Any) -> dict[str, str]:
@@ -415,3 +419,96 @@ def test_bulk_answer_sheets_match_the_single_sheet(attempt_env: Any) -> None:  #
         for attempt in attempts:
             assert attempt is not None
             assert bulk[attempt.id] == attempt_answer_sheet(db, attempt)
+
+
+def test_student_record_tolerates_blank_conversation_id(attempt_env: Any) -> None:  # noqa: F811
+    """Blank source_conversation_id must coerce to null, not 500 the list."""
+
+    _app, database, settings, client = attempt_env
+    made = _attempt(database, settings, client)
+    with database.session() as db:
+        # Prod can hold "" from older writers; the live FK blocks inserting that
+        # here, so drop it for this fixture database only.
+        db.execute(text(_DROP_ATTEMPT_CONVERSATION_FK))
+        attempt = db.get(AssessmentAttempt, made["attempt"])
+        assert attempt is not None
+        attempt.source_conversation_id = ""
+        db.commit()
+    _login(client, "bowen")
+    listed = client.get(STUDENT_URL)
+    assert listed.status_code == 200, listed.text
+    [row] = [item for item in listed.json() if item["attempt_id"] == made["attempt"]]
+    assert row["conversation_id"] is None
+    assert row["questions"][0]["answers"] == ["kept answer"]
+
+
+def test_student_record_keeps_attempts_with_orphaned_chat_fk(
+    attempt_env: Any,  # noqa: F811
+) -> None:
+    """Orphan chat FK must not filter the student list empty (false empty)."""
+
+    _app, database, settings, client = attempt_env
+    made = _attempt(database, settings, client)
+    orphan = str(uuid4())
+    with database.session() as db:
+        db.execute(text(_DROP_ATTEMPT_CONVERSATION_FK))
+        attempt = db.get(AssessmentAttempt, made["attempt"])
+        assert attempt is not None
+        attempt.source_conversation_id = orphan
+        db.commit()
+        assert db.get(Conversation, orphan) is None
+    assert _student_sees(client, made["attempt"])
+    _login(client, "bowen")
+    [row] = [
+        item for item in client.get(STUDENT_URL).json() if item["attempt_id"] == made["attempt"]
+    ]
+    assert row["conversation_id"] == orphan
+
+
+def test_student_record_lists_answers_with_null_question_version(
+    attempt_env: Any,  # noqa: F811
+) -> None:
+    """Null frozen question_version_id must not 500 my-assessment-attempts."""
+
+    from app.modules.learning.models import AssessmentAttemptQuestion
+
+    _app, database, settings, client = attempt_env
+    made = _attempt(database, settings, client)
+    with database.session() as db:
+        rows = db.scalars(
+            select(AssessmentAttemptQuestion).where(
+                AssessmentAttemptQuestion.attempt_id == made["attempt"]
+            )
+        ).all()
+        assert rows
+        for row in rows:
+            row.question_version_id = None
+        db.commit()
+    _login(client, "bowen")
+    listed = client.get(STUDENT_URL)
+    assert listed.status_code == 200, listed.text
+    [row] = [item for item in listed.json() if item["attempt_id"] == made["attempt"]]
+    assert row["questions"][0]["answers"] == ["kept answer"]
+
+
+def test_student_record_skips_one_broken_row_without_500(
+    attempt_env: Any,  # noqa: F811
+) -> None:
+    """A single invalid row is skipped; siblings still return 200."""
+
+    _app, database, settings, client = attempt_env
+    first = _attempt(database, settings, client)
+    second = _attempt(database, settings, client)
+    with database.session() as db:
+        db.execute(text(_DROP_ATTEMPT_CONVERSATION_FK))
+        broken = db.get(AssessmentAttempt, second["attempt"])
+        assert broken is not None
+        # Non-blank junk survives blank→None coerce and fails UUID validation.
+        broken.source_conversation_id = "not-a-uuid"
+        db.commit()
+    _login(client, "bowen")
+    listed = client.get(STUDENT_URL)
+    assert listed.status_code == 200, listed.text
+    ids = {row["attempt_id"] for row in listed.json()}
+    assert first["attempt"] in ids
+    assert second["attempt"] not in ids
