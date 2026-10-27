@@ -365,3 +365,26 @@ describe("edge toggle", () => {
     expect(toggle().className).toContain("top-[calc(50%-16px)]");
   });
 });
+
+describe("nav chrome", () => {
+  it("keeps idle flat, active pink key, Logout key chrome", () => {
+    renderShell("student", "/student/agents");
+    const agents = nav().getByRole("link", { name: "Agents" });
+    const teams = nav().getByRole("link", { name: "Teams" });
+    const logout = screen.getByRole("button", { name: "Logout" });
+    // Active Agents: pink key + press shadow.
+    expect(agents.className).toContain("bg-main");
+    expect(agents.className).toContain("border-border");
+    expect(agents.className).toContain("shadow-[0_6px_0_#111]");
+    // Idle Teams: flat at rest (transparent border/bg, no rest key shadow).
+    expect(teams.className).toContain("border-transparent");
+    expect(teams.className).toContain("bg-transparent");
+    expect(teams.className).toContain("shadow-none");
+    expect(teams.className).toContain("hover:bg-surface");
+    expect(teams.className).toContain("hover:shadow-[0_6px_0_#111]");
+    // Logout stays always-on key.
+    expect(logout.className).toContain("bg-surface");
+    expect(logout.className).toContain("border-border");
+    expect(logout.className).toContain("shadow-[0_6px_0_#111]");
+  });
+});

@@ -119,13 +119,23 @@ type SidebarGroup = {
   items: SidebarItem[];
 };
 
-/** Sidebar nav keys match Logout / Meet Problems (border + surface + arc shadow). */
-const ITEM = `group/item relative flex min-h-12 items-center gap-2.5 rounded-arc-s border-[3px] px-3 py-2 font-body text-sm font-semibold text-ink no-underline ${PRESS_MOTION}`;
-const ITEM_IDLE = "border-border bg-surface shadow-arc-s";
-const ITEM_ACTIVE = "border-border bg-main shadow-arc-s";
-const ICON_ITEM = `relative grid size-12 place-items-center rounded-arc-s border-[3px] text-ink no-underline ${PRESS_MOTION}`;
+/**
+ * Sidebar nav: idle stays flat (icon+label only); hover reveals key chrome +
+ * lift; press sinks. Active / Logout / Meet Problems keep always-on key chrome
+ * + PRESS_MOTION. Roomier sizing from polish-2 kept.
+ */
+const FLAT_PRESS =
+  "shadow-none transition-[translate,box-shadow,background-color,border-color,color] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-0.5 hover:border-border hover:bg-surface hover:shadow-[0_6px_0_#111] active:translate-y-1.5 active:border-border active:bg-surface active:shadow-none active:duration-[80ms] motion-reduce:transition-colors motion-reduce:hover:translate-y-0 motion-reduce:hover:shadow-none motion-reduce:active:translate-y-0";
+const ITEM =
+  "group/item relative flex min-h-12 items-center gap-2.5 rounded-arc-s border-[3px] px-3 py-2 font-body text-sm font-semibold text-ink no-underline";
+const ITEM_IDLE = `border-transparent bg-transparent ${FLAT_PRESS}`;
+const ITEM_ACTIVE = `border-border bg-main ${PRESS_MOTION}`;
+const ITEM_KEY = `border-border bg-surface ${PRESS_MOTION}`;
+const ICON_ITEM =
+  "relative grid size-12 place-items-center rounded-arc-s border-[3px] text-ink no-underline";
 const ICON_ITEM_IDLE = ITEM_IDLE;
 const ICON_ITEM_ACTIVE = ITEM_ACTIVE;
+const ICON_ITEM_KEY = ITEM_KEY;
 
 export function AppShell({
   children,
@@ -821,8 +831,8 @@ export function AppShell({
             aria-label={collapsed ? item.label : undefined}
             className={
               collapsed
-                ? `${ICON_ITEM} ${ICON_ITEM_IDLE} opacity-55`
-                : `${ITEM} ${ITEM_IDLE} cursor-not-allowed text-arc-muted opacity-55`
+                ? `${ICON_ITEM} border-transparent bg-transparent shadow-none opacity-55`
+                : `${ITEM} cursor-not-allowed border-transparent bg-transparent text-arc-muted shadow-none opacity-55`
             }
           >
             <WorkspaceIcon name={item.icon} size={18} />
@@ -994,7 +1004,7 @@ export function AppShell({
                 {collapsed ? (
                   <a
                     href="mailto:t330034059@mail.bnbu.edu.cn"
-                    className={`${ICON_ITEM} ${ICON_ITEM_IDLE}`}
+                    className={`${ICON_ITEM} ${ICON_ITEM_KEY}`}
                     aria-label="Meet Problems? Send to t330034059@mail.bnbu.edu.cn"
                   >
                     <WorkspaceIcon name="mail" size={18} />
@@ -1011,7 +1021,7 @@ export function AppShell({
                   </p>
                 )}
                 <button
-                  className={`${collapsed ? `${ICON_ITEM} ${ICON_ITEM_IDLE}` : `${ITEM} w-full ${ITEM_IDLE}`} cursor-pointer text-left disabled:cursor-wait disabled:opacity-60`}
+                  className={`${collapsed ? `${ICON_ITEM} ${ICON_ITEM_KEY}` : `${ITEM} w-full ${ITEM_KEY}`} cursor-pointer text-left disabled:cursor-wait disabled:opacity-60`}
                   type="button"
                   disabled={busy}
                   data-ui-guide="workspace.logout"
