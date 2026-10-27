@@ -64,6 +64,8 @@ type SessionContextValue = {
   register: (body: RegisterRequest) => Promise<AuthSession>;
   quickLogin: (userId: string) => Promise<AuthSession>;
   logout: () => Promise<void>;
+  /** A sign-out is under way: guarded pages wait instead of asking to sign in. */
+  signingOut: boolean;
   switchIdentity: (userId: string) => Promise<AuthSession>;
 };
 
@@ -109,6 +111,8 @@ export function SessionProvider({
   const [session, setSession] = useState<AuthSession | null>(null);
   const [identityGeneration, setIdentityGeneration] = useState(0);
   const [error, setError] = useState<unknown>(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const pathname = usePathname();
   const sessionOperationEpoch = useRef(0);
   const sessionMutationTail = useRef<Promise<void>>(Promise.resolve());
   const currentSession = useRef<AuthSession | null>(null);
@@ -160,6 +164,7 @@ export function SessionProvider({
       currentSession.current = next;
       setSession(next);
       setStatus("authenticated");
+      setSigningOut(false);
       setError(null);
     },
     [api, restoreCommittedCsrf],
@@ -338,10 +343,12 @@ export function SessionProvider({
     () =>
       enqueueSessionMutation(async () => {
         const epoch = beginSessionOperation();
+        setSigningOut(true);
         try {
           await api.logout();
           commitAnonymousSession(epoch);
         } catch (cause) {
+          setSigningOut(false);
           preserveSessionAfterFailure(epoch);
           throw cause;
         }
@@ -377,6 +384,18 @@ export function SessionProvider({
     ],
   );
 
+  // Leaving the page the sign-out started on ends the wait, so a later
+  // expired session on another page still gets the sign-in prompt.
+  const signOutPath = useRef<string | null>(null);
+  useEffect(() => {
+    if (!signingOut) {
+      signOutPath.current = null;
+      return;
+    }
+    if (signOutPath.current === null) signOutPath.current = pathname;
+    else if (signOutPath.current !== pathname) setSigningOut(false);
+  }, [pathname, signingOut]);
+
   const value = useMemo<SessionContextValue>(
     () => ({
       api,
@@ -390,6 +409,7 @@ export function SessionProvider({
       register,
       quickLogin,
       logout,
+      signingOut,
       switchIdentity,
     }),
     [
@@ -402,6 +422,7 @@ export function SessionProvider({
       quickLogin,
       refresh,
       session,
+      signingOut,
       status,
       switchIdentity,
     ],
@@ -426,7 +447,7 @@ export function RouteGuard({
   role?: "teacher" | "student";
 }) {
   const t = useT();
-  const { status, user, refresh } = useSession();
+  const { status, user, refresh, signingOut } = useSession();
   const pathname = usePathname();
   const [visitCheck, setVisitCheck] = useState<"idle" | "done">("idle");
 
@@ -471,7 +492,11 @@ export function RouteGuard({
     };
   }, [awaitingTeacherVisit, refresh]);
 
-  if (status === "loading" || (awaitingTeacherVisit && visitCheck !== "done")) {
+  if (
+    status === "loading" ||
+    (status === "anonymous" && signingOut) ||
+    (awaitingTeacherVisit && visitCheck !== "done")
+  ) {
     return (
       <main className="shell">
         <LoadingCard />

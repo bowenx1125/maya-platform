@@ -303,4 +303,4 @@ voice_params (clones; seed best-effort). Playback rate gone (0080):1.0.
 ## Oct27 UI (#305, 38)
 
 #305: G Agent cards (4-col width), Teams 3 columns, Teams empty = Agents empty.
-Sign-in/register: accepted 38 v3 (cards react to fields; [auth](ui-proposals/auth)).
+Sign-in: 38 v3 ([auth](ui-proposals/auth)); refresh/logout: LoadingCard, no intro.
