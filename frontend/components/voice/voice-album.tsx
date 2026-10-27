@@ -1,6 +1,7 @@
 "use client";
 
 import { LIST_CARD_LIFT } from "../agent-chrome";
+import { BUSY_MOTION_PRIMARY, PRESS_MOTION } from "../ui/button";
 import { useEffect, useState, type ReactNode } from "react";
 
 import type { AffectedAgent, VoiceProfile } from "../../lib/api/platform";
@@ -19,7 +20,7 @@ export const voiceAlbum = {
   top: "flex items-center gap-[18px] mb-[30px]",
   h2: "inline-block m-0 py-[6px] px-[22px] bg-[#c4b5fd] border-[3px] border-solid border-[#111] rounded-[8px] shadow-[5px_5px_0_#111] [transform:rotate(-3deg)] [font:800_44px_var(--font-bricolage,'Bricolage_Grotesque'),system-ui] leading-normal",
   tape: "w-[70px] h-[22px] bg-[rgb(103_232_249_/_0.7)] border-2 border-solid border-[#111] [transform:rotate(8deg)]",
-  pn: "inline-flex items-center gap-[6px] h-[44px] py-0 px-[18px] bg-[#ff4d8d] text-[#111] border-[3px] border-solid border-[#111] rounded-[10px] shadow-[4px_4px_0_#111] [font:800_15px_var(--font-lexend,'Lexend')] cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
+  pn: `inline-flex items-center gap-[6px] h-[44px] py-0 px-[18px] bg-[#ff4d8d] text-[#111] border-[3px] border-solid border-[#111] rounded-[10px] [font:800_15px_var(--font-lexend,'Lexend')] cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${PRESS_MOTION} ${BUSY_MOTION_PRIMARY}`,
   grid: "grid grid-cols-[repeat(3,minmax(0,1fr))] gap-y-[34px] gap-x-[30px] m-0 p-0 list-none max-[960px]:grid-cols-[minmax(0,1fr)]",
   card: `relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[14px] shadow-[6px_6px_0_#111] [&:nth-child(3n+1)]:[--r:-1.6deg] [&:nth-child(3n+2)]:[--r:1.2deg] [&:nth-child(3n)]:[--r:-0.6deg] bg-[#c4b5fd] data-[status=enrolling]:bg-[#fde68a] data-[status=validating]:bg-[#fde68a] ${LIST_CARD_LIFT}`,
   art: "relative grid place-items-center h-[104px] overflow-hidden border-[3px] border-solid border-[#111] rounded-[8px] [background:linear-gradient(135deg,#fff_0%,#ede9fe_30%,#fbcfe8_55%,#fff_70%,#c7f9ff_100%)]",
@@ -41,7 +42,7 @@ export const voiceAlbum = {
   lbl: "[font:800_10px_var(--font-lexend,'Lexend')] tracking-[1.2px] uppercase text-[#555]",
   sg: "[font:700_20px_var(--font-caveat,'Caveat'),cursive] text-[#0e7490]",
   ft: "flex items-center gap-[10px]",
-  ib: "inline-grid place-items-center flex-none w-[42px] h-[42px] p-0 border-2 border-solid border-[#111] rounded-[10px] shadow-[3px_3px_0_#111] text-[#111] cursor-pointer disabled:opacity-45 disabled:shadow-none disabled:cursor-not-allowed",
+  ib: `inline-grid place-items-center flex-none w-[42px] h-[42px] p-0 border-2 border-solid border-[#111] rounded-[10px] text-[#111] cursor-pointer disabled:opacity-45 disabled:shadow-none disabled:cursor-not-allowed ${PRESS_MOTION}`,
   play: "bg-[#a3e635]",
   del: "bg-[#ef4444] text-white",
   audio: "w-full",

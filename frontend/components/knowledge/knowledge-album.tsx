@@ -37,7 +37,7 @@ export const knowledgeAlbum = {
   bad: "block w-fit py-[4px] px-[8px] border-2 border-solid border-[#111] rounded-[6px] bg-[#ffe4e4] text-[#b91c1c] [font:600_12px_var(--font-lexend,'Lexend')]",
   ag: "w-fit py-[2px] px-[10px] bg-[#67e8f9] border-2 border-solid border-[#111] rounded-full shadow-[2px_2px_0_#111] [font:800_12px_var(--font-lexend,'Lexend')]",
   ft: "flex items-center gap-[10px] min-h-[40px]",
-  ib: "!inline-grid !place-items-center !w-[40px] !h-[40px] !p-0 !bg-white !border-[2.5px] !border-solid !border-[#111] !rounded-[8px] !shadow-[4px_4px_0_#111] !opacity-60",
+  ib: `!inline-grid !place-items-center !w-[40px] !h-[40px] !p-0 !bg-white !border-[2.5px] !border-solid !border-[#111] !rounded-[8px] !opacity-60 ${PRESS_MOTION}`,
   ghost:
     "grid place-items-center min-h-[300px] text-[#b9ae90] border-[3px] border-dashed border-[#b9ae90] rounded-[12px]",
   ghostFirst:

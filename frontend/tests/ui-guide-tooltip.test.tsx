@@ -77,7 +77,7 @@ function renderGuide() {
 }
 
 describe("workspace UI guide tooltip", () => {
-  it("follows the pointer and restores an existing description on pointer leave", () => {
+  it("does not show a hover tip on pressable controls", () => {
     renderGuide();
     const button = screen.getByRole("button", { name: "Edit" });
 
@@ -87,31 +87,65 @@ describe("workspace UI guide tooltip", () => {
       clientY: 48,
     });
 
-    expect(screen.getByRole("tooltip").textContent).toContain(
-      "Markdown editor",
-    );
-    expect(button.getAttribute("aria-describedby")).toBe(
-      "existing-description maya-ui-guide-tooltip",
-    );
-
-    fireEvent.pointerOut(button, { relatedTarget: document.body });
-
     expect(screen.queryByRole("tooltip")).toBeNull();
     expect(button.getAttribute("aria-describedby")).toBe(
       "existing-description",
     );
   });
 
+  it("follows the pointer on labels and restores an existing description on leave", () => {
+    render(
+      <>
+        <UiGuideTooltip />
+        <label
+          data-ui-guide="knowledge.edit"
+          aria-describedby="existing-description"
+        >
+          Edit field
+        </label>
+      </>,
+    );
+    const label = screen.getByText("Edit field");
+
+    fireEvent.pointerOver(label, {
+      pointerType: "mouse",
+      clientX: 32,
+      clientY: 48,
+    });
+
+    expect(screen.getByRole("tooltip").textContent).toContain(
+      "Markdown editor",
+    );
+    expect(label.getAttribute("aria-describedby")).toBe(
+      "existing-description maya-ui-guide-tooltip",
+    );
+
+    fireEvent.pointerOut(label, { relatedTarget: document.body });
+
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(label.getAttribute("aria-describedby")).toBe("existing-description");
+  });
+
   it.each(["focus", "pointer", "touch"])(
     "clears %s help when navigation removes its target without a leave event",
     async (input) => {
-      const view = renderGuide();
-      const button = screen.getByRole("button", { name: "Edit" });
-      if (input === "focus") fireEvent.focusIn(button);
+      const view = render(
+        <>
+          <UiGuideTooltip />
+          <label
+            data-ui-guide="knowledge.edit"
+            aria-describedby="existing-description"
+          >
+            Edit field
+          </label>
+        </>,
+      );
+      const label = screen.getByText("Edit field");
+      if (input === "focus") fireEvent.focusIn(label);
       else if (input === "touch") {
-        fireEvent.pointerUp(button, { pointerType: "touch" });
+        fireEvent.pointerUp(label, { pointerType: "touch" });
       } else {
-        fireEvent.pointerOver(button, { pointerType: "mouse" });
+        fireEvent.pointerOver(label, { pointerType: "mouse" });
       }
       expect(screen.getByRole("tooltip")).toBeTruthy();
 
@@ -123,8 +157,8 @@ describe("workspace UI guide tooltip", () => {
       );
 
       await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
-      expect(button.isConnected).toBe(false);
-      expect(button.getAttribute("aria-describedby")).toBe(
+      expect(label.isConnected).toBe(false);
+      expect(label.getAttribute("aria-describedby")).toBe(
         "existing-description",
       );
       fireEvent.pointerMove(document.body, { pointerType: "mouse" });
@@ -200,13 +234,18 @@ describe("workspace UI guide tooltip", () => {
   });
 
   it("clears a missed leave event when a fast pointer move reaches empty space", () => {
-    renderGuide();
-    const button = screen.getByRole("button", { name: "Edit" });
-    fireEvent.pointerOver(button);
+    render(
+      <>
+        <UiGuideTooltip />
+        <label data-ui-guide="knowledge.edit">Edit field</label>
+      </>,
+    );
+    const label = screen.getByText("Edit field");
+    fireEvent.pointerOver(label);
     expect(screen.getByRole("tooltip")).toBeTruthy();
     fireEvent.pointerMove(document.body);
     expect(screen.queryByRole("tooltip")).toBeNull();
-    fireEvent.pointerMove(button);
+    fireEvent.pointerMove(label);
     expect(screen.getByRole("tooltip")).toBeTruthy();
   });
 
@@ -215,7 +254,8 @@ describe("workspace UI guide tooltip", () => {
     (event) => {
       renderGuide();
       const button = screen.getByRole("button", { name: "Edit" });
-      fireEvent.pointerOver(button);
+      fireEvent.focusIn(button);
+      expect(screen.getByRole("tooltip")).toBeTruthy();
       if (event === "scroll") fireEvent.scroll(document.body);
       else if (event === "blur") fireEvent.blur(window);
       else if (event === "resize") fireEvent.resize(window);
@@ -244,7 +284,7 @@ describe("workspace UI guide tooltip", () => {
   it("clears help when a control disappears without a pointer event", async () => {
     const view = renderGuide();
     const button = screen.getByRole("button", { name: "Edit" });
-    fireEvent.pointerOver(button);
+    fireEvent.focusIn(button);
     view.rerender(guideContent(false));
     await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
     expect(button.getAttribute("aria-describedby")).toBe(
@@ -435,9 +475,10 @@ describe("workspace UI guide tooltip", () => {
     expect(label.hasAttribute("aria-describedby")).toBe(false);
   });
 
-  it("pins touch help until the same guided control is tapped again", () => {
+  it("pins opt-in touch help until the same guided control is tapped again", () => {
     renderGuide();
     const button = screen.getByRole("button", { name: "Edit" });
+    button.dataset.uiGuideTouch = "true";
 
     fireEvent.pointerUp(button, { pointerType: "touch" });
 
@@ -450,11 +491,25 @@ describe("workspace UI guide tooltip", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
-  it("shows touch help on guided controls without a special touch marker", () => {
+  it("does not show touch help on pressables without data-ui-guide-touch", () => {
     renderGuide();
     const button = screen.getByRole("button", { name: "Edit" });
 
     fireEvent.pointerUp(button, { pointerType: "touch" });
+
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("shows touch help on non-pressable guides without a special touch marker", () => {
+    render(
+      <>
+        <UiGuideTooltip />
+        <label data-ui-guide="knowledge.edit">Edit field</label>
+      </>,
+    );
+    const label = screen.getByText("Edit field");
+
+    fireEvent.pointerUp(label, { pointerType: "touch" });
 
     expect(screen.getByRole("tooltip").textContent).toContain(
       "Markdown editor",
@@ -519,7 +574,7 @@ describe("workspace UI guide tooltip", () => {
     expect(overlaps(neighbor.getBoundingClientRect())).toBe(false);
   });
 
-  it("avoids covering nearby controls when a guided control is hovered", () => {
+  it("avoids covering nearby controls when a guided label is hovered", () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       value: 1280,
@@ -531,14 +586,13 @@ describe("workspace UI guide tooltip", () => {
     render(
       <>
         <UiGuideTooltip />
-        <button type="button" data-ui-guide="knowledge.edit">
-          Hovered control
-        </button>
+        <label data-ui-guide="knowledge.edit">Hovered control</label>
         <button type="button">Neighbor control</button>
       </>,
     );
-    const [button, neighbor] = screen.getAllByRole("button");
-    button.getBoundingClientRect = () =>
+    const label = screen.getByText("Hovered control");
+    const neighbor = screen.getByRole("button");
+    label.getBoundingClientRect = () =>
       ({
         left: 490,
         right: 530,
@@ -564,7 +618,7 @@ describe("workspace UI guide tooltip", () => {
       }) as DOMRect;
 
     mockTooltipMeasurement(180, 40);
-    fireEvent.pointerOver(button, {
+    fireEvent.pointerOver(label, {
       pointerType: "mouse",
       clientX: 500,
       clientY: 500,
@@ -578,7 +632,7 @@ describe("workspace UI guide tooltip", () => {
       left + 180 > rect.left &&
       top < rect.bottom &&
       top + 40 > rect.top;
-    expect(overlaps(button.getBoundingClientRect())).toBe(false);
+    expect(overlaps(label.getBoundingClientRect())).toBe(false);
     expect(overlaps(neighbor.getBoundingClientRect())).toBe(false);
   });
 
