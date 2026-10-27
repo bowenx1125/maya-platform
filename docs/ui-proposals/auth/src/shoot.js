@@ -3,7 +3,7 @@ const OUT = process.argv[2];
 const only = process.argv[3];
 (async () => {
   const b = await chromium.launch();
-  for (const s of ["1", "2", "3"])
+  for (const s of (process.env.SCHEMES || "1,2,3").split(","))
     for (const st of ["login", "user", "pw", "error", "reg1", "reg2"])
       for (const [w, h] of [
         [1440, 900],

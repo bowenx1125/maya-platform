@@ -4,7 +4,23 @@ The sign-in page (`/`: `app/page.tsx` with `LoginForm` and `RegisterForm`) is th
 last page still in the old Academy look (cream, gold, serif). Every sheet is a real
 frontend render using the app's fonts, mascots, U3 error bubble and copy.
 
-## v2 (current): bold, game-like, mascots react to the form
+## v3 (current): scheme 1 with the game beats of 2 and 3
+
+User picked v2 scheme 1 and asked for the game-feel elements of schemes 2 and 3.
+`v3/scheme-1-plus.png` (mockup `?s=4`) keeps scheme 1's sunburst, outlined pink
+nameplate with stars, full-width lime stage, tilted taped form card, yellow
+speech-bubble heading and step coins, and adds:
+
+- from 2: the four character cards standing on the stage; the picked card lifts
+  with a pink ring and arrow; all cards flip face down (pink dotted backs with the
+  brand dot) while the password is typed; the picked card follows the
+  registration step; a pink burst behind the form card;
+- from 3: a white comic burst behind the nameplate; speed lines towards the form
+  while typing; "!" over the picked card; on a failed sign-in the whole scene turns
+  the grey-blue rain panel, the cards scatter and the mascots frown and sweat
+  (plus the U3 bubble).
+
+## v2: bold, game-like, mascots react to the form
 
 User feedback on v1: wanted more game feel, more youth and energy, bigger mascots
 that react to what you type, a far bolder design; v1 scheme A was "OK" and is the
@@ -39,7 +55,7 @@ ring emblem; it is the sidebar's mark.
 
 ## Reproduce
 
-`src/page.demo.tsx` is the v2 mockup page. Apply `src/mascot-mood.patch` (a held
+`src/page.demo.tsx` is the v2/v3 mockup page (`?s=1|2|3` for v2, `?s=4` for v3). Apply `src/mascot-mood.patch` (a held
 `mood` for `MascotFigure`, needed by schemes 1 and 2), copy the page to
 `frontend/app/auth-proposals/page.demo.tsx`, run `next dev`, then
-`node src/shoot.js <out-dir>`.
+`SCHEMES=4 node src/shoot.js <out-dir>` (default `1,2,3`).

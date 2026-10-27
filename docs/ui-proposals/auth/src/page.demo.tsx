@@ -666,6 +666,176 @@ function SchemeThree({ state }: { state: State }) {
   );
 }
 
+/* ── 4 · Title Screen MAX + character cards (2) + comic beats (3) ── */
+
+function SchemeFour({ state, mobile }: { state: State; mobile: boolean }) {
+  const { t, title, step, current, register } = useCopy(state);
+  const mood = MOOD[state];
+  const hidden = mood === "discreet";
+  const sad = mood === "refused";
+  const typing = mood === "attentive";
+  const picked = register ? current : 1;
+  return (
+    <main
+      className="relative min-h-screen overflow-hidden bg-[#FFF7CC]"
+      style={{
+        backgroundImage:
+          "repeating-conic-gradient(from 0deg at 30% 78%,#FFE14D 0 7deg,#FFF7CC 7deg 14deg)",
+      }}
+    >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(#FF4D8D_2.4px,transparent_2.9px)] bg-[length:18px_18px] [mask-image:radial-gradient(circle_at_100%_0%,#000_0_18%,transparent_34%),radial-gradient(circle_at_0%_0%,#000_0_10%,transparent_22%)]"
+      />
+      {/* 3's "gloomy panel": the scene turns grey-blue rain on a refusal */}
+      {sad ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[#C9D3F0d9] bg-[repeating-linear-gradient(100deg,transparent_0_26px,#ffffff88_26px_29px)]"
+        />
+      ) : null}
+      <div
+        aria-hidden="true"
+        className="absolute right-0 bottom-0 left-0 h-[110px] border-t-[8px] border-[#111] bg-[#A3E635] bg-[repeating-linear-gradient(90deg,#0000_0_40px,#0001_40px_80px)] max-[767px]:top-[392px] max-[767px]:bottom-auto max-[767px]:h-[64px]"
+      />
+      {/* 3's speed lines: the cast rushing towards the field being filled */}
+      {typing ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-[30%] left-[44%] h-[34%] w-[16%] bg-[repeating-linear-gradient(0deg,transparent_0_18px,#111_18px_22px)] [mask-image:linear-gradient(90deg,transparent,#000_40%,#000_70%,transparent)] max-[767px]:hidden"
+        />
+      ) : null}
+      <div className="relative mx-auto grid min-h-screen max-w-[1440px] grid-cols-[1.15fr_1fr] max-[767px]:grid-cols-1">
+        <section className="relative max-[767px]:h-[456px]">
+          <p className="absolute top-12 left-16 z-[2] m-0 -rotate-3 border-[4px] border-[#111] bg-white bg-[linear-gradient(90deg,#A3E635_0_12px,transparent_12px_calc(100%-12px),#A3E635_calc(100%-12px))] px-5 py-1 font-body text-[15px] font-extrabold tracking-[.16em] shadow-[5px_5px_0_#111] max-[767px]:top-5 max-[767px]:left-4 max-[767px]:text-[10px]">
+            {t("academyEyebrow")}
+          </p>
+          <div className="absolute top-[118px] left-12 max-[767px]:top-16 max-[767px]:left-3">
+            {/* 3's comic burst behind the nameplate */}
+            <Burst
+              size={mobile ? 0 : 280}
+              fill="#FFFFFF"
+              className="-top-24 left-[-30px] -rotate-6 max-[767px]:hidden"
+            />
+            <h1 className="relative m-0 -rotate-[6deg] rounded-[24px] border-[5px] border-[#111] bg-[#FF4D8D] py-2 pr-14 pl-8 font-display text-[124px] leading-none font-extrabold text-white shadow-[12px_12px_0_#111] [-webkit-text-stroke:5px_#111] [paint-order:stroke_fill] after:absolute after:top-1/2 after:-right-[10px] after:-translate-y-1/2 after:border-y-[22px] after:border-l-[34px] after:border-y-transparent after:border-l-[#111] after:content-[''] max-[767px]:pr-9 max-[767px]:pl-5 max-[767px]:text-[62px] max-[767px]:shadow-[7px_7px_0_#111] max-[767px]:[-webkit-text-stroke:3px_#111]">
+              {t("appName")}
+            </h1>
+            <Star
+              size={mobile ? 48 : 104}
+              className="-top-16 -right-16 z-10 rotate-12 max-[767px]:-top-8 max-[767px]:-right-6"
+            />
+            <Star
+              size={mobile ? 34 : 64}
+              fill="#67E8F9"
+              className="-bottom-16 left-10 z-10 -rotate-12 max-[767px]:-bottom-9"
+            />
+            <Star
+              size={mobile ? 26 : 46}
+              fill="#A3E635"
+              className="-top-10 left-[40%] z-10 rotate-6 max-[767px]:-top-6"
+            />
+          </div>
+          {/* 2's character cards, standing on the stage */}
+          <div className="absolute right-4 bottom-[88px] left-6 flex items-end justify-center max-[767px]:right-2 max-[767px]:bottom-auto max-[767px]:left-2 max-[767px]:top-[226px]">
+            {SELECT.map((card, index) => {
+              const chosen = index === picked && !hidden && !sad;
+              const tilt = [-7, -2, 3, 8][index];
+              const shake = sad ? (index % 2 ? 12 : -12) : 0;
+              return (
+                <div
+                  key={card.id}
+                  className={cn(
+                    "relative -ml-5 w-[172px] shrink-0 first:ml-0 max-[767px]:-ml-3 max-[767px]:w-[92px]",
+                    chosen && "z-10",
+                  )}
+                  style={{
+                    transform: `rotate(${tilt + shake}deg) translateY(${chosen ? -44 : sad ? 14 : index % 2 ? 0 : 10}px) scale(${chosen ? 1.1 : 1})`,
+                  }}
+                >
+                  {chosen ? (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="absolute -top-14 left-1/2 z-[2] h-0 w-0 -translate-x-1/2 border-x-[20px] border-t-[28px] border-x-transparent border-t-[#FF4D8D] drop-shadow-[3px_3px_0_#111] max-[767px]:-top-8 max-[767px]:border-x-[11px] max-[767px]:border-t-[15px]"
+                      />
+                      {typing ? (
+                        <Pop className="-top-6 -right-3 z-[3]" />
+                      ) : null}
+                    </>
+                  ) : null}
+                  {sad && index % 2 ? (
+                    <Sweat className="-top-7 left-6 z-[3]" />
+                  ) : null}
+                  <div
+                    className={cn(
+                      "relative h-[270px] overflow-hidden rounded-[20px] border-[5px] border-[#111] shadow-[7px_7px_0_#111] max-[767px]:h-[150px] max-[767px]:rounded-[12px] max-[767px]:border-[3px]",
+                      chosen &&
+                        "outline-[6px] outline-offset-[3px] outline-[#FF4D8D] max-[767px]:outline-[4px]",
+                    )}
+                    style={{
+                      backgroundColor: hidden
+                        ? "#FF4D8D"
+                        : sad
+                          ? "#C9D3F0"
+                          : card.bg,
+                      backgroundImage: hidden
+                        ? "radial-gradient(circle,#FFE14D 0 8px,transparent 9px),radial-gradient(circle,#ffffff 0 5px,transparent 6px)"
+                        : "repeating-conic-gradient(from 0deg at 50% 72%,#ffffff66 0 9deg,transparent 9deg 18deg)",
+                      backgroundSize: hidden ? "38px 38px" : undefined,
+                      backgroundPosition: hidden ? "0 0,19px 19px" : undefined,
+                    }}
+                  >
+                    {hidden ? (
+                      <BrandDot className="absolute top-1/2 left-1/2 size-14 -translate-x-1/2 -translate-y-1/2 max-[767px]:size-8" />
+                    ) : (
+                      <MascotFigure
+                        id={card.id}
+                        mood={mood}
+                        className="absolute bottom-[-6px] left-1/2 h-[236px] w-auto -translate-x-1/2 max-[767px]:h-[128px]"
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+        <section className="relative flex items-center justify-center px-12 py-14 max-[767px]:px-4 max-[767px]:pt-4 max-[767px]:pb-10">
+          <div className="relative w-full max-w-[470px]">
+            {/* 2's pink burst peeking out behind the card */}
+            <Burst
+              size={mobile ? 0 : 160}
+              fill="#FF4D8D"
+              className="-right-14 -bottom-14 rotate-12 max-[767px]:hidden"
+            />
+            <div className="relative rotate-[2deg] rounded-[24px] border-[5px] border-[#111] bg-white px-9 pt-[92px] pb-9 shadow-[14px_14px_0_#111] max-[767px]:rotate-0 max-[767px]:px-5 max-[767px]:pt-20">
+              <span
+                aria-hidden="true"
+                className="absolute -top-4 left-10 h-8 w-28 -rotate-6 border-[3px] border-[#111] bg-[#67E8F9cc]"
+              />
+              <span
+                aria-hidden="true"
+                className="absolute -top-4 right-10 h-8 w-28 rotate-6 border-[3px] border-[#111] bg-[#FFE14Dcc]"
+              />
+              <div className="absolute -top-14 -left-14 max-[767px]:-top-10 max-[767px]:-left-1">
+                <div className="relative -rotate-[5deg] rounded-[28px] border-[5px] border-[#111] bg-[#FFE14D] px-7 py-3 shadow-[8px_8px_0_#111] after:absolute after:-bottom-[26px] after:left-10 after:h-0 after:w-0 after:border-t-[26px] after:border-r-[26px] after:border-t-[#111] after:border-r-transparent after:content-['']">
+                  <h2 className="m-0 font-display text-[46px] leading-none font-extrabold whitespace-nowrap max-[767px]:text-[32px]">
+                    {title}
+                  </h2>
+                </div>
+              </div>
+              <div className="grid gap-4">
+                {step ? <Steps current={current} step={step} /> : null}
+                <Fields state={state} />
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
 function Proposals() {
   const params = useSearchParams();
   const scheme = params.get("s") ?? "1";
@@ -673,7 +843,9 @@ function Proposals() {
   const mobile = params.get("m") === "1";
   return (
     <AcademyMoodProvider>
-      {scheme === "2" ? (
+      {scheme === "4" ? (
+        <SchemeFour state={state} mobile={mobile} />
+      ) : scheme === "2" ? (
         <SchemeTwo state={state} mobile={mobile} />
       ) : scheme === "3" ? (
         <SchemeThree state={state} />
