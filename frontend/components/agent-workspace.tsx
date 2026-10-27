@@ -51,6 +51,7 @@ import {
 } from "./avatar";
 import { buildAgentTemplate } from "./agent-template";
 import { PageAction } from "./page-action";
+import { PageBanner } from "./page-banner";
 import { ModuleUpload } from "./studyform-layout";
 import { IconDownload, IconUpload } from "./quiet-icons";
 import { VoiceLibrary } from "./voice/voice-library";
@@ -73,10 +74,6 @@ import {
   StickerBadge,
 } from "./ui";
 import {
-  STUDYFORM_BANNER,
-  STUDYFORM_BANNER_FORM,
-  STUDYFORM_BANNER_FORM_TITLE,
-  STUDYFORM_BANNER_TITLE,
   AGENT_ICON_BUTTON,
   AGENT_NEW_BUTTON,
   AGENT_PAGE,
@@ -1593,7 +1590,15 @@ export function AgentWorkbench({
   return (
     <>
       <div className={AGENT_PAGE}>
-        <header className={cn(STUDYFORM_BANNER, STUDYFORM_BANNER_FORM)}>
+        <PageBanner
+          title={
+            unsavedCreate
+              ? draftName.trim()
+                ? `${draftName.trim()} · ${version.version_label}`
+                : t("newAgent")
+              : `${agent.name} · ${version.version_label}`
+          }
+        >
           <PageAction
             name="back"
             placement="page"
@@ -1627,15 +1632,6 @@ export function AgentWorkbench({
               }
             }}
           />
-          <h1
-            className={cn(STUDYFORM_BANNER_TITLE, STUDYFORM_BANNER_FORM_TITLE)}
-          >
-            {unsavedCreate
-              ? draftName.trim()
-                ? `${draftName.trim()} · ${version.version_label}`
-                : t("newAgent")
-              : `${agent.name} · ${version.version_label}`}
-          </h1>
           <PageAction
             name="done"
             placement="page"
@@ -1653,7 +1649,7 @@ export function AgentWorkbench({
             }
             onClick={() => void publish()}
           />
-        </header>
+        </PageBanner>
         {!unsavedCreate && !agentIssuesDismissed ? (
           <AgentHintBar
             title={t("agentIssuesTitle")}

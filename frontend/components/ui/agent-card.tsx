@@ -33,7 +33,7 @@ export function agentMascot(id: string, materialTheme?: string | null) {
 export const AGENT_GRID_CLASS =
   "m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5 p-0 pt-4 pr-4 pb-5 max-[680px]:grid-cols-1 max-[680px]:gap-4";
 
-const CARD_CLASS = `group/card relative flex min-h-[248px] flex-col overflow-visible rounded-[14px] border-[3px] border-border bg-surface p-2 font-body text-ink shadow-[6px_6px_0_#111] ${LIST_CARD_LIFT} focus-within:[--card-lift:-2px] motion-reduce:focus-within:[--card-lift:0px]`;
+const CARD_CLASS = `group/card relative flex min-h-[248px] flex-col overflow-visible rounded-[14px] border-[3px] border-border bg-surface p-2 font-body text-ink shadow-[6px_6px_0_#111] ${LIST_CARD_LIFT} focus-within:[--card-lift:-6px] motion-reduce:focus-within:[--card-lift:0px]`;
 
 /** Card tones: salmon, periwinkle, sage — title band and sunburst share one. */
 const CARD_TONES = ["#F2B79A", "#C9D3F0", "#C9D9A0"] as const;
@@ -162,7 +162,6 @@ export function AgentCard({
   mascot,
   footer,
   caption,
-  guideText,
   deleting = false,
   onDelete,
   deleteLabel,
@@ -183,7 +182,7 @@ export function AgentCard({
   footer?: ReactNode;
   /** A short line above the version strip (e.g. the team on teacher Home). */
   caption?: ReactNode;
-  /** ui-guide hover help (last editor). */
+  /** @deprecated Tips removed; kept optional so callers need no churn. */
   guideText?: string;
   deleting?: boolean;
   onDelete?: () => void;
@@ -364,8 +363,6 @@ export function AgentCard({
               href={href}
               aria-label={name}
               className="absolute inset-0 z-0 rounded-[10px] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
-              data-ui-guide={guideText ? "agent.lastEdited" : undefined}
-              data-ui-guide-text={guideText}
             />
             {renameInvalid ? <KindSticker kind="server" on /> : null}
             {versionTag}
@@ -419,20 +416,21 @@ export function AgentCard({
             </span>
           </>
         ) : (
-          <Link
-            href={href}
-            aria-label={name}
-            className="block rounded-[10px] text-[#111] no-underline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
-            data-ui-guide={guideText ? "agent.lastEdited" : undefined}
-            data-ui-guide-text={guideText}
-          >
-            {versionTag}
-            <span data-card-band className={tapeClass}>
-              {nameText}
+          <>
+            <Link
+              href={href}
+              aria-label={name}
+              className="absolute inset-0 z-0 rounded-[10px] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
+            />
+            <span className="pointer-events-none relative z-[1] block">
+              {versionTag}
+              <span data-card-band className={tapeClass}>
+                {nameText}
+              </span>
+              {listArt}
+              {pill}
             </span>
-            {listArt}
-            {pill}
-          </Link>
+          </>
         )}
         {onDelete ? (
           <DeleteX label={deleteLabel} disabled={deleting} onClick={onDelete} />
@@ -454,8 +452,6 @@ export function AgentCard({
             href={href}
             aria-label={name}
             className="absolute inset-0 z-0 rounded-[14px] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
-            data-ui-guide={guideText ? "agent.lastEdited" : undefined}
-            data-ui-guide-text={guideText}
           />
           {/* A failed rename is a server error: the black "!" of its bubble,
               on the card corner so the frame's overflow cannot clip it. */}
@@ -526,27 +522,30 @@ export function AgentCard({
           </span>
         </>
       ) : (
-        <Link
-          href={href}
-          aria-label={name}
-          className={cn(
-            listCard ? FRAME_A_CLASS : FRAME_CLASS,
-            "text-ink no-underline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main",
-          )}
-          data-ui-guide={guideText ? "agent.lastEdited" : undefined}
-          data-ui-guide-text={guideText}
-        >
+        <>
+          <Link
+            href={href}
+            aria-label={name}
+            className="absolute inset-0 z-0 rounded-[14px] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
+          />
           <span
-            data-card-band
-            className={listCard ? BAND_A_CLASS : BAND_CLASS}
-            style={{ backgroundColor: tone }}
+            className={cn(
+              listCard ? FRAME_A_CLASS : FRAME_CLASS,
+              "pointer-events-none relative z-[1]",
+            )}
           >
-            <span className={titleClass}>{title}</span>
+            <span
+              data-card-band
+              className={listCard ? BAND_A_CLASS : BAND_CLASS}
+              style={{ backgroundColor: tone }}
+            >
+              <span className={titleClass}>{title}</span>
+            </span>
+            {art}
+            {strip}
+            {foot}
           </span>
-          {art}
-          {strip}
-          {foot}
-        </Link>
+        </>
       )}
       {onDelete ? (
         <DeleteX label={deleteLabel} disabled={deleting} onClick={onDelete} />

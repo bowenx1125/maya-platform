@@ -2557,6 +2557,15 @@ function BrainformWorkspaceBody({
                     document={document}
                     agents={ragAgents(document)}
                     tone={failed ? "failed" : status ? "pending" : ""}
+                    openLabel={t(
+                      canEdit
+                        ? "brainformEditRagNamed"
+                        : "brainformViewRagNamed",
+                      { name: document.source_filename },
+                    )}
+                    onOpen={() =>
+                      void (canEdit ? editRag(document) : viewRag(document))
+                    }
                     title={
                       renameDocumentId === document.id ? (
                         <input
@@ -2771,6 +2780,24 @@ function BrainformWorkspaceBody({
                     key={row.canonical_set_id}
                     artId={`kart-${row.canonical_set_id}`}
                     tone={isGenerating ? "running" : failed ? "failed" : ""}
+                    openLabel={
+                      row.can_edit
+                        ? t("brainformEditKnowledgeNamed", {
+                            name: row.knowledge_display_name,
+                          })
+                        : t("brainformViewKnowledgeNamed", {
+                            name: row.knowledge_display_name,
+                          })
+                    }
+                    onOpen={
+                      isGenerating || (!currentDoc && !row.can_edit)
+                        ? undefined
+                        : () =>
+                            void openKnowledge(
+                              row,
+                              row.can_edit ? "edit" : "view",
+                            )
+                    }
                     footer={
                       <>
                         {isGenerating ? (

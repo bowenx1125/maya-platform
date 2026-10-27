@@ -79,7 +79,9 @@ describe("title buttons use FitTitle", () => {
     const link = screen.getByRole("link", {
       name: "Comparative Study of Confucian Ethics and Aristocratic Virtue",
     });
-    expect(link.querySelector(".fit-title-text")).not.toBeNull();
+    // Whole-card link is an absolute hit target; FitTitle sits on the card.
+    const card = link.closest("li") ?? link.parentElement;
+    expect(card?.querySelector(".fit-title-text")).not.toBeNull();
   });
 
   it("keeps the RAG/Knowledge row copy on the buttons' row", async () => {

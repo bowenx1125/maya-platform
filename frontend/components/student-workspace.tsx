@@ -1,8 +1,6 @@
 "use client";
 
-import { STUDYFORM_NEW_CLASS } from "./agent-chrome";
 import { safeTeamsReturn } from "../lib/team-return";
-import { agentLastEditedTitle } from "../lib/agent-tooltip";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -47,8 +45,9 @@ import { UserAvatar } from "./user-avatar";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
 import { assessmentAttemptsRead } from "./knowledge/assessment-record";
 import { ModuleTiles, VersionTile } from "./studyform-layout";
-import { AgentsEmpty, NewButton, type AgentRename } from "./ui/agent-card";
+import { AgentsEmpty, type AgentRename } from "./ui/agent-card";
 import { AgentsPage } from "./agents-page";
+import { PageAction } from "./page-action";
 import { TeamsPage } from "./teams-page";
 import { GuidePortrait } from "./ui/guide-dialog";
 import { EmptyCard, ErrorNotice, LoadingCard, SectionCard } from "./ui";
@@ -763,10 +762,11 @@ function GroupWorkspaceSession({
           action={
             // With no Agents yet, New sits inside the empty card instead.
             teacherIdentity || !(items.length || sharedAgents.length) ? null : (
-              <NewButton
+              <PageAction
+                name="new"
+                placement="page"
                 href={`/student/groups/${groupId}/agents/new`}
-                label={t("newAgent")}
-                className={STUDYFORM_NEW_CLASS}
+                className="bg-[#FF4D8D]"
               />
             )
           }
@@ -816,11 +816,6 @@ function GroupWorkspaceSession({
                   }
                   name={item.agent.name}
                   href={`/student/agents/${item.agent.id}`}
-                  title={agentLastEditedTitle(
-                    t,
-                    item.agent,
-                    item.current_version.version_label,
-                  )}
                   label={item.current_version.version_label}
                   pending={false}
                   visibility={item.agent.visibility}
@@ -906,7 +901,6 @@ function GroupAgentRow({
       materialTheme={bubble.materialTheme}
       name={agent.name}
       href={`/student/agents/${agent.id}`}
-      title={agentLastEditedTitle(t, agent, bubble.label)}
       label={bubble.label}
       pending={bubble.pending}
       visibility={agent.visibility}

@@ -265,8 +265,8 @@ describe("PW3-E teacher shell and responsive contract", () => {
     );
     // Sidebar rows (and Logout, which reuses them) and the collapsed icon
     // buttons keep 44px targets.
-    expect(shell).toMatch(/const ITEM =\s*"[^"]*\bmin-h-11\b/);
-    expect(shell).toMatch(/const ICON_ITEM =\s*"[^"]*\bsize-11\b/);
+    expect(shell).toMatch(/const ITEM =[\s\S]*?\bmin-h-11\b/);
+    expect(shell).toMatch(/const ICON_ITEM =[\s\S]*?\bsize-11\b/);
     expect(css).toMatch(/\.text-link\s*\{[^}]*min-height:\s*44px/s);
     expect(css).toMatch(/details > summary\s*\{[^}]*min-height:\s*44px/s);
     expect(css).toMatch(

@@ -42,6 +42,9 @@
 
 html {
   min-width: 320px;
+  /* Keep layout width stable when Card Room (or any overlay) toggles
+     document scrolling — otherwise the sidebar expands/contracts. */
+  scrollbar-gutter: stable;
   /* Arcade canvas everywhere (DESIGN-RULES --bg / --bg-grid), shell or not. */
   background-color: #dcebff;
 }

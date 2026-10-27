@@ -160,11 +160,15 @@ export function KnowledgeCard({
   artId,
   children,
   footer,
+  onOpen,
+  openLabel,
 }: {
   tone: "" | "running" | "failed";
   artId: string;
   children: ReactNode;
   footer: ReactNode;
+  onOpen?: () => void;
+  openLabel?: string;
 }) {
   return (
     <li
@@ -177,11 +181,36 @@ export function KnowledgeCard({
             : "bg-[#a3e635]",
       )}
     >
-      <div className={knowledgeAlbum.art}>
-        <KnowledgeArt id={artId} />
+      {onOpen ? (
+        <button
+          type="button"
+          aria-label={openLabel ?? "Open"}
+          className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] border-0 bg-transparent p-0"
+          onClick={onOpen}
+        />
+      ) : null}
+      <div className="pointer-events-none relative z-[1]">
+        <div className={knowledgeAlbum.art}>
+          <KnowledgeArt id={artId} />
+        </div>
+        <div
+          className={cn(
+            knowledgeAlbum.plate,
+            onOpen ? "pointer-events-auto" : undefined,
+          )}
+        >
+          {children}
+        </div>
       </div>
-      <div className={knowledgeAlbum.plate}>{children}</div>
-      <div className={knowledgeAlbum.ft}>{footer}</div>
+      <div
+        className={cn(
+          knowledgeAlbum.ft,
+          "relative z-[1]",
+          onOpen ? "pointer-events-auto" : undefined,
+        )}
+      >
+        {footer}
+      </div>
     </li>
   );
 }

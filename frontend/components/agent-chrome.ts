@@ -73,4 +73,4 @@ export const STUDYFORM_BANNER_FORM_TITLE =
 export const STUDYFORM_NEW_CLASS = `m-0 ml-auto box-border inline-flex h-[52px] min-h-[52px] shrink-0 items-center gap-2.5 rounded-[10px] border-[3px] border-[#111] bg-[#FF4D8D] px-[22px] py-0 font-body text-[17px] leading-none font-extrabold text-[#111] no-underline [&_svg]:size-[22px] [&_svg]:stroke-[3.5] ${PRESS_MOTION} ${BUSY_MOTION_PRIMARY}`;
 /** List-card hover lift (DESIGN-RULES: -2px, --dur-ui 150ms, --ease); keeps the --r tilt; none under reduced motion. */
 export const LIST_CARD_LIFT =
-  "[transform:translateY(var(--card-lift,0px))_rotate(var(--r,0deg))] transition-transform duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:[--card-lift:-2px] motion-reduce:hover:[--card-lift:0px]";
+  "cursor-pointer [transform:translateY(var(--card-lift,0px))_rotate(var(--r,0deg))] transition-transform duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:[--card-lift:-6px] motion-reduce:hover:[--card-lift:0px]";

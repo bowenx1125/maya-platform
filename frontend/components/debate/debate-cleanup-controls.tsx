@@ -242,7 +242,6 @@ export function DebateCleanupControls({
         disabled={busy}
         aria-label={voiceLabel}
         aria-busy={labelled && voiceBusy ? true : undefined}
-        title={labelled ? undefined : voiceLabel}
         data-vocalized={revoice ? "false" : "true"}
         onClick={() => void (revoice ? generateAudio() : remove("voice"))}
       >
@@ -265,7 +264,6 @@ export function DebateCleanupControls({
         disabled={busy}
         aria-label={deleteLabel}
         aria-busy={labelled && deleteBusy ? true : undefined}
-        title={labelled ? undefined : deleteLabel}
         onClick={() => void remove("all")}
       >
         {labelled && deleteBusy ? (

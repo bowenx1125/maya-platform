@@ -80,6 +80,7 @@ import { IconClose, IconPin } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import { PageAction } from "./page-action";
+import { PageBanner } from "./page-banner";
 import {
   ChatAvatar,
   ChatEmptyGhosts,
@@ -89,7 +90,6 @@ import {
   chatKindChipClass,
   chatTapeTitleClass,
 } from "./chatform-chrome";
-import { AGENT_BANNER, AGENT_BANNER_TITLE } from "./agent-chrome";
 import { buttonVariants } from "./ui/button";
 import { cn } from "../lib/utils";
 import {
@@ -2911,40 +2911,37 @@ function AgentChatScope({
 
   return (
     <>
-      <header className={cn(AGENT_BANNER, "mb-5 justify-between")}>
-        <h1 className={cn(AGENT_BANNER_TITLE, "flex-none")}>Chatform</h1>
-        <div className="ml-auto flex shrink-0 items-center gap-3">
-          {newChatRoute ? (
-            <>
-              <PageAction
-                name="back"
-                placement="page"
-                disabled={creating}
-                onClick={() => closeNewEntry()}
-              />
-              <PageAction
-                name="done"
-                placement="page"
-                disabled={!pick || creating || busy || teamBusy}
-                className={
-                  !pick || creating || busy || teamBusy
-                    ? "bg-[#FFB3CE] text-[#111]/50"
-                    : undefined
-                }
-                onClick={() => void createPicked()}
-              />
-            </>
-          ) : (
+      <PageBanner title="Chatform">
+        {newChatRoute ? (
+          <>
             <PageAction
-              name="new"
+              name="back"
               placement="page"
-              className="bg-[#FF4D8D]"
-              disabled={busy || teamBusy}
-              onClick={openNewEntry}
+              disabled={creating}
+              onClick={() => closeNewEntry()}
             />
-          )}
-        </div>
-      </header>
+            <PageAction
+              name="done"
+              placement="page"
+              disabled={!pick || creating || busy || teamBusy}
+              className={
+                !pick || creating || busy || teamBusy
+                  ? "bg-[#FFB3CE] text-[#111]/50"
+                  : undefined
+              }
+              onClick={() => void createPicked()}
+            />
+          </>
+        ) : (
+          <PageAction
+            name="new"
+            placement="page"
+            className="bg-[#FF4D8D]"
+            disabled={busy || teamBusy}
+            onClick={openNewEntry}
+          />
+        )}
+      </PageBanner>
       {/* Owner decision (2026-10-13): opening Memory shows no status line
           and no "continue" button; the Chat itself shows what happened. */}
       {invalidMemoryRoute ? (

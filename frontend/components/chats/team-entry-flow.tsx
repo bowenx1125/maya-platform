@@ -27,6 +27,7 @@ import {
 import { localizeError } from "../../lib/i18n";
 import { useT } from "../../lib/i18n";
 import { PageAction } from "../page-action";
+import { PageBanner } from "../page-banner";
 import { teamVersionLabel } from "../studyform-layout";
 import { useSession } from "../session-provider";
 import { Notice, RetryPill, SectionCard, StickerBadge } from "../ui";
@@ -37,13 +38,7 @@ import {
   teamDraftKey,
   writeTeamDraft,
 } from "../../lib/team-return";
-import {
-  AGENT_PAGE,
-  STUDYFORM_BANNER,
-  STUDYFORM_BANNER_FORM,
-  STUDYFORM_BANNER_FORM_TITLE,
-  STUDYFORM_BANNER_TITLE,
-} from "../agent-chrome";
+import { AGENT_PAGE } from "../agent-chrome";
 import { MascotFigure } from "../academy/mascots";
 import { agentMascot } from "../ui/agent-card";
 import { WorkspaceIcon } from "../workspace-icon";
@@ -746,20 +741,19 @@ export function TeamEntryFlow({
     const tilts = [-1.2, 0.8, -0.6, 1.2, -0.9];
     return (
       <section className={AGENT_PAGE} aria-label={title}>
-        <header className={cn(STUDYFORM_BANNER, STUDYFORM_BANNER_FORM)}>
+        <PageBanner
+          title={
+            editing || initialRouteMode === "team-edit"
+              ? t("chatEditTeam")
+              : title
+          }
+        >
           <PageAction
             name="back"
             placement="page"
             disabled={saving || mutationUnknown}
             onClick={closeForm}
           />
-          <h1
-            className={cn(STUDYFORM_BANNER_TITLE, STUDYFORM_BANNER_FORM_TITLE)}
-          >
-            {editing || initialRouteMode === "team-edit"
-              ? t("chatEditTeam")
-              : title}
-          </h1>
           {readOnly ? null : (
             <PageAction
               name="done"
@@ -770,7 +764,7 @@ export function TeamEntryFlow({
               }
             />
           )}
-        </header>
+        </PageBanner>
         {loading ? <p role="status">{t("loading")}</p> : null}
         {loadError && loadError !== dismissedError ? (
           <Notice

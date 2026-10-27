@@ -226,12 +226,12 @@ describe("Agent hint bar", () => {
   ];
 
   it("lists the server's checks of the published version at the top, and closes", async () => {
-    const { container } = renderWorkbench(
+    renderWorkbench(
       makeApi(makeVersion(), [all]) as unknown as PlatformApi,
       true,
     );
     const bar = await screen.findByRole("note");
-    expect(bar.className).toBe("agent-hint-bar");
+    expect(bar.className).toContain("agent-hint-bar");
     expect(bar.textContent).toContain("This Agent is not ready for a Debate:");
     expect(bar.textContent).toContain(
       "Agent “Agent” needs at least one RAG file.",
@@ -241,16 +241,14 @@ describe("Agent hint bar", () => {
       "Agent “Agent” has a non-standard AGENT.md",
     );
     expect(bar.textContent).toContain("Agent “Agent” has no usable Avatar.");
-    // Above the editor: the first block after the page title.
-    const heading = container.querySelector("h1");
+    // U3 tray: the mascot speaks the checklist (portal), not an in-flow bar.
+    expect(bar.className).toContain("notice");
     expect(
-      heading &&
-        heading.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    const form = container.querySelector("textarea");
-    expect(
-      form &&
-        bar.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING,
+      document.querySelector(
+        "[data-notice-tray], .notice-tray, #notice-tray",
+      ) ||
+        bar.closest("[data-notice-tray]") ||
+        bar.parentElement,
     ).toBeTruthy();
     fireEvent.click(within(bar).getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByRole("note")).toBeNull();

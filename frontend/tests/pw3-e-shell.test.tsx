@@ -123,7 +123,7 @@ describe("PW3-E teacher information architecture", () => {
     expect(document.querySelector('[data-tour="brain"]')).toBeNull();
     expect(
       primaryNavigation.getByRole("link", { name: "Mayaform" }).className,
-    ).toContain("active");
+    ).toContain("is-active");
     expect(
       primaryNavigation
         .getByRole("link", { name: "Mayaform" })
@@ -131,10 +131,10 @@ describe("PW3-E teacher information architecture", () => {
     ).toBe("page");
     expect(
       primaryNavigation.getByRole("link", { name: "Debates" }).className,
-    ).not.toContain("active");
+    ).not.toContain("is-active");
     expect(
       primaryNavigation.getByRole("link", { name: "Accounts" }).className,
-    ).not.toContain("active");
+    ).not.toContain("is-active");
 
     expect(screen.getByRole("button", { name: "Logout" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "New" })).toBeNull();
@@ -157,7 +157,7 @@ describe("PW3-E teacher information architecture", () => {
     ).toBe("page");
     expect(
       primaryNavigation.getByRole("link", { name: "Mayaform" }).className,
-    ).not.toContain("active");
+    ).not.toContain("is-active");
   });
 
   it("keeps the sidebar labels on a view-transition layer above the moving highlight", () => {
@@ -191,7 +191,7 @@ describe("PW3-E teacher information architecture", () => {
     const primaryNavigation = within(screen.getByRole("navigation"));
     expect(
       primaryNavigation.getByRole("link", { name: "Agents" }).className,
-    ).toContain("active");
+    ).toContain("is-active");
     expect(
       primaryNavigation
         .getByRole("link", { name: "Agents" })

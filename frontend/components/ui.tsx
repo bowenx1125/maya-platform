@@ -438,7 +438,6 @@ function ErrorFixLinks({ error }: { error: unknown }) {
           className="inline-button"
           href={link.href}
           aria-label={link.label}
-          title={link.label}
         >
           <IconEdit />
         </Link>
