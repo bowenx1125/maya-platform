@@ -1,7 +1,5 @@
 "use client";
 
-import { STUDYFORM_NEW_CLASS } from "./agent-chrome";
-import { agentLastEditedTitle } from "../lib/agent-tooltip";
 import { CountUp } from "./count-up";
 import { HomeAgentRow } from "./home/agent-row";
 import {
@@ -10,12 +8,7 @@ import {
   HomeHero,
   HomeStat,
 } from "./home/home-hero";
-import {
-  AgentCard,
-  AgentsEmpty,
-  NewButton,
-  agentMascot,
-} from "./ui/agent-card";
+import { AgentCard, AgentsEmpty, agentMascot } from "./ui/agent-card";
 
 import {
   useCallback,
@@ -55,6 +48,7 @@ import { CreateAgentForm } from "./student-workspace";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
 import { ModuleTiles, VersionTile } from "./studyform-layout";
 import { AgentsPage } from "./agents-page";
+import { PageAction } from "./page-action";
 import { TeamsPage } from "./teams-page";
 import { EmptyCard, ErrorNotice, LoadingCard } from "./ui";
 
@@ -187,7 +181,6 @@ export function TeacherDashboard() {
                 label="V1.0"
                 pending={false}
                 mascot={agentMascot(agent.id, undefined)}
-                guideText={agentLastEditedTitle(t, agent)}
                 deleteLabel={t("deleteAgent")}
                 caption={
                   groups.find((group) => group.id === agent.group_id)?.name ||
@@ -230,7 +223,6 @@ function PublishedAgentCard({
         item.agent.id,
         item.current_version.avatar_config?.material_theme,
       )}
-      guideText={agentLastEditedTitle(t, item.agent)}
       deleteLabel={t("deleteAgent")}
       caption={groupName || undefined}
     />
@@ -460,10 +452,11 @@ export function TeacherStudyformWorkspace({
           action={
             // With no Agents yet, New sits inside the empty card instead.
             teacherCourseId && (personalAgents.length || ownedAgents.length) ? (
-              <NewButton
+              <PageAction
+                name="new"
+                placement="page"
                 href="/teacher/agents/new"
-                label={t("newAgent")}
-                className={STUDYFORM_NEW_CLASS}
+                className="bg-[#FF4D8D]"
               />
             ) : null
           }
@@ -478,11 +471,6 @@ export function TeacherStudyformWorkspace({
                   key={item.agent.id}
                   name={item.agent.name}
                   href={`/teacher/agents/${item.agent.id}`}
-                  title={agentLastEditedTitle(
-                    t,
-                    item.agent,
-                    item.current_version.version_label,
-                  )}
                   label={item.current_version.version_label}
                   pending={false}
                   visibility={item.agent.visibility}
@@ -508,7 +496,6 @@ export function TeacherStudyformWorkspace({
                     key={agent.id}
                     name={agent.name}
                     href={`/teacher/agents/${agent.id}`}
-                    title={agentLastEditedTitle(t, agent, label)}
                     label={label}
                     pending={false}
                     visibility={agent.visibility}

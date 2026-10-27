@@ -202,7 +202,6 @@ export function MascotBadge({
       type="button"
       data-mascot-badge
       aria-label={label}
-      title={label}
       onClick={onOpen}
       className="mascot-badge pointer-events-auto absolute right-0 bottom-[52px] z-[2] m-0 grid size-[28px] min-h-0 rotate-[-8deg] cursor-pointer place-items-center rounded-full border-2 border-border bg-[#EF4444] p-0 font-body text-[15px] font-black text-white shadow-[2px_2px_0_#111] [body>.notice-tray>&]:right-3 min-[900px]:[body>.notice-tray>&]:right-0"
     >

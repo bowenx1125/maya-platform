@@ -54,7 +54,6 @@ function JesterCard({
       style={
         { "--pigment": PIGMENTS[index % PIGMENTS.length] } as CSSProperties
       }
-      title={jester.text}
     >
       <span className={styles.jesterBand} aria-hidden="true" />
       <PixelText className={styles.jesterName} text={jester.name} scale={2} />

@@ -286,7 +286,6 @@ export function LlmParamsCard({
                         className={LOCK}
                         role="img"
                         aria-label={t("debateParamsNeverSent")}
-                        title={t("debateParamsNeverSent")}
                       >
                         <IconLock size={12} />
                       </span>
@@ -392,10 +391,7 @@ export function LlmParamsCard({
                   </div>
                   <div className={OMIT_CELL}>
                     {spec.kind !== "int" ? (
-                      <label
-                        className="relative grid size-8 place-items-center"
-                        title={t("debateParamsOmit")}
-                      >
+                      <label className="relative grid size-8 place-items-center">
                         <input
                           type="checkbox"
                           className={OMIT}

@@ -25,7 +25,7 @@ afterEach(() => cleanup());
 describe("version mark", () => {
   it("opens from the card link, shows [V1.0 | Private] and deletes from the round ×", () => {
     const onDelete = vi.fn();
-    render(
+    const { container } = render(
       <>
         <ul>
           <VersionTile
@@ -42,9 +42,11 @@ describe("version mark", () => {
     );
     const open = screen.getByRole("link", { name: "Laozi" });
     expect(open.getAttribute("href")).toBe("/student/agents/laozi");
-    // PR0: the whole card is the link; the strip reads [V1.0 | Private].
-    expect(open.textContent).toContain("V1.0");
-    expect(open.textContent).toContain("Private");
+    // Whole-card hit target is an absolute link; strip/label live as siblings.
+    const card =
+      container.querySelector("[data-agent-card]") ?? open.closest("li");
+    expect(card?.textContent).toContain("V1.0");
+    expect(card?.textContent).toContain("Private");
     fireEvent.click(screen.getByRole("button", { name: "Delete Laozi" }));
     expect(onDelete).toHaveBeenCalledTimes(1);
   });

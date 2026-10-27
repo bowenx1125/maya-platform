@@ -151,7 +151,6 @@ export function VoiceAlbumCard({
   index,
   profile,
   agents,
-  title,
   name,
   footer,
   audio,
@@ -159,7 +158,6 @@ export function VoiceAlbumCard({
   index: number;
   profile: VoiceProfile;
   agents: AffectedAgent[] | undefined;
-  title: string | undefined;
   name: ReactNode;
   footer: ReactNode;
   audio: ReactNode;
@@ -170,7 +168,7 @@ export function VoiceAlbumCard({
   const pending =
     profile.status === "enrolling" || profile.status === "validating";
   return (
-    <li className={voiceAlbum.card} data-status={profile.status} title={title}>
+    <li className={voiceAlbum.card} data-status={profile.status}>
       <div className={voiceAlbum.art}>
         <span className={voiceAlbum.no} aria-hidden="true">
           #{String(index + 1).padStart(2, "0")}

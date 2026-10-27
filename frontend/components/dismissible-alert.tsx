@@ -30,7 +30,6 @@ export function DismissButton({
     <RoundX
       className="alert-dismiss"
       aria-label={label ?? t("noticeDismiss")}
-      title={label ?? t("noticeDismiss")}
       onClick={onDismiss}
     />
   );

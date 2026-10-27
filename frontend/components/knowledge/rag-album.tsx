@@ -217,6 +217,8 @@ export function RagCard({
   status,
   footer,
   badge,
+  onOpen,
+  openLabel,
 }: {
   index: number;
   document: KnowledgeDocument;
@@ -226,6 +228,8 @@ export function RagCard({
   status: ReactNode;
   footer: ReactNode;
   badge: ReactNode;
+  onOpen?: () => void;
+  openLabel?: string;
 }) {
   const t = useT();
   const editor = lastEditor(document);
@@ -240,41 +244,53 @@ export function RagCard({
             : albumStyles.card
       }
     >
-      <div className={albumStyles.art}>
-        <span className={albumStyles.no} aria-hidden="true">
-          #{String(index + 1).padStart(2, "0")}
-        </span>
-        <span className={albumStyles.ty} aria-hidden="true">
-          {fileExt(document.source_filename)}
-        </span>
-        <span className={albumStyles.cnt} aria-hidden="true">
-          {used.length}
-        </span>
+      {onOpen ? (
+        <button
+          type="button"
+          aria-label={openLabel ?? document.source_filename}
+          className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] border-0 bg-transparent p-0"
+          onClick={onOpen}
+        />
+      ) : null}
+      <div className="pointer-events-none relative z-[1]">
+        <div className={albumStyles.art}>
+          <span className={albumStyles.no} aria-hidden="true">
+            #{String(index + 1).padStart(2, "0")}
+          </span>
+          <span className={albumStyles.ty} aria-hidden="true">
+            {fileExt(document.source_filename)}
+          </span>
+          <span className={albumStyles.cnt} aria-hidden="true">
+            {used.length}
+          </span>
+        </div>
+        <div className={`${albumStyles.plate} pointer-events-auto`}>
+          {title}
+          {status}
+          <dl className={albumStyles.stats}>
+            <dt>{t("ragUsedBy")}</dt>
+            <dd>
+              {used.length ? (
+                <ol>
+                  {used.map((agent) => (
+                    <li key={agent.agent_id}>{agent.name}</li>
+                  ))}
+                </ol>
+              ) : (
+                <span className={albumStyles.none}>{t("ragNoAgentsYet")}</span>
+              )}
+            </dd>
+          </dl>
+          <p className={albumStyles.sig}>
+            <span className={albumStyles.lbl}>{t("ragLastEditedBy")}</span>{" "}
+            {editor ? <span className={albumStyles.sg}>@{editor}</span> : null}
+          </p>
+        </div>
       </div>
-      <div className={albumStyles.plate}>
-        {title}
-        {status}
-        <dl className={albumStyles.stats}>
-          <dt>{t("ragUsedBy")}</dt>
-          <dd>
-            {used.length ? (
-              <ol>
-                {used.map((agent) => (
-                  <li key={agent.agent_id}>{agent.name}</li>
-                ))}
-              </ol>
-            ) : (
-              <span className={albumStyles.none}>{t("ragNoAgentsYet")}</span>
-            )}
-          </dd>
-        </dl>
-        <p className={albumStyles.sig}>
-          <span className={albumStyles.lbl}>{t("ragLastEditedBy")}</span>{" "}
-          {editor ? <span className={albumStyles.sg}>@{editor}</span> : null}
-        </p>
+      <div className={`${albumStyles.ft} pointer-events-auto relative z-[1]`}>
+        {footer}
       </div>
-      <div className={albumStyles.ft}>{footer}</div>
-      {badge}
+      <span className="pointer-events-none relative z-[1]">{badge}</span>
     </li>
   );
 }

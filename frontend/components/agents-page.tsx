@@ -2,16 +2,13 @@
 
 import type { ReactNode } from "react";
 
-import {
-  AGENT_PAGE,
-  STUDYFORM_BANNER,
-  STUDYFORM_BANNER_TITLE,
-} from "./agent-chrome";
+import { AGENT_PAGE } from "./agent-chrome";
+import { PageBanner } from "./page-banner";
 
 /**
- * The Agents page (r2-list.mjs list A / empty E2): the sunburst banner with
- * the title and, when there are Agents, "+ New"; one white panel below holds
- * the card A grid or the E2 spotlight.
+ * The Agents page: shared PageBanner (Chatform-sized) with the title and,
+ * when there are Agents, New on the right; one panel below holds the card
+ * grid or the empty spotlight.
  */
 export function AgentsPage({
   title,
@@ -19,18 +16,15 @@ export function AgentsPage({
   children,
 }: {
   title: string;
-  /** Header "+ New" (none in the empty state; it sits in the card). */
+  /** Header New (none in the empty state; it sits in the card). */
   action?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className={AGENT_PAGE}>
-      <header className={STUDYFORM_BANNER}>
-        <h1 id="studyform-agents" className={STUDYFORM_BANNER_TITLE}>
-          {title}
-        </h1>
+      <PageBanner title={title} titleId="studyform-agents">
         {action}
-      </header>
+      </PageBanner>
       <section aria-labelledby="studyform-agents">{children}</section>
     </div>
   );

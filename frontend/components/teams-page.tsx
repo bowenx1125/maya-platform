@@ -7,20 +7,11 @@ import type { TeamSummaryDto } from "../lib/api";
 import { useT } from "../lib/i18n";
 import { cn } from "../lib/utils";
 import { MascotFigure, MASCOT_IDS, type MascotId } from "./academy/mascots";
-import {
-  AGENT_PAGE,
-  STUDYFORM_BANNER,
-  STUDYFORM_BANNER_TITLE,
-  STUDYFORM_NEW_CLASS,
-  LIST_CARD_LIFT,
-} from "./agent-chrome";
+import { AGENT_PAGE, LIST_CARD_LIFT } from "./agent-chrome";
+import { PageAction } from "./page-action";
+import { PageBanner } from "./page-banner";
 import { teamVersionLabel } from "./studyform-layout";
-import {
-  AGENTS_NEW_CLASS,
-  agentMascot,
-  DeleteX,
-  NewButton,
-} from "./ui/agent-card";
+import { AGENTS_NEW_CLASS, agentMascot, DeleteX } from "./ui/agent-card";
 import { IconPlus } from "./quiet-icons";
 
 /*
@@ -139,7 +130,12 @@ function TeamPolaroid({
       )}
       style={{ "--r": `${TILTS[index % TILTS.length]}deg` } as CSSProperties}
     >
-      <Link href={href} className="block text-[#111] no-underline">
+      <Link
+        href={href}
+        aria-label={team.display_name}
+        className="absolute inset-0 z-0 rounded-[inherit] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
+      />
+      <span className="pointer-events-none relative z-[1] block text-[#111]">
         <span
           className={cn(
             TAPE,
@@ -172,7 +168,7 @@ function TeamPolaroid({
             </span>
           </span>
         </span>
-      </Link>
+      </span>
       {onDelete ? (
         <DeleteX label={deleteLabel} disabled={deleting} onClick={onDelete} />
       ) : null}
@@ -215,18 +211,17 @@ export function TeamsPage({
   return (
     <>
       <div className={AGENT_PAGE}>
-        <header className={STUDYFORM_BANNER}>
-          <h1 id="studyform-teams" className={STUDYFORM_BANNER_TITLE}>
-            {t("chatTargetTeams")}
-          </h1>
+        <PageBanner title={t("chatTargetTeams")} titleId="studyform-teams">
           {teams.length && newHref ? (
-            <NewButton
+            <PageAction
+              name="new"
+              placement="page"
               href={newHref}
-              label={newLabel}
-              className={STUDYFORM_NEW_CLASS}
+              className="bg-[#FF4D8D]"
+              guide="workspace.new"
             />
           ) : null}
-        </header>
+        </PageBanner>
         <section aria-labelledby="studyform-teams">
           {teams.length ? (
             <ul className="m-0 flex list-none flex-wrap gap-x-7 gap-y-[34px] p-0 pt-[30px] max-[767px]:gap-x-5 max-[767px]:gap-y-7">

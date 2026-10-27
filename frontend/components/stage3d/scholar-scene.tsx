@@ -376,6 +376,7 @@ export function ScholarScene({
                 <span
                   className={styles.namePlate}
                   data-current={character.id === speakingId ? "true" : "false"}
+                  aria-label={character.name}
                   key={character.id}
                   style={
                     {
@@ -387,7 +388,6 @@ export function ScholarScene({
                       "--name-plate-right": `${right - anchor.x}px`,
                     } as CSSProperties
                   }
-                  title={character.name}
                 >
                   <span className={styles.namePlateText}>{character.name}</span>
                 </span>

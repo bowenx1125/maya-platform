@@ -108,7 +108,7 @@ export function VersionTile({
   deleting = false,
   onDelete,
   deleteLabel,
-  title,
+  title: _title,
   editedBy,
   materialTheme,
   rename,
@@ -121,7 +121,7 @@ export function VersionTile({
   id?: string;
   name: string;
   href: string;
-  /** ui-guide hover help: the last editor. */
+  /** @deprecated Hover tips removed; callers may still pass Last-edited text. */
   title?: string;
   /** Last editor's name for the card footer. */
   editedBy?: string | null;
@@ -156,7 +156,6 @@ export function VersionTile({
       }
       mascot={agentMascot(id ?? href, materialTheme)}
       footer={editedBy ? t("agentLastEditedBy", { name: editedBy }) : null}
-      guideText={title}
       deleting={deleting}
       onDelete={onDelete}
       deleteLabel={deleteLabel}
