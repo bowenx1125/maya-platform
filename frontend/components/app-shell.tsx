@@ -36,7 +36,12 @@ import {
   SIDEBAR_MOBILE_QUERY,
   SIDEBAR_REVEAL_EVENT,
 } from "../lib/sidebar-reveal";
-import { ICON_MOTION, PRESS_MOTION } from "./ui/button";
+import {
+  BUSY_MOTION,
+  BUSY_MOTION_PRIMARY,
+  ICON_MOTION,
+  PRESS_MOTION,
+} from "./ui/button";
 import { NoticeTraySlot } from "./ui/error-kit";
 
 type ActionRegistration = {
@@ -1086,7 +1091,9 @@ export function AppShell({
                 const action = actions[name];
                 if (!action || action.placement === "page") return null;
                 const faded = Boolean(action.disabled);
-                const cls = `inline-flex items-center gap-1.5 rounded-[10px] border-[3px] border-border px-[18px] py-2 font-body text-sm font-bold text-ink no-underline ${PRESS_MOTION} max-[480px]:px-3 max-[480px]:py-1.5 max-[480px]:text-[13px] ${name === "back" ? "bg-surface" : "bg-main"}`;
+                const busyTone =
+                  name === "back" ? BUSY_MOTION : BUSY_MOTION_PRIMARY;
+                const cls = `inline-flex items-center gap-1.5 rounded-[10px] border-[3px] border-border px-[18px] py-2 font-body text-sm font-bold text-ink no-underline ${PRESS_MOTION} ${busyTone} max-[480px]:px-3 max-[480px]:py-1.5 max-[480px]:text-[13px] ${name === "back" ? "bg-surface" : "bg-main"}`;
                 const content = (
                   <>
                     {action.busy ? (
@@ -1113,7 +1120,7 @@ export function AppShell({
                 ) : (
                   <button
                     key={name}
-                    className={`${cls} cursor-pointer disabled:cursor-not-allowed disabled:opacity-50`}
+                    className={`${cls} cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:aria-busy:opacity-100`}
                     type={action.form ? "submit" : "button"}
                     form={action.form}
                     disabled={faded}

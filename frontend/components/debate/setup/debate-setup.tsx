@@ -1083,6 +1083,7 @@ export function TeacherDebateCreate({
               name="done"
               form="create-debate-form"
               disabled={busy || candidates.length === 0}
+              busy={busy}
             />
           </div>
         ) : null}

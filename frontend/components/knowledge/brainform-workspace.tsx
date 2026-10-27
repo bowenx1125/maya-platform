@@ -2736,7 +2736,7 @@ function BrainformWorkspaceBody({
               <Button
                 className={cn(kAlbum.btn, kAlbum.pink)}
                 aria-label={t("brainformNewKnowledge")}
-                aria-busy={busyKey === "knowledge-new" || undefined}
+                busy={busyKey === "knowledge-new"}
                 disabled={Boolean(busyKey)}
                 onClick={beginNewKnowledge}
               >
@@ -2788,34 +2788,48 @@ function BrainformWorkspaceBody({
                         ) : null}
                         {currentDoc && !isGenerating ? (
                           <Button
+                            variant="neutral"
                             className={kAlbum.btn}
                             aria-label={t("brainformDownloadKnowledgeNamed", {
                               name: row.knowledge_display_name,
                             })}
                             data-ui-guide="knowledge.download"
-                            disabled={
+                            busy={
                               busyKey ===
                               `download-knowledge:${row.canonical_set_id}`
                             }
+                            disabled={Boolean(busyKey)}
                             onClick={() => void downloadKnowledgeSet(row)}
                           >
-                            <KnowledgeIcon name="download" />
+                            {busyKey ===
+                            `download-knowledge:${row.canonical_set_id}` ? (
+                              <span className="spinner" aria-hidden="true" />
+                            ) : (
+                              <KnowledgeIcon name="download" />
+                            )}
                             <span aria-hidden="true">Download</span>
                           </Button>
                         ) : null}
                         {row.can_edit && !isGenerating ? (
                           <Button
+                            variant="neutral"
                             className={cn(kAlbum.btn, kAlbum.del)}
                             aria-label={t("brainformDeleteKnowledgeNamed", {
                               name: row.knowledge_display_name,
                             })}
                             data-ui-guide="knowledge.hide"
-                            disabled={
+                            busy={
                               busyKey === `delete-set:${row.canonical_set_id}`
                             }
+                            disabled={Boolean(busyKey)}
                             onClick={() => void deleteKnowledge(row)}
                           >
-                            <KnowledgeIcon name="trash" />
+                            {busyKey ===
+                            `delete-set:${row.canonical_set_id}` ? (
+                              <span className="spinner" aria-hidden="true" />
+                            ) : (
+                              <KnowledgeIcon name="trash" />
+                            )}
                             <span aria-hidden="true">Delete</span>
                           </Button>
                         ) : null}

@@ -1,4 +1,4 @@
-import { ICON_MOTION, PRESS_MOTION } from "./ui/button";
+import { BUSY_MOTION_PRIMARY, ICON_MOTION, PRESS_MOTION } from "./ui/button";
 import { cn } from "../lib/utils";
 
 /*
@@ -39,7 +39,7 @@ export function agentCard(
 }
 
 /** Shared "+ New" (Button default, R2). */
-export const AGENT_NEW_BUTTON = `m-0 inline-flex h-10 w-auto shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] bg-[#FF4D8D] px-3.5 py-0 font-body text-sm leading-none font-bold whitespace-nowrap text-[#111] disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:stroke-3 ${PRESS_MOTION}`;
+export const AGENT_NEW_BUTTON = `m-0 inline-flex h-10 w-auto shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] bg-[#FF4D8D] px-3.5 py-0 font-body text-sm leading-none font-bold whitespace-nowrap text-[#111] disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:stroke-3 ${PRESS_MOTION} ${BUSY_MOTION_PRIMARY}`;
 
 /** Shared 40px icon button (Button neutral size=icon, R2). */
 export const AGENT_ICON_BUTTON = `m-0 inline-grid size-10 min-h-0 shrink-0 cursor-pointer place-items-center rounded-[10px] border-[#111] bg-white p-0 text-[#111] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-[18px] [&_svg]:stroke-[2.25] ${ICON_MOTION}`;
@@ -70,7 +70,7 @@ export const STUDYFORM_BANNER_TITLE =
 export const STUDYFORM_BANNER_FORM_TITLE =
   "max-[767px]:order-first max-[767px]:basis-full max-[767px]:text-[34px]";
 /** H2 list "+ New": 52px tall, 22px sides, 17px label, 22px icon (3.5). */
-export const STUDYFORM_NEW_CLASS = `m-0 ml-auto box-border inline-flex h-[52px] min-h-[52px] shrink-0 items-center gap-2.5 rounded-[10px] border-[3px] border-[#111] bg-[#FF4D8D] px-[22px] py-0 font-body text-[17px] leading-none font-extrabold text-[#111] no-underline [&_svg]:size-[22px] [&_svg]:stroke-[3.5] ${PRESS_MOTION}`;
+export const STUDYFORM_NEW_CLASS = `m-0 ml-auto box-border inline-flex h-[52px] min-h-[52px] shrink-0 items-center gap-2.5 rounded-[10px] border-[3px] border-[#111] bg-[#FF4D8D] px-[22px] py-0 font-body text-[17px] leading-none font-extrabold text-[#111] no-underline [&_svg]:size-[22px] [&_svg]:stroke-[3.5] ${PRESS_MOTION} ${BUSY_MOTION_PRIMARY}`;
 /** List-card hover lift (DESIGN-RULES: -2px, --dur-ui 150ms, --ease); keeps the --r tilt; none under reduced motion. */
 export const LIST_CARD_LIFT =
   "[transform:translateY(var(--card-lift,0px))_rotate(var(--r,0deg))] transition-transform duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:[--card-lift:-2px] motion-reduce:hover:[--card-lift:0px]";

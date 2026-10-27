@@ -8,7 +8,7 @@ import { PlatformApiError } from "../lib/api/platform";
 import { useT } from "../lib/i18n";
 import { useSession } from "./session-provider";
 import { ErrorNotice, SectionCard, StickerBadge } from "./ui";
-import { PRESS_MOTION } from "./ui/button";
+import { BUSY_MOTION_PRIMARY, PRESS_MOTION } from "./ui/button";
 import { USER_AVATAR_CHOICES, UserAvatar } from "./user-avatar";
 
 /** The profile module: a white card with a lime ring and a tape title. */
@@ -22,7 +22,7 @@ const FIELD =
 const SAVED =
   "rotate-[-3deg] rounded border-2 border-ink bg-[#A3E635] px-2 py-px text-xs font-extrabold text-ink shadow-[2px_2px_0_#111]";
 /** Save as an arcade key: pink, inked; shared PRESS_MOTION. */
-const PRESS = `min-h-10 rounded-lg border-[3px] border-ink bg-[#FF4D8D] px-5 font-display text-base font-extrabold text-ink hover:bg-[#FF4D8D] disabled:opacity-60 ${PRESS_MOTION}`;
+const PRESS = `inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border-[3px] border-ink bg-[#FF4D8D] px-5 font-display text-base font-extrabold text-ink hover:bg-[#FF4D8D] disabled:opacity-60 disabled:aria-busy:opacity-100 ${PRESS_MOTION} ${BUSY_MOTION_PRIMARY}`;
 
 export function AccountSettings({ onSaved }: { onSaved?: () => void }) {
   const { user, identityGeneration } = useSession();
@@ -300,7 +300,11 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
                 className={`primary-action ${PRESS}`}
                 type="submit"
                 disabled={busy !== null}
+                aria-busy={busy === "name" || undefined}
               >
+                {busy === "name" ? (
+                  <span className="spinner" aria-hidden="true" />
+                ) : null}
                 {t("save")}
               </button>
             ) : saved === "name" ? (
@@ -337,7 +341,11 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
                   className={`primary-action ${PRESS}`}
                   type="submit"
                   disabled={busy !== null}
+                  aria-busy={busy === "group" || undefined}
                 >
+                  {busy === "group" ? (
+                    <span className="spinner" aria-hidden="true" />
+                  ) : null}
                   {t("save")}
                 </button>
               ) : saved === "group" ? (
@@ -441,7 +449,11 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
               className={`primary-action ${PRESS}`}
               type="submit"
               disabled={busy !== null}
+              aria-busy={busy === "password" || undefined}
             >
+              {busy === "password" ? (
+                <span className="spinner" aria-hidden="true" />
+              ) : null}
               {t("save")}
             </button>
             {saved === "password" ? (
