@@ -191,7 +191,7 @@ Per-sign-in Studyform/Brainform/Chat/Voices cache:6 parallel,10s reuse,429/503 b
 Students use teachers' public Agents only in Teams; old chats read-only. Oct19:
 uploaded Voices ready at once (0073);▷ listens only;Team model call12 rows (was16).
 
-## Oct20–23 releases (compacted)
+## Oct20–23 releases
 
 Oct20 base5dd9690b +#225 f2646b28,#229 566a798f,#227 bfe8187e,#230 a0f2954c,#232
 69d3218d: answer guard/edits,public Agent editors/audit,Chat-independent Record;0076.
@@ -205,8 +205,7 @@ sends expected_base_version_id,409 stale_base_version keeps edits;per-user draft
 Performance: hash waits free DB connections;Chat history SELECTs constant (5);
 Brainform coalesces/fences/aborts reads. #237 82d68ffa released;charged14331 unchanged.
 
-Oct23 50-user Mock run passed (logins 100/100, p95≤7.85s); PG poll race fixed with one
-REPEATABLE READ snapshot. Release #239 aa6d6ffd; voice enrollment off the event loop.
+Oct23 50-user Mock passed (logins 100/100, p95≤7.85s); PG poll race: REPEATABLE READ. Release #239 aa6d6ffd; voice enrollment off the event loop.
 0 real Provider calls in all Oct releases.
 
 ## Oct24 Team chats and junk (#241)
@@ -233,8 +232,6 @@ per-Debate lock;controller-only POST /debates/{id}/next-audio prefetch ticket,st
 plays the blob. debate_timing logs:generation/tts/lock_wait/audio_serve/
 next_request;browser logs audio_prefetch/audio_start. Uploaded voice auto-selected;
 Team errors name the Agent;agent_in_team names own Teams;unknown codes show the code.
-
-Local CI a9a34db3 (PG16): backend 3040/22 skip, frontend 1067/1, all gates (159 routes).
 
 ## Oct24 cleanup and Record hotfix
 
@@ -301,4 +298,9 @@ The create card starts from GET /courses/{id}/debate-llm-defaults; values freeze
 rule_snapshot_json.llm_params (ruleset_contract_v3; null = not sent). The execution
 contract lives in default_rules/{zh,en}.md ({round}); pre-v3 Debates keep legacy.
 Voice: DEBATE_TTS_RATE 1.25 (0.5–2), _INSTRUCTION, _SEED (0–65535) freeze as
-voice_params (clones only; seed is best-effort). Playback rate gone (0080): 1.0.
+voice_params (clones; seed best-effort). Playback rate gone (0080):1.0.
+
+## Oct27 Agent cards (37)
+
+Built, unaccepted: G cards, same 4-col width, Teams 3 columns; Teams empty =
+Agents empty ([changes](ui-proposals/agent-teams-scale/changes.md)).

@@ -33,8 +33,6 @@ export function agentMascot(id: string, materialTheme?: string | null) {
 export const AGENT_GRID_CLASS =
   "m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5 p-0 pt-4 pr-4 pb-5 max-[680px]:grid-cols-1 max-[680px]:gap-4";
 
-const CARD_CLASS = `group/card relative flex min-h-[248px] flex-col overflow-visible rounded-[14px] border-[3px] border-border bg-surface p-2 font-body text-ink shadow-[6px_6px_0_#111] ${LIST_CARD_LIFT} focus-within:[--card-lift:-6px] motion-reduce:focus-within:[--card-lift:0px]`;
-
 /** Card tones: salmon, periwinkle, sage — title band and sunburst share one. */
 const CARD_TONES = ["#F2B79A", "#C9D3F0", "#C9D9A0"] as const;
 
@@ -46,20 +44,6 @@ export function agentTone(id: string, index?: number) {
   for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return CARD_TONES[hash % CARD_TONES.length];
 }
-
-/** Card A on the Agents page (r2-list.mjs .tcA): one frame, 186px wide. */
-const CARD_A_CLASS = `group/card relative block w-[186px] list-none p-0 font-body text-ink max-[767px]:w-auto ${LIST_CARD_LIFT}`;
-const FRAME_A_CLASS =
-  "flex flex-col overflow-hidden rounded-[12px] border-[3px] border-[#111] bg-white shadow-[5px_5px_0_#111]";
-const BAND_A_CLASS =
-  "relative z-[1] box-border flex h-16 items-center border-b-[3px] border-[#111] pr-[30px] pl-[27px]";
-const TITLE_A_CLASS =
-  "line-clamp-2 min-w-0 wrap-break-word text-left font-display text-[17px] leading-[1.15] font-extrabold text-[#111] no-underline";
-
-const FRAME_CLASS =
-  "flex flex-1 flex-col overflow-hidden rounded-[9px] border-[3px] border-border bg-surface";
-const BAND_CLASS =
-  "relative z-[1] flex h-16 items-center border-b-[3px] border-border px-3 pr-10";
 
 /** The round × that deletes; the existing confirm flow runs on click. */
 export function DeleteX({
@@ -85,52 +69,6 @@ export function DeleteX({
   );
 }
 
-/** [V1.0 | Public] — green for Public, grey for Private. */
-function VersionStrip({
-  label,
-  pending,
-  visibility,
-  visibilityLabel,
-  list = false,
-}: {
-  label: string;
-  pending: boolean;
-  visibility?: "private" | "public";
-  visibilityLabel?: string;
-  /** Card A: 1px 8px cells. */
-  list?: boolean;
-}) {
-  const cell = list ? "px-2 py-px leading-[normal]" : "px-2.5 py-1";
-  return (
-    <span
-      className="relative z-[1] inline-flex w-fit overflow-hidden rounded-md border-2 border-border text-[11px] font-extrabold leading-none shadow-[2px_2px_0_#111]"
-      data-pending={pending ? "true" : "false"}
-      data-visibility={visibility}
-    >
-      <span
-        className={cn(
-          "bg-surface",
-          cell,
-          pending && "bg-warn-bg",
-          visibilityLabel && "border-r-2 border-border",
-        )}
-      >
-        {label}
-      </span>
-      {visibilityLabel ? (
-        <span
-          className={cn(
-            cell,
-            visibility === "public" ? "bg-[#22C55E]" : "bg-[#E5E7EB]",
-          )}
-        >
-          {visibilityLabel}
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
 export type AgentRename = {
   /** Accessible name of the name field ("Name"). */
   fieldLabel: string;
@@ -147,9 +85,11 @@ export type AgentRename = {
 };
 
 /**
- * One Agent (or Team) card: the mascot, the title (inline rename when the
- * viewer may edit), the version/visibility strip, "Last edited by", and the
- * round × when deleting is allowed. The whole card opens the Agent.
+ * One Agent card, G "arcade nameplate" (proposals/37 final-v2): a tone head
+ * band carries the white version chip and the name (inline rename when the
+ * viewer may edit), the framed sunburst art carries the Public/Private
+ * ribbon, and a cream foot carries the group and "Last edited by" when the
+ * caller passes them. The whole card opens the Agent; the round × deletes.
  */
 export function AgentCard({
   id,
@@ -169,7 +109,7 @@ export function AgentCard({
   variant,
   index,
 }: {
-  /** "list": card A of the Agents page. */
+  /** "list": the Studyform Agents grid; otherwise the home's row card. */
   variant?: "list";
   id: string;
   name: string;
@@ -179,8 +119,9 @@ export function AgentCard({
   visibility?: "private" | "public";
   visibilityLabel?: string;
   mascot: MascotId;
+  /** "Last edited by" line in the foot (Studyform list only). */
   footer?: ReactNode;
-  /** A short line above the version strip (e.g. the team on teacher Home). */
+  /** The group, first line of the foot (teacher views only). */
   caption?: ReactNode;
   /** @deprecated Tips removed; kept optional so callers need no churn. */
   guideText?: string;
@@ -223,330 +164,187 @@ export function AgentCard({
 
   const tone = agentTone(id, index);
   const listCard = variant === "list";
-  const art = (
+  const nameClass = listCard
+    ? "text-sm leading-[1.15]"
+    : "text-[13px] leading-[1.15]";
+  const nameText = (
     <span
-      data-card-art
       className={cn(
-        "relative flex h-[150px] items-end justify-center border-b-[3px] border-border",
-        listCard && "border-[#111] max-[767px]:h-[120px]",
+        "line-clamp-2 min-w-0 text-left font-body font-extrabold wrap-break-word text-[#111]",
+        nameClass,
       )}
-      style={{
-        backgroundColor: tone,
-        backgroundImage:
-          "radial-gradient(circle at 50% 60%,#fff8 0 30%,transparent 31%),repeating-conic-gradient(from 0deg at 50% 60%,#fff6 0 10deg,transparent 10deg 20deg)",
-      }}
-      aria-hidden="true"
     >
-      <MascotFigure
-        id={mascot}
-        className={cn("h-[132px] w-auto", listCard && "max-[767px]:h-[104px]")}
-      />
+      {listCard ? name : <FitTitle text={name} />}
     </span>
   );
-  const title = listCard ? name : <FitTitle text={name} />;
-  const titleClass = listCard
-    ? TITLE_A_CLASS
-    : "block min-w-0 font-display text-[22px] font-extrabold leading-tight text-ink no-underline";
-  const strip = (
+  const nameSlot = !rename ? (
+    nameText
+  ) : editing ? (
+    <input
+      ref={bindInput}
+      autoFocus
+      aria-label={fieldLabel}
+      aria-invalid={renameInvalid || undefined}
+      aria-describedby={renameInvalid ? renameErrorId : undefined}
+      maxLength={120}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onCompositionStart={() => (composing.current = true)}
+      onCompositionEnd={() => (composing.current = false)}
+      onBlur={() => {
+        // After a failed save, leaving the field (e.g. to Dismiss the
+        // error) keeps it open; Enter retries, Esc cancels.
+        if (!renameInvalid) void save();
+      }}
+      onKeyDown={(event) => {
+        if (composing.current || event.nativeEvent.isComposing) return;
+        if (event.key === "Enter") {
+          event.preventDefault();
+          void save();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          settled.current = true;
+          setEditing(false);
+        }
+      }}
+      className="pointer-events-auto m-0 h-7 w-full min-w-0 rounded-[4px] border-2 border-[#111] bg-white px-1.5 font-body text-sm font-extrabold text-[#111] outline-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main aria-invalid:border-err aria-invalid:shadow-[0_0_0_3px_#FFE4E4]"
+    />
+  ) : (
+    <button
+      type="button"
+      className={cn(
+        "pointer-events-auto m-0 block min-h-0 min-w-0 cursor-text rounded-[3px] border-0 bg-transparent p-0 text-left shadow-none hover:outline-2 hover:outline-dashed hover:outline-[#111]",
+        renameInvalid && "outline-[3px] outline-err",
+      )}
+      aria-describedby={renameInvalid ? renameErrorId : undefined}
+      onClick={startEditing}
+    >
+      {nameText}
+    </button>
+  );
+  const versionChip = (
+    <span
+      data-pending={pending ? "true" : "false"}
+      className={cn(
+        "shrink-0 rounded-[5px] border-2 border-[#111] bg-white px-1.5 py-px font-body leading-[normal] font-extrabold text-[#111]",
+        listCard ? "text-[11px]" : "text-[10px]",
+        pending && "bg-warn-bg",
+      )}
+    >
+      {label}
+    </span>
+  );
+  const band = (
+    <span
+      data-card-band
+      className={cn(
+        "pointer-events-none relative z-[1] flex items-center rounded-t-[9px] border-b-[3px] border-[#111]",
+        listCard
+          ? "min-h-[46px] gap-2 py-2 pr-9 pl-2.5"
+          : "min-h-[40px] gap-1.5 px-2 py-1.5",
+      )}
+      style={{ backgroundColor: tone }}
+    >
+      {versionChip}
+      {nameSlot}
+    </span>
+  );
+  const ribbon = visibilityLabel ? (
     <span
       data-card-strip
+      data-visibility={visibility}
       className={cn(
-        "relative z-[1] flex flex-col items-start gap-1.5 p-2.5",
-        listCard && "flex-row items-center gap-[5px] px-2.5 py-2",
+        "absolute z-[2] border-2 border-[#111] font-body leading-[normal] font-extrabold text-[#111] shadow-[2px_2px_0_#111]",
+        listCard
+          ? "bottom-2.5 -left-[7px] -rotate-2 rounded-[4px] px-2 py-[3px] text-[11px]"
+          : "top-2 right-0 rounded-l-[5px] border-r-0 px-1.5 py-px text-[10px]",
+        visibility === "public" ? "bg-[#22C55E]" : "bg-[#E5E7EB]",
       )}
     >
-      {caption ? (
-        <span className="max-w-full truncate text-[11px] font-bold text-[#333]">
-          {caption}
-        </span>
-      ) : null}
-      <VersionStrip
-        label={label}
-        pending={pending}
-        visibility={visibility}
-        visibilityLabel={visibilityLabel}
-        list={listCard}
-      />
-    </span>
-  );
-  const foot = footer ? (
-    <span
-      data-card-footer
-      className={
-        listCard
-          ? "pointer-events-none relative z-[1] mx-2.5 block border-0 border-t-2 border-dashed border-[#1116] pt-[7px] pb-[9px] text-left text-[11px] font-medium text-[#111] [line-height:normal]"
-          : "pointer-events-none relative z-[1] mt-auto border-t-2 border-dashed border-[#11111144] px-2.5 py-1.5 text-[11px] font-medium text-[#333]"
-      }
-    >
-      {footer}
+      {visibilityLabel}
     </span>
   ) : null;
-
-  if (listCard) {
-    // A1 (proposals/17-agents-list): the Teams polaroid language — tilted
-    // card on the grid, yellow tape name, V tag, framed art, one pill.
-    const tilt = (index ?? 0) % 2 ? 1.2 : -1.2;
-    const nameText = (
-      <span className="[overflow-wrap:normal] [word-break:normal]">{name}</span>
-    );
-    const tapeClass =
-      "absolute -top-3 right-10 left-[34px] z-[3] -rotate-2 border-[2.5px] border-[#111] bg-[#FFE14D] px-2 py-1 text-center font-body text-sm leading-[1.15] font-extrabold text-[#111] shadow-[2px_2px_0_#111]";
-    const listArt = (
+  const sunburst = {
+    backgroundColor: tone,
+    backgroundImage:
+      "radial-gradient(circle at 50% 62%,#fff8 0 22%,transparent 23%),repeating-conic-gradient(from 0deg at 50% 62%,#ffffff55 0 10deg,transparent 10deg 20deg)",
+  };
+  const art = listCard ? (
+    <span className="pointer-events-none relative z-[1] mx-2.5 mt-2.5 block">
       <span
         data-card-art
         aria-hidden="true"
         className="flex h-[150px] items-end justify-center overflow-hidden border-[3px] border-[#111] max-[767px]:h-[118px]"
-        style={{
-          backgroundColor: tone,
-          backgroundImage:
-            "radial-gradient(circle at 50% 62%,#fff8 0 22%,transparent 23%),repeating-conic-gradient(from 0deg at 50% 62%,#ffffff55 0 10deg,transparent 10deg 20deg)",
-        }}
+        style={sunburst}
       >
         <MascotFigure
           id={mascot}
           className="h-[172px] w-auto max-[767px]:h-[134px]"
         />
       </span>
-    );
-    const pill =
-      footer || visibilityLabel ? (
-        <span
-          data-card-strip
-          data-visibility={visibility}
-          className="pointer-events-none relative z-[1] mt-2.5 flex overflow-hidden rounded-[6px] border-2 border-[#111] font-body text-[11px] font-bold text-[#111] shadow-[2px_2px_0_#111]"
-        >
-          {footer ? (
-            <span
-              data-card-footer
-              className="flex-1 bg-white px-[7px] py-[5px] whitespace-nowrap max-[767px]:px-1.5 max-[767px]:py-1 max-[767px]:leading-[1.2] max-[767px]:whitespace-normal"
-            >
-              {footer}
-            </span>
-          ) : null}
-          {visibilityLabel ? (
-            <span
-              className={cn(
-                "flex items-center px-2 py-[5px] font-extrabold",
-                footer ? "border-l-2 border-[#111]" : "flex-1",
-                visibility === "public" ? "bg-[#22C55E]" : "bg-[#E5E7EB]",
-              )}
-            >
-              {visibilityLabel}
-            </span>
-          ) : null}
-        </span>
-      ) : null;
-    const versionTag = (
+      {ribbon}
+    </span>
+  ) : (
+    <span className="pointer-events-none relative z-[1] block">
       <span
-        data-pending={pending ? "true" : "false"}
-        className={cn(
-          "pointer-events-none absolute -top-2 -left-2 z-[4] -rotate-4 rounded-[5px] border-2 border-[#111] bg-white px-1.5 py-[3px] font-body text-[11px] leading-[normal] font-extrabold text-[#111] shadow-[2px_2px_0_#111]",
-          pending && "bg-warn-bg",
-        )}
+        data-card-art
+        aria-hidden="true"
+        className="flex h-[96px] items-center justify-center overflow-hidden"
+        style={sunburst}
       >
-        {label}
+        <MascotFigure id={mascot} className="h-[100px] w-auto" />
       </span>
-    );
-    return (
-      <li
-        className={cn(
-          "group/card relative list-none rounded-[12px] border-[3px] border-[#111] bg-white px-3 pt-[30px] pb-3 font-body text-[#111] shadow-[6px_6px_0_#111]",
-          LIST_CARD_LIFT,
-        )}
-        style={{ "--r": `${tilt}deg` } as CSSProperties}
-        data-agent-card={id}
-        data-tone={tone}
-      >
-        {rename ? (
-          <>
-            <Link
-              href={href}
-              aria-label={name}
-              className="absolute inset-0 z-0 rounded-[10px] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
-            />
-            {renameInvalid ? <KindSticker kind="server" on /> : null}
-            {versionTag}
-            <span data-card-band className={tapeClass}>
-              {editing ? (
-                <input
-                  ref={bindInput}
-                  autoFocus
-                  aria-label={fieldLabel}
-                  aria-invalid={renameInvalid || undefined}
-                  aria-describedby={renameInvalid ? renameErrorId : undefined}
-                  maxLength={120}
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  onCompositionStart={() => (composing.current = true)}
-                  onCompositionEnd={() => (composing.current = false)}
-                  onBlur={() => {
-                    if (!renameInvalid) void save();
-                  }}
-                  onKeyDown={(event) => {
-                    if (composing.current || event.nativeEvent.isComposing)
-                      return;
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void save();
-                    } else if (event.key === "Escape") {
-                      event.preventDefault();
-                      settled.current = true;
-                      setEditing(false);
-                    }
-                  }}
-                  className="m-0 h-7 w-full rounded-[4px] border-2 border-[#111] bg-white px-1.5 text-center font-body text-sm font-extrabold text-[#111] outline-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main aria-invalid:border-err aria-invalid:shadow-[0_0_0_3px_#FFE4E4]"
-                />
-              ) : (
-                <button
-                  type="button"
-                  className={cn(
-                    "m-0 block min-h-0 w-full cursor-text rounded-[3px] border-0 bg-transparent p-0 text-center font-body text-sm leading-[1.15] font-extrabold text-[#111] shadow-none hover:outline-2 hover:outline-dashed hover:outline-[#111]",
-                    renameInvalid && "outline-[3px] outline-err",
-                  )}
-                  aria-describedby={renameInvalid ? renameErrorId : undefined}
-                  onClick={startEditing}
-                >
-                  {nameText}
-                </button>
-              )}
-            </span>
-            <span className="pointer-events-none block">
-              {listArt}
-              {pill}
-            </span>
-          </>
-        ) : (
-          <>
-            <Link
-              href={href}
-              aria-label={name}
-              className="absolute inset-0 z-0 rounded-[10px] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
-            />
-            <span className="pointer-events-none relative z-[1] block">
-              {versionTag}
-              <span data-card-band className={tapeClass}>
-                {nameText}
-              </span>
-              {listArt}
-              {pill}
-            </span>
-          </>
-        )}
-        {onDelete ? (
-          <DeleteX label={deleteLabel} disabled={deleting} onClick={onDelete} />
-        ) : null}
-      </li>
-    );
-  }
+      {ribbon}
+    </span>
+  );
+  // The home shows no "Last edited by"; its foot is the group or a sliver.
+  const editedLine = listCard ? footer : null;
+  const foot = (
+    <span
+      data-card-footer={caption || editedLine ? "" : undefined}
+      className={cn(
+        "pointer-events-none relative z-[1] grid gap-0.5 rounded-b-[9px] border-0 border-t-2 border-dashed border-[#1116] bg-[#FFF8E7] text-left font-body text-[#111]",
+        listCard ? "mt-2.5 px-2.5 pt-[7px] pb-[9px]" : "px-2 py-1.5",
+        !caption && !editedLine && (listCard ? "min-h-3" : "min-h-2.5 py-0"),
+      )}
+    >
+      {caption ? (
+        <span className="truncate text-xs leading-tight font-extrabold">
+          {caption}
+        </span>
+      ) : null}
+      {editedLine ? (
+        <span className="text-[11px] leading-tight font-medium wrap-break-word text-[#6B7280]">
+          {editedLine}
+        </span>
+      ) : null}
+    </span>
+  );
+  const tilt = (index ?? 0) % 2 ? 1.2 : -1.2;
 
   return (
     <li
-      className={listCard ? CARD_A_CLASS : CARD_CLASS}
+      className={cn(
+        "group/card relative flex list-none flex-col rounded-[12px] border-[3px] border-[#111] bg-white p-0 font-body text-[#111]",
+        listCard ? "shadow-[6px_6px_0_#111]" : "shadow-[5px_5px_0_#111]",
+        LIST_CARD_LIFT,
+        "focus-within:[--card-lift:-6px] motion-reduce:focus-within:[--card-lift:0px]",
+      )}
+      style={listCard ? ({ "--r": `${tilt}deg` } as CSSProperties) : undefined}
       data-agent-card={id}
       data-tone={tone}
     >
-      {rename ? (
-        <>
-          {/* Covers the card so anywhere opens it; the title stays above. */}
-          <Link
-            href={href}
-            aria-label={name}
-            className="absolute inset-0 z-0 rounded-[14px] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
-          />
-          {/* A failed rename is a server error: the black "!" of its bubble,
-              on the card corner so the frame's overflow cannot clip it. */}
-          {renameInvalid ? <KindSticker kind="server" on /> : null}
-          <span
-            className={cn(
-              listCard ? FRAME_A_CLASS : FRAME_CLASS,
-              "pointer-events-none",
-            )}
-          >
-            <span
-              data-card-band
-              className={cn(
-                listCard ? BAND_A_CLASS : BAND_CLASS,
-                "pointer-events-auto",
-              )}
-              style={{ backgroundColor: tone }}
-            >
-              {editing ? (
-                <input
-                  ref={bindInput}
-                  autoFocus
-                  aria-label={fieldLabel}
-                  aria-invalid={renameInvalid || undefined}
-                  aria-describedby={renameInvalid ? renameErrorId : undefined}
-                  maxLength={120}
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  onCompositionStart={() => (composing.current = true)}
-                  onCompositionEnd={() => (composing.current = false)}
-                  onBlur={() => {
-                    // After a failed save, leaving the field (e.g. to Dismiss
-                    // the error) keeps it open; Enter retries, Esc cancels.
-                    if (!renameInvalid) void save();
-                  }}
-                  onKeyDown={(event) => {
-                    if (composing.current || event.nativeEvent.isComposing)
-                      return;
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void save();
-                    } else if (event.key === "Escape") {
-                      event.preventDefault();
-                      settled.current = true;
-                      setEditing(false);
-                    }
-                  }}
-                  className="m-0 h-10 w-full rounded-arc-s border-[3px] border-border bg-surface px-2.5 font-display text-lg font-extrabold text-ink shadow-[3px_3px_0_#FF4D8D] outline-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main aria-invalid:border-err aria-invalid:bg-surface aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]"
-                />
-              ) : (
-                <button
-                  type="button"
-                  className={cn(
-                    titleClass,
-                    "-mx-1 m-0 min-h-0 max-w-full cursor-text rounded-md border-0 bg-transparent px-1 py-0.5 text-left shadow-none hover:outline-2 hover:outline-dashed hover:outline-ink",
-                    renameInvalid && "outline-[3px] outline-err",
-                  )}
-                  aria-describedby={renameInvalid ? renameErrorId : undefined}
-                  onClick={startEditing}
-                >
-                  {title}
-                </button>
-              )}
-            </span>
-            {art}
-            {strip}
-            {foot}
-          </span>
-        </>
-      ) : (
-        <>
-          <Link
-            href={href}
-            aria-label={name}
-            className="absolute inset-0 z-0 rounded-[14px] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
-          />
-          <span
-            className={cn(
-              listCard ? FRAME_A_CLASS : FRAME_CLASS,
-              "pointer-events-none relative z-[1]",
-            )}
-          >
-            <span
-              data-card-band
-              className={listCard ? BAND_A_CLASS : BAND_CLASS}
-              style={{ backgroundColor: tone }}
-            >
-              <span className={titleClass}>{title}</span>
-            </span>
-            {art}
-            {strip}
-            {foot}
-          </span>
-        </>
-      )}
+      {/* Covers the card so anywhere opens it; the name field stays above. */}
+      <Link
+        href={href}
+        aria-label={name}
+        className="absolute inset-0 z-0 rounded-[10px] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
+      />
+      {/* A failed rename is a server error: the black "!" of its bubble. */}
+      {renameInvalid ? <KindSticker kind="server" on /> : null}
+      {band}
+      {art}
+      {foot}
       {onDelete ? (
         <DeleteX label={deleteLabel} disabled={deleting} onClick={onDelete} />
       ) : null}
@@ -557,18 +355,22 @@ export function AgentCard({
 /**
  * E2 Spotlight empty state (r2-list.mjs .eE2): a 250px yellow card A holds
  * the existing empty copy and "+ New"; two dashed card-A ghosts fan out
- * behind at ±170px, ±8deg, over a pale sun.
+ * behind at ±170px, ±8deg, over a pale sun. The Teams page uses the same
+ * frame so both empty cards sit in one place when switching pages.
  */
 export function AgentsEmpty({
   title,
   newHref,
   newLabel,
+  children,
 }: {
   title: string;
   newHref?: string;
   newLabel: string;
   /** Kept for callers; E2 always shows two fanned ghosts. */
   ghosts?: number;
+  /** Art for the sunburst well (the Teams page's member faces). */
+  children?: ReactNode;
 }) {
   return (
     <div className="block [background:radial-gradient(ellipse_at_50%_100%,#FFE14D55_0_30%,transparent_31%)]">
@@ -581,7 +383,9 @@ export function AgentsEmpty({
               {title}
             </p>
           </div>
-          <div className="grid h-[220px] place-items-center bg-[#FF4D8D33] [background-image:radial-gradient(circle_at_50%_50%,#fff9_0_30%,transparent_31%),repeating-conic-gradient(from_0deg_at_50%_50%,#FFE14D88_0_10deg,transparent_10deg_20deg)]" />
+          <div className="grid h-[220px] place-items-center bg-[#FF4D8D33] [background-image:radial-gradient(circle_at_50%_50%,#fff9_0_30%,transparent_31%),repeating-conic-gradient(from_0deg_at_50%_50%,#FFE14D88_0_10deg,transparent_10deg_20deg)]">
+            {children}
+          </div>
           <div className="flex justify-center border-t-[3px] border-[#111] p-4">
             {newHref ? (
               <Link

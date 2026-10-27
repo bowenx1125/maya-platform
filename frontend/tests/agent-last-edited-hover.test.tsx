@@ -22,9 +22,11 @@ import { VersionTile } from "../components/studyform-layout";
 afterEach(() => cleanup());
 
 describe("agent last-edited hover", () => {
+  // The Studyform list card carries "Last edited by"; the home card omits it.
   it("keeps Last edited by on the card and does not attach a hover tip", () => {
     render(
       <VersionTile
+        variant="list"
         name="Laozi"
         href="/teacher/agents/laozi"
         title="Last edited by: Maya"
