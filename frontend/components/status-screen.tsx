@@ -45,17 +45,19 @@ export function StatusScreen({
       />
       <section
         role={alert ? "alert" : undefined}
-        className="relative w-full max-w-[560px] rotate-[1.5deg] rounded-[24px] border-[5px] border-[#111] bg-white px-9 pt-[88px] pb-9 shadow-[14px_14px_0_#111] max-[767px]:rotate-0 max-[767px]:px-5 max-[767px]:pt-20"
+        className="relative w-full max-w-[560px] rotate-[1.5deg] rounded-[24px] border-[5px] border-[#111] bg-white px-9 pb-9 shadow-[14px_14px_0_#111] max-[767px]:rotate-0 max-[767px]:px-5"
       >
         <span
           aria-hidden="true"
           className="absolute -top-4 right-10 h-8 w-28 rotate-6 border-[3px] border-[#111] bg-[#67E8F9cc]"
         />
-        <div className="absolute -top-12 -left-10 max-[767px]:-top-10 max-[767px]:-left-1">
+        {/* In the flow, not pinned: a heading that wraps to two lines pushes
+            the body down instead of covering it. */}
+        <div className="-mt-12 mb-8 -ml-[70px] max-w-[calc(100%+70px)] max-[767px]:-mt-10 max-[767px]:mb-7 max-[767px]:-ml-6 max-[767px]:max-w-[calc(100%+24px)]">
           <p className="m-0 mb-2 ml-3 w-max -rotate-3 border-[3px] border-[#111] bg-white bg-[linear-gradient(90deg,#A3E635_0_10px,transparent_10px_calc(100%-10px),#A3E635_calc(100%-10px))] px-4 py-0.5 font-body text-xs font-extrabold tracking-[.16em] uppercase">
             {eyebrow}
           </p>
-          <h1 className="relative m-0 -rotate-[4deg] rounded-[26px] border-[5px] border-[#111] bg-[#FFE14D] px-6 py-3 font-display text-[40px] leading-none font-extrabold shadow-[8px_8px_0_#111] after:absolute after:-bottom-[24px] after:left-10 after:h-0 after:w-0 after:border-t-[24px] after:border-r-[24px] after:border-t-[#111] after:border-r-transparent after:content-[''] max-[767px]:text-[28px]">
+          <h1 className="relative m-0 w-fit -rotate-[2deg] rounded-[26px] border-[5px] border-[#111] bg-[#FFE14D] px-6 py-3 font-display text-[40px] leading-none font-extrabold shadow-[8px_8px_0_#111] after:absolute after:-bottom-[24px] after:left-10 after:h-0 after:w-0 after:border-t-[24px] after:border-r-[24px] after:border-t-[#111] after:border-r-transparent after:content-[''] max-[767px]:text-[28px]">
             {title}
           </h1>
         </div>
