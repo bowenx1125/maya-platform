@@ -131,13 +131,13 @@ describe("teacher account management", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
 
     const sidebar = within(screen.getByRole("navigation"));
-    expect(sidebar.getByRole("button", { name: "Back" })).toBeTruthy();
-    expect(sidebar.getByRole("button", { name: "Done" })).toBeTruthy();
     expect(
-      within(screen.getByRole("main")).queryByRole("button", {
-        name: "Back",
-      }),
-    ).toBeNull();
+      within(screen.getByRole("main")).getByRole("button", { name: "Back" }),
+    ).toBeTruthy();
+    expect(
+      within(screen.getByRole("main")).getByRole("button", { name: "Done" }),
+    ).toBeTruthy();
+    expect(sidebar.queryByRole("button", { name: "Back" })).toBeNull();
     const nameField = screen.getByLabelText("Display name");
     fireEvent.change(nameField, { target: { value: "Ada Lovelace" } });
     fireEvent.click(await screen.findByRole("button", { name: "Done" }));
@@ -350,36 +350,18 @@ describe("teacher account management", () => {
     expect(screen.getByRole("status").textContent).toContain("swift-otter-42");
   });
 
-  it("opens a group's workspace from its own row", async () => {
+  it("keeps group Enter pressable without joining or navigating (deferred)", async () => {
     const api = apiForTeacher();
     mount(api);
 
-    // Entering a group the caller is not in joins first, then opens it: one
-    // action from the row rather than a state to set and then act on.
+    // Parked until Accounts → group Studyform has a clear Back path (sidebar
+    // has no Back/New/Done). Cards stay buttons for press motion only.
     const enter = await screen.findAllByRole("button", { name: "Enter" });
+    fireEvent.click(enter[0]);
     fireEvent.click(enter[1]);
-    await waitFor(() =>
-      expect(api.joinGroupAsTeacher).toHaveBeenCalledWith("other-group"),
-    );
-    await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("/student/groups/other-group"),
-    );
-  });
-
-  it("joins again a group the roster still lists it in", async () => {
-    const api = apiForTeacher();
-    mount(api);
-
-    // The roster can load before the previous visit's leave finishes, so the
-    // listing is not trusted: joining is idempotent and always comes first.
-    fireEvent.click(
-      (await screen.findAllByRole("button", { name: "Enter" }))[0],
-    );
-    await waitFor(() =>
-      expect(push).toHaveBeenCalledWith(`/student/groups/${groupId}`),
-    );
-    expect(api.joinGroupAsTeacher).toHaveBeenCalledWith(groupId);
-    expect(screen.queryByRole("button", { name: "Leave" })).toBeNull();
+    await waitFor(() => expect(enter[0]).toBeTruthy());
+    expect(api.joinGroupAsTeacher).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("leaves test results to Brainform Record", async () => {

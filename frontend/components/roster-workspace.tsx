@@ -1,41 +1,38 @@
 "use client";
 
+import { LIST_CARD_LIFT } from "./agent-chrome";
+import { PRESS_MOTION } from "./ui/button";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-
 import {
   type Group,
   type RosterEntry,
   type UpdateCourseMemberRequest,
 } from "../lib/api";
-import {
-  beginTeacherEnter,
-  endTeacherEnter,
-  teacherLeavesSettled,
-} from "../lib/teacher-visit";
+import { teacherLeavesSettled } from "../lib/teacher-visit";
 import { useT } from "../lib/i18n";
 import { PageAction } from "./page-action";
-import { IconArrowRight } from "./quiet-icons";
-import { useSession } from "./session-provider";
-import cards from "./knowledge/brainform-workspace.module.css";
 import {
-  ModuleCard,
-  ModuleGrid,
-  ModuleList,
-  ModuleRow,
-} from "./studyform-layout";
+  IconArrowRight,
+  IconEdit,
+  IconRecycle,
+  IconRefresh,
+  IconTrash,
+} from "./quiet-icons";
+import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
 import { ErrorNotice, LoadingCard, PageIntro } from "./ui";
+import styles from "./roster-workspace.module.css";
 
 type Draft = { display_name: string; group_name: string };
 
 /** A password produced by a reset, held only until the page is reloaded. */
 type IssuedPassword = { user_id: string; username: string; password: string };
 
+const POLAROID_COLORS = ["#FFE14D", "#A3E635", "#67E8F9"] as const;
+
 export function RosterWorkspace() {
   const t = useT();
   const { api, user } = useSession();
-  const router = useRouter();
   const [entries, setEntries] = useState<RosterEntry[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,33 +127,10 @@ export function RosterWorkspace() {
     [api, courseId],
   );
 
-  const enterGroup = useCallback(
-    async (group: Group) => {
-      setBusy(group.id);
-      setError(null);
-      beginTeacherEnter();
-      try {
-        // A roster that is already open may still be deleting the previous
-        // visit. Join only after that delete finishes, or it removes the row
-        // this click just created.
-        await teacherLeavesSettled();
-        // Joining is what opens the group's workspace, so the two are one
-        // action rather than a state to set and then act on. Join even when
-        // this roster lists the caller in the group: it may have loaded
-        // before that leave finished. Joining is idempotent.
-        await api.joinGroupAsTeacher(group.id);
-        // Refresh after the student route is current. Refreshing while this
-        // Accounts page is still open makes the shell treat the visit as over
-        // and delete it before the group can load.
-        router.push(`/student/groups/${group.id}`);
-      } catch (cause) {
-        endTeacherEnter();
-        setError(cause);
-        setBusy(null);
-      }
-    },
-    [api, router],
-  );
+  // Deferred (2026-10-27): group cards keep press motion but do not join or
+  // navigate. Sidebar has no Back/New/Done, so the return path from the
+  // group's Studyform is unclear until 徐伯闻 redesigns that flow.
+  const onGroupPress = useCallback((_group: Group) => {}, []);
 
   if (loading) return <LoadingCard />;
 
@@ -205,10 +179,13 @@ export function RosterWorkspace() {
     const pending = busy === entry.user_id;
     if (editing === entry.user_id) {
       return (
-        <div className="list-row account-row" key={entry.user_id}>
+        <div
+          className={`list-row account-row ${styles.row}`}
+          key={entry.user_id}
+        >
           <form
             id={`roster-edit-${entry.user_id}`}
-            className="stack-form account-edit"
+            className={`stack-form account-edit ${styles.editForm}`}
             aria-busy={pending}
             onSubmit={(event) => {
               event.preventDefault();
@@ -265,27 +242,33 @@ export function RosterWorkspace() {
       );
     }
     return (
-      <div className="list-row account-row" key={entry.user_id}>
-        <span className="roster-identity">
+      <div className={`list-row account-row ${styles.row}`} key={entry.user_id}>
+        <span className={`roster-identity ${styles.identity}`}>
           <UserAvatar
             avatar={entry.avatar}
             name={entry.display_name}
             userId={entry.user_id}
           />
-          <span>
-            <span className="roster-headline">
+          <span className={styles.identityMeta}>
+            <span className={`roster-headline ${styles.headline}`}>
               <strong>{entry.display_name}</strong>
-              <small className="roster-username">{entry.username}</small>
+              <small className={`roster-username ${styles.username}`}>
+                {entry.username}
+              </small>
               {/* Active is the normal state, and removed accounts are folded
                   away under their own heading, so only they carry a word. */}
               {entry.status === "active" ? null : (
-                <small className="roster-status">{t("statusInactive")}</small>
+                <small className={`roster-status ${styles.status}`}>
+                  {t("statusInactive")}
+                </small>
               )}
             </span>
             {/* Under a group's heading the group goes without saying; a
                 second group, or a removed account, still names them. */}
             {inSection && (entry.groups?.length ?? 0) <= 1 ? null : (
-              <span className="group-label">{groupSummary(entry)}</span>
+              <span className={`group-label ${styles.groupLabel}`}>
+                {groupSummary(entry)}
+              </span>
             )}
             {issued && issued.user_id === entry.user_id ? (
               <small role="status">
@@ -298,9 +281,9 @@ export function RosterWorkspace() {
           </span>
         </span>
         {entry.editable ? (
-          <div className="button-row">
+          <div className={`button-row ${styles.acts}`}>
             <button
-              className="inline-button"
+              className={`${styles.sticker} ${styles.stickerEdit} ${PRESS_MOTION}`}
               type="button"
               disabled={pending}
               onClick={() => {
@@ -311,11 +294,16 @@ export function RosterWorkspace() {
                 });
               }}
             >
-              {t("editMember")}
+              <IconEdit size={12} />
+              <span>{t("editMember")}</span>
             </button>
             {entry.user_id === user?.id ? null : (
               <button
-                className="inline-button"
+                className={`${styles.sticker} ${
+                  entry.status === "active"
+                    ? styles.stickerRem
+                    : styles.stickerRestore
+                } ${PRESS_MOTION}`}
                 type="button"
                 disabled={pending}
                 onClick={() => {
@@ -330,18 +318,26 @@ export function RosterWorkspace() {
                   });
                 }}
               >
-                {entry.status === "active"
-                  ? t("removeAccount")
-                  : t("reactivateAccount")}
+                {entry.status === "active" ? (
+                  <IconTrash size={12} />
+                ) : (
+                  <IconRecycle size={12} />
+                )}
+                <span>
+                  {entry.status === "active"
+                    ? t("removeAccount")
+                    : t("reactivateAccount")}
+                </span>
               </button>
             )}
             <button
-              className="inline-button"
+              className={`${styles.sticker} ${styles.stickerReset} ${PRESS_MOTION}`}
               type="button"
               disabled={pending}
               onClick={() => void resetPassword(entry)}
             >
-              {t("resetPassword")}
+              <IconRefresh size={12} />
+              <span>{t("resetPassword")}</span>
             </button>
           </div>
         ) : null}
@@ -349,30 +345,46 @@ export function RosterWorkspace() {
     );
   }
 
+  const sortedGroups = [...groups].sort((left, right) =>
+    byName(left.name, right.name),
+  );
+
   return (
-    <div className="account-layout">
+    <div className={`account-layout ${styles.layout}`}>
       <PageIntro title={t("accounts")} />
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
 
-      <ModuleGrid>
-        <ModuleCard
-          title={t("members")}
-          count={current.length}
-          labelledBy="accounts-members"
-          empty={
-            current.length || removed.length ? undefined : t("rosterEmpty")
-          }
+      <div className={styles.grid}>
+        <section
+          className={styles.card}
+          aria-labelledby="accounts-members"
+          role="region"
         >
+          <div className={styles.head}>
+            <h2 id="accounts-members" className={styles.tapeTitle}>
+              {t("members")}
+            </h2>
+            <span className={styles.badge} aria-hidden="true">
+              {current.length}
+            </span>
+          </div>
           {current.length || removed.length ? (
             <>
-              <div className="roster-sections">
+              <div className={`roster-sections ${styles.sections}`}>
                 {memberSections.map((section) => (
-                  <section className="roster-section" key={section.key}>
-                    <h3 className="roster-section-title">
-                      {section.name}
-                      <small>{section.members.length}</small>
+                  <section
+                    className={`roster-section ${styles.section}`}
+                    key={section.key}
+                  >
+                    <h3
+                      className={`roster-section-title ${styles.sectionTitle}`}
+                    >
+                      <span className={styles.sectionTape}>{section.name}</span>
+                      <small className={styles.sectionCount}>
+                        {section.members.length}
+                      </small>
                     </h3>
-                    <div className="compact-list">
+                    <div className={`compact-list ${styles.rows}`}>
                       {section.members.map((entry) => memberRow(entry, true))}
                     </div>
                   </section>
@@ -384,52 +396,69 @@ export function RosterWorkspace() {
                 </datalist>
               </div>
               {removed.length ? (
-                <details className="roster-removed">
+                <details className={`roster-removed ${styles.removed}`}>
                   <summary>
                     {t("removedMembers")} · {removed.length}
                   </summary>
-                  <div className="compact-list">
+                  <div
+                    className={`compact-list ${styles.rows} ${styles.removedBody}`}
+                  >
                     {removed.map((entry) => memberRow(entry))}
                   </div>
                 </details>
               ) : null}
             </>
-          ) : undefined}
-        </ModuleCard>
+          ) : (
+            <p className={styles.empty}>{t("rosterEmpty")}</p>
+          )}
+        </section>
 
-        <ModuleCard
-          title={t("groups")}
-          count={groups.length}
-          labelledBy="accounts-groups"
-          empty={groups.length ? undefined : t("rosterNoGroups")}
+        <section
+          className={styles.card}
+          aria-labelledby="accounts-groups"
+          role="region"
         >
+          <div className={styles.head}>
+            <h2 id="accounts-groups" className={styles.tapeTitle}>
+              {t("groups")}
+            </h2>
+            <span
+              className={`${styles.badge} ${styles.badgeCyan}`}
+              aria-hidden="true"
+            >
+              {groups.length}
+            </span>
+          </div>
           {groups.length ? (
-            <ModuleList>
-              {[...groups]
-                .sort((left, right) => byName(left.name, right.name))
-                .map((group) => (
-                  <ModuleRow
+            <ul className={styles.polarList}>
+              {sortedGroups.map((group, index) => (
+                <li key={group.id} className={LIST_CARD_LIFT}>
+                  <button
+                    className={styles.polar}
+                    type="button"
                     id={`roster-group-${group.id}`}
-                    key={group.id}
-                    title={group.name}
-                    action={
-                      <button
-                        className={cards.iconButton}
-                        type="button"
-                        disabled={busy === group.id}
-                        aria-label={t("enter")}
-                        data-ui-guide="roster.openGroup"
-                        onClick={() => void enterGroup(group)}
-                      >
-                        <IconArrowRight />
-                      </button>
-                    }
-                  />
-                ))}
-            </ModuleList>
-          ) : undefined}
-        </ModuleCard>
-      </ModuleGrid>
+                    aria-label={t("enter")}
+                    data-ui-guide="roster.openGroup"
+                    style={{
+                      background:
+                        POLAROID_COLORS[index % POLAROID_COLORS.length],
+                    }}
+                    onClick={() => onGroupPress(group)}
+                  >
+                    <span className={styles.polarTape} aria-hidden="true" />
+                    <span className={styles.polarName}>{group.name}</span>
+                    <span className={styles.polarArrow} aria-hidden="true">
+                      <IconArrowRight size={16} />
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className={styles.empty}>{t("rosterNoGroups")}</p>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

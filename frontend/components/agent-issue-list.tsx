@@ -1,7 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+
+import { cn } from "../lib/utils";
+import { PRESS_MOTION } from "./ui/button";
+import {
+  NOTICE_TAIL_CLASS,
+  STICKER,
+  STICKER_TONE,
+  StickerBadge,
+  useNoticeTray,
+  useRevealNotice,
+} from "./ui";
 
 import {
   AGENT_ISSUE_MESSAGES,
@@ -167,5 +179,194 @@ export function AgentHintBar({
         </button>
       ) : null}
     </div>
+  );
+}
+
+/** One problem on a create form: a field to show, or an Agent to edit. */
+export type ChecklistItem = {
+  key: string;
+  text: string;
+  /** Id of the field that "Show me" scrolls to and focuses. */
+  target?: string;
+  /** The Agent this line is about, so its card wears the same number. */
+  agentId?: string;
+  href?: string;
+  editLabel?: string;
+};
+export type ChecklistEntry = ChecklistItem & { n: number; done: boolean };
+
+/**
+ * Numbers the problems of the latest attempt. A line that is fixed stays in
+ * place, ticked and struck through, until the next attempt starts a new list.
+ */
+export function useCreateChecklist(
+  items: ChecklistItem[],
+  attempt: number,
+): ChecklistEntry[] {
+  const [snapshot, setSnapshot] = useState({ attempt, items });
+  let base = snapshot;
+  if (snapshot.attempt !== attempt) {
+    base = { attempt, items };
+    setSnapshot(base);
+  } else {
+    const extra = items.filter(
+      (item) => !snapshot.items.some((seen) => seen.key === item.key),
+    );
+    if (extra.length) {
+      base = { attempt, items: [...snapshot.items, ...extra] };
+      setSnapshot(base);
+    }
+  }
+  return base.items.map((seen, index) => {
+    const live = items.find((item) => item.key === seen.key);
+    return { ...(live ?? seen), n: index + 1, done: !live };
+  });
+}
+
+export const checklistLineId = (n: number) => `create-issue-${n}`;
+
+/** The number sticker on a field or Agent card; ✓ once its line is fixed. */
+export function ChecklistBadge({ entry }: { entry?: ChecklistEntry }) {
+  if (!entry) return null;
+  return <StickerBadge n={entry.n} done={entry.done} />;
+}
+
+/** The pink pill jump button ("Show me" / "Edit Agent …") with its → arrow. */
+export const JUMP_BUTTON = `inline-flex flex-none cursor-pointer items-center gap-[5px] whitespace-nowrap rounded-full border-2 border-border bg-[#FF4D8D] px-[11px] py-1 font-body text-xs font-bold text-ink no-underline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main ${PRESS_MOTION}`;
+
+export function JumpArrow() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 12h13M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+/** One checklist line: dashed rule between lines; grey with a black strike once fixed. */
+export function ChecklistLine({
+  entry,
+  children,
+}: {
+  entry: ChecklistEntry;
+  children?: ReactNode;
+}) {
+  return (
+    <li
+      id={checklistLineId(entry.n)}
+      data-done={entry.done || undefined}
+      className={cn(
+        "group/line flex items-center gap-2.5 border-0! border-t-2! border-dashed! border-[#11111833] py-[7px] first:border-t-0! max-[680px]:flex-wrap",
+        !entry.done &&
+          "active:-mx-2 active:rounded-lg active:bg-[#FFD0D0] active:px-2",
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          STICKER,
+          "size-6 text-[11px] leading-5",
+          STICKER_TONE(entry.done),
+        )}
+      >
+        {entry.done ? "✓" : entry.n}
+      </span>
+      <span
+        className={cn(
+          "flex-1 max-[680px]:basis-[calc(100%-40px)]",
+          entry.done
+            ? "text-[#6B7280] line-through decoration-ink decoration-2"
+            : "decoration-[#FF4D8D] decoration-2 underline-offset-[3px] group-hover/line:underline",
+        )}
+      >
+        {entry.text}
+      </span>
+      {entry.done ? null : children}
+    </li>
+  );
+}
+
+/**
+ * The create form's problems, spoken once by the mascot (06 option A): the
+ * title, then every problem as a numbered line with its own jump.
+ */
+export function CreateChecklist({
+  title,
+  entries,
+  alert = false,
+  attempt,
+}: {
+  title: string;
+  entries: ChecklistEntry[];
+  alert?: boolean;
+  attempt: number;
+}) {
+  const t = useT();
+  const tray = useNoticeTray(true);
+  const [dismissed, setDismissed] = useState<number | null>(null);
+  useRevealNotice(tray, attempt, alert);
+  if (!tray || dismissed === attempt) return null;
+  if (entries.length === 0 || entries.every((entry) => entry.done)) return null;
+  const show = (target: string) => {
+    const element = document.getElementById(target);
+    element?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    element?.focus({ preventScroll: true });
+  };
+  return createPortal(
+    <div
+      className={cn(
+        "notice agent-hint-bar agent-hint-bar-bubble relative! top-auto! m-0! block! w-full rounded-[18px] border-[3px]! border-border! pt-[13px]! pr-[46px]! pb-3! pl-4! text-left font-body text-[13px] leading-[1.45] font-medium text-ink shadow-[4px_4px_0_#111]! max-[680px]:pt-[11px]! max-[680px]:pr-10! max-[680px]:pb-2.5! max-[680px]:pl-3! max-[680px]:text-xs!",
+        alert ? "notice-error bg-err-bg" : "notice-warning bg-warn-bg",
+        "pointer-events-auto flex-none",
+        NOTICE_TAIL_CLASS,
+      )}
+      role={alert ? "alert" : "note"}
+      aria-live={alert ? undefined : "polite"}
+    >
+      <strong className="mb-1.5 block text-sm font-bold">{title}</strong>
+      <ol className="m-0 list-none p-0">
+        {entries.map((entry) => (
+          <ChecklistLine key={entry.key} entry={entry}>
+            {entry.href ? (
+              <Link
+                className={cn(JUMP_BUTTON, "max-[680px]:ml-[34px]")}
+                href={entry.href}
+                aria-label={entry.editLabel}
+              >
+                {entry.editLabel}
+                <JumpArrow />
+              </Link>
+            ) : entry.target ? (
+              <button
+                type="button"
+                className={cn(JUMP_BUTTON, "max-[680px]:ml-[34px]")}
+                onClick={() => show(entry.target!)}
+              >
+                {t("debateShowMe")}
+                <JumpArrow />
+              </button>
+            ) : null}
+          </ChecklistLine>
+        ))}
+      </ol>
+      <button
+        type="button"
+        className="notice-close absolute! top-[9px] right-2.5 m-0! grid size-[26px] cursor-pointer place-items-center rounded-full border-2 border-border bg-surface text-ink focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
+        aria-label={t("noticeDismiss")}
+        onClick={() => setDismissed(attempt)}
+      >
+        <IconClose />
+      </button>
+    </div>,
+    tray,
   );
 }

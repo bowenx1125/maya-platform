@@ -1,932 +1,1120 @@
-.layout {
-  display: grid;
-  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
-  gap: 0;
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface);
-  box-shadow: none;
-}
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
-  padding: 24px;
-  border-right: 1px solid var(--line);
-  background: var(--surface-subtle);
-}
-.historyHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 40px;
-}
-.historyHead h2 {
-  margin: 0;
-  color: var(--ink);
-  font-family: var(--display-serif);
-  font-size: 1.15rem;
-  font-weight: 600;
-}
-/* Like Studyform's empty Agents and Teams: a dashed box, here the size of
-   one history entry, in the first row under History. */
-.historyEmpty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px dashed #d9d0e2;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--muted, #706b82);
-  font-size: 14px;
-  font-weight: 650;
-  line-height: 1.5;
-  text-align: center;
-}
-.history {
-  display: grid;
-  align-content: start;
-  gap: 4px;
-  max-height: calc(100dvh - 180px);
-  overflow: auto;
-}
-.historyRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  border-radius: 10px;
-}
-.historyRow:hover,
-.historyRow:has(:focus-visible) {
-  background: var(--surface-hover);
-}
-.historySelect {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  min-height: 44px;
-  padding: 10px 8px 10px 12px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--muted);
-  text-align: left;
-  cursor: pointer;
-  font-size: 14px;
-}
-.historySelect span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.historySelect[aria-current="page"] {
-  color: var(--ink);
-  font-weight: 650;
-}
-.historyRow:has(.historySelect[aria-current="page"]) {
-  background: var(--accent-soft);
-}
-.historyMeta {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-width: 76px;
-  height: 44px;
-}
-.historyDate {
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  white-space: nowrap;
-  visibility: visible;
-}
-/* Pin then delete take the date's place on hover, as delete alone did. */
-.historyPin,
-.historyDelete {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 38px;
-  display: grid;
-  place-items: center;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  visibility: hidden;
-  pointer-events: none;
-  cursor: pointer;
-}
-.historyPin {
-  right: 38px;
-  color: var(--muted);
-}
-.historyPin[aria-pressed="true"] {
-  color: var(--accent);
-}
-.historyDelete {
-  right: 0;
-  color: var(--red);
-}
-.historyPin:hover,
-.historyDelete:hover {
-  background: rgba(39, 35, 61, 0.06);
-}
-.historyRow:hover .historyDate,
-.historyRow:has(:focus-visible) .historyDate {
-  visibility: hidden;
-}
-.historyRow:hover :is(.historyPin, .historyDelete),
-.historyRow:has(:focus-visible) :is(.historyPin, .historyDelete) {
-  visibility: visible;
-  pointer-events: auto;
-}
-.historyPin:focus-visible,
-.historyDelete:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-  visibility: visible;
-  pointer-events: auto;
-}
-.historyPin:disabled,
-.historyDelete:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-.historySelect[aria-disabled="true"] {
-  cursor: default;
-}
-.historyRename {
-  min-width: 0;
-  height: 36px;
-  margin: 4px 0 4px 4px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fffdf8;
-  color: var(--ink);
-  font: inherit;
-  font-size: 14px;
-}
-@media (hover: none) {
-  .historyDate {
-    display: none;
-  }
-  .historyMeta {
-    min-width: 88px;
-  }
-  .historyPin,
-  .historyDelete {
-    width: 44px;
-    visibility: visible;
-    pointer-events: auto;
-  }
-  .historyPin {
-    right: 44px;
-  }
-}
-.conversation {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  height: max(600px, calc(100dvh - 74px));
-  overflow: hidden;
-  background: #fdfaf3;
-}
-.chatHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 64px;
-  padding: 14px 28px;
-  border-bottom: 1px solid var(--line);
-}
-.chatTitle {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-.chatTitle h2 {
-  margin: 0;
-  overflow: hidden;
-  font-family: var(--display-serif);
-  font-size: 1.2rem;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.kindChip {
-  flex: 0 0 auto;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--surface-subtle);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-}
-.pickTile {
-  position: relative;
-  width: 100%;
-  min-height: 112px;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-/* Named exactly like a Studyform tile, whose name is a text link. */
-.pickTile :global(.agent-tile-name) {
-  padding: 9px 16px;
-  color: var(--accent);
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.35;
-  letter-spacing: normal;
-}
-.pickTile[aria-pressed="true"] {
-  border-color: var(--accent, #76591f);
-  background: var(--accent-soft);
-  box-shadow: var(--lift);
-}
-.pickTile:focus-visible {
-  outline: 2px solid var(--accent, #76591f);
-  outline-offset: 2px;
-}
-.pickTile:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-.pickMark {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: grid;
-  place-items: center;
-  color: var(--accent, #76591f);
-}
-.emptyState {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: flex-start;
-  padding: 28px;
-}
-.emptyState strong {
-  padding: 18px;
-  border: 1px dashed #d9d0e2;
-  border-radius: 16px;
-  color: var(--muted);
-  background: var(--surface-subtle, #f5f5f7);
-  font-size: 0.95rem;
-  font-weight: 650;
-  line-height: 1.5;
-}
-.conversation > .entryFlow {
-  flex: 1 1 auto;
-  align-content: start;
-  width: 100%;
-  max-width: none;
-  margin: 0;
-  overflow: auto;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-.teamComposerTools > p {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.45;
-}
-.teamResults {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-.teamResult {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.teamResult h3 {
-  margin: 0 0 6px;
-  color: var(--muted);
-  font-family: var(--display-serif);
-  font-size: 13px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-}
-.teamWarning {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--surface-subtle);
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.5;
-}
-.memoryStatus {
-  margin: 0;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--surface-subtle);
-  color: var(--muted);
-  font-size: 13px;
-}
-.teamComposerTools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 20px 0;
-}
-.teamComposerTools > p {
-  flex: 1 1 100%;
-  margin: 0;
-}
-.teamRecipients {
-  position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  color: var(--muted);
-  font-size: 13px;
-}
-.recipientChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  max-width: 100%;
-  padding: 3px 4px 3px 9px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-.recipientRemove {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.recipientRemove:hover:not(:disabled) {
-  color: var(--ink);
-  background: var(--surface-hover);
-}
-.recipientRemove:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-.recipientMenu {
-  position: absolute;
-  z-index: 5;
-  left: 14px;
-  bottom: calc(100% + 8px);
-  display: grid;
-  gap: 2px;
-  width: min(280px, calc(100% - 28px));
-  max-height: 50dvh;
-  overflow: auto;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-.recipientMenu button {
-  min-height: 40px;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--ink);
-  font-size: 14px;
-  text-align: left;
-  cursor: pointer;
-}
-.recipientMenu button:hover:not(:disabled) {
-  background: var(--surface-hover);
-}
-.recipientMenu button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-.recipientMenu button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-.messages {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  min-height: 0;
-  padding: 28px 28px 12px;
-  overscroll-behavior: contain;
-}
-.messages > :global(.notice) {
-  max-width: 760px;
-  margin: 12px auto 0;
-}
-.exchange {
-  display: grid;
-  gap: 20px;
-  margin-bottom: 28px;
-  min-width: 0;
-}
-.userMessage {
-  justify-self: end;
-  max-width: 85%;
-  padding: 12px 18px;
-  border-radius: 18px 18px 5px 18px;
-  background: var(--accent-soft);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.reply {
-  min-width: 0;
-  font-size: 16px;
-  line-height: 1.7;
-}
-.reply details {
-  margin-top: 16px;
-  padding: 12px 16px;
-  background: var(--surface-subtle);
-  border-radius: 12px;
-}
-.reply summary {
-  color: var(--muted);
-  font-size: 12px;
-  cursor: pointer;
-}
-.source {
-  margin-top: 16px;
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-.source p {
-  white-space: pre-wrap;
-  max-height: 240px;
-  overflow: auto;
-}
-.pending {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--muted);
-  font-size: 14px;
-}
-/* Floating rounded shell: text row above, send on the control row, with
-   clear air under the shell — not a flush bar or sharp block. */
-.composer {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas:
-    "text text"
-    "attach send";
-  gap: 6px 8px;
-  width: min(100% - 40px, 720px);
-  margin: 8px auto 22px;
-  padding: 14px 14px 10px;
-  border: 1px solid #e4ddd2;
-  border-radius: 22px;
-  background: #fffcf7;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.8) inset,
-    0 10px 28px rgba(52, 45, 30, 0.06);
-}
-.composer:focus-within {
-  outline: none;
-  border-color: #c9b896;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.8) inset,
-    0 0 0 2px rgba(118, 89, 31, 0.18),
-    0 10px 28px rgba(52, 45, 30, 0.07);
-}
-.composer :global(#chat-message) {
-  grid-area: text;
-  width: 100%;
-  min-height: 28px;
-  max-height: 168px;
-  field-sizing: content;
-  margin: 0;
-  padding: 2px 6px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  resize: none;
-  overflow-y: auto;
-  color: var(--ink);
-  font-size: 15px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-.composer :global(#chat-message)::placeholder {
-  color: var(--muted);
-  opacity: 0.8;
-}
-.composer :global(#chat-message):focus-visible {
-  outline: none;
-  box-shadow: none;
-}
-.composer :global(#chat-message):disabled {
-  opacity: 0.55;
-}
-.composerBar {
-  grid-area: send;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  min-height: 40px;
-  padding: 0 2px;
-}
-/* Chat attachments: "+" at the lower left, files above the text. */
-.composer:has(.attachmentRow) {
-  grid-template-areas:
-    "files files"
-    "text text"
-    "attach send";
-}
-.attachButton {
-  grid-area: attach;
-  align-self: center;
-  justify-self: start;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border: 1px solid #e4ddd2;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.attachButton:hover:not(:disabled) {
-  border-color: #c9b896;
-  color: var(--ink);
-}
-.attachButton:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.attachButton:disabled {
-  opacity: 0.38;
-  cursor: default;
-}
-.attachmentRow {
-  grid-area: files;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-.attachmentChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 100%;
-  padding: 3px 6px 3px 10px;
-  border: 1px solid #e4ddd2;
-  border-radius: 999px;
-  background: #f6f1e8;
-  color: var(--ink);
-  font-size: 13px;
-}
-.attachmentName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 240px;
-}
-.attachmentRemove {
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.attachmentRemove:hover:not(:disabled) {
-  color: var(--ink);
-}
-.attachmentError {
-  flex-basis: 100%;
-  margin: 0;
-  color: var(--warning-ink, #7a5420);
-  font-size: 0.82rem;
-}
-/* Above the composer while the Scorer marks a finished test. */
-.scoringNotice {
-  margin: 0 0 6px;
-  color: var(--muted, #706b82);
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-/* Beside the Send button: the student is asked to press it again. */
-.sendHint {
-  margin: 0;
-  color: var(--warning-ink, #7a5420);
-  font-size: 0.82rem;
-  font-weight: 600;
-  line-height: 1.35;
-  text-align: right;
-}
-.sendButton {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
-  min-height: 40px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: var(--accent-fill);
-  color: var(--on-accent);
-  cursor: pointer;
-  transition:
-    background 160ms ease,
-    opacity 160ms ease,
-    transform 160ms ease;
-}
-.sendButton:hover:not(:disabled) {
-  background: var(--accent-hover);
-  transform: translateY(-1px);
-}
-.sendButton:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.sendButton:disabled {
-  opacity: 0.38;
-  cursor: default;
-  transform: none;
-}
-.entryFlow {
-  display: grid;
-  gap: 20px;
-  /* A fixed track, not shrink-to-fit: otherwise the validation hint sets the
-     card's width and choosing a Leader (which clears it) narrows the card.
-     As wide as Agents New, so both pages' edges line up (2026-10-13). */
-  width: 100%;
-  max-width: none;
-  margin: 0;
-  padding: clamp(16px, 3vw, 32px);
-  border: 1px solid var(--line, #e4e1d9);
-  border-radius: 16px;
-  background: var(--panel, #fdfaf3);
-  box-shadow: none;
-}
-/* The form's own cards carry the frame, as on Agents New; no card around
-   cards, so both pages' edges line up. */
-.entryFlowForm {
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-.teamForm h3 {
-  margin: 0;
-}
-.teamForm fieldset > p,
-.entryTeamList small {
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.5;
-}
-.entrySection {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-}
-.entryTeamList {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.entryTeamList li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 56px;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-}
-.entryTeamList li > span {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-/* As wide as Agents New: its cards fill the centred page. */
-.teamForm {
-  display: grid;
-  gap: 18px;
-  width: 100%;
-}
-.teamForm :global(.section-card) {
-  margin-bottom: 0;
-}
-.teamForm :global(input:focus-visible),
-.teamForm :global(button:focus-visible) {
-  outline: 3px solid #967c50;
-  outline-offset: 2px;
-}
-.teamFormReadOnly .entryChoice,
-.teamFormReadOnly input:disabled {
-  cursor: default;
-}
-.teamForm > label {
-  display: grid;
-  gap: 6px;
-  font-weight: 600;
-}
-.teamForm input:not([type="checkbox"]):not([type="radio"]) {
-  width: 100%;
-  min-height: 44px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 16px;
-}
-.teamForm fieldset,
-.entrySection fieldset {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  margin: 0;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-}
-.teamForm legend,
-.entrySection legend {
-  padding: 0 6px;
-  font-weight: 650;
-}
-.entryMemberList {
-  display: grid;
-  gap: 6px;
-}
-.entryMember {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
-  align-items: center;
-  gap: 12px;
-  min-height: 48px;
-  padding: 4px 8px;
-  border-radius: 10px;
-}
-.entryChoice {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  min-width: 0;
-  cursor: pointer;
-}
-.entryChoice input {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-  accent-color: var(--accent);
-}
-.entryHint {
-  padding: 12px 14px;
-  border-radius: 10px;
-  background: var(--surface-subtle);
-  color: var(--ink);
-  line-height: 1.5;
-}
-@media (max-width: 1100px) {
+@layer legacy {
+  /* final-v2b: History + conversation are SEPARATE cards with gap, not one panel */
   .layout {
-    grid-template-columns: minmax(170px, 210px) minmax(0, 1fr);
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 24px;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
   }
   .sidebar {
-    padding: 20px;
+    display: flex;
+    width: 290px;
+    flex-shrink: 0;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    padding: 8px;
+    border: 3px solid #111;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 6px 6px 0 #111;
   }
-}
-@media (max-width: 680px) {
-  .entryFlow {
-    gap: 16px;
-    padding: 16px;
-    border-radius: 18px;
+  .historyHead {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
   }
-  .entryMember {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
+  .historyHead h2 {
+    margin: 0;
+    color: #111;
+    font-family: var(--font-display, inherit);
+    font-size: 1.125rem;
+    font-weight: 800;
   }
-  .layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .sidebar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
-    gap: 12px 16px;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
+  /* Scheme A empty: dashed box under History tape */
+  .historyEmpty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    margin: 8px;
+    padding: 12px;
+    border: 2px dashed rgba(17, 17, 17, 0.4);
+    border-radius: 6px;
+    background: transparent;
+    color: #4b5563;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.5;
+    text-align: center;
   }
   .history {
-    max-height: 104px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: calc(100dvh - 220px);
+    overflow: auto;
+  }
+  .historyRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 8px;
+    border: 3px solid #111;
+    border-radius: 10px;
+    background: #fff;
+  }
+  .historyRow:hover,
+  .historyRow:has(:focus-visible) {
+    background: #fff7cc;
+  }
+  .historyRow:has(.historySelect[aria-current="page"]) {
+    background: #ff4d8d;
+    box-shadow: 3px 3px 0 #111;
+  }
+  .historyRow:has(.historySelect[aria-current="page"]):hover {
+    background: #ff4d8d;
+  }
+  .historySelect {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #111;
+    text-align: left;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 800;
+  }
+  .historySelectTitle {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .historyChip {
+    display: inline-block;
+    padding: 0 6px;
+    border: 2px solid #111;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1.4;
+  }
+  .historyChipTeam {
+    background: #fdba74;
+  }
+  .historySelect[aria-current="page"] {
+    color: #111;
+    font-weight: 800;
+  }
+  .historyMeta {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+  .historyDate {
+    font-size: 10px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #4b5563;
+    white-space: nowrap;
+  }
+  .historyRow:has(.historySelect[aria-current="page"]) .historyDate {
+    color: #111;
+  }
+  /* Always-visible pin + delete (final-v2b); keep a11y names */
+  .historyPin,
+  .historyDelete {
+    display: grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    margin: 0;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    color: #111;
+  }
+  .historyPin {
+    color: #4b5563;
+  }
+  .historyPin[aria-pressed="true"] {
+    color: #111;
+  }
+  .historyPin:hover {
+    border-color: #111;
+  }
+  .historyDelete {
+    border-radius: 999px;
+    border-color: #111;
+    background: #fff;
+    box-shadow: 2px 2px 0 #111;
+    color: #111;
+  }
+  .historyPin:hover,
+  .historyDelete:hover {
+    background: #fff;
+  }
+  .historyPin:focus-visible,
+  .historyDelete:focus-visible {
+    outline: 2px solid #111;
+    outline-offset: 1px;
+  }
+  .historyPin:disabled,
+  .historyDelete:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .historySelect[aria-disabled="true"] {
+    cursor: default;
+  }
+  .historyRename {
+    min-width: 0;
+    flex: 1 1 auto;
+    height: 36px;
+    margin: 0;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fffdf8;
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+  }
+  @media (hover: none) {
+    .historyPin,
+    .historyDelete {
+      width: 32px;
+      height: 32px;
+    }
   }
   .conversation {
-    height: max(600px, 75dvh);
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 620px;
+    height: max(620px, calc(100dvh - 160px));
+    overflow: hidden;
+    border: 2px solid #111;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 6px 6px 0 #111;
   }
   .chatHeader {
-    flex-wrap: wrap;
-    padding: 12px 16px;
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    min-height: 64px;
+    padding: 8px 16px 0;
+    border-bottom: 2px solid #111;
+    background: #fff;
   }
-  .messages {
-    padding: 16px 16px 8px;
+  .chatTitle {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    min-width: 0;
+    padding-bottom: 10px;
   }
-  .composer {
-    width: min(100% - 24px, 720px);
-    margin: 6px auto 16px;
-    padding: 12px 12px 8px;
-    border-radius: 20px;
+  .chatTitle h2 {
+    margin: 0 0 4px;
+    overflow: hidden;
+    max-width: 100%;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .composer textarea {
-    font-size: 16px;
+  .kindChip {
+    flex: 0 0 auto;
+    margin-bottom: 6px;
+    padding: 2px 6px;
+    border: 2px solid #111;
+    border-radius: 4px;
+    background: #fff;
+    color: #111;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    box-shadow: 2px 2px 0 #111;
   }
-  .teamComposerTools {
-    padding-inline: 12px;
+  .pickTile {
+    position: relative;
+    width: 100%;
+    min-height: 112px;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  /* Named exactly like a Studyform tile, whose name is a text link. */
+  .pickTile :global(.agent-tile-name) {
+    padding: 9px 16px;
+    color: var(--accent);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.35;
+    letter-spacing: normal;
+  }
+  .pickTile[aria-pressed="true"] {
+    border-color: var(--accent, #76591f);
+    background: var(--accent-soft);
+    box-shadow: var(--lift);
+  }
+  .pickTile:focus-visible {
+    outline: 2px solid var(--accent, #76591f);
+    outline-offset: 2px;
+  }
+  .pickTile:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+  .pickMark {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: grid;
+    place-items: center;
+    color: var(--accent, #76591f);
+  }
+  .emptyState {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: flex-start;
+    padding: 28px;
+  }
+  .emptyState strong {
+    padding: 18px;
+    border: 1px dashed #d9d0e2;
+    border-radius: 16px;
+    color: var(--muted);
+    background: var(--surface-subtle, #f5f5f7);
+    font-size: 0.95rem;
+    font-weight: 650;
+    line-height: 1.5;
+  }
+  .conversation > .entryFlow {
+    flex: 1 1 auto;
+    align-content: start;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    overflow: auto;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .teamComposerTools > p {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.45;
   }
   .teamResults {
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
   }
-}
-@media (prefers-reduced-motion: reduce) {
+  .teamResult {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .teamResult h3 {
+    margin: 0 0 6px;
+    color: var(--muted);
+    font-family: var(--display-serif);
+    font-size: 13px;
+    font-weight: 650;
+    letter-spacing: 0.01em;
+  }
+  .teamWarning {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--surface-subtle);
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .memoryStatus {
+    margin: 0;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: var(--surface-subtle);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .teamComposerTools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 20px 0;
+  }
+  .teamComposerTools > p {
+    flex: 1 1 100%;
+    margin: 0;
+  }
+  .teamRecipients {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .recipientChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 100%;
+    padding: 3px 4px 3px 9px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  .recipientRemove {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .recipientRemove:hover:not(:disabled) {
+    color: var(--ink);
+    background: var(--surface-hover);
+  }
+  .recipientRemove:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .recipientMenu {
+    position: absolute;
+    z-index: 5;
+    left: 14px;
+    bottom: calc(100% + 8px);
+    display: grid;
+    gap: 2px;
+    width: min(280px, calc(100% - 28px));
+    max-height: 50dvh;
+    overflow: auto;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: var(--legacy-shadow);
+  }
+  .recipientMenu button {
+    min-height: 40px;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--ink);
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .recipientMenu button:hover:not(:disabled) {
+    background: var(--surface-hover);
+  }
+  .recipientMenu button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .recipientMenu button:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .messages {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;
+    padding: 16px;
+    overscroll-behavior: contain;
+  }
+  .messages > :global(.notice) {
+    max-width: 760px;
+    margin: 12px auto 0;
+  }
+  .exchange {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 12px;
+    min-width: 0;
+  }
+  .userMessage {
+    align-self: flex-end;
+    max-width: 78%;
+    padding: 8px 12px;
+    border: 2px solid #111;
+    border-radius: 10px;
+    background: #ffe4ee;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .agentBubble {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .reply {
+    min-width: 0;
+    max-width: 82%;
+    padding: 8px 12px;
+    border: 2px solid #111;
+    border-radius: 10px;
+    background: #fff;
+    font-size: 14px;
+    line-height: 1.625;
+  }
+  .reply details {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: #f5f5f7;
+    border-radius: 8px;
+  }
+  .reply summary {
+    color: #4b5563;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .source {
+    margin-top: 12px;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+  .source p {
+    white-space: pre-wrap;
+    max-height: 240px;
+    overflow: auto;
+  }
+  .pending {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  /* Floating rounded shell: text row above, send on the control row, with
+   clear air under the shell — not a flush bar or sharp block. */
+  .composer {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "text text"
+      "attach send";
+    gap: 6px 8px;
+    width: calc(100% - 24px);
+    max-width: none;
+    margin: 0 12px 12px;
+    padding: 8px;
+    border: 3px solid #111;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: none;
+  }
+  .composer:focus-within {
+    border-color: #111;
+    box-shadow: 3px 3px 0 #ff4d8d;
+  }
+  .composer :global(#chat-message) {
+    grid-area: text;
+    width: 100%;
+    min-height: 28px;
+    max-height: 168px;
+    field-sizing: content;
+    margin: 0;
+    padding: 2px 6px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    resize: none;
+    overflow-y: auto;
+    color: var(--ink);
+    font-size: 15px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  .composer :global(#chat-message)::placeholder {
+    color: var(--muted);
+    opacity: 0.8;
+  }
+  .composer :global(#chat-message):focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+  .composer :global(#chat-message):disabled {
+    opacity: 0.55;
+  }
+  .composerBar {
+    grid-area: send;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 2px;
+  }
+  /* Chat attachments: "+" at the lower left, files above the text. */
+  .composer:has(.attachmentRow) {
+    grid-template-areas:
+      "files files"
+      "text text"
+      "attach send";
+  }
+  .attachButton {
+    grid-area: attach;
+    align-self: center;
+    justify-self: start;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 2px solid #111;
+    border-radius: 6px;
+    background: #fff;
+    color: #111;
+    box-shadow: 0 3px 0 #111;
+    cursor: pointer;
+  }
+  .attachButton:hover:not(:disabled) {
+    color: #111;
+    background: #fff;
+  }
+  .attachButton:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .attachButton:disabled {
+    opacity: 0.38;
+    cursor: default;
+  }
+  .attachmentRow {
+    grid-area: files;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .attachmentChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 3px 6px 3px 10px;
+    border: 1px solid #e4ddd2;
+    border-radius: 999px;
+    background: #f6f1e8;
+    color: var(--ink);
+    font-size: 13px;
+  }
+  .attachmentName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 240px;
+  }
+  .attachmentRemove {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .attachmentRemove:hover:not(:disabled) {
+    color: var(--ink);
+  }
+  .attachmentError {
+    flex-basis: 100%;
+    margin: 0;
+    color: var(--warning-ink, #7a5420);
+    font-size: 0.82rem;
+  }
+  /* Above the composer while the Scorer marks a finished test. */
+  .scoringNotice {
+    margin: 0 0 6px;
+    color: var(--muted, #706b82);
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  /* Beside the Send button: the student is asked to press it again. */
+  .sendHint {
+    margin: 0;
+    color: var(--warning-ink, #7a5420);
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1.35;
+    text-align: right;
+  }
   .sendButton {
-    transition: none;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0;
+    border: 3px solid #111;
+    border-radius: 10px;
+    background: #ff4d8d;
+    color: #111;
+    box-shadow: 0 6px 0 #111;
+    cursor: pointer;
+    transition:
+      transform 80ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 80ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .sendButton:hover:not(:disabled) {
+    background: #ff4d8d;
+    transform: translateY(-2px);
+  }
+  .sendButton:active:not(:disabled) {
+    transform: translateY(6px);
+    box-shadow: none;
+  }
+  .sendButton:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .sendButton:disabled {
+    opacity: 0.38;
+    cursor: default;
     transform: none;
   }
-}
+  .entryFlow {
+    display: grid;
+    gap: 20px;
+    /* A fixed track, not shrink-to-fit: otherwise the validation hint sets the
+     card's width and choosing a Leader (which clears it) narrows the card.
+     As wide as Agents New, so both pages' edges line up (2026-10-13). */
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: clamp(16px, 3vw, 32px);
+    border: 1px solid var(--line, #e4e1d9);
+    border-radius: 16px;
+    background: var(--panel, #fdfaf3);
+    box-shadow: none;
+  }
+  /* The form's own cards carry the frame, as on Agents New; no card around
+   cards, so both pages' edges line up. */
+  .entryFlowForm {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .teamForm h3 {
+    margin: 0;
+  }
+  .teamForm fieldset > p,
+  .entryTeamList small {
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .entrySection {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+  }
+  .entryTeamList {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .entryTeamList li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 56px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .entryTeamList li > span {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  /* As wide as Agents New: its cards fill the centred page. */
+  .teamForm {
+    display: grid;
+    gap: 18px;
+    width: 100%;
+  }
+  .teamForm :global(.section-card) {
+    margin-bottom: 0;
+  }
+  .teamForm :global(input:focus-visible),
+  .teamForm :global(button:focus-visible) {
+    outline: 3px solid #967c50;
+    outline-offset: 2px;
+  }
+  .teamFormReadOnly .entryChoice,
+  .teamFormReadOnly input:disabled {
+    cursor: default;
+  }
+  .teamForm > label {
+    display: grid;
+    gap: 6px;
+    font-weight: 600;
+  }
+  .teamForm input:not([type="checkbox"]):not([type="radio"]) {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 16px;
+  }
+  .teamForm fieldset,
+  .entrySection fieldset {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .teamForm legend,
+  .entrySection legend {
+    padding: 0 6px;
+    font-weight: 650;
+  }
+  .entryMemberList {
+    display: grid;
+    gap: 6px;
+  }
+  .entryMember {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    padding: 4px 8px;
+    border-radius: 10px;
+  }
+  .entryChoice {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    min-width: 0;
+    cursor: pointer;
+  }
+  .entryChoice input {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 auto;
+    accent-color: var(--accent);
+  }
+  .entryHint {
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--surface-subtle);
+    color: var(--ink);
+    line-height: 1.5;
+  }
+  @media (max-width: 1100px) {
+    .sidebar {
+      width: 240px;
+    }
+  }
+  @media (max-width: 680px) {
+    .entryFlow {
+      gap: 16px;
+      padding: 16px;
+      border-radius: 18px;
+    }
+    .entryMember {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+    }
+    .layout {
+      flex-direction: column;
+    }
+    .sidebar {
+      width: 100%;
+    }
+    .history {
+      max-height: 160px;
+    }
+    .conversation {
+      min-height: 460px;
+      height: max(460px, 70dvh);
+    }
+    .chatHeader {
+      flex-wrap: wrap;
+      padding: 12px 16px;
+    }
+    .messages {
+      padding: 16px 16px 8px;
+    }
+    .composer {
+      width: min(100% - 24px, 720px);
+      margin: 6px auto 16px;
+      padding: 12px 12px 8px;
+      border-radius: 20px;
+    }
+    .composer textarea {
+      font-size: 16px;
+    }
+    .teamComposerTools {
+      padding-inline: 12px;
+    }
+    .teamResults {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sendButton {
+      transition: none;
+    }
+    .sendButton:hover:not(:disabled) {
+      transform: none;
+    }
+  }
 
-/* Progress of a formal test the server is scoring, under the newest message. */
-.assessmentProgress {
-  display: grid;
-  gap: 6px;
-  margin: 4px 0 8px;
-  max-width: 420px;
-}
-.assessmentProgressTrack {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--line, #e4e1d9);
-  overflow: hidden;
-}
-.assessmentProgressTrack > span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent, #76591f);
-  transition: width 400ms ease;
-}
-.assessmentProgress[data-stage="completed"] .assessmentProgressTrack > span {
-  background: var(--green, #2d8a68);
-}
-.assessmentProgressLabel {
-  color: var(--muted, #62626a);
-  font-size: 0.85rem;
-}
+  /* Progress of a formal test the server is scoring, under the newest message. */
+  .assessmentProgress {
+    display: grid;
+    gap: 6px;
+    margin: 4px 0 8px;
+    max-width: 420px;
+  }
+  .assessmentProgressTrack {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--line, #e4e1d9);
+    overflow: hidden;
+  }
+  .assessmentProgressTrack > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent, #76591f);
+    transition: width 400ms ease;
+  }
+  .assessmentProgress[data-stage="completed"] .assessmentProgressTrack > span {
+    background: var(--green, #2d8a68);
+  }
+  .assessmentProgressLabel {
+    color: var(--muted, #62626a);
+    font-size: 0.85rem;
+  }
 
-.blankHint {
-  margin: auto;
-  padding: 24px;
-  color: var(--muted, #777);
-  font-size: 0.9rem;
-  text-align: center;
+  .blankHint {
+    margin: 0;
+    max-width: 300px;
+    padding: 0;
+    color: #4b5563;
+    font-size: 0.875rem;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .pickLayout {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+    min-width: 0;
+  }
+  .pickCol {
+    min-width: 0;
+    padding: 18px 16px 20px;
+    border: 3px solid #111;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 6px 6px 0 #111;
+  }
+  .pickColTitle {
+    display: inline-block;
+    margin: 0 0 18px;
+    padding: 2px 12px;
+    border: 2.5px solid #111;
+    border-radius: 4px;
+    background: #a3e635;
+    color: #111;
+    font-family: var(--font-display, inherit);
+    font-size: 1.25rem;
+    font-weight: 800;
+    transform: rotate(-1deg);
+    box-shadow: 2px 2px 0 #111;
+  }
+  .pickGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 22px 16px;
+    margin: 0;
+    padding: 8px 4px 4px;
+    list-style: none;
+  }
+  .pickCardWrap {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .pickCardWrap:nth-child(odd) .pickCard {
+    transform: rotate(-1.2deg);
+  }
+  .pickCardWrap:nth-child(even) .pickCard {
+    transform: rotate(1.2deg);
+  }
+  .pickCard {
+    position: relative;
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    padding: 28px 10px 10px;
+    border: 3px solid #111;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 6px 6px 0 #111;
+    color: #111;
+    font: inherit;
+    cursor: pointer;
+  }
+  .pickCard:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+  .pickCardPicked {
+    outline: 4px solid #ff4d8d;
+    outline-offset: 2px;
+  }
+  .pickVersion {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    padding: 1px 6px;
+    border: 2px solid #111;
+    border-radius: 5px;
+    background: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    transform: rotate(-3deg);
+    box-shadow: 2px 2px 0 #111;
+  }
+  .pickName {
+    position: absolute;
+    top: -12px;
+    right: 12px;
+    left: 36px;
+    overflow: hidden;
+    padding: 2px 8px;
+    border: 2.5px solid #111;
+    background: #ffe14d;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transform: rotate(-2deg);
+    box-shadow: 2px 2px 0 #111;
+  }
+  .pickArt {
+    display: grid;
+    height: 112px;
+    place-items: end center;
+    overflow: hidden;
+    border: 3px solid #111;
+  }
+  .pickTeamArt {
+    place-items: center;
+  }
+  .pickEmpty {
+    margin: 8px 0 0;
+    color: #4b5563;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .pickMark {
+    position: absolute;
+    top: -12px;
+    right: -12px;
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border: 3px solid #111;
+    border-radius: 999px;
+    background: #ff4d8d;
+    color: #111;
+  }
+  @media (max-width: 680px) {
+    .pickLayout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .blankState {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 32px;
+    text-align: center;
+  }
+  .messagesNewConv {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 24px;
+  }
 }

@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { useT } from "../lib/i18n";
+import { cn } from "../lib/utils";
 import { IconClose, IconDownload, IconEye } from "./quiet-icons";
+import { buttonVariants } from "./ui/button";
 import { ReportMarkdown } from "./report/report-markdown";
 
 export type KnowledgeCheck = { title: string; markdown: string };
@@ -94,7 +96,10 @@ export function KnowledgeCheckOverlay({
       >
         <button
           ref={closeRef}
-          className="icon-action knowledge-check-close"
+          className={cn(
+            buttonVariants({ variant: "neutral", size: "icon" }),
+            "knowledge-check-close absolute top-3 right-3 z-[2] min-h-0 rounded-[10px] p-0",
+          )}
           type="button"
           aria-label={t("knowledgeCheckClose")}
           onClick={onClose}
@@ -121,10 +126,14 @@ export function KnowledgeRowActions({
   onDownload: () => void;
 }) {
   const t = useT();
+  const icon = cn(
+    buttonVariants({ variant: "neutral", size: "icon" }),
+    "min-h-0 rounded-[10px] p-0",
+  );
   return (
     <>
       <button
-        className="icon-action"
+        className={icon}
         type="button"
         disabled={disabled}
         aria-label={t("brainformViewRagNamed", { name })}
@@ -133,7 +142,7 @@ export function KnowledgeRowActions({
         <IconEye />
       </button>
       <button
-        className="icon-action"
+        className={icon}
         type="button"
         disabled={disabled}
         aria-label={t("brainformDownloadRagNamed", { name })}

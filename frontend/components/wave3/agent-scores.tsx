@@ -9,8 +9,6 @@ import {
   segmentEvidenceGrade,
 } from "../../lib/evidence-grading";
 import type { DebateParticipant, DebateTurn } from "../../lib/api";
-import styles from "./agent-scores.module.css";
-import panelStyles from "../report/report.module.css";
 
 function claimsOf(turn: DebateTurn): { support_mode: string }[] {
   // The chain is typed on the wire, but a turn from an older run may carry
@@ -65,15 +63,26 @@ export function AgentScores({
 }) {
   const data = agentScores(participants, turns);
   return (
-    <section aria-labelledby="agent-scores-title" className={panelStyles.panel}>
-      <div className={panelStyles.header}>
+    <section
+      aria-labelledby="agent-scores-title"
+      className="grid min-w-0 gap-(--section-content-gap) rounded-[22px] border border-(--line,#dedee3) bg-white p-(--workspace-inset)"
+    >
+      <div className="flex items-start justify-between gap-4 border-b border-(--line,#dedee3) pb-(--section-content-gap)">
         <div>
-          <h2 id="agent-scores-title">Evaluation</h2>
+          <h2
+            id="agent-scores-title"
+            className="m-0 text-[1.24rem] leading-[1.4] text-(--indigo-dark)"
+          >
+            Evaluation
+          </h2>
         </div>
       </div>
-      <div className={panelStyles.content}>
-        <div className={panelStyles.reportCard}>
-          <div aria-label="Evidence grading" className={styles.legend}>
+      <div className="grid min-w-0 gap-(--section-content-gap) rounded-[14px] border border-transparent bg-(--surface-subtle,#f5f5f7) p-4">
+        <div className="min-w-0 border-0 bg-transparent p-0">
+          <div
+            aria-label="Evidence grading"
+            className="mb-4 flex flex-wrap gap-1.5 text-[0.78rem] text-(--muted) [&_[data-grade]]:rounded-[7px] [&_[data-grade]]:px-2 [&_[data-grade]]:py-1 [&_[data-grade]]:font-semibold [&_[data-grade=direct]]:bg-[#e7f0e7] [&_[data-grade=direct]]:text-[#386e54] [&_[data-grade=indirect]]:bg-[#f2e4c2] [&_[data-grade=indirect]]:text-[#806127] [&_[data-grade=none]]:bg-[#eee8f0] [&_[data-grade=none]]:text-[#71667f]"
+          >
             {Object.entries(EVIDENCE_GRADE_LABELS).map(([grade, label]) => (
               <span key={grade} data-grade={grade}>
                 {label}

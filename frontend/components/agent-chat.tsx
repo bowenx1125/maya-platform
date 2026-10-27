@@ -80,7 +80,25 @@ import { IconClose, IconPin } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import { PageAction } from "./page-action";
-import { ErrorNotice, LoadingCard, Notice, PageIntro } from "./ui";
+import {
+  ChatAvatar,
+  ChatEmptyGhosts,
+  ChatPeekAvatar,
+  ChatRadiantDisk,
+  chatHistoryTapeClass,
+  chatKindChipClass,
+  chatTapeTitleClass,
+} from "./chatform-chrome";
+import { AGENT_BANNER, AGENT_BANNER_TITLE } from "./agent-chrome";
+import { buttonVariants } from "./ui/button";
+import { cn } from "../lib/utils";
+import {
+  ErrorNotice,
+  NOTICE_ACTION_CLASS,
+  LoadingCard,
+  Notice,
+  useNoticeTrayAbove,
+} from "./ui";
 import { WorkspaceAction } from "./workspace-actions";
 import styles from "./agent-chat.module.css";
 
@@ -544,6 +562,10 @@ function AgentChatScope({
   role: "teacher" | "student";
 }) {
   const t = useT();
+  // In Chat the mascot tray speaks from just above the message box.
+  const [composerElement, setComposerElement] =
+    useState<HTMLFormElement | null>(null);
+  useNoticeTrayAbove(composerElement);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -2723,18 +2745,57 @@ function AgentChatScope({
   const activeSession = selectedTeam ?? selected;
   const teamIds = new Set(teamChoices.map((team) => team.id));
   const teamOptions: ChatTargetTeam[] = [
-    ...teamChoices,
+    ...teamChoices.map((team) => ({
+      id: team.id,
+      display_name: team.display_name,
+      current_version_seq: team.current_version_seq,
+      visibility: team.visibility,
+      member_count: team.member_count,
+      // TeamSummary may carry members once the directory lists them.
+      members: (team as { members?: ChatTargetTeam["members"] }).members,
+    })),
     ...mayaChoices
       .filter((team) => !teamIds.has(team.id))
       .map((team) => ({
         id: team.id,
         display_name: team.display_name,
         visibility: "public" as const,
+        member_count: team.members.length,
+        members: team.members.map((member) => ({
+          agent_id: null as string | null,
+          material_theme:
+            typeof member.avatar_config?.material_theme === "string"
+              ? member.avatar_config.material_theme
+              : null,
+          is_leader: member.is_leader,
+        })),
       })),
   ];
-  const chatTitle = selectedTeam?.team.name ?? character?.name ?? "";
+  const chatTitle =
+    selectedTeam?.team.name ??
+    (selected?.title && selected.title.trim() ? selected.title : null) ??
+    character?.name ??
+    "";
   const chatKind = teamMode ? "Team" : "Agent";
   const hasTarget = Boolean(selected || selectedTeam || versionId);
+  const peekAgentId =
+    character?.agent_id ??
+    selected?.agent.agent_id ??
+    selectedTeam?.team.id ??
+    "chat";
+  const peekTheme =
+    character?.avatar_config?.material_theme ??
+    selected?.agent.avatar_config?.material_theme ??
+    null;
+  const isNewConv =
+    hasTarget &&
+    !newChatRoute &&
+    !pendingMessage &&
+    (selected
+      ? selected.turns.length === 0
+      : selectedTeam
+        ? selectedTeam.turns.length === 0
+        : Boolean(versionId));
   // Inside an open Chat, errors sit under the latest message, not above the page.
   const showConversation = hasTarget && !newChatRoute;
   const deletedMember = selectedTeam?.team.members.find(
@@ -2850,26 +2911,40 @@ function AgentChatScope({
 
   return (
     <>
-      <PageIntro title="Chatform" />
-      <WorkspaceAction
-        name="new"
-        disabled={busy || teamBusy || newChatRoute}
-        onClick={openNewEntry}
-      />
-      {newChatRoute ? (
-        <>
-          <PageAction
-            name="back"
-            disabled={creating}
-            onClick={() => closeNewEntry()}
-          />
-          <PageAction
-            name="done"
-            disabled={!pick || creating || busy || teamBusy}
-            onClick={() => void createPicked()}
-          />
-        </>
-      ) : null}
+      <header className={cn(AGENT_BANNER, "mb-5 justify-between")}>
+        <h1 className={cn(AGENT_BANNER_TITLE, "flex-none")}>Chatform</h1>
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+          {newChatRoute ? (
+            <>
+              <PageAction
+                name="back"
+                placement="page"
+                disabled={creating}
+                onClick={() => closeNewEntry()}
+              />
+              <PageAction
+                name="done"
+                placement="page"
+                disabled={!pick || creating || busy || teamBusy}
+                className={
+                  !pick || creating || busy || teamBusy
+                    ? "bg-[#FFB3CE] text-[#111]/50"
+                    : undefined
+                }
+                onClick={() => void createPicked()}
+              />
+            </>
+          ) : (
+            <PageAction
+              name="new"
+              placement="page"
+              className="bg-[#FF4D8D]"
+              disabled={busy || teamBusy}
+              onClick={openNewEntry}
+            />
+          )}
+        </div>
+      </header>
       {/* Owner decision (2026-10-13): opening Memory shows no status line
           and no "continue" button; the Chat itself shows what happened. */}
       {invalidMemoryRoute ? (
@@ -2877,9 +2952,10 @@ function AgentChatScope({
           {t("brainformMemoryInvalid")}
         </DismissibleAlert>
       ) : null}
-      {error && !showConversation ? (
+      {error && !showConversation && requestState?.status !== "uncertain" ? (
         <ErrorNotice
           error={error}
+          kind="chat"
           onRetry={
             historyRefreshTarget
               ? () => void openHistory(historyRefreshTarget)
@@ -2888,13 +2964,22 @@ function AgentChatScope({
         />
       ) : null}
       {requestState?.status === "uncertain" && requestState.sessionId ? (
-        <button
-          className="inline-button"
-          type="button"
-          onClick={() => void checkUncertainRequestStatus()}
+        <Notice
+          tone="error"
+          kind="chat"
+          transient={false}
+          action={
+            <button
+              type="button"
+              className={NOTICE_ACTION_CLASS}
+              onClick={() => void checkUncertainRequestStatus()}
+            >
+              {t("chatCheckStatus")}
+            </button>
+          }
         >
-          {t("chatCheckStatus")}
-        </button>
+          {t("errorChatTransportUncertain")}
+        </Notice>
       ) : null}
       {newChatRoute ? (
         <ChatTargetPicker
@@ -2908,7 +2993,7 @@ function AgentChatScope({
         <div className={styles.layout}>
           <aside className={styles.sidebar}>
             <div className={styles.historyHead}>
-              <h2>{t("chatHistory")}</h2>
+              <h2 className={chatHistoryTapeClass()}>{t("chatHistory")}</h2>
             </div>
             <div className={styles.history} aria-label="History">
               {historyItems.length === 0 ? (
@@ -2916,6 +3001,19 @@ function AgentChatScope({
               ) : null}
               {historyItems.map(({ kind, session, name, label }) => (
                 <div className={styles.historyRow} key={session.id}>
+                  <ChatAvatar
+                    agentId={
+                      kind === "agent"
+                        ? session.agent.agent_id
+                        : session.team.id
+                    }
+                    materialTheme={
+                      kind === "agent"
+                        ? session.agent.avatar_config?.material_theme
+                        : null
+                    }
+                    size={36}
+                  />
                   {renaming?.session.id === session.id ? (
                     <input
                       className={styles.historyRename}
@@ -2971,7 +3069,17 @@ function AgentChatScope({
                         setRenaming({ session, initial: label, value: label });
                       }}
                     >
-                      <span>{label}</span>
+                      <span className={styles.historySelectTitle}>{label}</span>
+                      {/* Visual chip only: keeps the Chat's accessible name its title, as on main. */}
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          styles.historyChip,
+                          kind === "team" && styles.historyChipTeam,
+                        )}
+                      >
+                        {kind === "team" ? "Team" : "Agent"}
+                      </span>
                     </button>
                   )}
                   <span className={styles.historyMeta}>
@@ -2994,7 +3102,7 @@ function AgentChatScope({
                         });
                       }}
                     >
-                      <IconPin filled={Boolean(session.pinned_at)} />
+                      <IconPin size={13} filled={Boolean(session.pinned_at)} />
                     </button>
                     <button
                       type="button"
@@ -3011,7 +3119,7 @@ function AgentChatScope({
                         void removeChat(session);
                       }}
                     >
-                      <IconClose />
+                      <IconClose size={11} />
                     </button>
                   </span>
                 </div>
@@ -3024,22 +3132,40 @@ function AgentChatScope({
           >
             {!hasTarget ? (
               // A blank pane read as "still loading" (2026-10-20 audit):
-              // say what to do instead.
-              <p className={styles.blankHint}>{t("chatPickOrNew")}</p>
+              // say what to do instead. FINAL v2b: C ghost character-select.
+              <div className={styles.blankState}>
+                <ChatEmptyGhosts />
+                <p className={styles.blankHint}>{t("chatPickOrNew")}</p>
+              </div>
             ) : (
               <>
                 <header className={styles.chatHeader}>
+                  <ChatPeekAvatar
+                    agentId={peekAgentId}
+                    materialTheme={peekTheme}
+                  />
                   <div className={styles.chatTitle}>
-                    <h2>{chatTitle || t("chatNewTitle")}</h2>
-                    <span className={styles.kindChip}>{chatKind}</span>
+                    <h2 className={chatTapeTitleClass()}>
+                      {chatTitle || t("chatNewTitle")}
+                    </h2>
+                    <span className={chatKindChipClass()}>{chatKind}</span>
                   </div>
                 </header>
                 <div
-                  className={styles.messages}
+                  className={cn(
+                    styles.messages,
+                    isNewConv && styles.messagesNewConv,
+                  )}
                   role="log"
                   aria-live="polite"
                   aria-relevant="additions text"
                 >
+                  {isNewConv ? (
+                    <ChatRadiantDisk
+                      agentId={peekAgentId}
+                      materialTheme={peekTheme}
+                    />
+                  ) : null}
                   {selected?.turns.map((turn) => (
                     <div key={turn.id} className={styles.exchange}>
                       {turn.user_text ? (
@@ -3047,37 +3173,51 @@ function AgentChatScope({
                           {turn.user_text}
                         </div>
                       ) : null}
-                      <div className={styles.reply}>
-                        {turn.assistant_text ? (
-                          <ReportMarkdown>{turn.assistant_text}</ReportMarkdown>
-                        ) : (
-                          <span className={styles.pending} role="status">
-                            {turn.state === "pending" ? (
-                              <>
-                                <span className="spinner" aria-hidden="true" />
-                                {t("loading")}
-                              </>
-                            ) : turn.state === "acceptance_unknown" ? (
-                              t("errorChatAcceptanceUnknown")
-                            ) : (
-                              localizeError({ code: turn.safe_error_code })
-                            )}
-                          </span>
-                        )}
-                        {turn.sources.length ? (
-                          <details>
-                            <summary>Check RAG · {turn.sources.length}</summary>
-                            {turn.sources.map((source) => (
-                              <div
-                                className={styles.source}
-                                key={source.chunk_id}
-                              >
-                                <strong>{source.filename}</strong>
-                                <p>{source.excerpt}</p>
-                              </div>
-                            ))}
-                          </details>
-                        ) : null}
+                      <div className={styles.agentBubble}>
+                        <ChatAvatar
+                          agentId={peekAgentId}
+                          materialTheme={peekTheme}
+                          size={30}
+                        />
+                        <div className={styles.reply}>
+                          {turn.assistant_text ? (
+                            <ReportMarkdown>
+                              {turn.assistant_text}
+                            </ReportMarkdown>
+                          ) : (
+                            <span className={styles.pending} role="status">
+                              {turn.state === "pending" ? (
+                                <>
+                                  <span
+                                    className="spinner"
+                                    aria-hidden="true"
+                                  />
+                                  {t("loading")}
+                                </>
+                              ) : turn.state === "acceptance_unknown" ? (
+                                t("errorChatAcceptanceUnknown")
+                              ) : (
+                                localizeError({ code: turn.safe_error_code })
+                              )}
+                            </span>
+                          )}
+                          {turn.sources.length ? (
+                            <details>
+                              <summary>
+                                Check RAG · {turn.sources.length}
+                              </summary>
+                              {turn.sources.map((source) => (
+                                <div
+                                  className={styles.source}
+                                  key={source.chunk_id}
+                                >
+                                  <strong>{source.filename}</strong>
+                                  <p>{source.excerpt}</p>
+                                </div>
+                              ))}
+                            </details>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -3155,67 +3295,85 @@ function AgentChatScope({
                               className={styles.teamResult}
                               key={result.id}
                             >
-                              <h3>
-                                {result.speaker_name}
-                                {participant?.is_leader
-                                  ? ` · ${t("leader")}`
-                                  : ""}
-                              </h3>
-                              {result.assistant_text ? (
-                                result.assistant_text.trim() ===
-                                "正在总结答案" ? (
-                                  <p
-                                    role="status"
-                                    data-team-progress="summarizing"
-                                  >
-                                    {result.assistant_text}
-                                  </p>
-                                ) : (
-                                  <ReportMarkdown>
-                                    {result.assistant_text}
-                                  </ReportMarkdown>
-                                )
-                              ) : result.state === "pending" ||
-                                result.state === "running" ? (
-                                <p className={styles.pending} role="status">
-                                  <span
-                                    className="spinner"
-                                    aria-hidden="true"
-                                  />
-                                  {t("loading")}
-                                </p>
-                              ) : result.state === "acceptance_unknown" ? (
-                                <DismissibleAlert
-                                  className={styles.teamWarning}
-                                  role="status"
-                                >
-                                  {t("errorChatAcceptanceUnknown")}
-                                </DismissibleAlert>
-                              ) : (
-                                <DismissibleAlert
-                                  className={styles.teamWarning}
-                                  role="status"
-                                >
-                                  {teamFailureText(
-                                    result.safe_error_code,
-                                    "teamMemberFailure",
+                              <div className={styles.agentBubble}>
+                                <ChatAvatar
+                                  agentId={
+                                    participant?.id ??
+                                    result.participant_id ??
+                                    peekAgentId
+                                  }
+                                  materialTheme={
+                                    participant?.avatar_config
+                                      ?.material_theme ?? null
+                                  }
+                                  size={30}
+                                />
+                                <div className={styles.reply}>
+                                  <h3>
+                                    {result.speaker_name}
+                                    {participant?.is_leader
+                                      ? ` · ${t("leader")}`
+                                      : ""}
+                                  </h3>
+                                  {result.assistant_text ? (
+                                    result.assistant_text.trim() ===
+                                    "正在总结答案" ? (
+                                      <p
+                                        role="status"
+                                        data-team-progress="summarizing"
+                                      >
+                                        {result.assistant_text}
+                                      </p>
+                                    ) : (
+                                      <ReportMarkdown>
+                                        {result.assistant_text}
+                                      </ReportMarkdown>
+                                    )
+                                  ) : result.state === "pending" ||
+                                    result.state === "running" ? (
+                                    <p className={styles.pending} role="status">
+                                      <span
+                                        className="spinner"
+                                        aria-hidden="true"
+                                      />
+                                      {t("loading")}
+                                    </p>
+                                  ) : result.state === "acceptance_unknown" ? (
+                                    <DismissibleAlert
+                                      className={styles.teamWarning}
+                                      role="status"
+                                    >
+                                      {t("errorChatAcceptanceUnknown")}
+                                    </DismissibleAlert>
+                                  ) : (
+                                    <DismissibleAlert
+                                      className={styles.teamWarning}
+                                      role="status"
+                                    >
+                                      {teamFailureText(
+                                        result.safe_error_code,
+                                        "teamMemberFailure",
+                                      )}
+                                    </DismissibleAlert>
                                   )}
-                                </DismissibleAlert>
-                              )}
-                              {/* Formal progress hangs under the Summarizer line.
+                                  {/* Formal progress hangs under the Summarizer line.
                                   Until that card exists, the executor card or
                                   the fallback below carries it. */}
-                              {(formalSummarizerCard ||
-                                (isSummarizerTurn &&
-                                  turn.id ===
-                                    shownTeamTurns[shownTeamTurns.length - 1]
-                                      ?.id)) &&
-                              selectedTeam.assessment_stage &&
-                              selectedTeam.assessment_stage !== "preparing" ? (
-                                <AssessmentProgress
-                                  stage={selectedTeam.assessment_stage}
-                                />
-                              ) : null}
+                                  {(formalSummarizerCard ||
+                                    (isSummarizerTurn &&
+                                      turn.id ===
+                                        shownTeamTurns[
+                                          shownTeamTurns.length - 1
+                                        ]?.id)) &&
+                                  selectedTeam.assessment_stage &&
+                                  selectedTeam.assessment_stage !==
+                                    "preparing" ? (
+                                    <AssessmentProgress
+                                      stage={selectedTeam.assessment_stage}
+                                    />
+                                  ) : null}
+                                </div>
+                              </div>
                             </article>
                           );
                         })}
@@ -3225,16 +3383,27 @@ function AgentChatScope({
                   {pendingMessage ? (
                     <div className={styles.exchange}>
                       <div className={styles.userMessage}>{pendingMessage}</div>
-                      <div className={styles.pending} role="status">
-                        <span className="spinner" aria-hidden="true" />
-                        {t("loading")}
+                      <div className={styles.agentBubble}>
+                        <ChatAvatar
+                          agentId={peekAgentId}
+                          materialTheme={peekTheme}
+                          size={30}
+                        />
+                        <div className={styles.reply}>
+                          <span className={styles.pending} role="status">
+                            <span className="spinner" aria-hidden="true" />
+                            {t("loading")}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ) : null}
-                  {error && !sendRefusalHint(error) ? (
+                  {error &&
+                  !sendRefusalHint(error) &&
+                  requestState?.status !== "uncertain" ? (
                     <ErrorNotice
-                      inline
                       error={error}
+                      transient
                       onRetry={
                         historyRefreshTarget
                           ? () => void openHistory(historyRefreshTarget)
@@ -3245,7 +3414,6 @@ function AgentChatScope({
                   {closedNotice &&
                   closedNoticeDismissed !== activeSession?.id ? (
                     <Notice
-                      inline
                       id="chat-readonly-help"
                       tone="warning"
                       onClose={() =>
@@ -3257,7 +3425,6 @@ function AgentChatScope({
                   ) : null}
                   {selectedTeam && teamError && !sendRefusalHint(teamError) ? (
                     <Notice
-                      inline
                       tone="error"
                       onClose={() => setTeamError(null)}
                       action={
@@ -3363,6 +3530,7 @@ function AgentChatScope({
                   </p>
                 ) : null}
                 <form
+                  ref={setComposerElement}
                   className={styles.composer}
                   onSubmit={(event) => submitMessage(event)}
                 >

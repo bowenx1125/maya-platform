@@ -8,7 +8,6 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DebateStage } from "../components/debate/stage";
 import type {
   DebatePlaybackApi,
   PlaybackSocket,
@@ -119,10 +118,6 @@ function api(): DebatePlaybackApi {
     freezeFinalInput: vi.fn(),
     retryDebatePreparation: vi.fn(),
     replayDebate: vi.fn(),
-    listProviderDataCallManifests: vi.fn().mockResolvedValue({
-      scope_id: debateId,
-      items: [],
-    }),
   };
 }
 
@@ -176,191 +171,191 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe.each([
-  ["classic", DebateStage],
-  ["beta", BetaDebateStage],
-] as const)("%s final text phase", (name, Stage) => {
-  function renderStage(
-    snapshot: DebateDetail,
-    options?: {
-      client: DebatePlaybackApi;
-      socket: TestSocket;
-      refreshSnapshot: () => Promise<DebateDetail>;
-    },
-  ) {
-    render(
-      <Stage
-        api={options?.client ?? api()}
-        debateId={debateId}
-        detail={snapshot}
-        labels={{
-          stageTitle: "Acceptance stage",
-          transcript: "Public Debate",
-          phaseWaiting: "Waiting",
-          phaseInProgress: "Generating",
-          phaseFinished: "Completed",
-        }}
-        readOnly={!options}
-        socketFactory={options ? () => options.socket : undefined}
-        refreshSnapshot={options?.refreshSnapshot}
-      />,
-    );
-    if (name === "beta") {
-      fireEvent.click(screen.getByRole("button", { name: "Transcript" }));
-    }
-    return screen.getByRole("region", { name: "Acceptance stage" });
-  }
-
-  it("waits for End after the eighth public text without showing generation", () => {
-    const stage = renderStage(detail());
-
-    expect(stage.getAttribute("data-classroom-phase")).toBe("waiting");
-    expect(
-      screen.getByRole("heading", { name: "Public Debate Waiting" }),
-    ).toBeTruthy();
-    expect(screen.queryByText("Generating")).toBeNull();
-  });
-
-  it("keeps the completed label after End", () => {
-    const snapshot = detail();
-    snapshot.status = "debate_finished";
-    snapshot.playback.status = "completed";
-    const stage = renderStage(snapshot);
-
-    expect(stage.getAttribute("data-classroom-phase")).toBe("finished");
-    expect(
-      screen.getByRole("heading", { name: "Public Debate Completed" }),
-    ).toBeTruthy();
-  });
-
-  it("does not mark an actively playing final turn as waiting", () => {
-    const snapshot = detail();
-    snapshot.playback.status = "playing";
-    const stage = renderStage(snapshot);
-
-    expect(stage.getAttribute("data-classroom-phase")).toBe("in_progress");
-  });
-
-  it("preserves the next-turn preparation label before the final text", () => {
-    const stage = renderStage(detail(7));
-
-    expect(stage.getAttribute("data-classroom-phase")).toBe(
-      name === "beta" ? "in_progress" : "waiting",
-    );
-  });
-
-  it.each([
-    "older-version",
-    "older-sequence",
-    "before-mutation",
-    "controller-revoked",
-    "unmounted",
-    "two-stale-reads",
-  ] as const)(
-    "confirms Final after a concurrent %s recovery without a second mutation",
-    async (snapshotRace) => {
-      const initial = detail(6);
-      initial.turn_protocol = "segments_v2";
-      initial.final_input_frozen = false;
-      const fresh = detail(6);
-      fresh.turn_protocol = "segments_v2";
-      fresh.last_sequence = 9;
-      fresh.playback.control_version = 9;
-      fresh.playback.next_turn_ready = true;
-      let resolvePending!: (value: DebateDetail) => void;
-      const pending = new Promise<DebateDetail>((resolve) => {
-        resolvePending = resolve;
-      });
-      const refreshSnapshot = vi
-        .fn()
-        .mockReturnValueOnce(pending)
-        .mockResolvedValue(
-          snapshotRace === "two-stale-reads" ? initial : fresh,
-        );
-      const client = api();
-      const socket = new TestSocket();
-      renderStage(initial, { client, socket, refreshSnapshot });
-      await waitFor(() => expect(socket.hasListeners()).toBe(true));
-      act(() => {
-        socket.emit("open");
-        socket.emit(
-          "message",
-          privateMessage("controller.acquired", {
-            controller_epoch: "50000000-0000-4000-8000-000000000001",
-            control_version: 8,
-          }),
-        );
-        socket.emit(
-          "message",
-          privateMessage("command.rejected", {
-            code: "stale_control_version",
-            recoverable: true,
-            current_control_version: 8,
-          }),
-        );
-      });
-      await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(1));
-      fireEvent.click(screen.getByRole("button", { name: "Final" }));
-      await waitFor(() =>
-        expect(client.freezeFinalInput).toHaveBeenCalledTimes(1),
+describe.each([["beta", BetaDebateStage]] as const)(
+  "%s final text phase",
+  (name, Stage) => {
+    function renderStage(
+      snapshot: DebateDetail,
+      options?: {
+        client: DebatePlaybackApi;
+        socket: TestSocket;
+        refreshSnapshot: () => Promise<DebateDetail>;
+      },
+    ) {
+      render(
+        <Stage
+          api={options?.client ?? api()}
+          debateId={debateId}
+          detail={snapshot}
+          labels={{
+            stageTitle: "Acceptance stage",
+            transcript: "Public Debate",
+            phaseWaiting: "Waiting",
+            phaseInProgress: "Generating",
+            phaseFinished: "Completed",
+          }}
+          readOnly={!options}
+          socketFactory={options ? () => options.socket : undefined}
+          refreshSnapshot={options?.refreshSnapshot}
+        />,
       );
-      await act(async () => {
-        if (
-          snapshotRace === "older-version" ||
-          snapshotRace === "older-sequence" ||
-          snapshotRace === "two-stale-reads"
-        ) {
-          socket.emit("message", {
-            event_id: "90000000-0000-4000-8000-000000000009",
-            event_type: "playback.waiting_next",
-            event_version: 1,
-            debate_id: debateId,
-            sequence: 9,
-            occurred_at: "2026-10-12T00:00:00Z",
-            payload: {
-              mode: "live",
-              completed_turn_id: initial.playback.current_turn_id,
-              control_version: snapshotRace === "older-sequence" ? 8 : 9,
-              next_turn_ready: true,
-            },
-          });
-        } else if (snapshotRace === "controller-revoked") {
+      if (name === "beta") {
+        fireEvent.click(screen.getByRole("button", { name: "Transcript" }));
+      }
+      return screen.getByRole("region", { name: "Acceptance stage" });
+    }
+
+    it("waits for End after the eighth public text without showing generation", () => {
+      const stage = renderStage(detail());
+
+      expect(stage.getAttribute("data-classroom-phase")).toBe("waiting");
+      expect(
+        screen.getByRole("heading", { name: "Public Debate Waiting" }),
+      ).toBeTruthy();
+      expect(screen.queryByText("Generating")).toBeNull();
+    });
+
+    it("keeps the completed label after End", () => {
+      const snapshot = detail();
+      snapshot.status = "debate_finished";
+      snapshot.playback.status = "completed";
+      const stage = renderStage(snapshot);
+
+      expect(stage.getAttribute("data-classroom-phase")).toBe("finished");
+      expect(
+        screen.getByRole("heading", { name: "Public Debate Completed" }),
+      ).toBeTruthy();
+    });
+
+    it("does not mark an actively playing final turn as waiting", () => {
+      const snapshot = detail();
+      snapshot.playback.status = "playing";
+      const stage = renderStage(snapshot);
+
+      expect(stage.getAttribute("data-classroom-phase")).toBe("in_progress");
+    });
+
+    it("preserves the next-turn preparation label before the final text", () => {
+      const stage = renderStage(detail(7));
+
+      expect(stage.getAttribute("data-classroom-phase")).toBe(
+        name === "beta" ? "in_progress" : "waiting",
+      );
+    });
+
+    it.each([
+      "older-version",
+      "older-sequence",
+      "before-mutation",
+      "controller-revoked",
+      "unmounted",
+      "two-stale-reads",
+    ] as const)(
+      "confirms Final after a concurrent %s recovery without a second mutation",
+      async (snapshotRace) => {
+        const initial = detail(6);
+        initial.turn_protocol = "segments_v2";
+        initial.final_input_frozen = false;
+        const fresh = detail(6);
+        fresh.turn_protocol = "segments_v2";
+        fresh.last_sequence = 9;
+        fresh.playback.control_version = 9;
+        fresh.playback.next_turn_ready = true;
+        let resolvePending!: (value: DebateDetail) => void;
+        const pending = new Promise<DebateDetail>((resolve) => {
+          resolvePending = resolve;
+        });
+        const refreshSnapshot = vi
+          .fn()
+          .mockReturnValueOnce(pending)
+          .mockResolvedValue(
+            snapshotRace === "two-stale-reads" ? initial : fresh,
+          );
+        const client = api();
+        const socket = new TestSocket();
+        renderStage(initial, { client, socket, refreshSnapshot });
+        await waitFor(() => expect(socket.hasListeners()).toBe(true));
+        act(() => {
+          socket.emit("open");
           socket.emit(
             "message",
-            privateMessage("controller.revoked", {
+            privateMessage("controller.acquired", {
               controller_epoch: "50000000-0000-4000-8000-000000000001",
-              reason: "session_revoked",
+              control_version: 8,
             }),
           );
-        } else if (snapshotRace === "unmounted") {
-          cleanup();
+          socket.emit(
+            "message",
+            privateMessage("command.rejected", {
+              code: "stale_control_version",
+              recoverable: true,
+              current_control_version: 8,
+            }),
+          );
+        });
+        await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(1));
+        fireEvent.click(screen.getByRole("button", { name: "Final" }));
+        await waitFor(() =>
+          expect(client.freezeFinalInput).toHaveBeenCalledTimes(1),
+        );
+        await act(async () => {
+          if (
+            snapshotRace === "older-version" ||
+            snapshotRace === "older-sequence" ||
+            snapshotRace === "two-stale-reads"
+          ) {
+            socket.emit("message", {
+              event_id: "90000000-0000-4000-8000-000000000009",
+              event_type: "playback.waiting_next",
+              event_version: 1,
+              debate_id: debateId,
+              sequence: 9,
+              occurred_at: "2026-10-12T00:00:00Z",
+              payload: {
+                mode: "live",
+                completed_turn_id: initial.playback.current_turn_id,
+                control_version: snapshotRace === "older-sequence" ? 8 : 9,
+                next_turn_ready: true,
+              },
+            });
+          } else if (snapshotRace === "controller-revoked") {
+            socket.emit(
+              "message",
+              privateMessage("controller.revoked", {
+                controller_epoch: "50000000-0000-4000-8000-000000000001",
+                reason: "session_revoked",
+              }),
+            );
+          } else if (snapshotRace === "unmounted") {
+            cleanup();
+          }
+          resolvePending(initial);
+          await pending;
+        });
+        if (
+          snapshotRace === "controller-revoked" ||
+          snapshotRace === "unmounted" ||
+          snapshotRace === "two-stale-reads"
+        ) {
+          expect(client.freezeFinalInput).toHaveBeenCalledTimes(1);
+          expect(client.advanceDebatePlayback).not.toHaveBeenCalled();
+          expect(refreshSnapshot).toHaveBeenCalledTimes(
+            snapshotRace === "two-stale-reads" ? 4 : 1,
+          );
+          expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+          return;
         }
-        resolvePending(initial);
-        await pending;
-      });
-      if (
-        snapshotRace === "controller-revoked" ||
-        snapshotRace === "unmounted" ||
-        snapshotRace === "two-stale-reads"
-      ) {
+        await waitFor(() =>
+          expect(
+            (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
+              .disabled,
+          ).toBe(false),
+        );
+        expect(screen.queryByRole("button", { name: "Final" })).toBeNull();
         expect(client.freezeFinalInput).toHaveBeenCalledTimes(1);
         expect(client.advanceDebatePlayback).not.toHaveBeenCalled();
-        expect(refreshSnapshot).toHaveBeenCalledTimes(
-          snapshotRace === "two-stale-reads" ? 4 : 1,
-        );
-        expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
-        return;
-      }
-      await waitFor(() =>
-        expect(
-          (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
-            .disabled,
-        ).toBe(false),
-      );
-      expect(screen.queryByRole("button", { name: "Final" })).toBeNull();
-      expect(client.freezeFinalInput).toHaveBeenCalledTimes(1);
-      expect(client.advanceDebatePlayback).not.toHaveBeenCalled();
-      expect(refreshSnapshot).toHaveBeenCalledTimes(2);
-    },
-  );
-});
+        expect(refreshSnapshot).toHaveBeenCalledTimes(2);
+      },
+    );
+  },
+);

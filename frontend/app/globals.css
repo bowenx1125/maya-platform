@@ -13,7 +13,7 @@
   --gold-soft: #f6ecd3;
   --green: #2d8a68;
   --red: #b74f5a;
-  --shadow: 0 24px 70px rgba(72, 61, 105, 0.11);
+  --legacy-shadow: 0 24px 70px rgba(72, 61, 105, 0.11);
   /* One settle and one spring for the whole product, so everything that moves
      moves like the same material. */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -42,25 +42,19 @@
 
 html {
   min-width: 320px;
-  background: var(--paper);
+  /* Arcade canvas everywhere (DESIGN-RULES --bg / --bg-grid), shell or not. */
+  background-color: #dcebff;
 }
 
 body {
   min-height: 100vh;
   margin: 0;
   color: var(--ink);
-  background:
-    radial-gradient(
-      circle at 8% 2%,
-      rgba(211, 167, 74, 0.15),
-      transparent 31rem
-    ),
-    radial-gradient(
-      circle at 100% 25%,
-      rgba(84, 73, 166, 0.11),
-      transparent 34rem
-    ),
-    var(--paper);
+  background-color: #dcebff;
+  background-image:
+    linear-gradient(#0001 1px, transparent 1px),
+    linear-gradient(90deg, #0001 1px, transparent 1px);
+  background-size: 32px 32px;
   font-family:
     Inter,
     ui-sans-serif,
@@ -315,9 +309,7 @@ textarea {
   border-color: #edcdd0;
 }
 
-.loading-card,
-.empty-card,
-.notice {
+.empty-card {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -328,10 +320,21 @@ textarea {
   background: rgba(255, 255, 255, 0.78);
 }
 
+/* B-v2 LoadingCard chrome (component adds skeleton rows via Tailwind).
+   Kept here so session-provider's plain .loading-card still matches. */
 .loading-card {
-  justify-content: center;
-  min-height: 120px;
-  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-height: 0;
+  padding: 16px 20px;
+  border: 3px solid #111;
+  border-radius: 18px;
+  background: #fff;
+  color: #111;
+  box-shadow: 4px 5px 0 #111;
 }
 
 .spinner {
@@ -402,8 +405,7 @@ textarea {
 }
 
 .empty-card p,
-.muted-copy,
-.notice span {
+.muted-copy {
   color: var(--muted);
   font-size: 0.88rem;
   line-height: 1.6;
@@ -415,55 +417,6 @@ textarea {
   margin: 4px 0 2px 2px;
   background: rgba(201, 162, 39, 0.8);
   transform: rotate(45deg);
-}
-
-.notice {
-  align-items: center;
-  margin: 16px 0;
-  line-height: 1.45;
-}
-
-.notice strong {
-  white-space: nowrap;
-}
-
-.notice-warning {
-  border-color: #e9d6a8;
-  background: #fffaf0;
-}
-
-.notice-error {
-  border-color: #edcdd0;
-  background: #fff7f7;
-}
-
-.notice-success {
-  border-color: #c6e1d5;
-  background: #f5fcf8;
-}
-
-.notice-close {
-  display: inline-grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  margin: -6px -8px -6px auto;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.notice-close:hover {
-  background: rgba(39, 35, 61, 0.06);
-  color: var(--ink);
-}
-
-.notice-close:focus-visible {
-  outline: 2px solid var(--accent, #76591f);
-  outline-offset: 2px;
 }
 
 /* Ad-hoc error, failure and warning lines close with a compact ×. */
@@ -486,72 +439,44 @@ span.dismissible-alert {
   min-width: 0;
 }
 
+/* The × itself is the shared round × (components/ui/error-kit.tsx). */
 .alert-dismiss {
-  display: inline-grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  margin: 0 -2px 0 auto;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: inherit;
-  opacity: 0.7;
-  cursor: pointer;
-}
-
-.alert-dismiss:hover {
-  background: rgba(39, 35, 61, 0.08);
-  opacity: 1;
-}
-
-.alert-dismiss:focus-visible {
-  outline: 2px solid var(--accent, #76591f);
-  outline-offset: 2px;
-  opacity: 1;
-}
-
-/* Notices away from a conversation float above the page's bottom edge. */
-.notice-tray {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 60;
-  display: grid;
-  gap: 10px;
-  width: min(440px, calc(100vw - 32px));
-  pointer-events: none;
-}
-
-.notice-tray:empty {
-  display: none;
-}
-
-.notice-tray .notice {
-  margin: 0;
-  padding: 14px 16px;
-  box-shadow: var(--lift);
-  pointer-events: auto;
-}
-
-@media (max-width: 680px) {
-  .notice-tray {
-    right: 16px;
-    bottom: 16px;
-    left: 16px;
-    width: auto;
-  }
-}
-
-.notice .inline-button {
   margin-left: auto;
-  flex: 0 0 auto;
 }
 
-.notice .inline-button + .notice-close {
-  margin-left: 0;
+/* 14 option A: every error line speaks in the notices-v3 bubble look
+   (3px border, 18px radius, hard shadow), led by its U3 kind sticker. */
+p.dismissible-alert[role="alert"],
+div.dismissible-alert[role="alert"] {
+  position: relative;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 0;
+  /* U3: 13px bubble padding plus the 7px line padding. */
+  padding: 20px 46px 19px 16px;
+  border: 3px solid #111;
+  border-radius: 18px;
+  background: #ffe4e4;
+  box-shadow: 4px 4px 0 #111;
+  color: #111;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: left;
+}
+
+/* U3 tray (audience mocks .bub): a tray bubble has no extra line padding. */
+.notice-tray p.dismissible-alert[role="alert"],
+.notice-tray div.dismissible-alert[role="alert"] {
+  padding: 12px 46px 12px 14px;
+}
+
+p.dismissible-alert[role="alert"] > .alert-dismiss,
+div.dismissible-alert[role="alert"] > .alert-dismiss {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  margin: 0;
 }
 
 .form-error {
@@ -625,12 +550,6 @@ details > summary {
   box-shadow: 5px -4px 0 -1px var(--indigo);
 }
 
-/* Both homes share `.mayaform-home`; the teacher's differs in what it holds,
-   not in how wide it is. */
-.mayaform-home > * {
-  margin-bottom: 0;
-}
-
 .workbench-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -681,14 +600,6 @@ details > summary {
   line-height: 1.5;
 }
 
-.studyform-module-note {
-  max-width: 62ch;
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.92rem;
-  line-height: 1.6;
-}
-
 .rag-metrics > div {
   padding: 13px 12px;
   border-radius: 13px;
@@ -725,7 +636,6 @@ details > summary {
 .brainform-source-group + .brainform-source-group {
   margin-top: 20px;
   padding-top: 18px;
-  border-top: 1px solid var(--line);
 }
 
 .brainform-source-group h3 {
@@ -814,52 +724,6 @@ button.agent-tile-name {
   font-size: 0.86rem;
 }
 
-.agent-pill-action {
-  position: relative;
-  border: 0;
-  cursor: pointer;
-  font: inherit;
-  line-height: 1.2;
-  transition: opacity 160ms ease;
-}
-
-.agent-pill-action:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.agent-pill-action .agent-pill-x {
-  display: none;
-  align-items: center;
-  justify-content: center;
-}
-
-.agent-pill-action:hover .agent-pill-label,
-.agent-pill-action:focus-visible .agent-pill-label {
-  display: none;
-}
-
-.agent-pill-action:hover .agent-pill-x,
-.agent-pill-action:focus-visible .agent-pill-x {
-  display: inline-flex;
-}
-
-/* Hovered, the mark turns into Delete: the diamond gives way to the cross. */
-.agent-pill-action:hover,
-.agent-pill-action:focus-visible {
-  color: var(--red);
-}
-
-.agent-pill-action:hover::before,
-.agent-pill-action:focus-visible::before {
-  display: none;
-}
-
-.agent-pill-action:focus-visible {
-  outline: 2px solid var(--accent, #76591f);
-  outline-offset: 2px;
-}
-
 .agent-tile-name {
   min-width: 0;
   max-width: 100%;
@@ -874,33 +738,6 @@ button.agent-tile-name {
   font-weight: 650;
   line-height: 1.25;
   letter-spacing: -0.01em;
-}
-
-.agent-tile-group {
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted);
-  font-size: 0.72rem;
-  line-height: 1.3;
-}
-
-.agent-tile-author {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  max-width: 100%;
-  color: var(--muted);
-  font-size: 0.7rem;
-}
-
-.agent-tile-author > span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .knowledge-tile {
@@ -975,288 +812,6 @@ button.agent-tile-name {
   background: rgba(183, 79, 90, 0.08);
 }
 
-/* Both home pages sit to the right of a fixed sidebar, so nothing here is
-   centred. A centred hero inside a sidebar layout floats away from the one
-   vertical edge the eye is already using, which is what made this page read
-   as "not lined up" even though every block was centred correctly inside its
-   own column. Everything now hangs off the same left margin. */
-.mayaform-home {
-  display: grid;
-  gap: 26px;
-  max-width: 1040px;
-  padding: 26px 0 44px;
-}
-
-.home-hero {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 20px;
-  border-bottom: 1px solid rgba(201, 162, 39, 0.5);
-}
-
-/* The sign-in's rule: a gold line with a diamond set on it, here at the
-   margin everything else hangs from. */
-.home-hero::after {
-  content: "";
-  position: absolute;
-  bottom: -4px;
-  left: 0;
-  width: 7px;
-  height: 7px;
-  background: rgba(201, 162, 39, 0.8);
-  transform: rotate(45deg);
-}
-
-.home-hero-copy {
-  display: grid;
-  align-content: end;
-  gap: 8px;
-  min-width: 0;
-  padding-bottom: 20px;
-}
-
-.home-hero-eyebrow {
-  margin: 0;
-  color: #5449a6;
-  font-size: 0.72rem;
-  font-weight: 650;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-/* The same face and spacing as the sign-in's "Welcome back", so arriving
-   reads as the next room of the same building. */
-.home-hero-copy h1 {
-  margin: 0;
-  max-width: 22ch;
-  color: #3d3220;
-  font-family: var(--display-serif);
-  font-size: clamp(2rem, 3.6vw, 2.75rem);
-  font-weight: 400;
-  letter-spacing: 0.04em;
-  line-height: 1.12;
-}
-
-/* The scholars are the welcome, so they stand at full height on the rule
-   rather than inside the 116px letterbox that cropped them to a strip. */
-.home-hero-art {
-  position: relative;
-  align-self: end;
-  width: min(330px, 34vw);
-  height: 164px;
-}
-
-.home-hero-art .academy-mascots {
-  bottom: 0;
-  width: 100%;
-}
-
-/* The guide and the group are both required reading, and the page is wide
-   enough to answer both at once instead of stacking them a scroll apart. */
-.home-columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-  align-items: start;
-  gap: 20px;
-}
-
-.home-panel {
-  display: grid;
-  align-content: start;
-  gap: 10px;
-  min-width: 0;
-}
-
-.home-panel > h2 {
-  margin: 0 0 2px;
-  color: #3d3220;
-  font-family: var(--display-serif);
-  font-size: 1.3rem;
-  font-weight: 400;
-  letter-spacing: 0.03em;
-}
-
-/* A register, not a stack of buttons: these rows go nowhere, so they are
-   ruled like the guide beside them instead of boxed like links. */
-.home-people-list {
-  display: grid;
-  margin: 0;
-  padding: 0;
-  border-top: 1px solid rgba(201, 162, 39, 0.35);
-  list-style: none;
-}
-
-.home-person {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  min-height: 52px;
-  padding: 10px 6px;
-  border-bottom: 1px solid rgba(201, 162, 39, 0.35);
-}
-
-.home-person strong {
-  overflow: hidden;
-  min-width: 0;
-  font-size: 0.92rem;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.home-person small {
-  color: var(--muted);
-  font-family: var(--display-serif);
-  font-size: 0.9rem;
-  font-style: italic;
-}
-
-.home-person[data-role="leader"] small {
-  color: #8a6a1f;
-}
-
-/* Three numbers a teacher can read without opening anything: the difference
-   between their home and a student's, which is a single group's progress. */
-.home-stats {
-  display: flex;
-  flex-wrap: wrap;
-  row-gap: 12px;
-}
-
-/* Figures set on the page, divided by gold rules, rather than three cards:
-   nothing here opens, so nothing here should look like it does. */
-.home-stat {
-  display: grid;
-  gap: 2px;
-  margin-right: 36px;
-  padding: 2px 36px 2px 0;
-  border-right: 1px solid rgba(201, 162, 39, 0.4);
-}
-
-.home-stat:last-child {
-  margin-right: 0;
-  padding-right: 0;
-  border-right: 0;
-}
-
-.home-stat b {
-  color: #3d3220;
-  font-family: var(--display-serif);
-  font-size: 2.5rem;
-  font-weight: 400;
-  letter-spacing: 0.02em;
-  line-height: 1.05;
-}
-
-.home-stat > span {
-  color: var(--muted);
-  font-size: 0.8rem;
-  font-weight: 500;
-}
-
-/* The guide is a `.home-panel` like the group beside it, so its heading and
-   spacing come from there; only the rows are its own. */
-
-.home-guide-list {
-  display: grid;
-  margin: 0;
-  padding: 0;
-  border-top: 1px solid rgba(201, 162, 39, 0.35);
-  list-style: none;
-}
-
-.home-guide-list > li {
-  border-bottom: 1px solid rgba(201, 162, 39, 0.35);
-}
-
-.home-guide-row {
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto auto auto;
-  align-items: center;
-  gap: 12px;
-  min-height: 52px;
-  padding: 10px 10px 10px 4px;
-  border-radius: 4px;
-  color: var(--muted);
-  text-decoration: none;
-  transition:
-    background-color 200ms ease,
-    color 200ms ease;
-}
-
-.home-guide-row:hover,
-.home-guide-row:focus-visible,
-.home-guide-row[data-state="next"] {
-  color: var(--ink);
-}
-
-.home-guide-row:hover,
-.home-guide-row:focus-visible {
-  background: rgba(211, 167, 74, 0.08);
-}
-
-.home-guide-marker {
-  display: grid;
-  place-items: center;
-}
-
-.home-guide-marker::before {
-  content: "";
-  width: 8px;
-  height: 8px;
-  background: rgba(201, 162, 39, 0.8);
-  transform: rotate(45deg);
-}
-
-.home-guide-row[data-state="next"] .home-guide-marker::before {
-  background: #3d3220;
-}
-
-.home-guide-row strong {
-  min-width: 0;
-  font-size: 0.92rem;
-  font-weight: 600;
-}
-
-.home-guide-row[data-state="done"] strong {
-  font-weight: 500;
-}
-
-.home-guide-row small,
-.home-guide-state {
-  font-family: var(--display-serif);
-  font-size: 0.9rem;
-  font-style: italic;
-}
-
-.home-guide-row small {
-  color: var(--muted);
-}
-
-.home-guide-state {
-  color: #8a6a1f;
-}
-
-/* Only the next step points onward; the others show the way on hover. */
-.home-guide-arrow {
-  color: #b0904a;
-  opacity: 0;
-  translate: -4px 0;
-  transition:
-    opacity 200ms ease,
-    translate 280ms var(--ease-spring);
-}
-
-.home-guide-row[data-state="next"] .home-guide-arrow,
-.home-guide-row:hover .home-guide-arrow,
-.home-guide-row:focus-visible .home-guide-arrow {
-  opacity: 1;
-  translate: 0 0;
-}
-
 .user-avatar {
   display: inline-grid;
   flex: 0 0 auto;
@@ -1297,156 +852,6 @@ button.agent-tile-name {
   font-weight: 800;
 }
 
-.account-settings-card {
-  margin-top: 2px;
-}
-
-.account-settings-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-/* Two halves of one plate with a gold rule between them, as on the sign-in,
-   rather than two boxes inside a box. */
-.profile-panel {
-  display: grid;
-  align-content: start;
-  gap: 16px;
-  min-width: 0;
-  padding: 4px 32px 4px 0;
-}
-
-.password-panel {
-  padding: 4px 0 4px 32px;
-  border-left: 1px solid rgba(201, 162, 39, 0.4);
-}
-
-.profile-panel h3 {
-  margin: 0;
-  color: #3d3220;
-  font-family: var(--display-serif);
-  font-size: 1.15rem;
-  font-weight: 400;
-  letter-spacing: 0.03em;
-}
-
-.profile-panel-heading {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.profile-panel-heading > div {
-  min-width: 0;
-}
-
-.profile-panel-heading span {
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
-.profile-saved {
-  color: #8a6a1f;
-  font-family: var(--display-serif);
-  font-size: 0.95rem;
-  font-style: italic;
-  animation: page-rise 320ms var(--ease-out) both;
-}
-
-.profile-panel-heading .profile-saved {
-  margin-left: auto;
-}
-
-/* Four across, so the eight read as two rows of a set rather than a ragged
-   five-and-three that looks like an overflow. */
-.avatar-picker {
-  display: grid;
-  grid-template-columns: repeat(4, max-content);
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.avatar-picker label {
-  display: grid;
-  padding: 4px;
-  border: 2px solid transparent;
-  border-radius: 14px;
-  cursor: pointer;
-  transition:
-    border-color 200ms ease,
-    background-color 200ms ease,
-    translate 280ms var(--ease-spring);
-}
-
-.avatar-picker label:hover {
-  background: rgba(211, 167, 74, 0.1);
-  translate: 0 -2px;
-}
-
-.avatar-picker label[data-selected="true"] {
-  border-color: rgba(201, 162, 39, 0.9);
-  background: #fff;
-}
-
-/* The radios are hidden, so the keyboard focus has to show on the scholar. */
-.avatar-picker label:focus-within {
-  outline: 3px solid rgba(201, 162, 39, 0.55);
-  outline-offset: 2px;
-}
-
-.avatar-picker:disabled label {
-  cursor: progress;
-}
-
-/* Your name sits above the faces: an input that offers Save only once it
-   holds a new name. */
-.profile-name {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-}
-
-.profile-name label {
-  display: grid;
-  flex: 1;
-  gap: 5px;
-  min-width: 0;
-  color: var(--ink);
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.profile-name input {
-  min-height: 40px;
-  padding-block: 8px;
-}
-
-.profile-name .profile-saved {
-  padding-bottom: 9px;
-}
-
-.password-panel label {
-  display: grid;
-  gap: 5px;
-  color: var(--ink);
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.password-panel input {
-  min-height: 40px;
-  padding-block: 8px;
-}
-
-.profile-action-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 30px;
-}
-
 .roster-identity {
   display: flex;
   align-items: center;
@@ -1470,53 +875,6 @@ button.agent-tile-name {
   .knowledge-tile-grid,
   .agent-tile-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .mayaform-home {
-    gap: 26px;
-    padding-inline: 0;
-  }
-
-  .account-settings-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .profile-panel {
-    padding-right: 0;
-  }
-
-  .password-panel {
-    margin-top: 20px;
-    padding: 20px 0 0;
-    border-top: 1px solid rgba(201, 162, 39, 0.4);
-    border-left: 0;
-  }
-
-  .home-guide-row {
-    grid-template-columns: 28px minmax(0, 1fr) auto;
-  }
-
-  .home-guide-row small,
-  .home-guide-state {
-    display: none;
-  }
-}
-
-/* The hero's two halves and the two columns below it need roughly a laptop's
-   width to stay side by side; under that they stack, and the scholars step
-   aside rather than shrink to a smudge. */
-@media (max-width: 880px) {
-  .home-columns,
-  .home-hero {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .home-hero-art {
-    display: none;
-  }
-
-  .home-hero-copy {
-    padding-bottom: 14px;
   }
 }
 
@@ -1725,13 +1083,6 @@ button.agent-tile-name {
   gap: 18px;
 }
 
-.agent-editor-media {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  align-items: start;
-}
-
 .knowledge-check {
   /* Fixed to the viewport so the dialog is not clipped or scrolled away with
      #workspace-content; the close control must stay clickable above Markdown. */
@@ -1776,12 +1127,6 @@ button.agent-tile-name {
   .knowledge-check {
     backdrop-filter: none;
     background: rgb(48 42 30 / 46%);
-  }
-}
-
-@media (max-width: 800px) {
-  .agent-editor-media {
-    grid-template-columns: 1fr;
   }
 }
 
@@ -2038,14 +1383,6 @@ button.agent-tile-name {
   .rag-metrics .status-badge {
     grid-column: 1 / -1;
     justify-self: start;
-  }
-
-  .notice {
-    flex-wrap: wrap;
-  }
-
-  .notice .inline-button {
-    margin-left: 0;
   }
 
   .button-row > .primary-action,
@@ -2309,11 +1646,6 @@ dd {
   color: var(--muted);
 }
 
-.agent-pill-action[data-visibility]:hover,
-.agent-pill-action[data-visibility]:focus-visible {
-  color: var(--red);
-}
-
 /* The group's members, alphabetical, under the group's own name. */
 
 /* ---------------------------------------------------------------------------
@@ -2346,7 +1678,7 @@ dd {
   border: 1px solid #e0d2b4;
   border-radius: 6px;
   background: #fbf6ec;
-  box-shadow: var(--shadow);
+  box-shadow: var(--legacy-shadow);
 }
 
 .academy-frame {
@@ -3045,18 +2377,13 @@ dd {
     animation: none;
   }
   .knowledge-tile,
-  .agent-tile,
-  .home-guide-arrow,
-  .avatar-picker label {
+  .agent-tile {
     transition: none;
   }
   .knowledge-tile:hover,
   .knowledge-tile:focus-within,
   .agent-tile:hover,
   .agent-tile:focus-within {
-    translate: none;
-  }
-  .avatar-picker label:hover {
     translate: none;
   }
 }
@@ -3163,4 +2490,14 @@ dd {
   gap: 4px;
   margin-left: 6px;
   vertical-align: middle;
+}
+
+/* A role=alert line moved into the mascot tray: the bubble, full width. */
+.notice-tray > .dismissible-alert.dismissible-alert-tray {
+  display: flex;
+  width: 100%;
+  max-width: 440px;
+  margin: 0;
+  color: #111;
+  font-size: 14px;
 }

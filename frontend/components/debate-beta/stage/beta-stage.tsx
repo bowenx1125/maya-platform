@@ -16,7 +16,6 @@ import type {
   DebatePlaybackState,
   DebateTurn,
   IdempotencyHandle,
-  ProviderDataCallManifestListResponse,
 } from "../../../lib/api";
 import { createIdempotencyHandle } from "../../../lib/api";
 import { markDebateNextClicked } from "../../../lib/client-metrics";
@@ -35,13 +34,31 @@ import {
   type AvatarExpression,
   type AvatarState,
 } from "../../avatar";
-import styles from "./beta-stage.module.css";
 import { QrCode } from "../../interaction/qr-code";
 import { BarrageLane, type BarrageBullet } from "../../stage3d/barrage-lane";
 import { ScholarScene } from "../../stage3d/scholar-scene";
 import { bubbleProgressFrom } from "./bubble-progress";
 import type { StageCharacter } from "../../stage3d/scholar-stage";
-import stage3d from "../../stage3d/stage3d.module.css";
+import { cn } from "../../../lib/utils";
+import {
+  BETA_CONNECTION_OVERLAY,
+  BETA_DOCK,
+  BETA_END_PROMPT,
+  BETA_END_PROMPT_ACTIONS,
+  BETA_FAILURE_CARD,
+  BETA_JOIN_BODY,
+  BETA_JOIN_CARD,
+  BETA_JOIN_STICK,
+  BETA_NOTICES,
+  BETA_PANEL_ACTIONS,
+  BETA_PROVIDER_GATE_CARD,
+  BETA_RECONNECT_BUTTON,
+  BETA_STAGE,
+  BETA_STREAM_STYLES,
+  BETA_TOPIC,
+  BETA_TRANSCRIPT_DRAWER,
+  BETA_TURN_PROGRESS,
+} from "./beta-chrome";
 import { defaultBetaStageLabels, type BetaStageLabels } from "./beta-labels";
 import {
   phaseLabel,
@@ -88,14 +105,6 @@ function atFinalBoundary(
       detail.participants.length * (detail.round_count - 1) - 1
   );
 }
-
-type ProviderGateState = {
-  code: "provider_confirmation_unavailable" | "provider_not_sent";
-  loading: boolean;
-  value: ProviderDataCallManifestListResponse | null;
-  error: string | null;
-  selectedManifestHash: string | null;
-};
 
 function visibleRoundPhase(
   turn: VisiblePlaybackTurn | null,
@@ -623,10 +632,6 @@ export function BetaDebateStage({
     topic: string;
   } | null>(null);
   const [endRunningBusy, setEndRunningBusy] = useState(false);
-  const [providerGate, setProviderGate] = useState<ProviderGateState | null>(
-    null,
-  );
-  const [providerRetryBusy, setProviderRetryBusy] = useState(false);
   const audioPointerInput =
     currentAudioDebateId !== undefined
       ? currentAudioDebateId
@@ -709,10 +714,6 @@ export function BetaDebateStage({
   const startIdempotencyRef = useRef<IdempotencyHandle | null>(null);
   const pauseIdempotencyRef = useRef<IdempotencyHandle | null>(null);
   const resumeIdempotencyRef = useRef<IdempotencyHandle | null>(null);
-  const providerRetryIdempotencyRef = useRef<{
-    turnId: string;
-    handle: IdempotencyHandle;
-  } | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [bubblePlayback, setBubblePlayback] = useState<{
     turnId: string;
@@ -754,9 +755,8 @@ export function BetaDebateStage({
   useEffect(() => {
     if (!transcriptOpen) return;
     transcriptRef.current?.focus();
-    const list = transcriptRef.current?.querySelector<HTMLElement>(
-      `.${styles.streamList}`,
-    );
+    const list =
+      transcriptRef.current?.querySelector<HTMLElement>("[data-stream-list]");
     if (list) list.scrollTop = list.scrollHeight;
   }, [transcriptOpen]);
   const onInteractionOpenedRef = useRef(onInteractionOpened);
@@ -821,8 +821,6 @@ export function BetaDebateStage({
   useEffect(() => {
     if (catalogDebateIdRef.current === debateId) return;
     catalogDebateIdRef.current = debateId;
-    providerRetryIdempotencyRef.current = null;
-    setProviderGate(null);
     replayCatalogRef.current = new Map(
       normalisePublicTurns(detail.public_turns).map((turn) => [
         turn.id,
@@ -2133,93 +2131,6 @@ export function BetaDebateStage({
     ],
   );
 
-  const refreshProviderGate = useCallback(
-    async (code: ProviderGateState["code"]) => {
-      setProviderGate((current) => ({
-        code,
-        loading: true,
-        value: current?.code === code ? current.value : null,
-        error: null,
-        selectedManifestHash:
-          current?.code === code ? current.selectedManifestHash : null,
-      }));
-      try {
-        const value = await api.listProviderDataCallManifests(debateId);
-        if (!mountedRef.current || closingRef.current) return;
-        setProviderGate((current) => {
-          const retained = current?.selectedManifestHash;
-          const selected =
-            (retained &&
-            value.items.some((item) => item.manifest_hash === retained)
-              ? retained
-              : null) ??
-            value.items.find((item) => !item.confirmed)?.manifest_hash ??
-            value.items.find(
-              (item) => item.turn_id === playbackRef.current.current_turn_id,
-            )?.manifest_hash ??
-            value.items[value.items.length - 1]?.manifest_hash ??
-            null;
-          return {
-            code,
-            loading: false,
-            value,
-            error: null,
-            selectedManifestHash: selected,
-          };
-        });
-      } catch (cause) {
-        if (!mountedRef.current || closingRef.current) return;
-        setProviderGate({
-          code,
-          loading: false,
-          value: null,
-          error: errorText(cause, labelsRef.current.connectionError),
-          selectedManifestHash: null,
-        });
-      }
-    },
-    [api, debateId],
-  );
-
-  useEffect(() => {
-    const code = providerGate?.code;
-    if (!code) return;
-    const syncApprovals = () => void refreshProviderGate(code);
-    window.addEventListener("focus", syncApprovals);
-    return () => window.removeEventListener("focus", syncApprovals);
-  }, [providerGate?.code, refreshProviderGate]);
-
-  const retryProviderPreparation = useCallback(
-    async (turnId: string) => {
-      if (readOnly || providerRetryBusy) return;
-      setProviderRetryBusy(true);
-      setControlError(null);
-      const current = providerRetryIdempotencyRef.current;
-      const idempotency =
-        current?.turnId === turnId ? current.handle : createIdempotencyHandle();
-      providerRetryIdempotencyRef.current = { turnId, handle: idempotency };
-      try {
-        const next = await api.retryDebatePreparation(
-          debateId,
-          {
-            expected_control_version: playbackRef.current.control_version,
-            turn_id: turnId,
-          },
-          { idempotency },
-        );
-        providerRetryIdempotencyRef.current = null;
-        setProviderGate(null);
-        setFailure(null);
-        applyPlayback(next, "running");
-      } catch (cause) {
-        setControlError(errorText(cause, labelsRef.current.connectionError));
-      } finally {
-        setProviderRetryBusy(false);
-      }
-    },
-    [api, applyPlayback, debateId, providerRetryBusy, readOnly],
-  );
-
   const handleEvent = useCallback(
     (event: PlaybackEvent) => {
       const recoveryFence = recoveryFenceRef.current;
@@ -2346,7 +2257,6 @@ export function BetaDebateStage({
                 playbackRef.current.status === "paused")
             )
           ) {
-            setProviderGate(null);
             pendingActionRef.current = "start";
             const readyParticipant = detailRef.current.participants.find(
               (participant) => participant.slot === payload.slot,
@@ -2665,7 +2575,6 @@ export function BetaDebateStage({
           );
           break;
         case "debate.failed":
-          setProviderGate(null);
           pauseAudio(true);
           setVisible(null);
           setAvatars([]);
@@ -2687,7 +2596,6 @@ export function BetaDebateStage({
           );
           break;
         case "debate.stopped": {
-          setProviderGate(null);
           pauseAudio(true);
           setVisible(null);
           setAvatars([]);
@@ -2719,20 +2627,10 @@ export function BetaDebateStage({
                   labelsRef.current.retryReason)
               : labelsRef.current.retryReason,
           );
-          if (
-            payload.code === "provider_confirmation_unavailable" ||
-            payload.code === "provider_not_sent"
-          ) {
-            const code = payload.code;
-            applyPlayback({ status: "preparing" });
-            void refreshProviderGate(code);
-          } else if (payload.recoverable === true) {
-            setProviderGate(null);
+          if (payload.recoverable === true) {
             setFailure(null);
             setMediaRetryNeeded(true);
             void recoverPlayback(true);
-          } else {
-            setProviderGate(null);
           }
           break;
         case "interaction.opened":
@@ -2786,7 +2684,6 @@ export function BetaDebateStage({
       setActiveParticipant,
       requestReconnect,
       refreshRecoverySnapshot,
-      refreshProviderGate,
       setAvatars,
       setVisible,
       updatePublicTurns,
@@ -3804,7 +3701,7 @@ export function BetaDebateStage({
     : 0;
   return (
     <section
-      className={`${styles.stage}${className ? ` ${className}` : ""}`}
+      className={cn(BETA_STAGE, className)}
       data-connection={connection}
       data-connection-reason={connectionIssue ?? "none"}
       data-last-sequence={lastSequence}
@@ -3814,9 +3711,9 @@ export function BetaDebateStage({
       aria-label={labels.stageTitle}
     >
       {!suppressConnectionUi && connectionRecovery ? (
-        <div className={styles.connectionOverlay} role="status">
+        <div className={BETA_CONNECTION_OVERLAY} role="status">
           <button
-            className={styles.reconnectButton}
+            className={BETA_RECONNECT_BUTTON}
             onClick={() => {
               if (connectionRecovery.kind === "sign-in") {
                 window.location.href = "/";
@@ -3846,15 +3743,22 @@ export function BetaDebateStage({
             />
             {joinUrl && joinCodeVisible ? (
               <div
-                className={`${stage3d.joinCard} ${styles.joinCard}`}
+                className={cn(
+                  BETA_JOIN_CARD,
+                  // V1: at phone width the transcript takes the top half, so
+                  // the QR ticket steps aside while it is open.
+                  transcriptOpen && "max-[600px]:hidden",
+                )}
                 id="classroom-join-code"
               >
-                {/* QrCode brings its own caption with the URL under it, so the
-                    card adds only the running count beside the symbol. */}
-                <QrCode label={beta.joinLabel} value={joinUrl} />
-                <span className={stage3d.joinCount}>
-                  {beta.barrageCount(barrages.length)}
-                </span>
+                {/* A1 yellow ticket: stick header + body QR (count on stick). */}
+                <div className={BETA_JOIN_STICK}>
+                  <span>{beta.joinLabel}</span>
+                  <em>{beta.barrageCount(barrages.length)}</em>
+                </div>
+                <div className={BETA_JOIN_BODY}>
+                  <QrCode label={beta.joinLabel} value={joinUrl} />
+                </div>
               </div>
             ) : null}
           </>
@@ -3870,14 +3774,11 @@ export function BetaDebateStage({
         visuals={stageVisuals}
       />
 
-      <div
-        className={styles.controlsDock}
-        role="group"
-        aria-label={labels.stageTitle}
-      >
+      <div className={BETA_DOCK} role="group" aria-label={labels.stageTitle}>
         {!readOnly ? (
           <button
             className="primary-action"
+            data-dock="advance"
             type="button"
             disabled={canStart ? busyAction !== null : !canAdvance}
             onClick={() => void runControl(canStart ? "start" : "next")}
@@ -3886,7 +3787,7 @@ export function BetaDebateStage({
           </button>
         ) : null}
         {headerActions ? (
-          <div className={styles.panelActions}>
+          <div className={BETA_PANEL_ACTIONS}>
             {typeof headerActions === "function" ? (
               headerActions(replayButton)
             ) : (
@@ -3902,6 +3803,7 @@ export function BetaDebateStage({
         <button
           ref={transcriptToggleRef}
           className="secondary-action"
+          data-dock="transcript"
           type="button"
           aria-expanded={transcriptOpen}
           aria-controls="debate-transcript"
@@ -3921,66 +3823,12 @@ export function BetaDebateStage({
           onTimeUpdate={onAudioTimeUpdate}
         />
       </div>
-      <div className={styles.notices}>
-        <h1 className={styles.stageTopic}>{detailState.topic}</h1>
-        {providerGate ? (
-          <section
-            className={styles.providerGateCard}
-            data-testid="provider-query-gate"
-            aria-label={labels.providerGateTitle}
-          >
-            <a
-              href={`/teacher/provider-approvals/debates/${debateId}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {labels.providerGateReviewAll}
-            </a>
-            {providerGate.loading ? (
-              <span>{labels.providerGateLoading}</span>
-            ) : providerGate.error ? null : providerGate.value?.items.length ? (
-              <ul>
-                {providerGate.value.items
-                  .filter(
-                    (item) =>
-                      item.manifest_hash === providerGate.selectedManifestHash,
-                  )
-                  .map((item) => (
-                    <li key={item.manifest_hash}>
-                      {item.confirmed ? null : (
-                        <a
-                          href={`/teacher/provider-disclosures/${item.manifest_hash}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {labels.providerGateReview}
-                        </a>
-                      )}
-                      {item.confirmed && item.turn_id ? (
-                        <button
-                          type="button"
-                          disabled={providerRetryBusy || readOnly}
-                          onClick={() =>
-                            void retryProviderPreparation(
-                              item.turn_id as string,
-                            )
-                          }
-                        >
-                          {labels.providerGateRetry}
-                        </button>
-                      ) : null}
-                    </li>
-                  ))}
-              </ul>
-            ) : (
-              <span>{labels.providerGateEmpty}</span>
-            )}
-          </section>
-        ) : null}
+      <h1 className={BETA_TOPIC}>{detailState.topic}</h1>
+      <div className={BETA_NOTICES}>
         {controlError ? (
           <DismissibleAlert
             as="div"
-            className={styles.failureCard}
+            className={BETA_FAILURE_CARD}
             resetKey={controlError}
           >
             {controlError}
@@ -3989,7 +3837,7 @@ export function BetaDebateStage({
       </div>
       {blockedBy ? (
         <div
-          className={styles.endPrompt}
+          className={BETA_END_PROMPT}
           role="dialog"
           aria-modal="true"
           aria-labelledby="end-running-debate"
@@ -3999,7 +3847,7 @@ export function BetaDebateStage({
               ? `「${blockedBy.topic}」正在进行。要结束那场辩论吗？`
               : `“${blockedBy.topic}” is running. End that debate?`}
           </p>
-          <div className={styles.endPromptActions}>
+          <div className={BETA_END_PROMPT_ACTIONS}>
             <button
               className="secondary-action"
               type="button"
@@ -4035,7 +3883,7 @@ export function BetaDebateStage({
       <aside
         ref={transcriptRef}
         id="debate-transcript"
-        className={styles.transcriptDrawer}
+        className={BETA_TRANSCRIPT_DRAWER}
         hidden={!transcriptOpen}
         aria-label={labels.transcript}
         tabIndex={-1}
@@ -4066,12 +3914,20 @@ export function BetaDebateStage({
               : null
           }
           showTurnCount={false}
-          styles={styles}
+          styles={BETA_STREAM_STYLES}
           describe={(participantId) => {
             const owner = participantById.get(participantId);
             return {
               slot: "",
               name: owner?.agent_name ?? participantId,
+              // V1 stubs: yellow / cyan / green by seat order.
+              tone:
+                Math.max(
+                  0,
+                  detailState.participants.findIndex(
+                    (participant) => participant.id === participantId,
+                  ),
+                ) % 3,
             };
           }}
           emptyMessage={labels.noPublishedSpeech ?? ""}
@@ -4089,7 +3945,7 @@ export function BetaDebateStage({
           }}
           headerAction={
             <span
-              className={styles.turnProgress}
+              className={BETA_TURN_PROGRESS}
               data-connected={connection === "connected"}
               aria-label={`Turn ${currentTurnNumber} of ${totalTurns}, ${connection === "connected" ? "connected" : "disconnected"}`}
               role="status"

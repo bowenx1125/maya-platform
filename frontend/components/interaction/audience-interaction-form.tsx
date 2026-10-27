@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import { DismissibleAlert } from "../dismissible-alert";
+import { KindSticker, NoticeTraySlot } from "../ui/error-kit";
 import { apiErrorMessage, PlatformApiError } from "../../lib/api";
+import { cn } from "../../lib/utils";
 import { useT } from "../../lib/i18n";
 import {
   audienceId,
@@ -17,8 +19,66 @@ import {
   FORM_POLL_MIN_MS,
 } from "./audience-backoff";
 import type { AudienceInteractionApi } from "./types";
-import appearance from "../workspace-appearance.module.css";
-import styles from "./audience-interaction-form.module.css";
+
+/*
+ * Approved 02-audience family A, "cabinet controller": the phone is the pad
+ * for the Student Live cabinet. Every decoration is aria-hidden, and the root
+ * stops all animation under prefers-reduced-motion.
+ * geometricPrecision: the self-hosted Lexend is hinted, so Chrome rounds each
+ * glyph advance to whole pixels at small sizes (+23px on the 11px eyebrow);
+ * this keeps fractional advances, as in the approved mock.
+ */
+const PAGE =
+  "min-h-dvh bg-arc-bg bg-[linear-gradient(#00000010_1px,transparent_1px),linear-gradient(90deg,#00000010_1px,transparent_1px)] bg-size-[32px_32px] font-body leading-[normal] tracking-normal [text-rendering:geometricPrecision] text-ink motion-reduce:[&_*]:animate-none motion-reduce:[&_*]:transition-none";
+const WRAP =
+  "mx-auto max-w-[1180px] px-3.5 pt-[22px] pb-[39px] min-[900px]:px-10 min-[900px]:pt-10 min-[900px]:pb-[60px]";
+const PAD =
+  "relative rounded-[26px] border-3 border-ink bg-ink px-3.5 pt-[34px] pb-[18px] text-white shadow-[6px_6px_0_#FF4D8D] min-[900px]:rounded-[30px] min-[900px]:px-[26px] min-[900px]:pt-10 min-[900px]:pb-[26px]";
+const SCREEN =
+  "relative overflow-hidden rounded-xl border-3 border-[#333] bg-[#1d1d1d] px-4 py-3.5 after:pointer-events-none after:absolute after:inset-0 after:bg-[repeating-linear-gradient(#ffffff08_0_2px,transparent_2px_5px)] after:content-['']";
+const PANEL =
+  "relative rounded-2xl border-3 border-black bg-[#232323] p-3.5 shadow-[inset_0_3px_0_#333]";
+const HEADING =
+  "flex items-center gap-2.5 [&_h2]:m-0 [&_h2]:font-display [&_h2]:leading-[normal] [&_h2]:tracking-normal [&_h2]:text-xl [&_h2]:font-extrabold [&_h2]:text-white";
+const OK_TAG =
+  "ml-auto rotate-[-3deg] rounded-md border-2 border-black bg-ok px-2 py-[3px] text-xs leading-[normal] font-extrabold text-ink shadow-[2px_2px_0_#000]";
+const STATUS_LINE = "m-0 mt-2.5 text-[13px] font-bold text-[#E8FFE0]";
+const ARCADE =
+  "relative cursor-pointer rounded-full border-3 border-black bg-main font-extrabold text-ink shadow-[0_6px_0_#9b1747,0_6px_0_3px_#000] active:translate-y-1.5 active:shadow-[0_0_0_3px_#000] disabled:cursor-default disabled:opacity-100 disabled:translate-y-[3px] disabled:bg-[#6b6b6b] disabled:text-[#cfcfcf] disabled:shadow-[0_3px_0_#333,0_3px_0_3px_#000]";
+// Offsets measured against the mock: the button border (3px) shifts the containing block.
+const STICKER_AT = "left-auto top-[-9px] right-[-11px] size-[26px]";
+const VOTE_STICKER_AT = "left-auto top-[-4px] right-[-6px] size-[26px] z-[6]";
+const SLOT_TONES = ["#FFE14D", "#67E8F9", "#A3E635"];
+const LED_TONES = ["bg-main", "bg-[#FFE14D]", "bg-[#67E8F9]"];
+
+function Leds({ mode }: { mode: "chase" | "off" | "ok" }) {
+  return (
+    <div
+      aria-hidden="true"
+      className="absolute top-[11px] right-0 left-0 flex justify-center gap-[9px]"
+    >
+      {Array.from({ length: 22 }, (_, index) => (
+        <i
+          key={index}
+          className={cn(
+            "size-[9px] rounded-full shadow-[0_0_0_2px_#000]",
+            mode === "off"
+              ? "bg-[#3a3a3a]"
+              : mode === "ok"
+                ? "bg-ok"
+                : [
+                    LED_TONES[
+                      (index + 1) % 3 === 2 ? 1 : (index + 1) % 3 === 0 ? 2 : 0
+                    ],
+                    "animate-aud-blink",
+                    index % 2 === 0 ? "[animation-delay:.6s]" : "",
+                  ],
+          )}
+        />
+      ))}
+    </div>
+  );
+}
 
 type AudienceInteractionFormProps = {
   accessToken: string;
@@ -273,21 +333,105 @@ export function AudienceInteractionForm({
 
   if (loading) {
     return (
-      <main className={`${appearance.appearance} ${styles.audiencePage}`}>
-        <p role="status">{t("audienceLoading")}</p>
+      <main className={PAGE}>
+        <div className={WRAP}>
+          <div className={PAD}>
+            <Leds mode="chase" />
+            <div className={SCREEN}>
+              <p
+                role="status"
+                className="m-0 text-[15px] font-bold text-[#E8FFE0] after:ml-1.5 after:inline-block after:h-4 after:w-[9px] after:animate-aud-blink-cursor after:bg-[#E8FFE0] after:align-[-2px] after:content-['']"
+              >
+                {t("audienceLoading")}
+              </p>
+              <div aria-hidden="true" className="mt-3.5 grid gap-2.5">
+                {["", "w-[70%]", "w-[45%]"].map((width) => (
+                  <i
+                    key={width}
+                    className={cn(
+                      "h-3.5 animate-aud-blink rounded-md border-2 border-black bg-[#2f2f2f]",
+                      width,
+                    )}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </main>
     );
   }
   if (loadError || !form) {
     return (
-      <main className={`${appearance.appearance} ${styles.audiencePage}`}>
-        <section className={styles.audienceCard} role="alert">
-          <span className={styles.eyebrow}>{t("appName")}</span>
-          <h1>{t("audienceUnavailable")}</h1>
-          <p>{apiErrorMessage(loadError, t("audienceUnavailableHint"))}</p>
-        </section>
+      <main className={PAGE}>
+        <div className={WRAP}>
+          <div className={PAD}>
+            <Leds mode="off" />
+            <div className={cn(SCREEN, "px-4 pt-[26px] pb-[22px] text-center")}>
+              <div
+                aria-hidden="true"
+                className="relative mx-auto mt-1.5 h-[110px] w-[180px]"
+              >
+                <i className="absolute top-11 left-[30px] h-4 w-11 rounded-b-[40px] border-5 border-t-0 border-[#E8FFE0]" />
+                <i className="absolute top-11 right-[30px] h-4 w-11 rounded-b-[40px] border-5 border-t-0 border-[#E8FFE0]" />
+                <i className="absolute top-[76px] left-[78px] h-2.5 w-[22px] rounded-[50%] border-4 border-[#E8FFE0]" />
+              </div>
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 60 50"
+                fill="none"
+                stroke="#FFE14D"
+                strokeWidth="4"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                className="absolute top-2 right-4 h-[50px] w-[60px] animate-aud-rise"
+              >
+                <path d="M30 6h14L30 22h14M8 26h12L8 40h12" />
+              </svg>
+              <section
+                role="alert"
+                className="mt-4 inline-block max-w-[320px] rotate-[-2deg] rounded-[10px] border-3 border-ink bg-[#FFE14D] px-4 py-3 text-ink shadow-[4px_4px_0_#111]"
+              >
+                <span className="text-[11px] font-extrabold tracking-[.04em]">
+                  {t("appName")}
+                </span>
+                <h1 className="m-0 font-display text-[22px] tracking-normal font-extrabold leading-[normal] min-[900px]:text-[40px]">
+                  {t("audienceUnavailable")}
+                </h1>
+                {/* Q2: the hint, never the server's wording. */}
+                <p className="m-0 mt-1.5 text-sm leading-[normal] font-medium">
+                  {t("audienceUnavailableHint")}
+                </p>
+              </section>
+            </div>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 120 60"
+              fill="none"
+              stroke="#111"
+              strokeWidth="5"
+              strokeLinecap="round"
+              className="absolute -bottom-[34px] -left-1 h-[60px] w-[120px]"
+            >
+              <path d="M20 0c0 30 30 46 70 40" />
+              <rect x="88" y="30" width="22" height="16" rx="3" fill="#111" />
+              <path d="M110 34h8M110 42h8" />
+            </svg>
+          </div>
+        </div>
       </main>
     );
+  }
+
+  /** Q1: a 5xx or unknown vote failure never shows the server's raw text. */
+  function voteErrorMessage(cause: unknown): string {
+    if (
+      cause instanceof PlatformApiError &&
+      cause.status >= 400 &&
+      cause.status < 500
+    )
+      return apiErrorMessage(cause);
+    return t("errorInternal");
   }
 
   const canInteract = nickname.trim().length > 0;
@@ -388,208 +532,284 @@ export function AudienceInteractionForm({
   }
 
   return (
-    <main className={`${appearance.appearance} ${styles.audiencePage}`}>
-      <section className={styles.audienceCard}>
-        <header className={styles.header}>
-          <span className={styles.eyebrow}>{t("audienceEyebrow")}</span>
-          <h1>{form.topic}</h1>
-        </header>
-
-        <label className={styles.field}>
-          <span>{t("audienceNickname")}</span>
-          <input
-            value={nickname}
-            onChange={(event) => setNickname(event.target.value)}
-            autoComplete="nickname"
-            enterKeyHint="next"
-            placeholder={t("audienceNicknamePlaceholder")}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                messageInput.current?.focus();
-              }
-            }}
-            disabled={barragePayload !== null}
+    <main className={PAGE}>
+      <div className={WRAP}>
+        <section
+          className={cn(PAD, submissionsClosed && "[&_form]:opacity-55")}
+        >
+          <Leds
+            mode={
+              submissionsClosed
+                ? "off"
+                : voteState === "success" || barrageState === "success"
+                  ? "ok"
+                  : "chase"
+            }
           />
-        </label>
+          <div className="min-[900px]:grid min-[900px]:grid-cols-[1.4fr_1fr] min-[900px]:items-end min-[900px]:gap-[18px]">
+            <header className={SCREEN}>
+              <span className="text-[11px] font-bold tracking-[.04em] text-[#FFE14D]">
+                {t("audienceEyebrow")}
+              </span>
+              <h1 className="m-0 mt-1.5 font-display tracking-normal text-[26px] leading-[1.15] font-extrabold text-white min-[900px]:text-[40px]">
+                {form.topic}
+              </h1>
+            </header>
 
-        {canInteract ? (
-          <div className={styles.audienceSections}>
-            <form
-              className={`${styles.audienceSection} ${styles.messageSection}`}
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submitBarrage();
-              }}
-              aria-label={t("audienceBarrage")}
-            >
-              <div className={styles.sectionHeading}>
-                <h2>{t("audienceBarrage")}</h2>
-                {barrageState === "success" ? (
-                  <strong role="status">{t("audienceBarrageSubmitted")}</strong>
-                ) : null}
-              </div>
-              {form.round_no ? (
-                <span className={styles.round}>
-                  {t("audienceRound")} {form.round_no}
-                </span>
-              ) : null}
-              {form.barrage_open === false ? (
-                <p className={styles.closed} role="status">
-                  {t("audienceCollectionClosed")}
-                </p>
-              ) : null}
-              {syncFailed ? (
-                <p className={styles.connection} role="status">
-                  {t("audienceReconnecting")}
-                </p>
-              ) : null}
-              {barrageRetrying ? (
-                <p className={styles.connection} role="status">
-                  {t("audienceBusyRetrying")}
-                </p>
-              ) : null}
-              {barrageWaitSeconds > 0 ? (
-                <p className={styles.connection} role="status">
-                  {t("audienceTooFast", { seconds: barrageWaitSeconds })}
-                </p>
-              ) : null}
-              <textarea
-                ref={messageInput}
-                aria-label={t("audienceBarrage")}
-                aria-invalid={barrageError ? true : undefined}
-                aria-describedby={
-                  [
-                    turnBound ? "message-count" : "",
-                    barrageError ? "message-error" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ") || undefined
-                }
-                placeholder={t("audienceBarragePlaceholder")}
-                value={barrageText}
-                onChange={(event) => {
-                  setBarrageText(event.target.value);
-                  setBarrageError(null);
-                  setBarragePayload(null);
-                  setBarrageState("idle");
-                  setBarrageWaitSeconds(0);
+            <label className="mt-3.5 flex flex-col gap-1.5 [&>span]:text-xs [&>span]:leading-[15px] [&>span]:font-bold [&>span]:tracking-[.04em] [&>span]:text-[#FFE14D]">
+              <span>{t("audienceNickname")}</span>
+              <input
+                value={nickname}
+                onChange={(event) => setNickname(event.target.value)}
+                autoComplete="nickname"
+                enterKeyHint="next"
+                placeholder={t("audienceNicknamePlaceholder")}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    messageInput.current?.focus();
+                  }
                 }}
-                maxLength={turnBound ? 300 : undefined}
-                rows={5}
-                disabled={
-                  !canInteract ||
-                  submissionsClosed ||
-                  form.barrage_open === false ||
-                  barrageState === "busy"
-                }
+                disabled={barragePayload !== null}
+                className={cn(
+                  "rounded-[10px] border-3 border-white bg-white px-3.5 py-3 text-base leading-[normal] disabled:opacity-100 font-semibold text-ink shadow-[inset_0_-4px_0_#ddd] focus:shadow-[0_0_0_3px_#111,5px_5px_0_3px_#FF4D8D] focus:outline-none",
+                  !canInteract &&
+                    "shadow-[0_0_0_3px_#111,5px_5px_0_3px_#FF4D8D]",
+                )}
               />
-              <div className={styles.sendRow}>
-                {turnBound ? (
-                  <span id="message-count" className={styles.characterCount}>
-                    {barrageText.length} / 300
+            </label>
+          </div>
+
+          {canInteract ? (
+            <div className="mt-4 grid gap-3.5 min-[900px]:grid-cols-[1.25fr_1fr] min-[900px]:gap-[18px]">
+              <form
+                className={PANEL}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void submitBarrage();
+                }}
+                aria-label={t("audienceBarrage")}
+              >
+                <div className={HEADING}>
+                  <h2>{t("audienceBarrage")}</h2>
+                  {barrageState === "success" ? (
+                    <strong role="status" className={OK_TAG}>
+                      {t("audienceBarrageSubmitted")}
+                    </strong>
+                  ) : null}
+                </div>
+                {form.round_no ? (
+                  <span className="mt-2 inline-block rounded-full border-2 border-black bg-[#FFE14D] px-2.5 py-0.5 text-[11px] font-extrabold tracking-[.04em] text-ink">
+                    {t("audienceRound")} {form.round_no}
                   </span>
                 ) : null}
-                <button
-                  className={styles.primaryButton}
-                  type="submit"
+                {form.barrage_open === false ? (
+                  <p
+                    className="m-0 mt-2.5 ml-2 inline-block rotate-[-1.5deg] rounded-md border-2 border-black bg-[#FFE14D] px-2.5 py-1.5 text-[13px] font-extrabold text-ink"
+                    role="status"
+                  >
+                    {t("audienceCollectionClosed")}
+                  </p>
+                ) : null}
+                {syncFailed ? (
+                  <p className={STATUS_LINE} role="status">
+                    {t("audienceReconnecting")}
+                  </p>
+                ) : null}
+                {barrageRetrying ? (
+                  <p className={STATUS_LINE} role="status">
+                    {t("audienceBusyRetrying")}
+                  </p>
+                ) : null}
+                {barrageWaitSeconds > 0 ? (
+                  <p className={STATUS_LINE} role="status">
+                    {t("audienceTooFast", { seconds: barrageWaitSeconds })}
+                  </p>
+                ) : null}
+                <textarea
+                  ref={messageInput}
+                  aria-label={t("audienceBarrage")}
+                  aria-invalid={barrageError ? true : undefined}
+                  aria-describedby={
+                    [
+                      turnBound ? "message-count" : "",
+                      barrageError ? "message-error" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ") || undefined
+                  }
+                  placeholder={t("audienceBarragePlaceholder")}
+                  value={barrageText}
+                  onChange={(event) => {
+                    setBarrageText(event.target.value);
+                    setBarrageError(null);
+                    setBarragePayload(null);
+                    setBarrageState("idle");
+                    setBarrageWaitSeconds(0);
+                  }}
+                  maxLength={turnBound ? 300 : undefined}
+                  rows={5}
+                  className="mt-2.5 block min-h-[110px] w-full resize-none disabled:opacity-100 rounded-[10px] border-3 border-[#444] bg-[#0c0c0c] p-3 text-[15px] leading-normal font-medium text-[#E8FFE0] placeholder:text-[#8a8a8a] aria-invalid:border-err"
                   disabled={
                     !canInteract ||
-                    syncFailed ||
                     submissionsClosed ||
-                    !barrageText.trim() ||
                     form.barrage_open === false ||
                     barrageState === "busy"
                   }
-                >
-                  {barrageState === "busy"
-                    ? t("audienceSending")
-                    : t("audienceBarrageSend")}
-                </button>
-              </div>
-              {barrageError ? (
-                <DismissibleAlert
-                  id="message-error"
-                  className={styles.error}
-                  resetKey={barrageError}
-                >
-                  {apiErrorMessage(barrageError)}
-                </DismissibleAlert>
-              ) : null}
-            </form>
-            <form
-              className={`${styles.audienceSection} ${styles.voteSection}`}
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submitVote();
-              }}
-              aria-label={t("audienceVote")}
-            >
-              <div className={styles.sectionHeading}>
-                <h2>{t("audienceVote")}</h2>
-                {voteState === "success" ? (
-                  <strong role="status">{t("audienceVoteSubmitted")}</strong>
+                />
+                <div className="mt-3 flex items-center justify-between">
+                  {turnBound ? (
+                    <span
+                      id="message-count"
+                      className="text-xs font-bold text-[#9CA3AF] tabular-nums"
+                    >
+                      {barrageText.length} / 300
+                    </span>
+                  ) : null}
+                  <button
+                    className={cn(ARCADE, "ml-auto size-[78px] text-[15px]")}
+                    type="submit"
+                    disabled={
+                      !canInteract ||
+                      syncFailed ||
+                      submissionsClosed ||
+                      !barrageText.trim() ||
+                      form.barrage_open === false ||
+                      barrageState === "busy"
+                    }
+                  >
+                    {barrageError ? (
+                      <KindSticker kind="chat" on className={STICKER_AT} />
+                    ) : null}
+                    {barrageState === "busy"
+                      ? t("audienceSending")
+                      : t("audienceBarrageSend")}
+                  </button>
+                </div>
+                {barrageError ? (
+                  <DismissibleAlert
+                    id="message-error"
+                    resetKey={barrageError}
+                    kind="chat"
+                    transient
+                  >
+                    {apiErrorMessage(barrageError)}
+                  </DismissibleAlert>
                 ) : null}
-              </div>
-
-              <div
-                className={styles.participantChoices}
-                role="radiogroup"
+              </form>
+              <form
+                className={PANEL}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void submitVote();
+                }}
                 aria-label={t("audienceVote")}
               >
-                {form.participants.map((participant) => (
-                  <label
-                    className={styles.choice}
-                    key={participant.participant_id}
+                <div className={HEADING}>
+                  <h2>{t("audienceVote")}</h2>
+                  {voteState === "success" ? (
+                    <strong role="status" className={OK_TAG}>
+                      {t("audienceVoteSubmitted")}
+                    </strong>
+                  ) : null}
+                </div>
+
+                <div
+                  className="mt-3 grid gap-2.5"
+                  role="radiogroup"
+                  aria-label={t("audienceVote")}
+                >
+                  {form.participants.map((participant, index) => (
+                    <label
+                      className="relative flex cursor-pointer items-center gap-3"
+                      key={participant.participant_id}
+                      style={{ ["--tone" as string]: SLOT_TONES[index % 3] }}
+                    >
+                      <input
+                        type="radio"
+                        name="participant"
+                        className="peer absolute opacity-0"
+                        value={participant.participant_id}
+                        checked={
+                          selectedParticipant === participant.participant_id
+                        }
+                        onChange={(event) =>
+                          setSelectedParticipant(event.target.value)
+                        }
+                        disabled={
+                          !canInteract ||
+                          submissionsClosed ||
+                          voteState !== "idle" ||
+                          votePayload !== null
+                        }
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="grid size-[46px] flex-none place-items-center rounded-full border-3 border-black bg-(--tone) shadow-[0_5px_0_#000] peer-checked:translate-y-[5px] peer-checked:shadow-[0_0_0_#000,0_0_0_4px_#FF4D8D] peer-focus-visible:outline-3 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-main after:size-4 after:rounded-full after:bg-[#ffffff66] after:content-['']"
+                      />
+                      <span className="flex-1 rounded-l-md border-3 border-black bg-white py-[7px] pr-3.5 pl-3 text-[15px] font-bold text-ink [clip-path:polygon(0_0,100%_0,calc(100%-12px)_100%,0_100%)] peer-checked:bg-[#FFE4EF] peer-checked:shadow-[inset_0_0_0_2px_#FF4D8D] peer-disabled:opacity-60 [&_b]:mr-1.5 [&_b]:inline-block [&_b]:rounded [&_b]:border-2 [&_b]:border-black [&_b]:bg-(--tone) [&_b]:px-1.5">
+                        <b>{participant.slot}</b> {participant.name}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="relative mt-4 flex justify-center">
+                  {voteError ? (
+                    <KindSticker kind="bell" on className={VOTE_STICKER_AT} />
+                  ) : null}
+                  <button
+                    className={cn(
+                      ARCADE,
+                      "size-24 text-[17px] min-[900px]:size-[110px]",
+                    )}
+                    type="submit"
+                    disabled={
+                      !canInteract || submissionsClosed || voteState !== "idle"
+                    }
                   >
-                    <input
-                      type="radio"
-                      name="participant"
-                      value={participant.participant_id}
-                      checked={
-                        selectedParticipant === participant.participant_id
-                      }
-                      onChange={(event) =>
-                        setSelectedParticipant(event.target.value)
-                      }
-                      disabled={
-                        !canInteract ||
-                        submissionsClosed ||
-                        voteState !== "idle" ||
-                        votePayload !== null
-                      }
-                    />
-                    <span>
-                      <b>{participant.slot}</b> {participant.name}
-                    </span>
-                  </label>
+                    {voteState === "busy"
+                      ? t("audienceSubmitting")
+                      : t("audienceVoteSubmit")}
+                  </button>
+                </div>
+                {voteRetrying ? (
+                  <p className={STATUS_LINE} role="status">
+                    {t("audienceBusyRetrying")}
+                  </p>
+                ) : null}
+                {voteError ? (
+                  <DismissibleAlert resetKey={voteError} kind="bell" transient>
+                    {voteErrorMessage(voteError)}
+                  </DismissibleAlert>
+                ) : null}
+              </form>
+            </div>
+          ) : (
+            <div
+              aria-hidden="true"
+              className="mt-4 grid grid-cols-2 gap-3.5 opacity-35 min-[900px]:grid-cols-[1.25fr_1fr]"
+            >
+              <div className={cn(PANEL, "h-[150px]")} />
+              <div
+                className={cn(
+                  PANEL,
+                  "flex h-[150px] items-center justify-center gap-3",
+                )}
+              >
+                {[0, 1, 2].map((key) => (
+                  <i
+                    key={key}
+                    className="size-11 rounded-full border-3 border-black bg-[#555]"
+                  />
                 ))}
               </div>
-              <button
-                className={styles.secondaryButton}
-                type="submit"
-                disabled={
-                  !canInteract || submissionsClosed || voteState !== "idle"
-                }
-              >
-                {voteState === "busy"
-                  ? t("audienceSubmitting")
-                  : t("audienceVoteSubmit")}
-              </button>
-              {voteRetrying ? (
-                <p className={styles.connection} role="status">
-                  {t("audienceBusyRetrying")}
-                </p>
-              ) : null}
-              {voteError ? (
-                <DismissibleAlert className={styles.error} resetKey={voteError}>
-                  {apiErrorMessage(voteError)}
-                </DismissibleAlert>
-              ) : null}
-            </form>
-          </div>
-        ) : null}
-      </section>
+            </div>
+          )}
+        </section>
+        {/* Below 900px the shared notice tray sits here in the page flow,
+            inside the page padding (14px sides, 40px bottom) like the mock. */}
+        <NoticeTraySlot />
+      </div>
     </main>
   );
 }

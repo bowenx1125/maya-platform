@@ -1,6 +1,7 @@
 "use client";
 
 import { useT } from "../../lib/i18n";
+import { KindSticker } from "../ui/error-kit";
 
 export function buildMarkdownFile(filename: string, content: string): File {
   return new File([content], filename, { type: "text/markdown" });
@@ -24,6 +25,8 @@ export function KnowledgeFilenameField({
   className,
   describedBy,
   invalid = false,
+  fileError = false,
+  label,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -32,21 +35,29 @@ export function KnowledgeFilenameField({
   className?: string;
   describedBy?: string;
   invalid?: boolean;
+  /** U3: the number sticker on the field a filename error points at. */
+  fileError?: boolean;
+  /** Optional visible label override (RAG create/edit uses "File Name"). */
+  label?: string;
 }) {
   const t = useT();
   return (
     <label className={className}>
-      <span>{t("knowledgeFilename")}</span>
-      <input
-        type="text"
-        value={value}
-        disabled={disabled}
-        readOnly={readOnly}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={t("knowledgeFilenamePlaceholder")}
-        aria-invalid={invalid || undefined}
-        aria-describedby={describedBy}
-      />
+      <span>{label ?? t("knowledgeFilename")}</span>
+      {/* U3: the sticker sits on the input's corner, clear of the label. */}
+      <span className="relative block">
+        {fileError ? <KindSticker kind="field" n={1} on /> : null}
+        <input
+          type="text"
+          value={value}
+          disabled={disabled}
+          readOnly={readOnly}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={t("knowledgeFilenamePlaceholder")}
+          aria-invalid={invalid || undefined}
+          aria-describedby={describedBy}
+        />
+      </span>
     </label>
   );
 }

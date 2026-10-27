@@ -21,6 +21,7 @@ export default async function TeacherKnowledgePage({
       <AppShell role="teacher">
         <BrainformWorkspace
           role="teacher"
+          knowledgePage={!query.group_id}
           initialAgentId={query.agent_id}
           initialSetId={query.set_id}
           initialCourseId={query.course_id}

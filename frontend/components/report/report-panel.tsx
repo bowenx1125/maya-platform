@@ -14,8 +14,6 @@ import {
 } from "../../lib/report-citations";
 import { ReportMarkdown } from "./report-markdown";
 
-import styles from "./report.module.css";
-
 export type Report = components["schemas"]["Report"];
 export type ReportRevision = components["schemas"]["ReportRevision"];
 export type ReportRevisionSummary =
@@ -254,52 +252,77 @@ export function ReportPanel({
 
   return (
     <section
-      className={styles.panel}
+      className="grid min-w-0 gap-(--section-content-gap) rounded-[22px] border border-(--line,#dedee3) bg-white p-(--workspace-inset)"
       aria-busy={loading || polling}
       data-report-status={report?.generation_status ?? "not_started"}
       data-insight-status={insight?.status ?? "not_started"}
     >
-      <header className={styles.header}>
+      <header className="flex items-start justify-between gap-4 border-b border-(--line,#dedee3) pb-(--section-content-gap)">
         <div>
-          <h2>{copy.title}</h2>
+          <h2 className="m-0 text-[1.24rem] leading-[1.4] text-(--indigo-dark)">
+            {copy.title}
+          </h2>
         </div>
       </header>
 
-      <div className={styles.content}>
+      <div className="grid min-w-0 gap-(--section-content-gap) rounded-[14px] border border-transparent bg-(--surface-subtle,#f5f5f7) p-4">
         {error ? (
-          <DismissibleAlert className={styles.error}>{error}</DismissibleAlert>
+          <DismissibleAlert className="mt-2 rounded-[0.7rem] bg-[#fff0ee] px-[0.85rem] py-[0.7rem] leading-[1.55] text-[#a34842]">
+            {error}
+          </DismissibleAlert>
         ) : null}
 
         {pollTimedOut && polling ? (
-          <p className={styles.notice} role="status">
+          <p
+            className="mt-2 rounded-[0.7rem] bg-[#fff8ec] px-[0.85rem] py-[0.7rem] leading-[1.55] text-[#8b6532]"
+            role="status"
+          >
             The report is still generating. Reopen this page later.
           </p>
         ) : null}
         {report?.generation_status === "failed" ||
         insight?.status === "failed" ? (
-          <DismissibleAlert className={styles.notice} role="status">
+          <DismissibleAlert
+            className="mt-2 rounded-[0.7rem] bg-[#fff8ec] px-[0.85rem] py-[0.7rem] leading-[1.55] text-[#8b6532]"
+            role="status"
+          >
             {copy.failed}
           </DismissibleAlert>
         ) : null}
 
         {insight?.items.length ? (
-          <ul className={styles.insightList} aria-label={copy.insight}>
+          <ul
+            className="m-0 grid list-none gap-2 p-0"
+            aria-label={copy.insight}
+          >
             {insight.items.map((item, index) => (
-              <li key={`${item.category}-${item.summary}-${index}`}>
-                <span>{item.category}</span>
-                <p>{item.summary}</p>
+              <li
+                key={`${item.category}-${item.summary}-${index}`}
+                className="grid grid-cols-[auto_1fr_auto] items-center gap-[0.65rem] rounded-[0.7rem] border border-[rgba(24,39,61,0.1)] px-[0.8rem] py-[0.65rem]"
+              >
+                <span className="text-[0.78rem] font-bold uppercase text-(--muted,#62626a)">
+                  {item.category}
+                </span>
+                <p className="m-0 min-w-0 [overflow-wrap:anywhere]">
+                  {item.summary}
+                </p>
                 <strong>{item.count}</strong>
               </li>
             ))}
           </ul>
         ) : null}
 
-        <div className={styles.reportCard}>
-          <div className={styles.cardHeading}>
-            {displayed ? <h3>{revisionTitle(displayed.revision_no)}</h3> : null}
-            <div className={styles.actions}>
+        <div className="min-w-0 border-0 bg-transparent p-0">
+          <div className="flex items-start justify-between gap-4 max-[680px]:flex-wrap max-[680px]:gap-2">
+            {displayed ? (
+              <h3 className="m-0 text-base leading-[1.4] text-(--indigo-dark)">
+                {revisionTitle(displayed.revision_no)}
+              </h3>
+            ) : null}
+            <div className="ml-auto inline-flex shrink-0 items-center gap-[3px] rounded-[10px] border border-(--line,#dedee3) bg-white p-[3px]">
               <button
                 type="button"
+                className="min-h-[27px] cursor-pointer rounded-[7px] border-0 bg-transparent px-[9px] py-1 font-[inherit] text-[0.75rem] font-bold text-(--indigo-dark) transition-[transform,background-color,color] duration-150 hover:enabled:-translate-y-px hover:enabled:bg-(--surface-hover,#ededf0) active:enabled:translate-y-0 active:enabled:bg-(--surface-hover,#ededf0) focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--accent,#76591f) focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-40"
                 onClick={() => void regenerate()}
                 disabled={loading || busy || !canRegenerate || reportGenerating}
               >
@@ -309,6 +332,7 @@ export function ReportPanel({
               {displayed?.status === "ready" && selectedRevision === null ? (
                 <button
                   type="button"
+                  className="min-h-[27px] cursor-pointer rounded-[7px] border-0 bg-transparent px-[9px] py-1 font-[inherit] text-[0.75rem] font-bold text-(--indigo-dark) transition-[transform,background-color,color] duration-150 hover:enabled:-translate-y-px hover:enabled:bg-(--surface-hover,#ededf0) active:enabled:translate-y-0 active:enabled:bg-(--surface-hover,#ededf0) focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--accent,#76591f) focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-40"
                   onClick={() => void download()}
                   disabled={busy}
                 >
@@ -318,32 +342,45 @@ export function ReportPanel({
             </div>
           </div>
           {displayed?.status === "ready" ? (
-            <ReportMarkdown className={styles.markdown} label={copy.report}>
+            <ReportMarkdown
+              className="mt-4 max-h-[42rem] overflow-auto whitespace-normal [overflow-wrap:anywhere] font-[inherit] leading-[1.65] text-(--ink)"
+              label={copy.report}
+            >
               {cleanReportCitations(displayed.english_markdown)}
             </ReportMarkdown>
           ) : displayed?.status === "failed" ? (
-            <DismissibleAlert className={styles.notice} role="status">
+            <DismissibleAlert
+              className="mt-2 rounded-[0.7rem] bg-[#fff8ec] px-[0.85rem] py-[0.7rem] leading-[1.55] text-[#8b6532]"
+              role="status"
+            >
               {displayed.safe_error_code}
             </DismissibleAlert>
           ) : report?.generation_status === "failed" ? null : (
-            <p className={styles.empty} role="status">
+            <p className="mt-2 leading-[1.55] text-(--muted)" role="status">
               {copy.generating}
             </p>
           )}
         </div>
 
-        <div className={styles.history}>
-          <div className={styles.cardHeading}>
-            <h3>{copy.history}</h3>
+        <div className="grid min-w-0 gap-[0.8rem] border-0 border-t border-(--line,#dedee3) bg-transparent p-0 pt-4">
+          <div className="flex items-start justify-between gap-4 max-[680px]:flex-wrap max-[680px]:gap-2">
+            <h3 className="m-0 text-base leading-[1.4] text-(--muted,#62626a)">
+              {copy.history}
+            </h3>
           </div>
           {revisions.length === 0 ? (
-            <p className={styles.empty}>{copy.noHistory}</p>
+            <p className="mt-2 leading-[1.55] text-(--muted)">
+              {copy.noHistory}
+            </p>
           ) : (
-            <ul>
+            <ul className="m-0 grid list-none gap-2 p-0">
               {revisions.map((revision) => (
-                <li key={revision.id}>
+                <li
+                  key={revision.id}
+                  className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-[rgba(24,39,61,0.08)] py-[0.55rem] last:border-b-0 max-[680px]:grid-cols-[1fr_auto]"
+                >
                   <span>{revisionTitle(revision.revision_no)}</span>
-                  <span className={styles.revisionStatus}>
+                  <span className="text-[0.8rem] text-[#69778b] max-[680px]:col-start-1">
                     {revision.status !== "ready"
                       ? reportStatusLabel(revision.status)
                       : ""}
@@ -353,6 +390,7 @@ export function ReportPanel({
                   </span>
                   <button
                     type="button"
+                    className="min-h-[27px] cursor-pointer rounded-[7px] border-0 bg-transparent px-[9px] py-1 font-[inherit] text-[0.75rem] font-bold text-(--indigo-dark) transition-[transform,background-color,color] duration-150 hover:enabled:-translate-y-px hover:enabled:bg-(--surface-hover,#ededf0) active:enabled:translate-y-0 active:enabled:bg-(--surface-hover,#ededf0) focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--accent,#76591f) focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-40 max-[680px]:col-start-2 max-[680px]:row-span-2 max-[680px]:row-start-1"
                     onClick={() => void selectRevision(revision.id)}
                     disabled={busy}
                     aria-current={

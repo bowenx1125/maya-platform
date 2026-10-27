@@ -1,8 +1,10 @@
-import { AppShell } from "../../../../components/app-shell";
-import { GroupWorkspace } from "../../../../components/student-workspace";
-import { RouteGuard } from "../../../../components/session-provider";
+import { redirect } from "next/navigation";
 
-export default async function GroupPage({
+/**
+ * Old combined Studyform grid (Teams + Voices + Brainform). Split pages are
+ * the real UI; keep this URL as a stub for bookmarks and old links.
+ */
+export default async function StudentGroupRedirect({
   params,
   searchParams,
 }: {
@@ -15,16 +17,30 @@ export default async function GroupPage({
 }) {
   const { group_id: groupId } = await params;
   const query = await searchParams;
-  return (
-    <RouteGuard role="student">
-      <AppShell role="student">
-        <GroupWorkspace
-          groupId={groupId}
-          initialMode={query.mode}
-          initialTeamId={query.team_id}
-          initialDocumentId={query.document_id}
-        />
-      </AppShell>
-    </RouteGuard>
-  );
+  const mode = query.mode;
+
+  if (mode === "teams" || mode === "team-new" || mode === "team-edit") {
+    const params = new URLSearchParams({ group_id: groupId });
+    if (mode !== "teams") params.set("mode", mode);
+    if (mode === "team-edit" && query.team_id)
+      params.set("team_id", query.team_id);
+    redirect(`/student/teams?${params.toString()}`);
+  }
+
+  if (
+    mode === "rag-view" ||
+    mode === "rag-edit" ||
+    mode === "rag-new" ||
+    mode === "knowledge-view" ||
+    mode === "knowledge-edit"
+  ) {
+    const params = new URLSearchParams({ group_id: groupId, mode });
+    if (query.document_id) params.set("document_id", query.document_id);
+    const base = mode.startsWith("rag-")
+      ? "/student/rag"
+      : "/student/knowledge";
+    redirect(`${base}?${params.toString()}`);
+  }
+
+  redirect(`/student/agents?group_id=${encodeURIComponent(groupId)}`);
 }

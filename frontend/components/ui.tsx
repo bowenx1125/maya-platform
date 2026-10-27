@@ -1,52 +1,139 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  isValidElement,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 
 import { isConflict } from "../lib/api";
 import { localizeError, statusLabel, type MessageKey } from "../lib/i18n";
 import type { UiGuideKey } from "../lib/ui-guide-copy";
 import { useT } from "../lib/i18n";
+import { cn } from "../lib/utils";
 import { IconClose, IconEdit } from "./quiet-icons";
+import { buttonVariants } from "./ui/button";
+import { NOTICE_TAIL_CLASS, noticeTray, useNoticeTray } from "./notice-tray";
+import {
+  KindSticker,
+  MascotBadge,
+  NoticeTraySlot,
+  RetryPill,
+  RoundX,
+  useRevealNotice,
+  useTransientFold,
+  type ErrorKind,
+} from "./ui/error-kit";
+
+export {
+  KindSticker,
+  NoticeTraySlot,
+  RetryPill,
+  RoundX,
+  useRevealNotice,
+  type ErrorKind,
+};
+
+export { NOTICE_TAIL_CLASS, useNoticeTray };
 
 export function LoadingCard({ label }: { label?: string }) {
   const t = useT();
   return (
-    <div className="loading-card" role="status">
-      {/* The sign-in's four scholar blocks, still waiting their turn. */}
-      <span className="academy-loader" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-        <i />
+    <div
+      className="loading-card flex w-full flex-col gap-3 rounded-[18px] border-[3px] border-[#111] bg-white px-5 py-4 text-[#111] shadow-[4px_5px_0_#111]"
+      role="status"
+    >
+      {/* B-v2 LoadingCard: thick-border card + skeleton avatar/bars. */}
+      <div className="flex flex-col gap-3" aria-hidden="true">
+        <LoadingSkeletonRow barClass="w-[70%]" subClass="w-[46%]" />
+        <LoadingSkeletonRow barClass="w-[64%]" subClass="w-[32%]" />
+      </div>
+      <span className="font-body text-sm font-bold leading-none">
+        {label ?? t("loading")}
       </span>
-      {label ?? t("loading")}
     </div>
   );
 }
 
-const noSubscription = () => () => {};
-
-/** One tray at the bottom of the page, so notices never push a page down. */
-function noticeTray(): HTMLElement {
-  let element = document.querySelector<HTMLElement>(".notice-tray");
-  if (!element) {
-    element = document.createElement("div");
-    element.className = "notice-tray";
-    document.body.append(element);
-  }
-  return element;
+function LoadingSkeletonRow({
+  barClass,
+  subClass,
+}: {
+  barClass: string;
+  subClass: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="size-10 shrink-0 rounded-[8px] bg-[#D9D9D9]" />
+      <span className="flex min-w-0 flex-1 flex-col gap-2">
+        <span className={cn("h-3 rounded-full bg-[#D9D9D9]", barClass)} />
+        <span className={cn("h-3 rounded-full bg-[#D9D9D9]", subClass)} />
+      </span>
+    </div>
+  );
 }
 
-/** The tray exists only in the browser; the server renders no notice. */
-function useNoticeTray(enabled: boolean) {
-  const browser = useSyncExternalStore(
-    noSubscription,
-    () => true,
-    () => false,
-  );
-  return enabled && browser ? noticeTray() : null;
+/**
+ * Lift the tray above a Chat composer while it is on screen (option C: in
+ * Chat the mascot speaks from just above the message box).
+ */
+export function useNoticeTrayAbove(target: HTMLElement | null) {
+  useEffect(() => {
+    if (!target) return;
+    const root = document.documentElement;
+    let frame = 0;
+    const place = () => {
+      frame = 0;
+      // Fixed boxes sit in the layout viewport; the visual viewport is what
+      // is really on screen (a phone keyboard or pinch zoom shrinks it).
+      const layoutHeight = window.innerHeight;
+      const view = window.visualViewport;
+      const viewTop = view ? view.offsetTop : 0;
+      const viewBottom = view ? view.offsetTop + view.height : layoutHeight;
+      const top = target.getBoundingClientRect().top;
+      const edge = Math.min(Math.max(top, viewTop), viewBottom);
+      root.style.setProperty(
+        "--arc-tray-bottom",
+        `${Math.max(12, layoutHeight - edge + 12)}px`,
+      );
+      root.style.setProperty(
+        "--arc-tray-max",
+        `${Math.max(0, edge - viewTop - 24)}px`,
+      );
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(place);
+    };
+    place();
+    const observer =
+      typeof ResizeObserver === "function"
+        ? new ResizeObserver(schedule)
+        : null;
+    observer?.observe(target);
+    observer?.observe(document.body);
+    const view = window.visualViewport;
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, {
+      capture: true,
+      passive: true,
+    });
+    view?.addEventListener("resize", schedule);
+    view?.addEventListener("scroll", schedule);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule, { capture: true });
+      view?.removeEventListener("resize", schedule);
+      view?.removeEventListener("scroll", schedule);
+      root.style.removeProperty("--arc-tray-bottom");
+      root.style.removeProperty("--arc-tray-max");
+    };
+  }, [target]);
 }
 
 /**
@@ -62,8 +149,20 @@ export function Notice({
   action,
   inline = false,
   onClose,
+  badge,
+  kind,
+  transient = false,
+  foldKey,
 }: {
   id?: string;
+  /** What counts as the same error for folding (default: the children). */
+  foldKey?: unknown;
+  /** A field error: the sticker number its field wears, instead of the dot. */
+  badge?: number;
+  /** U3: the sticker shape that tells the error's kind (default: server). */
+  kind?: ErrorKind;
+  /** Chat and live classroom errors fold into the mascot badge after 6 s. */
+  transient?: boolean;
   tone: "error" | "warning" | "success" | "info";
   title?: ReactNode;
   children?: ReactNode;
@@ -73,32 +172,145 @@ export function Notice({
 }) {
   const t = useT();
   const [closed, setClosed] = useState(false);
+  // All feedback is spoken by the mascot: errors and warnings always float
+  // in the tray; only success/info lines may stay inline.
+  inline = inline && (tone === "success" || tone === "info");
   const tray = useNoticeTray(!inline);
-  if (closed || (!inline && !tray)) return null;
+  const fold = useTransientFold(
+    transient && !inline,
+    foldKey !== undefined ? foldKey : children,
+  );
+  useRevealNotice(
+    tray,
+    foldKey !== undefined
+      ? foldKey
+      : typeof children === "string"
+        ? children
+        : SAME_NOTICE,
+    tone === "error" || tone === "warning",
+  );
+  // No tray (shell-less surfaces like immerse boot): keep the notice in
+  // flow. Line below used to return null here and wiped immerse not-found.
+  if (closed) return null;
+  const sticker: ErrorKind | undefined =
+    badge !== undefined
+      ? "field"
+      : tone === "error"
+        ? (kind ?? "server")
+        : undefined;
+  // U3: Retry belongs to the black "!" server kind only; a field, file or
+  // other kind of error is fixed where it points, never by asking again.
+  const shownAction =
+    sticker && sticker !== "server" && isRetryPill(action) ? null : action;
   const notice = (
     <div
       id={id}
-      className={`notice notice-${tone}`}
+      className={cn(
+        `notice notice-${tone}`,
+        "relative my-4 flex w-full items-start gap-2.5 rounded-[18px] border-[3px] border-border bg-surface py-3 pr-[42px] pl-3.5 text-left font-body text-sm leading-[1.45] font-medium text-ink shadow-[4px_4px_0_#111] max-[680px]:flex-wrap",
+        // Status dot instead of an icon font; the colour carries the tone.
+        sticker
+          ? "items-center py-3 pr-[46px] pl-3.5"
+          : "before:mt-1 before:size-3.5 before:flex-none before:rotate-[-8deg] before:rounded-full before:border-2 before:border-border before:bg-main before:shadow-[2px_2px_0_#111] before:content-['']",
+        NOTICE_TONE[tone],
+        fold.folded && "hidden",
+        !inline &&
+          cn(
+            "pointer-events-auto my-0 flex-none",
+            // U3: 440px bubbles; a server error with Retry gets 480px.
+            !shownAction && "max-w-[440px]",
+            NOTICE_TAIL_CLASS,
+          ),
+      )}
       role={tone === "error" || tone === "warning" ? "alert" : "status"}
     >
-      {title ? <strong>{title}</strong> : null}
-      {children ? <span>{children}</span> : null}
-      {action}
-      <button
-        type="button"
-        className="notice-close"
+      {sticker ? <KindSticker kind={sticker} n={badge} /> : null}
+      {title ? <strong className="whitespace-nowrap">{title}</strong> : null}
+      {children ? <span className="min-w-0 flex-1">{children}</span> : null}
+      {shownAction}
+      <RoundX
+        className="notice-close absolute top-[9px] right-[10px]"
         aria-label={t("noticeDismiss")}
         onClick={() => (onClose ? onClose() : setClosed(true))}
-      >
-        <IconClose />
-      </button>
+      />
     </div>
   );
-  return inline || !tray ? notice : createPortal(notice, tray);
+  if (inline || !tray) return notice;
+  return (
+    <>
+      {createPortal(notice, tray)}
+      {fold.folded ? (
+        <MascotBadge
+          tray={tray}
+          label={t("noticeReopen")}
+          onOpen={fold.reopen}
+        />
+      ) : null}
+    </>
+  );
+}
+
+const SAME_NOTICE = {};
+
+function isRetryPill(node: ReactNode): boolean {
+  return isValidElement(node) && node.type === RetryPill;
+}
+
+/** Sticker (14 option A): a tilted round red number; green with ✓ once fixed. */
+export const STICKER =
+  "flex-none rotate-[-8deg] rounded-full border-2 border-border text-center font-body font-extrabold shadow-[2px_2px_0_#111]";
+export const STICKER_TONE = (done: boolean) =>
+  done
+    ? "grid place-items-center bg-[#22C55E] text-ink"
+    : "bg-[#EF4444] text-white";
+
+/** The number sticker on an offending field (shared by every form error). */
+export function StickerBadge({
+  n,
+  done = false,
+}: {
+  n: number;
+  done?: boolean;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      data-checklist-badge
+      data-done={done || undefined}
+      className={cn(
+        STICKER,
+        "absolute -top-[13px] -left-[13px] z-[5] size-7 text-[13px] leading-6",
+        STICKER_TONE(done),
+      )}
+    >
+      {done ? "✓" : n}
+    </span>
+  );
+}
+
+const NOTICE_TONE = {
+  error: "bg-err-bg before:bg-err",
+  warning: "bg-warn-bg before:bg-warn",
+  success: "bg-ok-bg before:bg-ok",
+  info: "",
+} as const;
+
+/** A notice's own action (Retry, Refresh): a small neutral button. */
+export const NOTICE_ACTION_CLASS = cn(
+  "inline-button ml-auto",
+  buttonVariants({ variant: "neutral", size: "sm" }),
+  "h-8 px-3 text-[13px]",
+);
+
+/** U3: an upload or filename refusal wears the file sticker. */
+function isFileError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const { code } = error as { code?: unknown };
+  return typeof code === "string" && /file|upload|attachment/.test(code);
 }
 
 /** A missing record, as opposed to one the server named a reason for. */
-function isNotFound(error: unknown) {
+export function isNotFound(error: unknown) {
   if (!error || typeof error !== "object") return false;
   const { code, status } = error as { code?: unknown; status?: unknown };
   return code === "not_found" || (typeof code !== "string" && status === 404);
@@ -110,11 +322,23 @@ function isNotFound(error: unknown) {
  * deleted Agent reads as a deleted Agent rather than an unknown resource.
  */
 export function ErrorNotice({
+  id,
   error,
   onRetry,
   inline = false,
   notFound,
+  onClosed,
+  kind,
+  transient,
+  badge,
 }: {
+  id?: string;
+  kind?: ErrorKind;
+  /** U3: the number of the field this error describes. */
+  badge?: number;
+  transient?: boolean;
+  /** Runs after the X closes it, e.g. to give focus back to a field. */
+  onClosed?: () => void;
   error: unknown;
   onRetry?: () => void;
   inline?: boolean;
@@ -128,26 +352,28 @@ export function ErrorNotice({
   const missing = isNotFound(error);
   return (
     <Notice
+      id={id}
       tone={conflict ? "warning" : "error"}
       title={conflict ? t("revisionConflict") : undefined}
       inline={inline}
-      onClose={() => setDismissed(error)}
+      kind={kind ?? (isFileError(error) ? "file" : "server")}
+      badge={badge}
+      transient={transient}
+      foldKey={error}
+      onClose={() => {
+        setDismissed(error);
+        onClosed?.();
+      }}
       action={
         // Retrying with the stale revision would only conflict again: offer
         // a reload, which reads the latest revision from the server.
         conflict ? (
-          <button
-            className="inline-button"
-            type="button"
-            onClick={() => window.location.reload()}
-          >
+          <RetryPill onClick={() => window.location.reload()}>
             {t("refreshPage")}
-          </button>
+          </RetryPill>
         ) : // Asking again for a deleted record cannot succeed.
         onRetry && !missing ? (
-          <button className="inline-button" type="button" onClick={onRetry}>
-            {t("retry")}
-          </button>
+          <RetryPill onClick={onRetry}>{t("retry")}</RetryPill>
         ) : null
       }
     >
@@ -197,8 +423,8 @@ function ErrorFixLinks({ error }: { error: unknown }) {
       links.push({
         href:
           student && typeof groupId === "string"
-            ? `/student/groups/${encodeURIComponent(groupId)}?${query}`
-            : `/teacher/studyform?${query}`,
+            ? `/student/teams?group_id=${encodeURIComponent(groupId)}&${query}`
+            : `/teacher/teams?${query}`,
         label: t("errorEditTeam", { name: teamName }),
       });
     }

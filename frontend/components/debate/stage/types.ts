@@ -49,7 +49,6 @@ export type DebatePlaybackApi = Pick<
   | "resumeDebate"
   | "freezeFinalInput"
   | "retryDebatePreparation"
-  | "listProviderDataCallManifests"
   | "replayDebate"
 > &
   Partial<
@@ -120,13 +119,6 @@ export type PlaybackStageLabels = {
   /** Turns a server safe code into a sentence a teacher can read. */
   localizeCode?: (code: string) => string;
   providerSetupIncomplete?: string;
-  providerGateTitle?: string;
-  providerGateLoading?: string;
-  providerGateEmpty?: string;
-  providerGateReview?: string;
-  providerGateReviewAll?: string;
-  providerGateConfirmed?: string;
-  providerGateRetry?: string;
   noPublishedSpeech?: string;
   audioNotRetained?: string;
   selectedTurn?: string;

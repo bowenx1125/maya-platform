@@ -1,7 +1,5 @@
 "use client";
 
-import styles from "./charts.module.css";
-
 /**
  * The two charts this classroom needs, drawn by hand.
  *
@@ -48,7 +46,7 @@ export function PieChart({
 }) {
   const total = data.reduce((sum, item) => sum + item.value, 0);
   if (total <= 0) {
-    return <p className={styles.empty}>{emptyLabel}</p>;
+    return <p className="m-0 text-[0.86rem] text-(--muted)">{emptyLabel}</p>;
   }
   // Slice boundaries are computed before rendering rather than accumulated
   // inside the map: a running total mutated during render is exactly what the
@@ -61,9 +59,9 @@ export function PieChart({
     slices.push({ datum, start, end: running });
   }
   return (
-    <div className={styles.pieLayout}>
+    <div className="flex flex-wrap items-center gap-5">
       <svg
-        className={styles.pie}
+        className="size-[132px] shrink-0"
         role="img"
         aria-label={data
           .map((item) => `${item.label} ${item.value}`)
@@ -97,16 +95,16 @@ export function PieChart({
           );
         })}
       </svg>
-      <ul className={styles.legend}>
+      <ul className="m-0 grid min-w-[180px] flex-1 list-none gap-2 p-0">
         {data.map((item, index) => (
-          <li key={item.id}>
+          <li className="flex items-center gap-2 text-[0.86rem]" key={item.id}>
             <span
               aria-hidden="true"
-              className={styles.swatch}
+              className="size-3 shrink-0 rounded"
               style={{ background: seriesColour(index) }}
             />
-            <span className={styles.legendLabel}>{item.label}</span>
-            <span className={styles.legendValue}>
+            <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            <span className="font-[640] text-(--muted) tabular-nums">
               {item.value} · {Math.round((item.value / total) * 100)}%
             </span>
           </li>
@@ -126,26 +124,32 @@ export function BarChart({
   valueColor?: string;
 }) {
   if (data.length === 0) {
-    return <p className={styles.empty}>{emptyLabel}</p>;
+    return <p className="m-0 text-[0.86rem] text-(--muted)">{emptyLabel}</p>;
   }
   // A zero-width bar for every Agent is honest but unreadable, so the scale
   // falls back to one and every bar renders empty.
   const peak = Math.max(1, ...data.map((item) => item.value));
   return (
-    <ul className={styles.bars}>
+    <ul className="m-0 grid min-w-[180px] flex-1 list-none gap-2 p-0">
       {data.map((item, index) => (
-        <li key={item.id}>
-          <span className={styles.barLabel}>{item.label}</span>
-          <span className={styles.barTrack}>
+        <li
+          className="grid grid-cols-[minmax(72px,0.35fr)_1fr_auto] items-center gap-2.5 text-[0.86rem]"
+          key={item.id}
+        >
+          <span className="truncate font-[640]">{item.label}</span>
+          <span className="h-3 overflow-hidden rounded-full bg-(--line)">
             <span
-              className={styles.barFill}
+              className="block h-full min-w-0.5 rounded-full"
               style={{
                 background: item.color ?? seriesColour(index),
                 width: `${(item.value / peak) * 100}%`,
               }}
             />
           </span>
-          <span className={styles.barValue} style={{ color: valueColor }}>
+          <span
+            className="font-[640] text-(--muted) tabular-nums"
+            style={{ color: valueColor }}
+          >
             {item.value}
           </span>
         </li>

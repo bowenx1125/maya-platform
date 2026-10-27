@@ -1,418 +1,358 @@
-/* Shared content hierarchy for both authenticated workspaces. */
-.surface {
-  --workspace-content: var(--surface-subtle);
-  --workspace-selected: var(--accent);
-  --workspace-label: var(--ink);
-  --workspace-border: var(--line);
-  --workspace-divider: var(--line);
-  display: grid;
-  align-content: start;
-  gap: var(--workspace-gap);
-  min-width: 0;
-  font-size: 1rem;
-  line-height: 1.5;
-}
+@layer legacy {
+  /* Shared content hierarchy for both authenticated workspaces. */
+  .surface {
+    --workspace-content: var(--surface-subtle);
+    --workspace-selected: var(--accent);
+    --workspace-label: var(--ink);
+    --workspace-border: var(--line);
+    --workspace-divider: var(--line);
+    display: grid;
+    align-content: start;
+    gap: var(--workspace-gap);
+    min-width: 0;
+    font-size: 1rem;
+    line-height: 1.5;
+  }
 
-.surface > *,
-.surface :global(.workspace-grid),
-.surface :global(.overview-grid),
-.surface :global(.workbench-grid),
-.surface :global(.section-card) {
-  margin-bottom: 0;
-}
+  .surface > *,
+  .surface :global(.workspace-grid),
+  .surface :global(.overview-grid),
+  .surface :global(.workbench-grid),
+  .surface :global(.section-card) {
+    margin-bottom: 0;
+  }
 
-.surface :global(.section-card) {
-  background: #fdfaf3;
-  padding: var(--workspace-inset);
-}
+  .surface :global(.section-card) {
+    background: #fdfaf3;
+    padding: var(--workspace-inset);
+  }
 
-/* A page's blocks rise into place one after another, so arriving reads as
+  /* A page's blocks rise into place one after another, so arriving reads as
    the page being laid out rather than switched on. The home is one block that
    holds the page, so its sections take the stagger instead. */
-.surface > :not(:global(.mayaform-home)),
-.surface > :global(.mayaform-home) > * {
-  animation: page-rise 520ms var(--ease-out) both;
-}
-
-.surface > :nth-child(2),
-.surface > :global(.mayaform-home) > :nth-child(2) {
-  animation-delay: 60ms;
-}
-.surface > :nth-child(3),
-.surface > :global(.mayaform-home) > :nth-child(3) {
-  animation-delay: 120ms;
-}
-.surface > :nth-child(4),
-.surface > :global(.mayaform-home) > :nth-child(4) {
-  animation-delay: 180ms;
-}
-.surface > :nth-child(n + 5),
-.surface > :global(.mayaform-home) > :nth-child(n + 5) {
-  animation-delay: 240ms;
-}
-
-.surface :global(.section-card-header) {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  margin: 0 0 var(--section-content-gap);
-  padding-bottom: var(--section-content-gap);
-  border-bottom: 1px solid var(--workspace-divider);
-}
-
-.surface :global(.section-card-header) h2 {
-  margin: 0;
-  font-family: var(--display-serif);
-  font-size: 1.35rem;
-  font-weight: 500;
-  line-height: 1.35;
-  letter-spacing: 0.02em;
-}
-
-.surface :global(.section-card-header) p {
-  margin: 6px 0 0;
-  font-size: 0.8rem;
-}
-
-.surface :global(.workspace-grid),
-.surface :global(.overview-grid),
-.surface :global(.workbench-grid) {
-  gap: var(--workspace-gap);
-  align-items: start;
-}
-
-.surface :global(.workbench-main),
-.surface :global(.workbench-side),
-.surface :global(.account-layout) {
-  display: grid;
-  gap: var(--workspace-gap);
-  min-width: 0;
-}
-
-.surface :global(.workbench-grid) {
-  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 1fr);
-}
-
-.surface :global(.compact-list),
-.surface :global(.agent-list),
-.surface :global(.document-list),
-.surface :global(.snapshot-files) {
-  gap: 12px;
-}
-
-.surface :global(.list-row),
-.surface :global(.agent-row),
-.surface :global(.document-row),
-.surface :global(.snapshot-file),
-.surface :global(.member-chip) {
-  min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--workspace-border);
-  border-radius: 14px;
-  background: var(--workspace-content);
-  box-shadow: none;
-}
-
-.surface :global(a.list-row):hover,
-.surface :global(a.agent-row):hover {
-  background: var(--surface-hover, #ededf0);
-  border-color: var(--line, #dedee3);
-}
-
-.surface :global(.list-row) strong,
-.surface :global(.agent-row) strong,
-.surface :global(.document-main) strong {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.surface :global(.list-row) small,
-.surface :global(.document-main) small {
-  font-size: 0.75rem;
-  line-height: 1.5;
-}
-
-.surface :global(.status-badge),
-.surface :global(.current-label),
-.surface :global(.dirty-label) {
-  font-size: 0.7rem;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-  text-transform: none;
-}
-
-.surface :global(.button-row),
-.surface :global(.row-actions) {
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.surface :global(.stack-form) {
-  gap: var(--section-content-gap);
-}
-
-.surface :global(.stack-form) label {
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.surface :global(.wide-form) {
-  max-width: none;
-}
-
-.surface
-  :global(.stack-form)
-  :is(input:not([type="checkbox"]):not([type="file"]), select, textarea),
-.surface :global(.chat-form) input {
-  min-width: 0;
-  border: 1px solid var(--workspace-border);
-  border-radius: 10px;
-  background: #fff;
-  color: var(--ink);
-  font-family: inherit;
-  font-size: 0.9rem;
-  font-weight: 400;
-  line-height: 1.6;
-}
-
-.surface :global(.markdown-editor),
-.surface :global(.read-only-markdown),
-.surface :global(.rag-preview),
-.surface :global(.snapshot-preview) {
-  padding: 16px;
-  border-color: var(--workspace-border);
-  background: var(--workspace-content);
-  color: var(--ink);
-  font-family: inherit;
-  font-size: 0.88rem;
-  line-height: 1.7;
-}
-
-.surface :global(.stat-row),
-.surface :global(.rag-metrics) {
-  gap: 10px;
-  margin: 0 0 var(--section-content-gap);
-}
-
-.surface :global(.stat-row) > div,
-.surface :global(.rag-metrics) > div {
-  padding: 12px 16px;
-  border: 1px solid var(--workspace-border);
-  background: var(--workspace-content);
-}
-
-.surface :global(.stat-row) strong {
-  font-size: 1.24rem;
-  line-height: 1.4;
-  font-weight: 650;
-}
-
-.surface :global(.avatar-orb) {
-  border-color: var(--workspace-border);
-  background: var(--surface-subtle, #f5f5f7);
-  color: var(--ink, #1d1d1f);
-  border-radius: 12px;
-}
-
-.surface :global(.workbench-meta) {
-  margin: 0;
-  font-weight: 500;
-}
-
-.surface :global(.empty-card) {
-  padding: 24px;
-  background: var(--workspace-content);
-  border: 1px solid var(--workspace-border);
-  box-shadow: none;
-}
-
-.surface :global(.account-row) {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
-}
-
-.surface :global(.account-row) > :global(.button-row) {
-  justify-content: flex-end;
-  padding-left: 12px;
-  border-left: 1px solid var(--workspace-divider);
-}
-
-/* A member row carries a name, a status and three actions, so a third of the
-   page left the buttons on top of the name. Members take two of the three
-   columns, and a row that is still narrow puts its actions under the name. */
-@media (min-width: 961px) {
-  .surface
-    :global(.account-layout)
-    section[aria-labelledby="accounts-members"] {
-    grid-column: span 2;
+  .surface > :not(:global(.mayaform-home)),
+  .surface > :global(.mayaform-home) > * {
+    animation: page-rise 520ms var(--ease-out) both;
   }
-}
 
-.surface :global(.account-layout) :global(.compact-list) {
-  container-type: inline-size;
-}
-
-/* The face beside the name, as in the home's member list, rather than on a
-   line of its own above it. */
-.surface :global(.account-row) > :global(.roster-identity) {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.surface :global(.account-row) > :global(.roster-identity) > span:last-child {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-@container (max-width: 460px) {
-  .surface :global(.account-row) {
-    grid-template-columns: minmax(0, 1fr);
+  .surface > :nth-child(2),
+  .surface > :global(.mayaform-home) > :nth-child(2) {
+    animation-delay: 60ms;
   }
-  .surface :global(.account-row) > :global(.button-row) {
-    justify-content: flex-start;
-    padding: 10px 0 0;
-    border-left: 0;
-    border-top: 1px solid var(--workspace-divider);
+  .surface > :nth-child(3),
+  .surface > :global(.mayaform-home) > :nth-child(3) {
+    animation-delay: 120ms;
   }
-}
-
-/* "removed", in the italic the home uses for "member" and "leader". */
-.surface :global(.roster-status) {
-  color: var(--muted, #62626a);
-  font-family: var(--display-serif);
-  font-size: 0.9rem;
-  font-style: italic;
-}
-
-/* Removed accounts fold away under the members, one click from Restore. */
-/* Accounts lists members group by group. Each group is named the way the
-   folded Removed heading is, quietly, with its head count beside it. */
-.surface :global(.roster-sections) {
-  display: grid;
-  gap: 16px;
-}
-
-.surface :global(.roster-section) {
-  display: grid;
-  gap: 8px;
-}
-
-.surface :global(.roster-section-title) {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 0;
-  padding: 0 2px;
-  color: var(--muted, #62626a);
-  font-family: var(--display-serif);
-  font-size: 0.95rem;
-  font-style: italic;
-  font-weight: 400;
-}
-
-.surface :global(.roster-section-title) > small {
-  font-family: inherit;
-  font-size: 0.8rem;
-  font-style: normal;
-}
-
-.surface :global(.roster-removed) {
-  margin-top: 14px;
-}
-
-.surface :global(.roster-removed) > summary {
-  width: fit-content;
-  padding: 6px 2px;
-  color: var(--muted, #62626a);
-  cursor: pointer;
-  font-family: var(--display-serif);
-  font-size: 0.95rem;
-  font-style: italic;
-}
-
-.surface :global(.roster-removed) > :global(.compact-list) {
-  margin-top: 8px;
-}
-
-.surface :global(.account-edit) {
-  grid-column: 1 / -1;
-  width: 100%;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.surface :global(.account-edit) > :global(.button-row) {
-  grid-column: 1 / -1;
-  justify-content: flex-end;
-}
-
-.surface :global(.group-label) {
-  color: var(--muted, #62626a);
-  font-size: 14px;
-  overflow-wrap: anywhere;
-}
-
-@media (max-width: 900px) {
-  .surface :global(.workbench-grid),
-  .surface :global(.workspace-grid) {
-    grid-template-columns: minmax(0, 1fr);
+  .surface > :nth-child(4),
+  .surface > :global(.mayaform-home) > :nth-child(4) {
+    animation-delay: 180ms;
   }
-}
+  .surface > :nth-child(n + 5),
+  .surface > :global(.mayaform-home) > :nth-child(n + 5) {
+    animation-delay: 240ms;
+  }
 
-@media (max-width: 600px) {
-  .surface {
-    --workspace-inset: 20px;
+  .surface :global(.section-card-header) {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 0 0 var(--section-content-gap);
+    padding-bottom: var(--section-content-gap);
+    border-bottom: 1px solid var(--workspace-divider);
   }
-  .surface :global(.account-row),
-  .surface :global(.account-edit) {
-    grid-template-columns: minmax(0, 1fr);
+
+  .surface :global(.section-card-header) h2 {
+    margin: 0;
+    font-family: var(--display-serif);
+    font-size: 1.35rem;
+    font-weight: 500;
+    line-height: 1.35;
+    letter-spacing: 0.02em;
   }
-  .surface :global(.account-row) > :global(.button-row) {
-    justify-content: flex-start;
-    padding: 10px 0 0;
-    border-left: 0;
-    border-top: 1px solid var(--workspace-divider);
+
+  .surface :global(.section-card-header) p {
+    margin: 6px 0 0;
+    font-size: 0.8rem;
   }
-  .surface :global(.stat-row) > div {
-    padding: 10px 8px;
+
+  .surface :global(.workspace-grid),
+  .surface :global(.overview-grid),
+  .surface :global(.workbench-grid) {
+    gap: var(--workspace-gap);
+    align-items: start;
   }
-  .surface :global(.document-row) {
+
+  .surface :global(.workbench-main),
+  .surface :global(.workbench-side),
+  .surface :global(.account-layout) {
+    display: grid;
+    gap: var(--workspace-gap);
+    min-width: 0;
+  }
+
+  .surface :global(.workbench-grid) {
+    grid-template-columns: minmax(0, 1.8fr) minmax(280px, 1fr);
+  }
+
+  .surface :global(.compact-list),
+  .surface :global(.agent-list),
+  .surface :global(.document-list),
+  .surface :global(.snapshot-files) {
+    gap: 12px;
+  }
+
+  .surface :global(.list-row):not(:global(.account-row)),
+  .surface :global(.agent-row),
+  .surface :global(.document-row),
+  .surface :global(.snapshot-file),
+  .surface :global(.member-chip) {
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid var(--workspace-border);
+    border-radius: 14px;
+    background: var(--workspace-content);
+    box-shadow: none;
+  }
+
+  .surface :global(a.list-row):hover,
+  .surface :global(a.agent-row):hover {
+    background: var(--surface-hover, #ededf0);
+    border-color: var(--line, #dedee3);
+  }
+
+  .surface :global(.list-row) strong,
+  .surface :global(.agent-row) strong,
+  .surface :global(.document-main) strong {
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .surface :global(.list-row) small,
+  .surface :global(.document-main) small {
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+
+  .surface :global(.status-badge),
+  .surface :global(.current-label),
+  .surface :global(.dirty-label) {
+    font-size: 0.7rem;
+    font-weight: 650;
+    letter-spacing: 0.01em;
+    text-transform: none;
+  }
+
+  .surface :global(.button-row),
+  .surface :global(.row-actions) {
+    gap: 6px;
     flex-wrap: wrap;
   }
-  .surface :global(.document-main) {
-    flex-basis: 60%;
+
+  .surface :global(.stack-form) {
+    gap: var(--section-content-gap);
   }
-  .surface :global(.row-actions) {
+
+  .surface :global(.stack-form) label {
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .surface :global(.wide-form) {
+    max-width: none;
+  }
+
+  .surface
+    :global(.stack-form)
+    :is(input:not([type="checkbox"]):not([type="file"]), select, textarea),
+  .surface :global(.chat-form) input {
+    min-width: 0;
+    border: 1px solid var(--workspace-border);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 400;
+    line-height: 1.6;
+  }
+
+  .surface :global(.markdown-editor),
+  .surface :global(.read-only-markdown),
+  .surface :global(.rag-preview),
+  .surface :global(.snapshot-preview) {
+    padding: 16px;
+    border-color: var(--workspace-border);
+    background: var(--workspace-content);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 0.88rem;
+    line-height: 1.7;
+  }
+
+  .surface :global(.stat-row),
+  .surface :global(.rag-metrics) {
+    gap: 10px;
+    margin: 0 0 var(--section-content-gap);
+  }
+
+  .surface :global(.stat-row) > div,
+  .surface :global(.rag-metrics) > div {
+    padding: 12px 16px;
+    border: 1px solid var(--workspace-border);
+    background: var(--workspace-content);
+  }
+
+  .surface :global(.stat-row) strong {
+    font-size: 1.24rem;
+    line-height: 1.4;
+    font-weight: 650;
+  }
+
+  .surface :global(.avatar-orb) {
+    border-color: var(--workspace-border);
+    background: var(--surface-subtle, #f5f5f7);
+    color: var(--ink, #1d1d1f);
+    border-radius: 12px;
+  }
+
+  .surface :global(.workbench-meta) {
+    margin: 0;
+    font-weight: 500;
+  }
+
+  .surface :global(.empty-card) {
+    padding: 24px;
+    background: var(--workspace-content);
+    border: 1px solid var(--workspace-border);
+    box-shadow: none;
+  }
+
+  /* account-row chrome is owned by roster-workspace.module.css */
+
+  /* Members/Groups share a 2-col grid in roster-workspace.module.css;
+   do not span Members across both columns. */
+
+  .surface :global(.account-layout) :global(.compact-list) {
+    container-type: inline-size;
+  }
+
+  /* The face beside the name, as in the home's member list, rather than on a
+   line of its own above it. */
+  .surface :global(.account-row) > :global(.roster-identity) {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .surface :global(.account-row) > :global(.roster-identity) > span:last-child {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  /* account-row responsive layout owned by roster-workspace.module.css */
+
+  /* "removed", in the italic the home uses for "member" and "leader". */
+  .surface :global(.roster-status) {
+    color: var(--muted, #62626a);
+    font-family: var(--display-serif);
+    font-size: 0.9rem;
+    font-style: italic;
+  }
+
+  /* Roster fused look lives in roster-workspace.module.css; keep only
+   layout helpers here so serif/italic defaults do not fight the tapes. */
+  .surface :global(.roster-sections) {
+    display: grid;
+    gap: 14px;
+  }
+
+  .surface :global(.roster-section) {
+    display: grid;
+    gap: 8px;
+  }
+
+  .surface :global(.roster-removed) > :global(.compact-list) {
+    margin-top: 0;
+  }
+
+  .surface :global(.account-edit) {
+    grid-column: 1 / -1;
     width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .surface :global(.account-edit) > :global(.button-row) {
+    grid-column: 1 / -1;
     justify-content: flex-end;
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .surface :is(a, button) {
-    transition: none;
-    transform: none;
+  .surface :global(.group-label) {
+    color: var(--muted, #62626a);
+    font-size: 14px;
+    overflow-wrap: anywhere;
   }
-  .surface > *,
-  .surface > :global(.mayaform-home) > * {
-    animation: none;
+
+  @media (max-width: 900px) {
+    .surface :global(.workbench-grid),
+    .surface :global(.workspace-grid) {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
-}
 
-.surface :global(.rendered-persona) {
-  white-space: normal;
-}
+  @media (max-width: 600px) {
+    .surface {
+      --workspace-inset: 20px;
+    }
+    .surface :global(.account-row),
+    .surface :global(.account-edit) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .surface :global(.account-row) > :global(.button-row) {
+      justify-content: flex-start;
+      padding: 0;
+      border-left: 0;
+      border-top: 0;
+    }
+    .surface :global(.stat-row) > div {
+      padding: 10px 8px;
+    }
+    .surface :global(.document-row) {
+      flex-wrap: wrap;
+    }
+    .surface :global(.document-main) {
+      flex-basis: 60%;
+    }
+    .surface :global(.row-actions) {
+      width: 100%;
+      justify-content: flex-end;
+    }
+  }
 
-.surface :global(.check-item) strong {
-  text-transform: none;
-}
+  @media (prefers-reduced-motion: reduce) {
+    .surface :is(a, button) {
+      transition: none;
+      transform: none;
+    }
+    .surface > *,
+    .surface > :global(.mayaform-home) > * {
+      animation: none;
+    }
+  }
 
-.surface :global(.agent-row-name) {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 0.9rem;
-  font-weight: 700;
+  .surface :global(.rendered-persona) {
+    white-space: normal;
+  }
+
+  .surface :global(.check-item) strong {
+    text-transform: none;
+  }
+
+  .surface :global(.agent-row-name) {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
 }

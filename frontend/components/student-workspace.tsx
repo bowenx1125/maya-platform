@@ -1,5 +1,7 @@
 "use client";
 
+import { STUDYFORM_NEW_CLASS } from "./agent-chrome";
+import { safeTeamsReturn } from "../lib/team-return";
 import { agentLastEditedTitle } from "../lib/agent-tooltip";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -10,6 +12,7 @@ import {
   type PublishedAgentSummary,
   type AgentVersion,
   type ChatAgent,
+  type ConversationSession,
   type GroupDetail,
   type PlatformApi,
   type TeamSummaryDto,
@@ -26,39 +29,29 @@ import {
   requestCacheGeneration,
   requestCacheIdentity,
 } from "../lib/request-cache";
-import {
-  fetchVoiceList,
-  prefetchVoiceList,
-  voiceListIdentity,
-} from "../lib/voice-list-cache";
-import { AcademyMascots } from "./academy/mascots";
+import { fetchVoiceList, voiceListIdentity } from "../lib/voice-list-cache";
 import { AccountSettings } from "./account-settings";
-import { GroupOverview } from "./group-overview";
 import { HomeGuide } from "./home-guide";
-import { OnboardingTour } from "./onboarding-tour";
+import { HomeAgentRow } from "./home/agent-row";
+import {
+  HOME_CARD_CLASS,
+  HOME_CARD_TITLE,
+  HOME_CLASS,
+  HOME_TAPE_TITLE,
+  HomeHero,
+} from "./home/home-hero";
 import { useT } from "../lib/i18n";
 import { AgentWorkbench } from "./agent-workspace";
 import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
-import { VoiceLibrary } from "./voice/voice-library";
-import { BrainformWorkspace } from "./knowledge/brainform-workspace";
 import { assessmentAttemptsRead } from "./knowledge/assessment-record";
-import {
-  ModuleCard,
-  ModuleGrid,
-  ModulePlus,
-  ModuleTiles,
-  VersionTile,
-  teamVersionLabel,
-} from "./studyform-layout";
-import {
-  EmptyCard,
-  ErrorNotice,
-  LoadingCard,
-  PageIntro,
-  SectionCard,
-} from "./ui";
+import { ModuleTiles, VersionTile } from "./studyform-layout";
+import { AgentsEmpty, NewButton, type AgentRename } from "./ui/agent-card";
+import { AgentsPage } from "./agents-page";
+import { TeamsPage } from "./teams-page";
+import { GuidePortrait } from "./ui/guide-dialog";
+import { EmptyCard, ErrorNotice, LoadingCard, SectionCard } from "./ui";
 
 type GroupOverview = {
   group: GroupDetail;
@@ -122,8 +115,28 @@ function versionBubble(agent: AgentSummary, versions: AgentVersion[]) {
   const label = published?.version_label ?? draft?.version_label ?? "V1.0";
   return {
     label,
+    materialTheme: (published ?? draft)?.avatar_config?.material_theme,
     pending: agent.status === "archived",
   };
+}
+
+/**
+ * Chats in the current course only: the conversations list spans every course
+ * the student is in. Agent chats carry agent.course_id, team chats
+ * team.course_id; with no current course nothing counts.
+ */
+export function courseChatCount(
+  chats: readonly ConversationSession[],
+  courseId: string | undefined,
+) {
+  if (!courseId) return 0;
+  return chats.filter((chat) =>
+    "team" in chat && chat.team
+      ? chat.team.course_id === courseId
+      : "agent" in chat && chat.agent
+        ? chat.agent.course_id === courseId
+        : false,
+  ).length;
 }
 
 export function StudentDashboard() {
@@ -132,6 +145,7 @@ export function StudentDashboard() {
   const voiceIdentity = voiceListIdentity(user?.id, identityGeneration);
   const [groups, setGroups] = useState<GroupOverview[]>([]);
   const [published, setPublished] = useState<PublishedAgentSummary[]>([]);
+  const [chatCount, setChatCount] = useState(0);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
   const hasUser = Boolean(user);
@@ -145,16 +159,23 @@ export function StudentDashboard() {
     setError(null);
     try {
       const groupIds = groupIdsKey ? groupIdsKey.split(",") : [];
-      const [overviews, nextPublished] = await Promise.all([
+      const [overviews, nextPublished, chats] = await Promise.all([
         loadGroups(api, groupIds, voiceIdentity),
         courseId && typeof api.publishedAgents === "function"
           ? cachedCall(api, voiceIdentity, "publishedAgents", [courseId], () =>
               api.publishedAgents(courseId),
             )
           : Promise.resolve([]),
+        // "Start the Chat" is done once the student has a chat in this
+        // course (the list spans all courses, so it is filtered below). Only the guide uses it,
+        // so a failed read leaves the step undone rather than the page.
+        typeof api.conversations === "function"
+          ? api.conversations().catch(() => [])
+          : Promise.resolve([]),
       ]);
       setGroups(overviews);
       setPublished(nextPublished);
+      setChatCount(courseChatCount(chats, courseId));
     } catch (cause) {
       setError(cause);
     } finally {
@@ -178,14 +199,9 @@ export function StudentDashboard() {
   const guide = primary
     ? [
         {
-          label: t("studentGuideGroup"),
-          complete: true,
-          href: `/student/groups/${primary.group.id}`,
-        },
-        {
           label: t("studentGuideAgent"),
           complete: primary.agentCount > 0,
-          href: `/student/groups/${primary.group.id}`,
+          href: `/student/agents?group_id=${encodeURIComponent(primary.group.id)}`,
         },
         {
           label: t("studentGuideKnowledge"),
@@ -195,31 +211,36 @@ export function StudentDashboard() {
         {
           label: t("studentGuideVoice"),
           complete: primary.voiceCount > 0,
-          optional: true,
-          href: `/student/groups/${primary.group.id}/voices?mode=new`,
+          href: `/student/voices?group_id=${encodeURIComponent(primary.group.id)}&mode=new`,
+        },
+        {
+          label: t("studentGuideChat"),
+          complete: chatCount > 0,
+          href: "/student/chat",
         },
       ]
     : [];
 
   return (
-    <div className="mayaform-home">
-      <section className="home-hero">
-        <div className="home-hero-copy">
-          <h1>{t("homeWelcomeTitle", { name })}</h1>
-        </div>
-        <div className="home-hero-art">
-          <AcademyMascots label={t("academyMascotsLabel")} />
-        </div>
-      </section>
+    <div className={HOME_CLASS}>
+      <HomeHero name={name} />
       {published.length ? (
-        <section className="home-panel" aria-labelledby="student-agents-title">
-          <h2 id="student-agents-title">
+        <section
+          className="home-panel grid min-w-0 gap-[26px] max-[767px]:gap-[23px]"
+          aria-labelledby="student-agents-title"
+        >
+          <h2 id="student-agents-title" className={HOME_TAPE_TITLE}>
             {t("agents")} · {published.length}
           </h2>
-          <div className="agent-tile-grid">
-            {published.map((item) => (
+          <HomeAgentRow>
+            {published.map((item, index) => (
               <VersionTile
                 key={item.agent.id}
+                index={index}
+                id={item.agent.id}
+                materialTheme={
+                  item.current_version.avatar_config?.material_theme
+                }
                 name={item.agent.name}
                 href={`/student/agents/${item.agent.id}`}
                 label={item.current_version.version_label}
@@ -228,33 +249,49 @@ export function StudentDashboard() {
                 deleteLabel={t("deleteAgent")}
               />
             ))}
-          </div>
+          </HomeAgentRow>
         </section>
       ) : null}
       {groups.length === 0 ? (
         <EmptyCard title={t("noGroup")} />
       ) : (
-        <div className="home-columns" id="student-groups">
+        <div
+          className="home-columns grid grid-cols-2 items-stretch gap-8 max-[880px]:grid-cols-1 max-[880px]:gap-10"
+          id="student-groups"
+        >
           <section
-            className="home-panel"
+            className={`home-panel ${HOME_CARD_CLASS} shadow-[0_0_0_3px_#67E8F9,8px_8px_0_3px_#111]`}
             aria-labelledby="student-guide-title"
             data-tour="guide"
           >
-            <h2 id="student-guide-title">{t("guide")}</h2>
-            <HomeGuide steps={guide} />
+            <h2 id="student-guide-title" className={HOME_CARD_TITLE}>
+              {t("guide")}
+            </h2>
+            {/* The guide speaks from its gold portrait, as in the tour. */}
+            <div className="flex items-start gap-5 max-[680px]:gap-3">
+              <GuidePortrait className="size-24 max-[680px]:size-14" />
+              <div className="min-w-0 flex-1">
+                <HomeGuide steps={guide} />
+              </div>
+            </div>
           </section>
           {groups.map((overview, index) => (
             <section
-              className="home-panel"
+              className={`home-panel ${HOME_CARD_CLASS} shadow-[0_0_0_3px_#FDBA74,8px_8px_0_3px_#111]`}
               key={overview.group.id}
               aria-labelledby={`group-${overview.group.id}`}
               data-tour={index === 0 ? "group" : undefined}
             >
-              <h2 id={`group-${overview.group.id}`}>{overview.group.name}</h2>
-              <ul className="home-people-list">
+              <h2
+                id={`group-${overview.group.id}`}
+                className={`${HOME_CARD_TITLE} bg-[#67E8F9]`}
+              >
+                {overview.group.name}
+              </h2>
+              <ul className="home-people-list m-0 grid list-none border-0 border-t-2 border-[#FFE14D] p-0">
                 {(overview.group.members ?? []).map((member) => (
                   <li
-                    className="home-person"
+                    className="home-person grid min-h-[52px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-0 border-b-2 border-dashed border-[#11111133] px-1.5 py-2.5 font-body last:border-b-0"
                     data-role={member.role}
                     key={member.user_id}
                   >
@@ -264,8 +301,20 @@ export function StudentDashboard() {
                       userId={member.user_id}
                       size="sm"
                     />
-                    <strong>{member.display_name}</strong>
-                    <small>{roleLabel(member.role)}</small>
+                    <strong className="min-w-0 truncate text-sm font-semibold">
+                      {member.display_name}
+                    </strong>
+                    {/* roleLabel words, uppercased by CSS as the approved home mock draws them. */}
+                    <small
+                      className={
+                        "rounded border-2 border-ink px-2 py-px font-body text-[11px] font-extrabold text-ink uppercase shadow-[2px_2px_0_#111] " +
+                        (member.role === "leader"
+                          ? "-rotate-3 bg-[#FF4D8D]"
+                          : "rotate-3 bg-[#67E8F9]")
+                      }
+                    >
+                      {roleLabel(member.role)}
+                    </small>
                   </li>
                 ))}
               </ul>
@@ -274,30 +323,71 @@ export function StudentDashboard() {
         </div>
       )}
       <AccountSettings onSaved={() => void load()} />
-      {user ? <OnboardingTour userId={user.id} /> : null}
     </div>
+  );
+}
+
+/** The Agents page; ?group_id picks the group, else the first membership. */
+export function StudentAgentsPage({ groupId }: { groupId?: string }) {
+  const { user } = useSession();
+  const target = groupId ?? user?.groups?.[0]?.group_id;
+  if (!target) return <LoadingCard />;
+  return <GroupWorkspace key={target} groupId={target} view="agents" />;
+}
+
+/** Where a group's Teams page lives (sidebar Teams); list, create and edit. */
+export function studentTeamsHref(
+  groupId: string,
+  mode?: "team-new" | "team-edit",
+  teamId?: string,
+) {
+  const params = new URLSearchParams({ group_id: groupId });
+  if (mode) params.set("mode", mode);
+  if (teamId) params.set("team_id", teamId);
+  return `/student/teams?${params.toString()}`;
+}
+
+/**
+ * The Teams page; ?group_id picks the group, else the first membership.
+ * ?mode=team-new / team-edit&team_id open the form; no mode (or the
+ * mode=teams TeamEntryFlow leaves behind) is the list.
+ */
+export function StudentTeamsPage({
+  groupId,
+  mode,
+  teamId,
+}: {
+  groupId?: string;
+  mode?: string;
+  teamId?: string;
+}) {
+  const { user } = useSession();
+  const target = groupId ?? user?.groups?.[0]?.group_id;
+  if (!target) return <LoadingCard />;
+  return (
+    <GroupWorkspace
+      key={target}
+      groupId={target}
+      view="teams"
+      initialMode={mode}
+      initialTeamId={teamId}
+    />
   );
 }
 
 export function GroupWorkspace({
   groupId,
-  initialVoiceCreate = false,
-  focusVoices = false,
   initialMode,
   initialTeamId,
-  initialDocumentId,
+  view,
 }: {
+  /** Split Studyform pages: Agents or Teams. */
+  view: "agents" | "teams";
   groupId: string;
-  initialVoiceCreate?: boolean;
-  focusVoices?: boolean;
   initialMode?: string;
   initialTeamId?: string;
-  /** A RAG file a ?mode=rag-view / rag-edit link opens. */
-  initialDocumentId?: string;
 }) {
   const { identityGeneration, user } = useSession();
-  // Only Team modes swap the page; RAG modes open inside the embedded
-  // Brainform cards and must not remount Studyform.
   const pageMode =
     initialMode === "team-new" || initialMode === "team-edit"
       ? initialMode
@@ -307,41 +397,28 @@ export function GroupWorkspace({
     <GroupWorkspaceSession
       key={scope}
       groupId={groupId}
-      initialVoiceCreate={initialVoiceCreate}
-      focusVoices={focusVoices}
       initialMode={initialMode}
       initialTeamId={initialTeamId}
-      initialDocumentId={initialDocumentId}
       scope={scope}
+      view={view}
     />
   );
 }
 
 function GroupWorkspaceSession({
+  view,
   groupId,
-  initialVoiceCreate,
-  focusVoices,
   initialMode,
   initialTeamId,
-  initialDocumentId,
   scope,
 }: {
   groupId: string;
-  initialVoiceCreate: boolean;
-  focusVoices: boolean;
   initialMode?: string;
   initialTeamId?: string;
-  initialDocumentId?: string;
   scope: string;
+  view: "agents" | "teams";
 }) {
   const t = useT();
-  // Team modes swap the whole page; any other mode belongs to the embedded
-  // RAG / Record cards, which open it as their own page.
-  const brainformMode =
-    initialMode === "team-new" || initialMode === "team-edit"
-      ? undefined
-      : initialMode;
-  const [brainformPane, setBrainformPane] = useState(false);
   const { api, identityGeneration, user } = useSession();
   const cacheIdentity = requestCacheIdentity(user?.id, identityGeneration);
   const snapshotKey = `page:studyform-group:${groupId}`;
@@ -363,6 +440,11 @@ function GroupWorkspaceSession({
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(!snapshot);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [renameError, setRenameError] = useState<{
+    agentId: string;
+    error: unknown;
+  } | null>(null);
+  const renameField = useRef<HTMLInputElement | null>(null);
   const [retryDelete, setRetryDelete] = useState<string | null>(null);
   const mutations = useIdempotencyStore();
   const teacherCourseKey = (user?.courses ?? [])
@@ -390,7 +472,6 @@ function GroupWorkspaceSession({
       }
       // The Voices panel mounts only after this page loads; start its list
       // now so it is not a second wait after the first.
-      prefetchVoiceList(api, cacheIdentity, "group", groupId);
       const generation = requestCacheGeneration(api);
       const read = <T,>(
         name: string,
@@ -410,7 +491,7 @@ function GroupWorkspaceSession({
           typeof api.courses === "function" &&
           typeof api.knowledge === "function"
         ) {
-          // The RAG and Record cards (Brainform's, embedded) mount after
+          // Warm caches used by Agents / Teams tiles.
           // this page loads; warm the same cached reads now so they do not
           // add round trips of their own (same endpoints, same cache keys).
           void read("courses", [], () => api.courses()).catch(() => undefined);
@@ -529,13 +610,6 @@ function GroupWorkspaceSession({
     return () => window.clearTimeout(timer);
   }, [load, snapshot]);
 
-  useEffect(() => {
-    if (loading || !(initialVoiceCreate || focusVoices)) return;
-    document.getElementById("studyform-voices")?.scrollIntoView({
-      block: "start",
-    });
-  }, [focusVoices, initialVoiceCreate, loading]);
-
   if (loading) return <LoadingCard />;
   async function deleteAgent(agentId: string, retry = false) {
     if (deleting || (!retry && !window.confirm(t("deleteAgentConfirm"))))
@@ -558,6 +632,37 @@ function GroupWorkspaceSession({
       setError(cause);
     } finally {
       setDeleting(null);
+    }
+  }
+
+  async function renameAgent(agentId: string, name: string) {
+    const current = items.find((item) => item.agent.id === agentId);
+    if (!current) return false;
+    setRenameError(null);
+    try {
+      const saved = await api.updateAgentMetadata(agentId, {
+        name,
+        expected_metadata_revision: current.agent.metadata_revision,
+      });
+      invalidateRequestCache(api);
+      setItems((list) =>
+        list.map((item) =>
+          item.agent.id === agentId
+            ? {
+                ...item,
+                agent: {
+                  ...item.agent,
+                  name: saved.name,
+                  metadata_revision: saved.metadata_revision,
+                },
+              }
+            : item,
+        ),
+      );
+      return true;
+    } catch (cause) {
+      setRenameError({ agentId, error: cause });
+      return false;
     }
   }
 
@@ -598,12 +703,12 @@ function GroupWorkspaceSession({
   // a teacher looking round the group sees the group's work alone.
   const sharedAgents = teacherIdentity ? [] : courseAgents;
   const teamForm =
-    initialMode === "team-edit" ||
-    (!teacherIdentity && initialMode === "team-new");
+    view === "teams" &&
+    (initialMode === "team-edit" ||
+      (!teacherIdentity && initialMode === "team-new"));
   if (teamForm)
     return (
       <>
-        <PageIntro title={t("studyform")} />
         <TeamEntryFlow
           key={scope}
           api={api}
@@ -612,7 +717,12 @@ function GroupWorkspaceSession({
           variant="team"
           groupId={groupId}
           standalone
-          backHref={`/student/groups/${groupId}`}
+          backHref={studentTeamsHref(groupId)}
+          agentCreateHref={
+            teacherIdentity
+              ? undefined
+              : `/student/groups/${groupId}/agents/new`
+          }
           initialRouteMode={
             initialMode === "team-new" ? "team-new" : "team-edit"
           }
@@ -621,9 +731,8 @@ function GroupWorkspaceSession({
       </>
     );
 
-  return (
+  const agentNotices = (
     <>
-      <PageIntro title={t("studyform")} />
       {error ? (
         <ErrorNotice
           error={error}
@@ -632,29 +741,42 @@ function GroupWorkspaceSession({
           }
         />
       ) : null}
-      <ModuleGrid
-        variant={teacherIdentity ? undefined : "studyform"}
-        paneOpen={brainformPane}
-      >
-        <ModuleCard
+      {renameError ? (
+        <ErrorNotice
+          id={`agent-rename-error-${renameError.agentId}`}
+          error={renameError.error}
+          onClosed={() => {
+            const field = renameField.current;
+            setRenameError(null);
+            field?.focus();
+          }}
+        />
+      ) : null}
+    </>
+  );
+  if (view === "agents")
+    return (
+      <>
+        {agentNotices}
+        <AgentsPage
           title={t("agents")}
-          labelledBy="studyform-agents"
-          empty={
-            items.length || sharedAgents.length ? undefined : t("noAgents")
-          }
           action={
-            teacherIdentity ? null : (
-              <ModulePlus
+            // With no Agents yet, New sits inside the empty card instead.
+            teacherIdentity || !(items.length || sharedAgents.length) ? null : (
+              <NewButton
                 href={`/student/groups/${groupId}/agents/new`}
                 label={t("newAgent")}
+                className={STUDYFORM_NEW_CLASS}
               />
             )
           }
         >
           {items.length ? (
-            <ModuleTiles>
-              {items.map(({ agent, versions }) => (
+            <ModuleTiles variant="list">
+              {items.map(({ agent, versions }, index) => (
                 <GroupAgentRow
+                  variant="list"
+                  index={index}
                   agent={agent}
                   key={agent.id}
                   versions={versions}
@@ -666,11 +788,32 @@ function GroupWorkspaceSession({
                     agent.can_delete ??
                     (!teacherIdentity && agent.can_edit === true)
                   }
+                  rename={
+                    !teacherIdentity && agent.can_edit
+                      ? {
+                          fieldLabel: t("agentName"),
+                          onRename: (name) => renameAgent(agent.id, name),
+                          errorId: `agent-rename-error-${agent.id}`,
+                          invalid: renameError?.agentId === agent.id,
+                          bindInput: (input) => {
+                            if (renameError?.agentId === agent.id)
+                              renameField.current = input;
+                          },
+                        }
+                      : undefined
+                  }
                 />
               ))}
-              {sharedAgents.map((item) => (
+              {sharedAgents.map((item, index) => (
                 <VersionTile
+                  variant="list"
+                  index={items.length + index}
                   key={item.agent.id}
+                  id={item.agent.id}
+                  editedBy={item.agent.last_edited_by_name}
+                  materialTheme={
+                    item.current_version.avatar_config?.material_theme
+                  }
                   name={item.agent.name}
                   href={`/student/agents/${item.agent.id}`}
                   title={agentLastEditedTitle(
@@ -686,9 +829,11 @@ function GroupWorkspaceSession({
               ))}
             </ModuleTiles>
           ) : sharedAgents.length ? (
-            <ModuleTiles>
-              {sharedAgents.map((item) => (
+            <ModuleTiles variant="list">
+              {sharedAgents.map((item, index) => (
                 <VersionTile
+                  variant="list"
+                  index={index}
                   key={item.agent.id}
                   name={item.agent.name}
                   href={`/student/agents/${item.agent.id}`}
@@ -699,70 +844,36 @@ function GroupWorkspaceSession({
                 />
               ))}
             </ModuleTiles>
-          ) : undefined}
-        </ModuleCard>
-        <ModuleCard
-          title={t("chatTargetTeams")}
-          labelledBy="studyform-teams"
-          empty={teams.length ? undefined : t("teamNoneYet")}
-          action={
-            teacherIdentity ? null : (
-              <ModulePlus
-                href={`/student/groups/${groupId}?mode=team-new`}
-                label={t("newAgent")}
-              />
-            )
-          }
-        >
-          {teams.length ? (
-            <ModuleTiles>
-              {teams.map((team) => (
-                <VersionTile
-                  key={team.id}
-                  name={team.display_name}
-                  href={`/student/groups/${groupId}?mode=team-edit&team_id=${encodeURIComponent(team.id)}`}
-                  label={teamVersionLabel(team.current_version_seq)}
-                  pending={false}
-                  visibility={team.visibility}
-                  deleting={deleting !== null}
-                  deleteLabel={t("deleteAgent")}
-                  onDelete={
-                    team.can_edit
-                      ? () => void deleteOwnedTeam(team.id)
-                      : undefined
-                  }
-                />
-              ))}
-            </ModuleTiles>
-          ) : undefined}
-        </ModuleCard>
-        <VoiceLibrary
-          id="studyform-voices"
-          key={`${scope}:voices:${initialVoiceCreate ? "new" : "list"}:${teacherIdentity ? "listen" : "own"}`}
-          groupId={groupId}
-          listenOnly={teacherIdentity}
-          moduleCard
-          initialCreate={teacherIdentity ? false : initialVoiceCreate}
-        />
-        {/* Owner request (2026-10-20): Brainform's RAG and Record cards
-            moved here for students; same component, same API calls. */}
-        {teacherIdentity ? null : (
-          <BrainformWorkspace
-            role="student"
-            embedded
-            initialGroupId={groupId}
-            initialCourseId={group.course_id}
-            initialMode={brainformMode}
-            initialDocumentId={initialDocumentId}
-            onPaneChange={setBrainformPane}
-          />
-        )}
-      </ModuleGrid>
-      {/* A visiting teacher also sees who is in the group, how their tests
-          went and what happened lately. */}
-      {teacherIdentity ? <GroupOverview groupId={groupId} /> : null}
-    </>
-  );
+          ) : teacherIdentity ? undefined : (
+            <AgentsEmpty
+              title={t("noAgents")}
+              newHref={`/student/groups/${groupId}/agents/new`}
+              newLabel={t("newAgent")}
+            />
+          )}
+        </AgentsPage>
+      </>
+    );
+
+  // /student/teams (where Team Back / Done return): the Teams page.
+  if (view === "teams")
+    return (
+      <TeamsPage
+        deleting={deleting !== null}
+        newHref={
+          teacherIdentity ? undefined : studentTeamsHref(groupId, "team-new")
+        }
+        teams={teams.map((team) => ({
+          team,
+          href: studentTeamsHref(groupId, "team-edit", team.id),
+          onDelete: team.can_edit
+            ? () => void deleteOwnedTeam(team.id)
+            : undefined,
+        }))}
+      />
+    );
+
+  return <LoadingCard />;
 }
 
 function GroupAgentRow({
@@ -771,17 +882,28 @@ function GroupAgentRow({
   deleting,
   canDelete = true,
   onDelete,
+  rename,
+  variant,
+  index,
 }: {
+  variant?: "list";
+  /** List position: picks the card tone as the mocks cycle it. */
+  index?: number;
   agent: AgentSummary;
   versions: AgentVersion[];
   deleting: boolean;
   canDelete?: boolean;
   onDelete: () => void;
+  rename?: AgentRename;
 }) {
   const t = useT();
   const bubble = versionBubble(agent, versions);
   return (
     <VersionTile
+      id={agent.id}
+      rename={rename}
+      editedBy={agent.last_edited_by_name}
+      materialTheme={bubble.materialTheme}
       name={agent.name}
       href={`/student/agents/${agent.id}`}
       title={agentLastEditedTitle(t, agent, bubble.label)}
@@ -791,6 +913,8 @@ function GroupAgentRow({
       deleting={deleting}
       deleteLabel={t("deleteAgent")}
       onDelete={canDelete ? onDelete : undefined}
+      variant={variant}
+      index={index}
     />
   );
 }
@@ -798,9 +922,12 @@ function GroupAgentRow({
 export function CreateAgentForm({
   groupId,
   courseId,
+  returnHref,
 }: {
   groupId?: string;
   courseId?: string;
+  /** ?return= from Create/Edit Team; Back and Done go there instead. */
+  returnHref?: string;
 }) {
   const { identityGeneration, user } = useSession();
   const actorScopeKey = `${user?.id ?? "anonymous"}:${courseId ?? groupId ?? "none"}:${identityGeneration}`;
@@ -810,6 +937,7 @@ export function CreateAgentForm({
       actorScopeKey={actorScopeKey}
       courseId={courseId}
       groupId={groupId}
+      returnHref={safeTeamsReturn(returnHref)}
     />
   );
 }
@@ -818,9 +946,11 @@ function CreateAgentFormSession({
   groupId,
   courseId,
   actorScopeKey,
+  returnHref,
 }: {
   groupId?: string;
   courseId?: string;
+  returnHref?: string;
   actorScopeKey: string;
 }) {
   const { api } = useSession();
@@ -861,7 +991,10 @@ function CreateAgentFormSession({
   return (
     <AgentWorkbench
       publishOnDone
-      backHref={groupId ? `/student/groups/${groupId}` : "/teacher/studyform"}
+      backHref={
+        returnHref ??
+        (groupId ? `/student/agents?group_id=${groupId}` : "/teacher/agents")
+      }
       unsavedCreate={{
         groupId,
         courseId,

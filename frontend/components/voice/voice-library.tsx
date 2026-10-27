@@ -28,11 +28,22 @@ import {
   PageIntro,
   SectionCard,
 } from "../ui";
-import { IconClose, IconPlay, IconUpload } from "../quiet-icons";
-import { ModuleCard, ModulePlus } from "../studyform-layout";
+import { IconClose, IconPlay, IconPlus, IconUpload } from "../quiet-icons";
+import { ModuleCard } from "../studyform-layout";
 import { WorkspaceIcon } from "../workspace-icon";
-import cards from "../knowledge/brainform-workspace.module.css";
-import styles from "./voice-library.module.css";
+import { PageAction } from "../page-action";
+import { buttonVariants } from "../ui/button";
+import { AGENT_NEW_BUTTON, agentCard } from "../agent-chrome";
+import { cn } from "../../lib/utils";
+import {
+  AlbumMic,
+  AlbumRings,
+  AlbumTrayAnchor,
+  VoiceAlbumCard,
+  VoiceAlbumCreate,
+  useVoiceAgents,
+  voiceAlbum,
+} from "./voice-album";
 
 const CONSENT_COPY_VERSION = "voice-consent-v1";
 
@@ -130,6 +141,20 @@ function previewIsCurrent(expiresAt: string): boolean {
   return Number.isFinite(expires) && expires > Date.now();
 }
 
+function VoiceEqualizer() {
+  return (
+    <span
+      className="ml-1 inline-flex h-[18px] w-[26px] shrink-0 items-end gap-[3px]"
+      aria-hidden="true"
+    >
+      <i className="inline-block w-1 bg-ink" style={{ height: "45%" }} />
+      <i className="inline-block w-1 bg-ink" style={{ height: "100%" }} />
+      <i className="inline-block w-1 bg-ink" style={{ height: "65%" }} />
+      <i className="inline-block w-1 bg-ink" style={{ height: "85%" }} />
+    </span>
+  );
+}
+
 export function VoiceLibrary({
   groupId,
   courseId = null,
@@ -143,6 +168,7 @@ export function VoiceLibrary({
   onSelect,
   onProfilesChange,
   id,
+  album = false,
 }: {
   groupId: string | null;
   /** A teacher's own personal voices in this course, instead of a group's. */
@@ -163,6 +189,9 @@ export function VoiceLibrary({
   onSelect?: (profileId: string | null) => void;
   onProfilesChange?: (profiles: VoiceProfile[]) => void;
   id?: string;
+  /** The dedicated /student/voices and /teacher/voices page: the Voice
+   * Sticker Album list. The create screen keeps its old layout. */
+  album?: boolean;
 }) {
   const t = useT();
   const session = useSession();
@@ -592,7 +621,7 @@ export function VoiceLibrary({
   }
 
   const form = (
-    <div className={styles.uploadCard}>
+    <div className={"grid gap-6"}>
       {failure ? (
         <ErrorNotice
           inline
@@ -602,9 +631,11 @@ export function VoiceLibrary({
           }
         />
       ) : null}
-      <div className={styles.uploadRow}>
+      <div className={"grid min-w-0 gap-2.5"}>
         <label
-          className={styles.uploadButton}
+          className={
+            "inline-grid w-full min-h-11 place-items-center rounded-[10px] border border-(--workspace-border,var(--line)) bg-(--workspace-content,var(--surface-subtle)) text-(--ink) cursor-pointer hover:border-[#d8cfbd] hover:bg-[#f5eddc] focus-within:outline focus-within:outline-[3px] focus-within:outline-[#967c50] focus-within:outline-offset-2 has-[input:disabled]:text-[#8b887f] has-[input:disabled]:cursor-not-allowed"
+          }
           data-ui-guide="voice.uploadSample"
           aria-busy={controlsDisabled || undefined}
         >
@@ -627,7 +658,12 @@ export function VoiceLibrary({
           />
         </label>
         {file ? (
-          <span className={styles.selectedFile} aria-live="polite">
+          <span
+            className={
+              "min-w-0 text-(--ink) text-[0.92rem] leading-[1.4] [overflow-wrap:anywhere]"
+            }
+            aria-live="polite"
+          >
             {file.name}
           </span>
         ) : null}
@@ -635,7 +671,9 @@ export function VoiceLibrary({
       {/* Confirming consent is the create step: no sidebar Done, and the
           sidebar never changes while this panel is open. */}
       <button
-        className={styles.consent}
+        className={
+          "flex w-full min-h-11 items-center gap-2.5 px-[14px] py-2.5 rounded-[10px] border border-(--workspace-border,var(--line)) bg-(--workspace-content,var(--surface-subtle)) text-(--ink) font-[inherit] text-[0.9rem] leading-[1.6] text-left cursor-pointer hover:enabled:border-[#d8cfbd] hover:enabled:bg-[#f5eddc] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#967c50] focus-visible:outline-offset-2 disabled:text-[#8b887f] disabled:cursor-not-allowed"
+        }
         type="button"
         disabled={!file || controlsDisabled || !canEnroll}
         aria-busy={busy || undefined}
@@ -649,13 +687,39 @@ export function VoiceLibrary({
       {/* Students read the grey button as "upload is broken" (2026-10-20):
           say why it is waiting. */}
       {!file ? (
-        <p id="voice-consent-hint" className={styles.consentHint}>
+        <p
+          id="voice-consent-hint"
+          className={"m-[4px_0_0] text-[0.85em] text-(--muted,#666)"}
+        >
           {t("voiceSelectFileFirst")}
         </p>
       ) : null}
     </div>
   );
 
+  // Arcade V2 picker (Create/Edit): white rows, keycap radio, lime + EQ when selected.
+  const arcadePicker = Boolean(onSelect);
+  function arcadeRow(selected: boolean) {
+    return cn(
+      "flex min-h-[60px] min-w-0 flex-wrap items-center gap-3 rounded-[12px] border-[3px] border-[#111] bg-white px-3 py-2 shadow-[4px_4px_0_#111]",
+      profiles.length === 0 && "min-h-[44px] py-1",
+      selected && "bg-[#A3E635]",
+    );
+  }
+  function arcadeChoice() {
+    return "flex min-h-8 min-w-0 flex-1 items-center gap-2.5 font-body text-ink";
+  }
+  function arcadeRadio() {
+    return cn(
+      "size-[30px] shrink-0 appearance-none rounded-lg border-[3px] border-border bg-[#67E8F9] shadow-[0_4px_0_#111]",
+      "checked:translate-y-[3px] checked:bg-[#FF4D8D] checked:shadow-[0_1px_0_#111,inset_0_0_0_5px_#FF4D8D,inset_0_0_0_30px_#111]",
+      "focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main",
+      "disabled:opacity-50",
+    );
+  }
+  function arcadeName() {
+    return "min-w-[6em] wrap-anywhere break-words font-body text-[15px] font-extrabold leading-[1.3] whitespace-normal";
+  }
   const selectedListed = profiles.some(
     (profile) => profile.id === selectedId && profile.status === "ready",
   );
@@ -665,43 +729,270 @@ export function VoiceLibrary({
   const pickerRows =
     onSelect && !loading ? (
       <>
-        <li className={styles.voiceRow} data-choice="none">
-          <label className={styles.voiceChoice}>
+        <li
+          className={
+            arcadePicker
+              ? arcadeRow(selectedId === null)
+              : "group flex min-w-0 flex-wrap items-center justify-between gap-x-2.5 gap-y-1 rounded-xl border border-[#ebe5df] bg-[#fdfaf3] px-[14px] py-1.5 transition-[box-shadow,border-color] duration-200 hover:border-[#ddd3c4] hover:shadow-[0_6px_18px_rgb(64_52_32/0.06)]"
+          }
+          data-choice="none"
+          data-selected={selectedId === null ? "true" : undefined}
+        >
+          <label
+            className={
+              arcadePicker
+                ? arcadeChoice()
+                : "flex min-h-8 min-w-0 flex-[1_1_0] cursor-pointer items-center gap-2.5 has-[input:disabled]:cursor-default"
+            }
+          >
             <input
-              className={styles.radio}
+              className={
+                arcadePicker
+                  ? arcadeRadio()
+                  : "radio m-0 inline-grid size-[18px] shrink-0 appearance-none place-items-center rounded-full border-[1.5px] border-[#8b7d66] bg-transparent cursor-inherit before:size-2.5 before:rounded-full before:bg-(--gold,#967c50) before:content-[''] before:scale-0 before:transition-transform before:duration-150 checked:border-(--gold,#967c50) checked:before:scale-100 disabled:border-[#cfc8bb] focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-[3px]"
+              }
               type="radio"
               name={pickerName}
               checked={selectedId === null}
               disabled={controlsDisabled}
               onChange={() => onSelect(null)}
             />
-            <span className={styles.voiceName}>{t("voiceNoneOption")}</span>
+            <span
+              className={
+                arcadePicker
+                  ? arcadeName()
+                  : "m-0 min-w-0 flex-[1_1_0] overflow-hidden border-0 bg-transparent p-0 font-(family-name:--display-serif) text-[1.05rem] font-[650] leading-[1.25] tracking-[-0.01em] text-left text-ellipsis whitespace-nowrap text-inherit group-data-[status=failed]:text-[#8b887f] group-data-[status=deleting]:text-[#8b887f] group-data-[status=outcome_unknown]:text-[#8b887f] cursor-pointer disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-4"
+              }
+            >
+              {t("voiceNoneOption")}
+            </span>
+            {arcadePicker && selectedId === null ? <VoiceEqualizer /> : null}
           </label>
         </li>
         {selectedId && !selectedListed ? (
-          <li className={styles.voiceRow} data-choice="current">
-            <label className={styles.voiceChoice}>
+          <li
+            className={
+              arcadePicker
+                ? arcadeRow(true)
+                : "group flex min-w-0 flex-wrap items-center justify-between gap-x-2.5 gap-y-1 rounded-xl border border-[#ebe5df] bg-[#fdfaf3] px-[14px] py-1.5 transition-[box-shadow,border-color] duration-200 hover:border-[#ddd3c4] hover:shadow-[0_6px_18px_rgb(64_52_32/0.06)]"
+            }
+            data-choice="current"
+            data-selected="true"
+          >
+            <label
+              className={
+                arcadePicker
+                  ? arcadeChoice()
+                  : "flex min-h-8 min-w-0 flex-[1_1_0] cursor-pointer items-center gap-2.5 has-[input:disabled]:cursor-default"
+              }
+            >
               <input
-                className={styles.radio}
+                className={
+                  arcadePicker
+                    ? arcadeRadio()
+                    : "radio m-0 inline-grid size-[18px] shrink-0 appearance-none place-items-center rounded-full border-[1.5px] border-[#8b7d66] bg-transparent cursor-inherit before:size-2.5 before:rounded-full before:bg-(--gold,#967c50) before:content-[''] before:scale-0 before:transition-transform before:duration-150 checked:border-(--gold,#967c50) checked:before:scale-100 disabled:border-[#cfc8bb] focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-[3px]"
+                }
                 type="radio"
                 name={pickerName}
                 checked
                 disabled={controlsDisabled}
                 onChange={() => undefined}
               />
-              <span className={styles.voiceName}>
+              <span
+                className={
+                  arcadePicker
+                    ? arcadeName()
+                    : "m-0 min-w-0 flex-[1_1_0] overflow-hidden border-0 bg-transparent p-0 font-(family-name:--display-serif) text-[1.05rem] font-[650] leading-[1.25] tracking-[-0.01em] text-left text-ellipsis whitespace-nowrap text-inherit group-data-[status=failed]:text-[#8b887f] group-data-[status=deleting]:text-[#8b887f] group-data-[status=outcome_unknown]:text-[#8b887f] cursor-pointer disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-4"
+                }
+              >
                 {t("currentVoiceBinding")}
               </span>
+              {arcadePicker ? <VoiceEqualizer /> : null}
             </label>
           </li>
         ) : null}
       </>
     ) : null;
 
+  const albumList = album && !onSelect && !embedded;
+  const voiceAgents = useVoiceAgents(profiles, albumList);
+
+  function nameField(
+    profile: ListedVoice,
+    name: string,
+    editing: boolean,
+    manageable: boolean,
+    inAlbum: boolean,
+  ) {
+    if (editing && editingName) {
+      return (
+        <input
+          className={
+            inAlbum
+              ? voiceAlbum.nameInput
+              : "m-0 min-w-0 flex-[1_1_0] w-auto px-1 border border-(--workspace-border,var(--line)) rounded bg-(--workspace-content,var(--surface-subtle)) text-(--ink) font-[inherit] text-base font-semibold leading-normal text-left"
+          }
+          aria-label={t("voiceName")}
+          value={editingName.value}
+          readOnly={controlsDisabled}
+          ref={focusNameInput}
+          onChange={(event) => {
+            setFailure(null);
+            setEditingName({
+              id: profile.id,
+              value: event.target.value,
+            });
+          }}
+          onBlur={() => void saveName(profile)}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing) return;
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void saveName(profile, true);
+            } else if (event.key === "Escape" && !savingName.current) {
+              event.preventDefault();
+              closeNameEditor(profile.id, true);
+            }
+          }}
+        />
+      );
+    }
+    if (!manageable) {
+      return (
+        <span
+          className={
+            inAlbum
+              ? voiceAlbum.vn
+              : "m-0 min-w-0 flex-[1_1_0] overflow-hidden border-0 bg-transparent p-0 font-(family-name:--display-serif) text-[1.05rem] font-[650] leading-[1.25] tracking-[-0.01em] text-left text-ellipsis whitespace-nowrap text-inherit group-data-[status=failed]:text-[#8b887f] group-data-[status=deleting]:text-[#8b887f] group-data-[status=outcome_unknown]:text-[#8b887f] cursor-pointer disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-4"
+          }
+        >
+          {name}
+        </span>
+      );
+    }
+    return (
+      <button
+        className={
+          inAlbum
+            ? voiceAlbum.vn
+            : "m-0 min-w-0 flex-[1_1_0] overflow-hidden border-0 bg-transparent p-0 font-(family-name:--display-serif) text-[1.05rem] font-[650] leading-[1.25] tracking-[-0.01em] text-left text-ellipsis whitespace-nowrap text-inherit group-data-[status=failed]:text-[#8b887f] group-data-[status=deleting]:text-[#8b887f] group-data-[status=outcome_unknown]:text-[#8b887f] cursor-pointer disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-4"
+        }
+        type="button"
+        disabled={controlsDisabled || profile.status === "deleted"}
+        ref={(button) => {
+          if (button && focusName.current === profile.id) {
+            button.focus();
+            focusName.current = null;
+          }
+        }}
+        onClick={() => {
+          activeName.current = profile.id;
+          setFailure(null);
+          setEditingName({
+            id: profile.id,
+            value: profile.source_filename ?? "",
+          });
+        }}
+      >
+        {name}
+      </button>
+    );
+  }
+
+  function previewButton(
+    profile: ListedVoice,
+    manageable: boolean,
+    playable: boolean,
+    inAlbum: boolean,
+  ) {
+    if (!(manageable || profile.status === "ready")) return null;
+    return (
+      <button
+        className={
+          inAlbum
+            ? cn(voiceAlbum.ib, voiceAlbum.play)
+            : cn(
+                buttonVariants({ variant: "neutral", size: "icon" }),
+                "min-h-0 rounded-[10px] p-0",
+              )
+        }
+        aria-label={t("voicePreview")}
+        data-ui-guide="voice.preview"
+        type="button"
+        disabled={controlsDisabled || !playable}
+        onClick={() => void makePreview(profile.id)}
+      >
+        <IconPlay />
+      </button>
+    );
+  }
+
+  // Every row keeps its ×, whatever the status: enrolling, failed, refused,
+  // outcome unknown or an earlier delete still in progress. The server
+  // soft-deletes any of them and cleans up the supplier voice on a
+  // best-effort basis. While this row's delete runs, × stays visible as a
+  // disabled spinner.
+  function deleteButton(
+    profile: ListedVoice,
+    name: string,
+    manageable: boolean,
+    inAlbum: boolean,
+  ) {
+    if (!manageable) return null;
+    return (
+      <button
+        className={
+          inAlbum
+            ? cn(voiceAlbum.ib, voiceAlbum.del)
+            : cn(
+                buttonVariants({ variant: "neutral", size: "icon" }),
+                "min-h-0 rounded-[10px] p-0",
+              )
+        }
+        aria-label={t("voiceDeleteNamed", { name })}
+        aria-busy={deletingId === profile.id || undefined}
+        data-ui-guide="voice.delete"
+        type="button"
+        disabled={controlsDisabled}
+        onClick={() => void remove(profile)}
+      >
+        {deletingId === profile.id ? (
+          <span className="spinner" aria-hidden="true" />
+        ) : (
+          <IconClose />
+        )}
+      </button>
+    );
+  }
+
+  function previewAudio(profile: ListedVoice, inAlbum: boolean) {
+    if (!preview[profile.id]) return null;
+    return (
+      <audio
+        className={
+          inAlbum
+            ? voiceAlbum.audio
+            : "col-span-full w-full min-w-0 flex-[1_0_100%]"
+        }
+        controls
+        autoPlay
+        preload="auto"
+        src={preview[profile.id].url}
+        onError={() => invalidatePreview(profile.id, "voicePreviewFailed")}
+      />
+    );
+  }
+
   const list =
     profiles.length > 0 || pickerRows ? (
       <ul
-        className={styles.voiceList}
+        className={
+          albumList
+            ? voiceAlbum.grid
+            : arcadePicker
+              ? "m-0 grid list-none gap-3 p-0"
+              : "m-0 grid list-none gap-2 p-0"
+        }
         role={onSelect ? "radiogroup" : undefined}
         aria-label={onSelect ? t("voices") : undefined}
       >
@@ -720,127 +1011,106 @@ export function VoiceLibrary({
             profile.status === "ready"
               ? undefined
               : statusLabel(profile.status);
+          if (albumList) {
+            return (
+              <VoiceAlbumCard
+                key={profile.id}
+                index={profiles.indexOf(profile)}
+                profile={profile}
+                agents={voiceAgents[profile.id]}
+                title={statusHint}
+                name={nameField(profile, name, editing, manageable, true)}
+                footer={
+                  <>
+                    {previewButton(profile, manageable, playable, true)}
+                    <span className="flex-1" />
+                    {deleteButton(profile, name, manageable, true)}
+                  </>
+                }
+                audio={previewAudio(profile, true)}
+              />
+            );
+          }
           return (
             <li
-              className={styles.voiceRow}
+              className={
+                arcadePicker
+                  ? arcadeRow(selectedId === profile.id)
+                  : "group flex min-w-0 flex-wrap items-center justify-between gap-x-2.5 gap-y-1 rounded-xl border border-[#ebe5df] bg-[#fdfaf3] px-[14px] py-1.5 transition-[box-shadow,border-color] duration-200 hover:border-[#ddd3c4] hover:shadow-[0_6px_18px_rgb(64_52_32/0.06)]"
+              }
               key={profile.id}
               data-status={profile.status}
+              data-selected={
+                arcadePicker && selectedId === profile.id ? "true" : undefined
+              }
               title={statusHint}
             >
               {editing ? (
-                <input
-                  className={styles.nameInput}
-                  aria-label={t("voiceName")}
-                  value={editingName.value}
-                  readOnly={controlsDisabled}
-                  ref={focusNameInput}
-                  onChange={(event) => {
-                    setFailure(null);
-                    setEditingName({
-                      id: profile.id,
-                      value: event.target.value,
-                    });
-                  }}
-                  onBlur={() => void saveName(profile)}
-                  onKeyDown={(event) => {
-                    if (event.nativeEvent.isComposing) return;
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void saveName(profile, true);
-                    } else if (event.key === "Escape" && !savingName.current) {
-                      event.preventDefault();
-                      closeNameEditor(profile.id, true);
-                    }
-                  }}
-                />
+                nameField(profile, name, editing, manageable, false)
               ) : onSelect ? (
-                <label className={styles.voiceChoice}>
+                <label
+                  className={
+                    arcadePicker
+                      ? arcadeChoice()
+                      : "flex min-h-8 min-w-0 flex-[1_1_0] cursor-pointer items-center gap-2.5 has-[input:disabled]:cursor-default"
+                  }
+                >
                   <input
-                    className={styles.radio}
+                    className={
+                      arcadePicker
+                        ? arcadeRadio()
+                        : "radio m-0 inline-grid size-[18px] shrink-0 appearance-none place-items-center rounded-full border-[1.5px] border-[#8b7d66] bg-transparent cursor-inherit before:size-2.5 before:rounded-full before:bg-(--gold,#967c50) before:content-[''] before:scale-0 before:transition-transform before:duration-150 checked:border-(--gold,#967c50) checked:before:scale-100 disabled:border-[#cfc8bb] focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-[3px]"
+                    }
                     type="radio"
                     name={pickerName}
                     checked={selectedId === profile.id}
                     disabled={controlsDisabled || profile.status !== "ready"}
                     onChange={() => onSelect(profile.id)}
                   />
-                  <span className={styles.voiceName}>{name}</span>
-                </label>
-              ) : !manageable ? (
-                <span className={styles.voiceName}>{name}</span>
-              ) : (
-                <button
-                  className={styles.voiceName}
-                  type="button"
-                  disabled={controlsDisabled || profile.status === "deleted"}
-                  ref={(button) => {
-                    if (button && focusName.current === profile.id) {
-                      button.focus();
-                      focusName.current = null;
+                  <span
+                    className={
+                      arcadePicker
+                        ? arcadeName()
+                        : "m-0 min-w-0 flex-[1_1_0] overflow-hidden border-0 bg-transparent p-0 font-(family-name:--display-serif) text-[1.05rem] font-[650] leading-[1.25] tracking-[-0.01em] text-left text-ellipsis whitespace-nowrap text-inherit group-data-[status=failed]:text-[#8b887f] group-data-[status=deleting]:text-[#8b887f] group-data-[status=outcome_unknown]:text-[#8b887f] cursor-pointer disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--gold) focus-visible:outline-offset-4"
                     }
-                  }}
-                  onClick={() => {
-                    activeName.current = profile.id;
-                    setFailure(null);
-                    setEditingName({
-                      id: profile.id,
-                      value: profile.source_filename ?? "",
-                    });
-                  }}
-                >
-                  {name}
-                </button>
+                  >
+                    {name}
+                  </span>
+                  {arcadePicker && selectedId === profile.id ? (
+                    <VoiceEqualizer />
+                  ) : null}
+                </label>
+              ) : (
+                nameField(profile, name, editing, manageable, false)
               )}
-              <div className={styles.voiceActions}>
-                {manageable || profile.status === "ready" ? (
-                  <button
-                    className={cards.iconButton}
-                    aria-label={t("voicePreview")}
-                    data-ui-guide="voice.preview"
-                    type="button"
-                    disabled={controlsDisabled || !playable}
-                    onClick={() => void makePreview(profile.id)}
-                  >
-                    <IconPlay />
-                  </button>
-                ) : null}
-                {/* Every row keeps its ×, whatever the status: enrolling,
-                    failed, refused, outcome unknown or an earlier delete still
-                    in progress. The server soft-deletes any of them and cleans
-                    up the supplier voice on a best-effort basis. While this
-                    row's delete runs, × stays visible as a disabled spinner. */}
-                {manageable ? (
-                  <button
-                    className={cards.iconButton}
-                    aria-label={t("voiceDeleteNamed", { name })}
-                    aria-busy={deletingId === profile.id || undefined}
-                    data-ui-guide="voice.delete"
-                    type="button"
-                    disabled={controlsDisabled}
-                    onClick={() => void remove(profile)}
-                  >
-                    {deletingId === profile.id ? (
-                      <span className="spinner" aria-hidden="true" />
-                    ) : (
-                      <IconClose />
-                    )}
-                  </button>
-                ) : null}
+              <div
+                className={
+                  arcadePicker
+                    ? "ml-auto flex shrink-0 items-center gap-2.5"
+                    : "flex shrink-0 items-center gap-0.5"
+                }
+              >
+                {previewButton(profile, manageable, playable, false)}
+                {deleteButton(profile, name, manageable, false)}
               </div>
-              {preview[profile.id] ? (
-                <audio
-                  className={styles.audio}
-                  controls
-                  autoPlay
-                  preload="auto"
-                  src={preview[profile.id].url}
-                  onError={() =>
-                    invalidatePreview(profile.id, "voicePreviewFailed")
-                  }
-                />
-              ) : null}
+              {previewAudio(profile, false)}
             </li>
           );
         })}
+        {albumList
+          ? Array.from(
+              { length: (3 - (profiles.length % 3)) % 3 },
+              (_, index) => (
+                <li
+                  key={`ghost-${index}`}
+                  className={voiceAlbum.ghost}
+                  aria-hidden="true"
+                >
+                  {index === 0 ? "+" : null}
+                </li>
+              ),
+            )
+          : null}
       </ul>
     ) : null;
 
@@ -865,7 +1135,10 @@ export function VoiceLibrary({
   const createAction = listenOnly ? null : creating ? (
     // Top-right, where New was: back to the list, nothing is uploaded.
     <button
-      className={cards.iconButton}
+      className={cn(
+        buttonVariants({ variant: "neutral", size: "icon" }),
+        "min-h-0 rounded-[10px] p-0",
+      )}
       type="button"
       aria-label={t("cancel")}
       title={t("cancel")}
@@ -876,15 +1149,158 @@ export function VoiceLibrary({
       <WorkspaceIcon name="back" />
     </button>
   ) : (
-    <ModulePlus
-      label={t("voiceCreateTitle")}
+    <button
+      type="button"
+      aria-label={t("voiceCreateTitle")}
       disabled={controlsDisabled || !canEnroll}
       onClick={() => setCreating(true)}
-    />
+      className={
+        albumList
+          ? voiceAlbum.pn
+          : arcadePicker
+            ? AGENT_NEW_BUTTON
+            : cn(
+                buttonVariants({ variant: "default" }),
+                "gap-1.5 font-display text-base font-extrabold",
+              )
+      }
+    >
+      <IconPlus size={16} />
+      <span aria-hidden="true">{t("voiceCreateTitle")}</span>
+    </button>
   );
 
+  if (albumList && creating) {
+    const titleId = id ? `${id}-title` : "voices-title";
+    return (
+      <div id={id} data-voice-album="v2" data-voice-create="p2-tab">
+        <section className={voiceAlbum.alb} aria-labelledby={titleId}>
+          <AlbumRings />
+          <div
+            className={`${voiceAlbum.top} max-md:flex-wrap max-md:gap-x-[12px] max-md:gap-y-[16px] max-md:mb-[22px]`}
+          >
+            <h2 id={titleId} className={voiceAlbum.h2}>
+              {t("voices")}
+            </h2>
+            <span
+              className={`${voiceAlbum.tape} max-md:w-[44px]`}
+              aria-hidden="true"
+            />
+            <span className="flex-1 max-md:basis-full max-md:h-0" />
+            {/* Back / Done inside the album top row (same band as list New). */}
+            <PageAction
+              name="back"
+              placement="page"
+              onClick={cancelCreate}
+              disabled={controlsDisabled}
+              guide="voice.cancelCreate"
+            />
+            <PageAction
+              name="done"
+              placement="page"
+              onClick={() => void submitEnrollment()}
+              disabled={!file || controlsDisabled || !canEnroll}
+              busy={busy}
+              describedBy="voice-sample-req voice-consent-text"
+            />
+          </div>
+          {failure ? (
+            <ErrorNotice
+              inline
+              error={failure.cause}
+              onRetry={
+                controlsDisabled || !failure.retry ? undefined : retryFailure
+              }
+            />
+          ) : null}
+          <VoiceAlbumCreate
+            fileName={file?.name ?? null}
+            requirement={t("voiceSampleFile")}
+            consent={t("voiceConsent")}
+            input={
+              <input
+                className="sr-only"
+                type="file"
+                disabled={controlsDisabled}
+                accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
+                onChange={(event) => {
+                  idempotency.abandon("voice-enroll");
+                  setFailure(null);
+                  setFile(event.target.files?.[0] ?? null);
+                  event.target.value = "";
+                }}
+                aria-label={t("voiceSampleFile")}
+                aria-describedby="voice-sample-req"
+              />
+            }
+          />
+          {failure ? <AlbumTrayAnchor /> : null}
+        </section>
+      </div>
+    );
+  }
+
+  if (albumList && !creating) {
+    const titleId = id ? `${id}-title` : "voices-title";
+    return (
+      <div id={id} data-voice-album="v2">
+        {notice ? (
+          <Notice tone="success" onClose={() => setNotice(null)}>
+            {t(notice)}
+          </Notice>
+        ) : null}
+        <section className={voiceAlbum.alb} aria-labelledby={titleId}>
+          <AlbumRings />
+          <div className={voiceAlbum.top}>
+            <h2 id={titleId} className={voiceAlbum.h2}>
+              {t("voices")}
+            </h2>
+            <span className={voiceAlbum.tape} aria-hidden="true" />
+            <span className="flex-1" />
+            {createAction}
+          </div>
+          {failure ? (
+            <ErrorNotice
+              inline
+              error={failure.cause}
+              onRetry={
+                controlsDisabled || !failure.retry ? undefined : retryFailure
+              }
+            />
+          ) : null}
+          {loading ? <LoadingCard /> : null}
+          {list ?? (
+            <ul className={voiceAlbum.grid}>
+              {!loading && !failure ? (
+                <li className={voiceAlbum.ghostFirst}>
+                  <AlbumMic />
+                  <p>{t("voiceNone")}</p>
+                </li>
+              ) : (
+                <li className={voiceAlbum.skel} aria-hidden="true" />
+              )}
+              <li
+                className={failure ? voiceAlbum.skel : voiceAlbum.ghost}
+                aria-hidden="true"
+              />
+              <li
+                className={failure ? voiceAlbum.skel : voiceAlbum.ghost}
+                aria-hidden="true"
+              />
+            </ul>
+          )}
+          {failure ? <AlbumTrayAnchor /> : null}
+        </section>
+      </div>
+    );
+  }
+
   return (
-    <div className={styles.voicePanel} id={id}>
+    <div
+      className={arcadePicker ? "min-w-0" : "grid gap-6"}
+      id={id}
+      data-arcade-voices={arcadePicker ? "v2" : undefined}
+    >
       {embedded || moduleCard ? null : <PageIntro title={t("voices")} />}
       {notice ? (
         <Notice tone="success" onClose={() => setNotice(null)}>
@@ -893,7 +1309,11 @@ export function VoiceLibrary({
       ) : null}
       {embedded && !moduleCard ? (
         // Match Agent Avatar / AGENT.md and Team SectionCard title metrics.
-        <SectionCard title={t("voices")} action={createAction}>
+        <SectionCard
+          title={t("voices")}
+          action={createAction}
+          className={cn(agentCard("voices", profiles.length === 0), "mb-0")}
+        >
           {body ?? <p className="muted-copy">{t("voiceNone")}</p>}
         </SectionCard>
       ) : (

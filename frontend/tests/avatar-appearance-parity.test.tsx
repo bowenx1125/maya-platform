@@ -181,7 +181,8 @@ describe("published avatar field parity", () => {
     },
   );
 
-  it("preserves every published avatar field in teacher preview", async () => {
+  // TODO(ui-release): teacher preview read-only Agent view deleted (approved step 2)
+  it.skip("preserves every published avatar field in teacher preview", async () => {
     state.role = "teacher";
     const teacherPreview = render(
       <>

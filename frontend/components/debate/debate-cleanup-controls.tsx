@@ -10,7 +10,14 @@ import {
   type IdempotencyHandle,
   type PlatformApi,
 } from "../../lib/api";
-import { IconBell, IconBellOff, IconClose } from "../quiet-icons";
+import { cn } from "../../lib/utils";
+import {
+  IconBell,
+  IconBellOff,
+  IconClose,
+  IconSpinner,
+  IconDebateTrash,
+} from "../quiet-icons";
 
 type Intent = {
   debateId: string;
@@ -49,6 +56,8 @@ export function DebateCleanupControls({
   className = "row-actions",
   audioRestoreNeeded,
   iconClassName = "",
+  labelled = false,
+  dangerClassName = "",
 }: {
   detail?: DebateDetail;
   debateId?: string;
@@ -57,6 +66,10 @@ export function DebateCleanupControls({
   className?: string;
   audioRestoreNeeded?: boolean;
   iconClassName?: string;
+  /** Draw icon + visible text (Debates list, final mockup F); the label
+   * stays while busy, with a spinner and aria-busy. */
+  labelled?: boolean;
+  dangerClassName?: string;
   api: Pick<
     PlatformApi,
     "deleteDebateVoice" | "deleteDebateAll" | "regenerateDebateTurnAudio"
@@ -219,28 +232,50 @@ export function DebateCleanupControls({
   const deleteLabel = removal === "all" ? "Deleting" : "Delete";
   // Bell = this debate has its audio; clicking devocalizes. Bell struck
   // through = audio removed; clicking revocalizes (lifts the strike).
+  const voiceBusy = removal === "voice" || generatingAudio;
+  const deleteBusy = removal === "all";
   return (
     <div className={className}>
       <button
-        className={`icon-action ${iconClassName}`}
+        className={labelled ? iconClassName : `icon-action ${iconClassName}`}
         type="button"
         disabled={busy}
         aria-label={voiceLabel}
-        title={voiceLabel}
+        aria-busy={labelled && voiceBusy ? true : undefined}
+        title={labelled ? undefined : voiceLabel}
         data-vocalized={revoice ? "false" : "true"}
         onClick={() => void (revoice ? generateAudio() : remove("voice"))}
       >
-        {revoice ? <IconBellOff size={18} /> : <IconBell size={18} />}
+        {labelled && voiceBusy ? (
+          <IconSpinner size={18} />
+        ) : revoice ? (
+          <IconBellOff size={18} />
+        ) : (
+          <IconBell size={18} />
+        )}
+        {labelled ? <span>{voiceLabel}</span> : null}
       </button>
       <button
-        className={`icon-action icon-action-danger ${iconClassName}`}
+        className={
+          labelled
+            ? cn(iconClassName, dangerClassName)
+            : `icon-action icon-action-danger ${iconClassName}`
+        }
         type="button"
         disabled={busy}
         aria-label={deleteLabel}
-        title={deleteLabel}
+        aria-busy={labelled && deleteBusy ? true : undefined}
+        title={labelled ? undefined : deleteLabel}
         onClick={() => void remove("all")}
       >
-        <IconClose size={18} />
+        {labelled && deleteBusy ? (
+          <IconSpinner size={18} />
+        ) : labelled ? (
+          <IconDebateTrash size={18} />
+        ) : (
+          <IconClose size={18} />
+        )}
+        {labelled ? <span>{deleteLabel}</span> : null}
       </button>
     </div>
   );

@@ -1,0 +1,229 @@
+/*
+ * Arcade design tokens and components (DESIGN-RULES §2/§3), PR0.
+ *
+ * Token names: the legacy stylesheet already owns --ink, --muted, --bg-ish
+ * names with different values, so every Arcade token is prefixed --arc-*.
+ * The neobrutalism.dev component variables (--main, --border, --shadow,
+ * --radius-base, --box-shadow-x/y, ...) are kept under their upstream names;
+ * the legacy --shadow was renamed --legacy-shadow so nothing clashes.
+ */
+:root {
+  --arc-main: #ff4d8d;
+  --arc-main-fg: #111111;
+  --arc-bg: #dcebff;
+  --arc-bg-grid: #00000010;
+  --arc-grid-size: 32px;
+  --arc-sidebar: #ffe14d;
+  --arc-surface: #ffffff;
+  --arc-ink: #111111;
+  --arc-muted: #4b5563;
+  --arc-cat-studyform: #a3e635;
+  --arc-cat-brainform: #67e8f9;
+  --arc-cat-chatform: #fdba74;
+  --arc-ok: #22c55e;
+  --arc-ok-bg: #e3fbe9;
+  --arc-warn: #facc15;
+  --arc-warn-bg: #fff7cc;
+  --arc-err: #ef4444;
+  --arc-err-bg: #ffe4e4;
+  --arc-err-text: #b91c1c;
+  --arc-private: #e5e7eb;
+  --arc-border-w: 3px;
+  --arc-border-w-s: 2px;
+  --arc-radius: 10px;
+  --arc-radius-s: 6px;
+  --arc-radius-pill: 999px;
+  --arc-shadow: 6px 6px 0 #111;
+  --arc-shadow-s: 3px 3px 0 #111;
+  --arc-press-depth: 6px;
+  --arc-hover-lift: -2px;
+  --arc-dur-press: 80ms;
+  --arc-dur-ui: 150ms;
+  --arc-dur-feedback: 400ms;
+  --arc-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --arc-font-display:
+    var(--font-bricolage, "Bricolage Grotesque"), "Noto Sans SC", system-ui,
+    sans-serif;
+  --arc-font-body:
+    var(--font-lexend, "Lexend"), "Noto Sans SC", system-ui, sans-serif;
+
+  /* neobrutalism.dev variables (MIT), mapped onto the Arcade palette. */
+  --background: var(--arc-bg);
+  --secondary-background: var(--arc-surface);
+  --foreground: var(--arc-ink);
+  --main-foreground: var(--arc-main-fg);
+  --main: var(--arc-main);
+  --border: #111111;
+  --ring: #111111;
+  --overlay: rgba(17, 17, 17, 0.4);
+  --shadow: 6px 6px 0 0 var(--border);
+  --radius-base: 10px;
+  --box-shadow-x: 6px;
+  --box-shadow-y: 6px;
+  --reverse-box-shadow-x: -6px;
+  --reverse-box-shadow-y: -6px;
+  --base-font-weight: 500;
+  --heading-font-weight: 800;
+}
+
+/* Animatable fill stop for --animate-debate-fill. */
+@property --p {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
+@theme inline {
+  /* Audience controller (approved 02-audience A). Every use sits under the
+     page root's motion-reduce:[&_*]:animate-none. */
+  --animate-aud-blink: aud-blink 1.2s steps(2) infinite;
+  --animate-aud-blink-cursor: aud-blink 1s steps(2) infinite;
+  @keyframes aud-blink {
+    50% {
+      opacity: 0.25;
+    }
+  }
+  --animate-aud-rise: aud-rise 3s linear infinite;
+  @keyframes aud-rise {
+    0% {
+      transform: translateY(6px);
+      opacity: 0;
+    }
+    30% {
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(-14px);
+      opacity: 0;
+    }
+  }
+  /* The tour arrow nods toward what it points at (motion-safe only). */
+  --animate-tour-nod: tour-nod 1.1s ease-in-out infinite;
+  @keyframes tour-nod {
+    50% {
+      translate: -6px 0;
+    }
+  }
+  /* The home guide's progress cells fill once, left to right. */
+  --animate-hud-fill: hud-fill 400ms ease-out both;
+  @keyframes hud-fill {
+    from {
+      scale: 0 1;
+    }
+  }
+  /* Student Live cabinet (approved 01-student-live F1 / T1 / O2). Every use
+     is paired with motion-reduce:animate-none on the Live root. */
+  --animate-live-blink: live-blink 1.2s infinite;
+  --animate-live-blink-fast: live-blink 0.8s infinite;
+  --animate-live-blink-slow: live-blink 2.4s infinite;
+  @keyframes live-blink {
+    50% {
+      opacity: 0.35;
+    }
+  }
+  --animate-live-hop: live-hop 1s infinite;
+  @keyframes live-hop {
+    50% {
+      transform: translateY(-6px);
+    }
+  }
+  --animate-live-rise: live-rise 3s linear infinite;
+  @keyframes live-rise {
+    0% {
+      transform: translateY(0) scale(0.6);
+      opacity: 0;
+    }
+    20% {
+      opacity: 0.9;
+    }
+    100% {
+      transform: translateY(-120px) scale(1.2);
+      opacity: 0;
+    }
+  }
+  --animate-live-breathe: live-breathe 4s ease-in-out infinite;
+  @keyframes live-breathe {
+    50% {
+      transform: rotate(-1.5deg) scale(0.99);
+    }
+  }
+  --animate-live-swing: live-swing 2.6s ease-in-out infinite;
+  @keyframes live-swing {
+    0%,
+    100% {
+      transform: translateX(-50%) rotate(-7deg);
+    }
+    50% {
+      transform: translateX(-50%) rotate(4deg);
+    }
+  }
+  /* A busy Debates button fills left to right while it works (final mock
+     F `.bt.ld`); callers pair it with motion-reduce:animate-none. */
+  --animate-debate-fill: debate-fill 1.6s ease-in-out infinite;
+  @keyframes debate-fill {
+    from {
+      --p: 0%;
+    }
+    to {
+      --p: 100%;
+    }
+  }
+  /* A Preview turn still waiting for speech shimmers (final mock F
+     `@keyframes shim`); callers pair it with motion-reduce:animate-none. */
+  --animate-debate-shim: debate-shim 1.8s linear infinite;
+  @keyframes debate-shim {
+    to {
+      background-position: -150% 0;
+    }
+  }
+  /* Card-table room fade (entrance). */
+  --animate-room-in: room-in 520ms ease-out both;
+  --animate-room-out: room-out 280ms ease-in both;
+  @keyframes room-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes room-out {
+    to {
+      opacity: 0;
+    }
+  }
+  /* Guide tooltip fades up (motion-safe only). */
+  --animate-tooltip-in: tooltip-in 120ms ease-out;
+  @keyframes tooltip-in {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  --color-main: var(--arc-main);
+  --color-main-fg: var(--arc-main-fg);
+  --color-ink: var(--arc-ink);
+  --color-surface: var(--arc-surface);
+  --color-arc-bg: var(--arc-bg);
+  --color-arc-muted: var(--arc-muted);
+  --color-sidebar: var(--arc-sidebar);
+  --color-studyform: var(--arc-cat-studyform);
+  --color-brainform: var(--arc-cat-brainform);
+  --color-chatform: var(--arc-cat-chatform);
+  --color-ok: var(--arc-ok);
+  --color-ok-bg: var(--arc-ok-bg);
+  --color-warn: var(--arc-warn);
+  --color-warn-bg: var(--arc-warn-bg);
+  --color-err: var(--arc-err);
+  --color-err-bg: var(--arc-err-bg);
+  --color-err-text: var(--arc-err-text);
+  --color-private: var(--arc-private);
+  --color-border: var(--border);
+  --shadow-arc: var(--arc-shadow);
+  --shadow-arc-s: var(--arc-shadow-s);
+  --radius-arc: var(--arc-radius);
+  --radius-arc-s: var(--arc-radius-s);
+  --font-display: var(--arc-font-display);
+  --font-body: var(--arc-font-body);
+}

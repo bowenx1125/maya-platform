@@ -13,7 +13,6 @@ import type {
   DebatePlaybackApi,
   PlaybackSocket,
 } from "../components/debate/stage";
-import { DebateStage } from "../components/debate/stage";
 import { BetaDebateStage } from "../components/debate-beta/stage";
 import type { DebateDetail, DebatePlaybackState } from "../lib/api";
 
@@ -213,10 +212,6 @@ function apiFor(
     pauseDebate: vi.fn().mockResolvedValue({ ...replay, status: "paused" }),
     resumeDebate: vi.fn().mockResolvedValue({ ...replay, status: "ready" }),
     freezeFinalInput: vi.fn(),
-    listProviderDataCallManifests: vi.fn().mockResolvedValue({
-      scope_id: initial.id,
-      items: [],
-    }),
     retryDebatePreparation: vi.fn().mockResolvedValue(replay),
   };
 }
@@ -257,20 +252,80 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe.each([
-  ["classic", DebateStage],
-  ["beta", BetaDebateStage],
-] as const)("%s text-only publication", (_name, Stage) => {
-  it.each(["preparing", "waiting_next"] as const)(
-    "recovers unpublished text from %s without an audio handshake",
-    async (status) => {
+describe.each([["beta", BetaDebateStage]] as const)(
+  "%s text-only publication",
+  (_name, Stage) => {
+    it.each(["preparing", "waiting_next"] as const)(
+      "recovers unpublished text from %s without an audio handshake",
+      async (status) => {
+        const initial = detail(
+          "running",
+          {
+            status,
+            current_turn_id:
+              status === "preparing" ? secondTurnId : firstTurnId,
+            control_version: 2,
+            next_turn_ready: false,
+          },
+          turns().slice(0, 1),
+        );
+        const fresh = detail("running", {
+          status: "waiting_next",
+          current_turn_id: secondTurnId,
+          control_version: 3,
+          next_turn_ready: true,
+        });
+        fresh.last_sequence = 1;
+        const socket = new TestSocket();
+        const api = apiFor(initial, fresh.playback);
+        const refreshSnapshot = vi.fn().mockResolvedValue(fresh);
+        render(
+          <Stage
+            api={api}
+            debateId={debateId}
+            detail={initial}
+            refreshSnapshot={refreshSnapshot}
+            socketFactory={() => socket}
+          />,
+        );
+        await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+        act(() => {
+          socket.emit("open");
+          socket.emit("message", acquired(2));
+          socket.emit(
+            "message",
+            envelope("playback.waiting_next", 1, {
+              mode: "live",
+              completed_turn_id: secondTurnId,
+              control_version: 3,
+              next_turn_ready: true,
+            }),
+          );
+        });
+        await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(1));
+        await waitFor(() =>
+          expect(screen.getAllByText(speech("Second")).length).toBeGreaterThan(
+            0,
+          ),
+        );
+        expect(
+          socket
+            .commands()
+            .filter((c) => c.command_type === "playback.media.prepare"),
+        ).toHaveLength(0);
+        expect(api.advanceDebatePlayback).not.toHaveBeenCalled();
+        expect(api.retryDebatePreparation).not.toHaveBeenCalled();
+      },
+    );
+
+    it("loads newly published Next text when its websocket event is delayed", async () => {
       const initial = detail(
         "running",
         {
-          status,
-          current_turn_id: status === "preparing" ? secondTurnId : firstTurnId,
+          status: "waiting_next",
+          current_turn_id: firstTurnId,
           control_version: 2,
-          next_turn_ready: false,
+          next_turn_ready: true,
         },
         turns().slice(0, 1),
       );
@@ -278,11 +333,11 @@ describe.each([
         status: "waiting_next",
         current_turn_id: secondTurnId,
         control_version: 3,
-        next_turn_ready: true,
+        next_turn_ready: false,
       });
       fresh.last_sequence = 1;
-      const socket = new TestSocket();
       const api = apiFor(initial, fresh.playback);
+      const socket = new TestSocket();
       const refreshSnapshot = vi.fn().mockResolvedValue(fresh);
       render(
         <Stage
@@ -297,6 +352,109 @@ describe.each([
       act(() => {
         socket.emit("open");
         socket.emit("message", acquired(2));
+      });
+      const next = screen.getByRole("button", { name: "Next" });
+      await waitFor(() =>
+        expect((next as HTMLButtonElement).disabled).toBe(false),
+      );
+      fireEvent.click(next);
+      await waitFor(() =>
+        expect(api.advanceDebatePlayback).toHaveBeenCalledTimes(1),
+      );
+      await waitFor(() =>
+        expect(screen.getAllByText(speech("Second")).length).toBeGreaterThan(0),
+      );
+      expect(refreshSnapshot).toHaveBeenCalledTimes(1);
+      expect(
+        socket
+          .commands()
+          .filter((c) => c.command_type === "playback.media.prepare"),
+      ).toHaveLength(0);
+    });
+
+    it("recovers the first published text after Start without revealing preview text", async () => {
+      const initial = detail(
+        "running",
+        {
+          status: "preparing",
+          current_turn_id: firstTurnId,
+          control_version: 1,
+        },
+        [],
+      );
+      const fresh = detail(
+        "running",
+        {
+          status: "waiting_next",
+          current_turn_id: firstTurnId,
+          control_version: 2,
+          next_turn_ready: true,
+        },
+        turns().slice(0, 1),
+      );
+      fresh.last_sequence = 1;
+      const socket = new TestSocket();
+      const api = apiFor(initial, fresh.playback);
+      const refreshSnapshot = vi.fn().mockResolvedValue(fresh);
+      render(
+        <Stage
+          api={api}
+          debateId={debateId}
+          detail={initial}
+          refreshSnapshot={refreshSnapshot}
+          socketFactory={() => socket}
+        />,
+      );
+      expect(screen.queryByText(speech("First"))).toBeNull();
+      await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+      act(() => {
+        socket.emit("open");
+        socket.emit(
+          "message",
+          envelope("playback.waiting_next", 1, {
+            mode: "live",
+            completed_turn_id: firstTurnId,
+            control_version: 2,
+            next_turn_ready: true,
+          }),
+        );
+      });
+      await waitFor(() =>
+        expect(screen.getAllByText(speech("First")).length).toBeGreaterThan(0),
+      );
+      expect(screen.queryByText(speech("Second"))).toBeNull();
+      expect(
+        socket
+          .commands()
+          .filter((c) => c.command_type === "playback.media.prepare"),
+      ).toHaveLength(0);
+      expect(api.retryDebatePreparation).not.toHaveBeenCalled();
+    });
+    it("ignores a stale waiting event instead of exposing unseen text", async () => {
+      const initial = detail(
+        "running",
+        {
+          status: "waiting_next",
+          current_turn_id: firstTurnId,
+          control_version: 4,
+          next_turn_ready: true,
+        },
+        turns().slice(0, 1),
+      );
+      const socket = new TestSocket();
+      const refreshSnapshot = vi.fn();
+      render(
+        <Stage
+          api={apiFor(initial, initial.playback)}
+          debateId={debateId}
+          detail={initial}
+          refreshSnapshot={refreshSnapshot}
+          socketFactory={() => socket}
+        />,
+      );
+      await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+      act(() => {
+        socket.emit("open");
         socket.emit(
           "message",
           envelope("playback.waiting_next", 1, {
@@ -307,275 +465,118 @@ describe.each([
           }),
         );
       });
-      await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(1));
-      await waitFor(() =>
-        expect(screen.getAllByText(speech("Second")).length).toBeGreaterThan(0),
-      );
-      expect(
-        socket
-          .commands()
-          .filter((c) => c.command_type === "playback.media.prepare"),
-      ).toHaveLength(0);
-      expect(api.advanceDebatePlayback).not.toHaveBeenCalled();
-      expect(api.retryDebatePreparation).not.toHaveBeenCalled();
-    },
-  );
-
-  it("loads newly published Next text when its websocket event is delayed", async () => {
-    const initial = detail(
-      "running",
-      {
-        status: "waiting_next",
-        current_turn_id: firstTurnId,
-        control_version: 2,
-        next_turn_ready: true,
-      },
-      turns().slice(0, 1),
-    );
-    const fresh = detail("running", {
-      status: "waiting_next",
-      current_turn_id: secondTurnId,
-      control_version: 3,
-      next_turn_ready: false,
+      expect(refreshSnapshot).not.toHaveBeenCalled();
+      expect(screen.queryByText(speech("Second"))).toBeNull();
     });
-    fresh.last_sequence = 1;
-    const api = apiFor(initial, fresh.playback);
-    const socket = new TestSocket();
-    const refreshSnapshot = vi.fn().mockResolvedValue(fresh);
-    render(
-      <Stage
-        api={api}
-        debateId={debateId}
-        detail={initial}
-        refreshSnapshot={refreshSnapshot}
-        socketFactory={() => socket}
-      />,
-    );
-    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
-    act(() => {
-      socket.emit("open");
-      socket.emit("message", acquired(2));
-    });
-    const next = screen.getByRole("button", { name: "Next" });
-    await waitFor(() =>
-      expect((next as HTMLButtonElement).disabled).toBe(false),
-    );
-    fireEvent.click(next);
-    await waitFor(() =>
-      expect(api.advanceDebatePlayback).toHaveBeenCalledTimes(1),
-    );
-    await waitFor(() =>
-      expect(screen.getAllByText(speech("Second")).length).toBeGreaterThan(0),
-    );
-    expect(refreshSnapshot).toHaveBeenCalledTimes(1);
-    expect(
-      socket
-        .commands()
-        .filter((c) => c.command_type === "playback.media.prepare"),
-    ).toHaveLength(0);
-  });
+  },
+);
 
-  it("recovers the first published text after Start without revealing preview text", async () => {
-    const initial = detail(
-      "running",
-      {
-        status: "preparing",
-        current_turn_id: firstTurnId,
-        control_version: 1,
-      },
-      [],
-    );
-    const fresh = detail(
-      "running",
-      {
-        status: "waiting_next",
-        current_turn_id: firstTurnId,
-        control_version: 2,
-        next_turn_ready: true,
-      },
-      turns().slice(0, 1),
-    );
-    fresh.last_sequence = 1;
-    const socket = new TestSocket();
-    const api = apiFor(initial, fresh.playback);
-    const refreshSnapshot = vi.fn().mockResolvedValue(fresh);
-    render(
-      <Stage
-        api={api}
-        debateId={debateId}
-        detail={initial}
-        refreshSnapshot={refreshSnapshot}
-        socketFactory={() => socket}
-      />,
-    );
-    expect(screen.queryByText(speech("First"))).toBeNull();
-    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
-    act(() => {
-      socket.emit("open");
-      socket.emit(
-        "message",
-        envelope("playback.waiting_next", 1, {
-          mode: "live",
-          completed_turn_id: firstTurnId,
+describe.each([["beta", BetaDebateStage]] as const)(
+  "%s next_not_ready visibility",
+  (_name, Stage) => {
+    it("surfaces next_not_ready instead of silently spinning", async () => {
+      const initial = detail(
+        "running",
+        {
+          status: "waiting_next",
+          current_turn_id: firstTurnId,
           control_version: 2,
           next_turn_ready: true,
-        }),
+        },
+        turns().slice(0, 1),
       );
+      const api = apiFor(initial, initial.playback);
+      const err = Object.assign(new Error("not ready"), {
+        code: "next_not_ready",
+        status: 409,
+      });
+      (api.advanceDebatePlayback as ReturnType<typeof vi.fn>).mockRejectedValue(
+        err,
+      );
+      const refreshSnapshot = vi.fn().mockResolvedValue(initial);
+      const socket = new TestSocket();
+      render(
+        <Stage
+          api={api}
+          debateId={debateId}
+          detail={initial}
+          refreshSnapshot={refreshSnapshot}
+          socketFactory={() => socket}
+        />,
+      );
+      await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+      act(() => {
+        socket.emit("open");
+        socket.emit("message", acquired(2));
+      });
+      const next = await screen.findByRole("button", { name: "Next" });
+      await waitFor(() =>
+        expect((next as HTMLButtonElement).disabled).toBe(false),
+      );
+      fireEvent.click(next);
+      await waitFor(() =>
+        expect(api.advanceDebatePlayback).toHaveBeenCalledTimes(1),
+      );
+      await waitFor(() =>
+        expect(screen.getByText(/Next turn is not ready yet/i)).toBeTruthy(),
+      );
+      // Still Turn 1 identity: do not pretend the advance succeeded.
+      expect(screen.queryByText(speech("Second"))).toBeNull();
     });
-    await waitFor(() =>
-      expect(screen.getAllByText(speech("First")).length).toBeGreaterThan(0),
-    );
-    expect(screen.queryByText(speech("Second"))).toBeNull();
-    expect(
-      socket
-        .commands()
-        .filter((c) => c.command_type === "playback.media.prepare"),
-    ).toHaveLength(0);
-    expect(api.retryDebatePreparation).not.toHaveBeenCalled();
-  });
-  it("ignores a stale waiting event instead of exposing unseen text", async () => {
-    const initial = detail(
-      "running",
-      {
-        status: "waiting_next",
-        current_turn_id: firstTurnId,
-        control_version: 4,
-        next_turn_ready: true,
-      },
-      turns().slice(0, 1),
-    );
-    const socket = new TestSocket();
-    const refreshSnapshot = vi.fn();
-    render(
-      <Stage
-        api={apiFor(initial, initial.playback)}
-        debateId={debateId}
-        detail={initial}
-        refreshSnapshot={refreshSnapshot}
-        socketFactory={() => socket}
-      />,
-    );
-    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
-    act(() => {
-      socket.emit("open");
-      socket.emit(
-        "message",
-        envelope("playback.waiting_next", 1, {
-          mode: "live",
-          completed_turn_id: secondTurnId,
-          control_version: 3,
+
+    it("surfaces Next 503 host_load_pressure as visible controlError", async () => {
+      const initial = detail(
+        "running",
+        {
+          status: "waiting_next",
+          current_turn_id: firstTurnId,
+          control_version: 2,
           next_turn_ready: true,
-        }),
+        },
+        turns().slice(0, 1),
       );
+      const api = apiFor(initial, initial.playback);
+      const err = Object.assign(
+        new Error("Server is busy. Please try again."),
+        {
+          code: "host_load_pressure",
+          status: 503,
+        },
+      );
+      (api.advanceDebatePlayback as ReturnType<typeof vi.fn>).mockRejectedValue(
+        err,
+      );
+      const refreshSnapshot = vi.fn().mockResolvedValue(initial);
+      const socket = new TestSocket();
+      render(
+        <Stage
+          api={api}
+          debateId={debateId}
+          detail={initial}
+          refreshSnapshot={refreshSnapshot}
+          socketFactory={() => socket}
+        />,
+      );
+      await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+      act(() => {
+        socket.emit("open");
+        socket.emit("message", acquired(2));
+      });
+      const next = await screen.findByRole("button", { name: "Next" });
+      await waitFor(() =>
+        expect((next as HTMLButtonElement).disabled).toBe(false),
+      );
+      fireEvent.click(next);
+      await waitFor(() =>
+        expect(api.advanceDebatePlayback).toHaveBeenCalledTimes(1),
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByText(/Server is busy\. Please try again\./i),
+        ).toBeTruthy(),
+      );
+      // Must not silently clear the failure or fake-advance.
+      expect(screen.queryByText(speech("Second"))).toBeNull();
     });
-    expect(refreshSnapshot).not.toHaveBeenCalled();
-    expect(screen.queryByText(speech("Second"))).toBeNull();
-  });
-});
-
-describe.each([
-  ["classic", DebateStage],
-  ["beta", BetaDebateStage],
-] as const)("%s next_not_ready visibility", (_name, Stage) => {
-  it("surfaces next_not_ready instead of silently spinning", async () => {
-    const initial = detail(
-      "running",
-      {
-        status: "waiting_next",
-        current_turn_id: firstTurnId,
-        control_version: 2,
-        next_turn_ready: true,
-      },
-      turns().slice(0, 1),
-    );
-    const api = apiFor(initial, initial.playback);
-    const err = Object.assign(new Error("not ready"), {
-      code: "next_not_ready",
-      status: 409,
-    });
-    (api.advanceDebatePlayback as ReturnType<typeof vi.fn>).mockRejectedValue(
-      err,
-    );
-    const refreshSnapshot = vi.fn().mockResolvedValue(initial);
-    const socket = new TestSocket();
-    render(
-      <Stage
-        api={api}
-        debateId={debateId}
-        detail={initial}
-        refreshSnapshot={refreshSnapshot}
-        socketFactory={() => socket}
-      />,
-    );
-    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
-    act(() => {
-      socket.emit("open");
-      socket.emit("message", acquired(2));
-    });
-    const next = await screen.findByRole("button", { name: "Next" });
-    await waitFor(() =>
-      expect((next as HTMLButtonElement).disabled).toBe(false),
-    );
-    fireEvent.click(next);
-    await waitFor(() =>
-      expect(api.advanceDebatePlayback).toHaveBeenCalledTimes(1),
-    );
-    await waitFor(() =>
-      expect(screen.getByText(/Next turn is not ready yet/i)).toBeTruthy(),
-    );
-    // Still Turn 1 identity: do not pretend the advance succeeded.
-    expect(screen.queryByText(speech("Second"))).toBeNull();
-  });
-
-  it("surfaces Next 503 host_load_pressure as visible controlError", async () => {
-    const initial = detail(
-      "running",
-      {
-        status: "waiting_next",
-        current_turn_id: firstTurnId,
-        control_version: 2,
-        next_turn_ready: true,
-      },
-      turns().slice(0, 1),
-    );
-    const api = apiFor(initial, initial.playback);
-    const err = Object.assign(new Error("Server is busy. Please try again."), {
-      code: "host_load_pressure",
-      status: 503,
-    });
-    (api.advanceDebatePlayback as ReturnType<typeof vi.fn>).mockRejectedValue(
-      err,
-    );
-    const refreshSnapshot = vi.fn().mockResolvedValue(initial);
-    const socket = new TestSocket();
-    render(
-      <Stage
-        api={api}
-        debateId={debateId}
-        detail={initial}
-        refreshSnapshot={refreshSnapshot}
-        socketFactory={() => socket}
-      />,
-    );
-    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
-    act(() => {
-      socket.emit("open");
-      socket.emit("message", acquired(2));
-    });
-    const next = await screen.findByRole("button", { name: "Next" });
-    await waitFor(() =>
-      expect((next as HTMLButtonElement).disabled).toBe(false),
-    );
-    fireEvent.click(next);
-    await waitFor(() =>
-      expect(api.advanceDebatePlayback).toHaveBeenCalledTimes(1),
-    );
-    await waitFor(() =>
-      expect(
-        screen.getByText(/Server is busy\. Please try again\./i),
-      ).toBeTruthy(),
-    );
-    // Must not silently clear the failure or fake-advance.
-    expect(screen.queryByText(speech("Second"))).toBeNull();
-  });
-});
+  },
+);

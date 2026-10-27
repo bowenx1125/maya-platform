@@ -1,347 +1,350 @@
-.appearance {
-  --font-ui:
-    -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC",
-    "Segoe UI", sans-serif;
-  --workspace-gap: 32px;
-  --workspace-inset: 32px;
-  --section-content-gap: 24px;
-  --ink: #282722;
-  --muted: #6b685f;
-  --paper: #f6f5f2;
-  --panel: #fdfaf3;
-  --surface: #fdfaf3;
-  --surface-subtle: #f7f6f3;
-  --surface-hover: #eeece6;
-  --line: #e4e1d9;
-  --accent: #76591f;
-  --accent-fill: #d3a74a;
-  --accent-hover: #c69a3e;
-  --accent-soft: #f6ecd3;
-  --accent-strong: #76591f;
-  --on-accent: #332811;
-  --danger-strong: #bd2734;
-  --indigo: var(--accent);
-  --indigo-dark: #5d461d;
-  --gold: #d3a74a;
-  --gold-soft: var(--accent-soft);
-  --green: #237245;
-  --red: #bd2734;
-  --shadow: 0 4px 24px rgba(52, 45, 30, 0.035);
-  min-height: 100dvh;
-  color: var(--ink);
-  background: var(--paper);
-  font-family: var(--font-ui);
-  font-size: 16px;
-  line-height: 1.5;
-  color-scheme: light;
-  -webkit-font-smoothing: antialiased;
-}
-
-.appearance :is(button, input, select, textarea) {
-  font-family: inherit;
-}
-
-.appearance :is(button, a, input, select, textarea, summary):focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 3px;
-}
-
-.appearance :global(.eyebrow) {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-}
-
-.appearance :global(.section-card) {
-  padding: var(--workspace-inset);
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-}
-
-.appearance
-  :is(
-    :global(.section-card-header),
-    :global(.published-section) > :global(.section-card-header)
-  ) {
-  border-color: var(--line);
-}
-
-.appearance :global(.section-card-header) h2 {
-  font-family: var(--display-serif);
-  font-size: 1.35rem;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-
-.appearance
-  :is(
-    :global(.primary-action),
-    :global(.secondary-action),
-    :global(.inline-button),
-    :global(.text-link),
-    :global(.file-button)
-  ) {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 9px 16px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.35;
-  text-decoration: none;
-  box-shadow: none;
-  cursor: pointer;
-  transition:
-    background 160ms ease,
-    color 160ms ease,
-    scale 160ms var(--ease-out);
-}
-
-/* Buttons give under the finger. `scale` rather than `transform`, so it adds
-   to any transform a button already carries instead of replacing it. */
-.appearance
-  :is(
-    :global(.primary-action),
-    :global(.secondary-action),
-    :global(.inline-button),
-    :global(.text-link),
-    :global(.file-button)
-  ):active:not(:disabled) {
-  scale: 0.97;
-  transition-duration: 80ms;
-}
-
-.appearance :global(.primary-action) {
-  background: var(--accent-fill);
-  color: var(--on-accent);
-}
-
-.appearance
-  :is(
-    :global(.secondary-action),
-    :global(.inline-button),
-    :global(.file-button)
-  ) {
-  background: var(--surface-subtle);
-  color: var(--ink);
-}
-
-.appearance :global(.text-link) {
-  background: transparent;
-  color: var(--accent);
-}
-
-.appearance :global(.primary-action):hover:not(:disabled) {
-  background: var(--accent-hover);
-  color: var(--on-accent);
-  transform: none;
-  box-shadow: none;
-}
-
-.appearance
-  :is(
-    :global(.secondary-action),
-    :global(.inline-button),
-    :global(.text-link),
-    :global(.file-button)
-  ):hover:not(:disabled) {
-  background: var(--surface-hover);
-  color: var(--ink);
-  transform: none;
-  box-shadow: none;
-}
-
-.appearance :global(.danger-button),
-.appearance :global(.danger-button):hover:not(:disabled) {
-  background: #fff0f0;
-  color: var(--red);
-}
-
-.appearance :is(:global(.button-row), :global(.row-actions)) {
-  gap: 8px;
-}
-
-.appearance
-  :is(
-    :global(.published-card),
-    :global(.course-context),
-    :global(.check-item)
-  ) {
-  border-color: var(--line);
-  background: var(--surface-subtle);
-  box-shadow: none;
-}
-
-.appearance :global(.published-card) {
-  gap: 14px;
-  padding: 22px;
-  border-color: transparent;
-  border-radius: 15px;
-}
-
-.appearance :global(.published-card):hover {
-  background: var(--accent-soft);
-  border-color: var(--gold);
-}
-
-.appearance :global(.published-card) h2 {
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.appearance
-  :is(
-    :global(.published-card) p,
-    :global(.published-card-group),
-    :global(.published-card-meta)
-  ) {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.appearance
-  :is(:global(.role-pill), :global(.current-label), :global(.dirty-label)) {
-  color: var(--muted);
-  background: var(--surface-hover);
-  font-weight: 500;
-}
-
-.appearance :global(.status-good) {
-  color: var(--green);
-  background: #eaf5ee;
-}
-
-.appearance :global(.status-bad) {
-  color: var(--red);
-  background: #fff0f0;
-}
-
-.appearance :global(.status-warn) {
-  color: #805600;
-  background: #fff5dc;
-}
-
-.appearance :global(.status-neutral) {
-  color: var(--muted);
-  background: var(--surface-hover);
-}
-
-.appearance
-  :is(:global(.notice), :global(.loading-card), :global(.empty-card)) {
-  border-radius: 16px;
-  box-shadow: none;
-}
-
-.appearance :global(.loading-card) {
-  background: var(--surface);
-  color: var(--muted);
-  border-color: var(--line);
-}
-
-.appearance :global(.notice-error) {
-  background: #fff0f0;
-  color: #8b1d28;
-  border-color: #edbec3;
-}
-
-.appearance :global(.notice-warning) {
-  background: #fff7e5;
-  color: #795200;
-  border-color: #ead9b1;
-}
-
-.appearance
-  :is(
-    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-    select,
-    textarea
-  ) {
-  border: 1px solid #c7c2b7;
-  border-radius: 10px;
-  color: var(--ink);
-  background: var(--surface);
-  box-shadow: none;
-  accent-color: var(--accent);
-}
-
-.appearance :is(input[type="checkbox"], input[type="radio"]) {
-  accent-color: var(--accent);
-}
-
-.appearance :is(input, select, textarea):focus {
-  border-color: var(--accent);
-}
-
-.appearance :is(button, a):active:not(:disabled) {
-  filter: brightness(0.96);
-}
-
-.appearance :is(button, input, select, textarea):disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.appearance :global(.spinner) {
-  border-color: var(--line);
-  border-top-color: var(--accent);
-}
-
-.appearance dialog {
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  color: var(--ink);
-  background: var(--surface);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.16);
-}
-
-.appearance dialog::backdrop {
-  background: rgba(20, 20, 25, 0.28);
-  backdrop-filter: blur(8px);
-}
-
-@media (max-width: 600px) {
+@layer legacy {
   .appearance {
-    --workspace-inset: 20px;
-    --workspace-gap: 24px;
-  }
-  .appearance :is(input, select, textarea) {
+    --font-ui:
+      -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC",
+      "Segoe UI", sans-serif;
+    --workspace-gap: 32px;
+    --workspace-inset: 32px;
+    --section-content-gap: 24px;
+    --ink: #282722;
+    --muted: #6b685f;
+    --paper: #f6f5f2;
+    --panel: #fdfaf3;
+    --surface: #fdfaf3;
+    --surface-subtle: #f7f6f3;
+    --surface-hover: #eeece6;
+    --line: #e4e1d9;
+    --accent: #76591f;
+    --accent-fill: #d3a74a;
+    --accent-hover: #c69a3e;
+    --accent-soft: #f6ecd3;
+    --accent-strong: #76591f;
+    --on-accent: #332811;
+    --danger-strong: #bd2734;
+    --indigo: var(--accent);
+    --indigo-dark: #5d461d;
+    --gold: #d3a74a;
+    --gold-soft: var(--accent-soft);
+    --green: #237245;
+    --red: #bd2734;
+    --shadow: 0 4px 24px rgba(52, 45, 30, 0.035);
+    min-height: 100dvh;
+    color: var(--ink);
+    background: var(--paper);
+    font-family: var(--font-ui);
     font-size: 16px;
+    line-height: 1.5;
+    color-scheme: light;
+    -webkit-font-smoothing: antialiased;
   }
+
+  .appearance :is(button, input, select, textarea) {
+    font-family: inherit;
+  }
+
+  .appearance :is(button, a, input, select, textarea, summary):focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  .appearance :global(.eyebrow) {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+  }
+
+  .appearance :global(.section-card) {
+    padding: var(--workspace-inset);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background: var(--panel);
+    box-shadow: var(--legacy-shadow);
+  }
+
+  .appearance
+    :is(
+      :global(.section-card-header),
+      :global(.published-section) > :global(.section-card-header)
+    ) {
+    border-color: var(--line);
+  }
+
+  .appearance :global(.section-card-header) h2 {
+    font-family: var(--display-serif);
+    font-size: 1.35rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+
   .appearance
     :is(
       :global(.primary-action),
       :global(.secondary-action),
       :global(.inline-button),
+      :global(.text-link),
       :global(.file-button)
     ) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     min-height: 44px;
+    padding: 9px 16px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.35;
+    text-decoration: none;
+    box-shadow: none;
+    cursor: pointer;
+    transition:
+      background 160ms ease,
+      color 160ms ease,
+      scale 160ms var(--ease-out);
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .appearance *,
-  .appearance *::before,
-  .appearance *::after {
-    scroll-behavior: auto;
-    transition: none;
-    animation-duration: 0.01ms;
-    animation-iteration-count: 1;
+  /* Buttons give under the finger. `scale` rather than `transform`, so it adds
+   to any transform a button already carries instead of replacing it. */
+  .appearance
+    :is(
+      :global(.primary-action),
+      :global(.secondary-action),
+      :global(.inline-button),
+      :global(.text-link),
+      :global(.file-button)
+    ):active:not(:disabled) {
+    scale: 0.97;
+    transition-duration: 80ms;
   }
-  .appearance :active {
-    scale: none;
-  }
-}
 
-@media (prefers-reduced-transparency: reduce) {
+  .appearance :global(.primary-action) {
+    background: var(--accent-fill);
+    color: var(--on-accent);
+  }
+
+  .appearance
+    :is(
+      :global(.secondary-action),
+      :global(.inline-button),
+      :global(.file-button)
+    ) {
+    background: var(--surface-subtle);
+    color: var(--ink);
+  }
+
+  .appearance :global(.text-link) {
+    background: transparent;
+    color: var(--accent);
+  }
+
+  .appearance :global(.primary-action):hover:not(:disabled) {
+    background: var(--accent-hover);
+    color: var(--on-accent);
+    transform: none;
+    box-shadow: none;
+  }
+
+  .appearance
+    :is(
+      :global(.secondary-action),
+      :global(.inline-button),
+      :global(.text-link),
+      :global(.file-button)
+    ):hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--ink);
+    transform: none;
+    box-shadow: none;
+  }
+
+  .appearance :global(.danger-button),
+  .appearance :global(.danger-button):hover:not(:disabled) {
+    background: #fff0f0;
+    color: var(--red);
+  }
+
+  .appearance :is(:global(.button-row), :global(.row-actions)) {
+    gap: 8px;
+  }
+
+  .appearance
+    :is(
+      :global(.published-card),
+      :global(.course-context),
+      :global(.check-item)
+    ) {
+    border-color: var(--line);
+    background: var(--surface-subtle);
+    box-shadow: none;
+  }
+
+  .appearance :global(.published-card) {
+    gap: 14px;
+    padding: 22px;
+    border-color: transparent;
+    border-radius: 15px;
+  }
+
+  .appearance :global(.published-card):hover {
+    background: var(--accent-soft);
+    border-color: var(--gold);
+  }
+
+  .appearance :global(.published-card) h2 {
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  .appearance
+    :is(
+      :global(.published-card) p,
+      :global(.published-card-group),
+      :global(.published-card-meta)
+    ) {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .appearance
+    :is(:global(.role-pill), :global(.current-label), :global(.dirty-label)) {
+    color: var(--muted);
+    background: var(--surface-hover);
+    font-weight: 500;
+  }
+
+  .appearance :global(.status-good) {
+    color: var(--green);
+    background: #eaf5ee;
+  }
+
+  .appearance :global(.status-bad) {
+    color: var(--red);
+    background: #fff0f0;
+  }
+
+  .appearance :global(.status-warn) {
+    color: #805600;
+    background: #fff5dc;
+  }
+
+  .appearance :global(.status-neutral) {
+    color: var(--muted);
+    background: var(--surface-hover);
+  }
+
+  .appearance :is(:global(.notice), :global(.empty-card)) {
+    border-radius: 16px;
+    box-shadow: none;
+  }
+
+  /* B-v2 LoadingCard keeps its hard border + shadow sitewide. */
+  .appearance :global(.loading-card) {
+    background: #fff;
+    color: #111;
+    border-color: #111;
+    box-shadow: 4px 5px 0 #111;
+  }
+
+  .appearance :global(.notice-error) {
+    background: #fff0f0;
+    color: #8b1d28;
+    border-color: #edbec3;
+  }
+
+  .appearance :global(.notice-warning) {
+    background: #fff7e5;
+    color: #795200;
+    border-color: #ead9b1;
+  }
+
+  .appearance
+    :is(
+      input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+      select,
+      textarea
+    ) {
+    border: 1px solid #c7c2b7;
+    border-radius: 10px;
+    color: var(--ink);
+    background: var(--surface);
+    box-shadow: none;
+    accent-color: var(--accent);
+  }
+
+  .appearance :is(input[type="checkbox"], input[type="radio"]) {
+    accent-color: var(--accent);
+  }
+
+  .appearance :is(input, select, textarea):focus {
+    border-color: var(--accent);
+  }
+
+  .appearance :is(button, a):active:not(:disabled) {
+    filter: brightness(0.96);
+  }
+
+  .appearance :is(button, input, select, textarea):disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  .appearance :global(.spinner) {
+    border-color: var(--line);
+    border-top-color: var(--accent);
+  }
+
+  .appearance dialog {
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    color: var(--ink);
+    background: var(--surface);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.16);
+  }
+
   .appearance dialog::backdrop {
-    backdrop-filter: none;
+    background: rgba(20, 20, 25, 0.28);
+    backdrop-filter: blur(8px);
+  }
+
+  @media (max-width: 600px) {
+    .appearance {
+      --workspace-inset: 20px;
+      --workspace-gap: 24px;
+    }
+    .appearance :is(input, select, textarea) {
+      font-size: 16px;
+    }
+    .appearance
+      :is(
+        :global(.primary-action),
+        :global(.secondary-action),
+        :global(.inline-button),
+        :global(.file-button)
+      ) {
+      min-height: 44px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .appearance *,
+    .appearance *::before,
+    .appearance *::after {
+      scroll-behavior: auto;
+      transition: none;
+      animation-duration: 0.01ms;
+      animation-iteration-count: 1;
+    }
+    .appearance :active {
+      scale: none;
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .appearance dialog::backdrop {
+      backdrop-filter: none;
+    }
   }
 }

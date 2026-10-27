@@ -1,12 +1,17 @@
 "use client";
 
-import { IconRefresh } from "../../quiet-icons";
-import { SectionCard } from "../../ui";
+import type { CSSProperties } from "react";
+import { IconLock, IconRefresh, IconSend } from "../../quiet-icons";
 import { useT } from "../../../lib/i18n";
+import { cn } from "../../../lib/utils";
 import type { DebateDraftRequest, DebateLLMDefaults } from "../../../lib/api";
-import styles from "./llm-params-card.module.css";
-import rulesetStyles from "./ruleset-editor.module.css";
-import sectionStyles from "./create-section.module.css";
+import {
+  CREATE_SUB_DEBATE,
+  CREATE_SUB_VOICE,
+  CREATE_TEXTAREA,
+  DEBATE_BUTTON,
+} from "../debate-chrome";
+import { CreateCard } from "./create-card";
 
 export type LLMParamSpec = DebateLLMDefaults["params"][number];
 export type LLMParamName = LLMParamSpec["name"];
@@ -148,6 +153,59 @@ function sliderBounds(spec: LLMParamSpec): { min: number; max: number } {
   return { min: Number(min.toFixed(4)), max: Number(max.toFixed(4)) };
 }
 
+/* F `.create .prow` and its controls. */
+const ROW =
+  "grid grid-cols-[170px_1fr_36px] items-center gap-3 border-0 border-t-2 border-dashed border-[#11111122] px-1 py-[9px] first:border-t-0 max-[600px]:grid-cols-[1fr_36px] max-[600px]:gap-2";
+const VOICE_ROW = "grid-cols-[110px_1fr_0]";
+const LABEL = "flex min-w-0 items-center gap-1.5";
+const NAME = "font-body text-[13px] leading-[normal] font-bold";
+const HELP_BUTTON =
+  "m-0 box-border grid size-[18px] flex-none cursor-help place-items-center rounded-full border-2 border-[#111] bg-[#FFE14D] p-0 font-body text-[10px] leading-none font-extrabold text-[#111] shadow-none";
+const LOCK =
+  "box-border inline-grid size-5 flex-none place-items-center rounded-full border-2 border-[#111] bg-[#EDE9FE] text-[#111]";
+const CONTROL =
+  "flex min-w-0 items-center gap-3 max-[600px]:col-span-full max-[600px]:row-start-2";
+const OMIT_CELL = "max-[600px]:col-start-2 max-[600px]:row-start-1";
+const NUMBER =
+  "box-border h-auto min-h-0 w-[84px] min-w-0 flex-none rounded-full border-[2.5px] border-[#111] bg-white px-2 py-1.5 text-center font-body text-[13px] leading-[normal] font-semibold text-[#111] shadow-none [appearance:textfield] disabled:opacity-100 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
+const INTEGER = "w-[140px]";
+const SLIDER =
+  "relative m-0 box-border h-2.5 min-h-0 min-w-0 flex-1 cursor-pointer appearance-none rounded-full border-2 border-[#111] bg-[linear-gradient(90deg,#FF4D8D_var(--fill),#fff_0)] p-0 disabled:cursor-default [&::-moz-range-thumb]:box-border [&::-moz-range-thumb]:size-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-[3px] [&::-moz-range-thumb]:border-[#111] [&::-moz-range-thumb]:bg-white [&::-webkit-slider-thumb]:box-border [&::-webkit-slider-thumb]:size-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-[#111] [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_2px_0_#111]";
+const SWITCH =
+  "relative m-0 box-border h-6 w-11 flex-none cursor-pointer appearance-none rounded-full border-[2.5px] border-[#111] bg-white p-0 before:absolute before:top-0.5 before:left-0.5 before:size-4 before:rounded-full before:bg-[#111] before:content-[''] checked:bg-[#FF4D8D] checked:before:left-[19px] disabled:cursor-default";
+const OMIT =
+  "peer absolute inset-0 m-0 box-border cursor-pointer appearance-none rounded-full border-[2.5px] border-[#111] bg-white shadow-[0_2px_0_#111] checked:translate-y-[2px] checked:bg-[#FFE4E4] checked:shadow-none disabled:cursor-default";
+
+function fillPercent(value: number, min: number, max: number): string {
+  if (!(max > min)) return "0%";
+  const pct = ((value - min) / (max - min)) * 100;
+  return `${Math.min(100, Math.max(0, pct))}%`;
+}
+
+/** The "?" whose shared ui-guide tooltip carries the meaning and any note. */
+function HelpButton({
+  name,
+  help,
+  extra,
+}: {
+  name: string;
+  help: string;
+  extra: string[];
+}) {
+  const text = [help, ...extra].join("\n");
+  return (
+    <button
+      type="button"
+      className={HELP_BUTTON}
+      aria-label={`${name}: ${help}`}
+      data-ui-guide="debate.llmParam"
+      data-ui-guide-text={text}
+    >
+      ?
+    </button>
+  );
+}
+
 export function LlmParamsCard({
   specs,
   values,
@@ -168,168 +226,221 @@ export function LlmParamsCard({
   onReset: () => void;
 }) {
   const t = useT();
+  const hasVoice = Boolean(voiceValues && voiceSpecs.length > 0);
   return (
-    <SectionCard
-      title={t("debateParamsTitle")}
-      className={`${rulesetStyles.card} ${sectionStyles.section}`}
-      guide="debate.llmParams"
-      action={
-        <div className={rulesetStyles.actions}>
-          <button
-            type="button"
-            className={`${rulesetStyles.action} ${rulesetStyles.iconAction}`}
-            disabled={disabled}
-            aria-label={t("debateParamsReset")}
-            data-ui-guide="debate.llmParamsReset"
-            onClick={onReset}
-          >
-            <IconRefresh />
-          </button>
-        </div>
-      }
-    >
-      <div id={LLM_PARAMS_ANCHOR} className={styles.rows}>
-        {specs.map((spec) => {
-          const state = values[spec.name];
-          if (!state) return null;
-          const off = disabled || !state.send;
-          const help = HELP[spec.name].join("\n");
-          return (
-            <div key={spec.name} className={styles.row} data-param={spec.name}>
-              <div className={styles.label}>
-                <span className={styles.name}>{spec.name}</span>
-                <button
-                  type="button"
-                  className={styles.help}
-                  aria-label={`${spec.name}: ${help}`}
-                  data-ui-guide="debate.llmParam"
-                  data-ui-guide-text={help}
-                >
-                  ?
-                </button>
-                {!spec.sent ? (
-                  <span className={styles.note}>
-                    {t("debateParamsNeverSent")}
-                  </span>
-                ) : null}
-              </div>
-              <div className={styles.control}>
-                {spec.kind === "bool" ? (
-                  <label className={styles.switch}>
-                    <input
-                      type="checkbox"
-                      role="switch"
-                      aria-label={spec.name}
-                      checked={Boolean(state.value)}
-                      disabled={off}
-                      onChange={(event) =>
-                        onChange(spec.name, {
-                          ...state,
-                          value: event.target.checked,
-                        })
-                      }
-                    />
-                    <span>
-                      {state.value ? t("debateParamsOn") : t("debateParamsOff")}
-                    </span>
-                  </label>
-                ) : spec.kind === "int" ? (
-                  <input
-                    type="number"
-                    className={`${styles.number} ${styles.integer}`}
-                    aria-label={spec.name}
-                    min={spec.minimum ?? undefined}
-                    max={spec.maximum ?? undefined}
-                    step={1}
-                    placeholder={t("debateParamsEmpty")}
-                    value={state.value === null ? "" : String(state.value)}
-                    disabled={disabled}
-                    onChange={(event) => {
-                      const raw = event.target.value.trim();
-                      // Empty means not sent.
-                      onChange(
-                        spec.name,
-                        raw === ""
-                          ? { value: null, send: false }
-                          : { value: Math.trunc(Number(raw)), send: true },
-                      );
-                    }}
-                  />
-                ) : (
-                  <>
-                    <input
-                      type="range"
-                      className={styles.slider}
-                      aria-label={`${spec.name} slider`}
-                      {...sliderBounds(spec)}
-                      step={spec.step ?? 0.01}
-                      value={Number(state.value ?? 0)}
-                      disabled={off}
-                      onChange={(event) =>
-                        onChange(spec.name, {
-                          ...state,
-                          value: Number(event.target.value),
-                        })
-                      }
-                    />
-                    <input
-                      type="number"
-                      className={styles.number}
-                      aria-label={spec.name}
-                      {...sliderBounds(spec)}
-                      step={spec.step ?? 0.01}
-                      value={state.value === null ? "" : String(state.value)}
-                      disabled={off}
-                      onChange={(event) =>
-                        onChange(spec.name, {
-                          ...state,
-                          value:
-                            event.target.value === ""
-                              ? null
-                              : Number(event.target.value),
-                        })
-                      }
-                    />
-                  </>
-                )}
-                {spec.kind !== "int" ? (
-                  <label className={styles.omit}>
-                    <input
-                      type="checkbox"
-                      checked={!state.send}
-                      disabled={disabled}
-                      onChange={(event) =>
-                        onChange(spec.name, {
-                          ...state,
-                          send: !event.target.checked,
-                        })
-                      }
-                    />
-                    <span>{t("debateParamsOmit")}</span>
-                  </label>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
+    <section className="mb-[22px]" aria-labelledby="debate-params-title">
+      <div className="mb-[18px] flex items-center gap-3">
+        <h2
+          id="debate-params-title"
+          className="m-0 inline-block -rotate-[1.5deg] rounded-full border-[2.5px] border-[#111] bg-white px-[22px] py-1 font-display text-[26px] leading-[normal] font-extrabold tracking-normal text-[#111] shadow-[4px_5px_0_#A3E635] outline-none max-[600px]:text-[22px]"
+          data-ui-guide="debate.llmParams"
+          tabIndex={0}
+        >
+          {t("debateParamsTitle")}
+        </h2>
+        <span
+          aria-hidden="true"
+          className="min-w-0 flex-1 border-t-[3px] border-dotted border-[#111]"
+        />
+        <button
+          type="button"
+          className={DEBATE_BUTTON}
+          disabled={disabled}
+          aria-label={t("debateParamsReset")}
+          data-ui-guide="debate.llmParamsReset"
+          onClick={onReset}
+        >
+          <IconRefresh size={15} />
+          <span aria-hidden="true">{t("debateParamsReset")}</span>
+        </button>
       </div>
-      {voiceValues && voiceSpecs.length > 0 ? (
-        <>
-          <h3 className={styles.group}>{t("debateParamsVoice")}</h3>
-          <div className={styles.rows} data-param-group="voice">
-            {voiceSpecs.map((spec) => (
-              <VoiceRow
-                key={spec.name}
-                spec={spec}
-                value={voiceValues[spec.name] ?? null}
-                disabled={disabled}
-                onChange={(next) => onVoiceChange?.(spec.name, next)}
-              />
-            ))}
+      <div
+        className={cn(
+          "grid items-start gap-5 max-[600px]:grid-cols-1 max-[600px]:gap-0",
+          hasVoice ? "grid-cols-[1.35fr_1fr]" : "grid-cols-1",
+        )}
+      >
+        <CreateCard
+          title={t("debateParamsDebate")}
+          headingLevel={3}
+          className={CREATE_SUB_DEBATE}
+        >
+          <div id={LLM_PARAMS_ANCHOR} className="mt-2.5">
+            {specs.map((spec) => {
+              const state = values[spec.name];
+              if (!state) return null;
+              const off = disabled || !state.send;
+              const help = HELP[spec.name].join("\n");
+              const extra = [
+                ...(!spec.sent ? [t("debateParamsNeverSent")] : []),
+                ...(spec.kind === "int" ? [t("debateParamsEmpty")] : []),
+              ];
+              const bounds = sliderBounds(spec);
+              return (
+                <div key={spec.name} className={ROW} data-param={spec.name}>
+                  <div className={LABEL}>
+                    <span className={NAME}>{spec.name}</span>
+                    <HelpButton name={spec.name} help={help} extra={extra} />
+                    {!spec.sent ? (
+                      <span
+                        className={LOCK}
+                        role="img"
+                        aria-label={t("debateParamsNeverSent")}
+                        title={t("debateParamsNeverSent")}
+                      >
+                        <IconLock size={12} />
+                      </span>
+                    ) : null}
+                  </div>
+                  <div
+                    className={cn(
+                      CONTROL,
+                      spec.kind !== "int" && !state.send && "opacity-40",
+                    )}
+                  >
+                    {spec.kind === "bool" ? (
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          role="switch"
+                          className={SWITCH}
+                          aria-label={spec.name}
+                          checked={Boolean(state.value)}
+                          disabled={off}
+                          onChange={(event) =>
+                            onChange(spec.name, {
+                              ...state,
+                              value: event.target.checked,
+                            })
+                          }
+                        />
+                        <span className="sr-only">
+                          {state.value
+                            ? t("debateParamsOn")
+                            : t("debateParamsOff")}
+                        </span>
+                      </label>
+                    ) : spec.kind === "int" ? (
+                      <input
+                        type="number"
+                        className={cn(NUMBER, INTEGER)}
+                        aria-label={spec.name}
+                        min={spec.minimum ?? undefined}
+                        max={spec.maximum ?? undefined}
+                        step={1}
+                        value={state.value === null ? "" : String(state.value)}
+                        disabled={disabled}
+                        onChange={(event) => {
+                          const raw = event.target.value.trim();
+                          // Empty means not sent.
+                          onChange(
+                            spec.name,
+                            raw === ""
+                              ? { value: null, send: false }
+                              : { value: Math.trunc(Number(raw)), send: true },
+                          );
+                        }}
+                      />
+                    ) : (
+                      <>
+                        <input
+                          type="range"
+                          className={SLIDER}
+                          style={
+                            {
+                              "--fill": fillPercent(
+                                Number(state.value ?? 0),
+                                bounds.min,
+                                bounds.max,
+                              ),
+                            } as CSSProperties
+                          }
+                          aria-label={`${spec.name} slider`}
+                          {...bounds}
+                          step={spec.step ?? 0.01}
+                          value={Number(state.value ?? 0)}
+                          disabled={off}
+                          onChange={(event) =>
+                            onChange(spec.name, {
+                              ...state,
+                              value: Number(event.target.value),
+                            })
+                          }
+                        />
+                        <input
+                          type="number"
+                          className={NUMBER}
+                          aria-label={spec.name}
+                          {...bounds}
+                          step={spec.step ?? 0.01}
+                          value={
+                            state.value === null ? "" : String(state.value)
+                          }
+                          disabled={off}
+                          onChange={(event) =>
+                            onChange(spec.name, {
+                              ...state,
+                              value:
+                                event.target.value === ""
+                                  ? null
+                                  : Number(event.target.value),
+                            })
+                          }
+                        />
+                      </>
+                    )}
+                  </div>
+                  <div className={OMIT_CELL}>
+                    {spec.kind !== "int" ? (
+                      <label
+                        className="relative grid size-8 place-items-center"
+                        title={t("debateParamsOmit")}
+                      >
+                        <input
+                          type="checkbox"
+                          className={OMIT}
+                          checked={!state.send}
+                          disabled={disabled}
+                          onChange={(event) =>
+                            onChange(spec.name, {
+                              ...state,
+                              send: !event.target.checked,
+                            })
+                          }
+                        />
+                        <span className="pointer-events-none relative text-[#111] peer-checked:translate-y-[2px] peer-checked:text-[#B91C1C]">
+                          <IconSend off={!state.send} />
+                        </span>
+                        <span className="sr-only">{t("debateParamsOmit")}</span>
+                      </label>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </>
-      ) : null}
-    </SectionCard>
+        </CreateCard>
+        {hasVoice && voiceValues ? (
+          <CreateCard
+            title={t("debateParamsVoice")}
+            headingLevel={3}
+            className={CREATE_SUB_VOICE}
+          >
+            <div className="mt-2.5" data-param-group="voice">
+              {voiceSpecs.map((spec) => (
+                <VoiceRow
+                  key={spec.name}
+                  spec={spec}
+                  value={voiceValues[spec.name] ?? null}
+                  disabled={disabled}
+                  onChange={(next) => onVoiceChange?.(spec.name, next)}
+                />
+              ))}
+            </div>
+          </CreateCard>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
@@ -352,28 +463,25 @@ function VoiceRow({
     const parsed = Number(trimmed);
     return integer ? Math.trunc(parsed) : parsed;
   };
+  const min = spec.minimum ?? 0;
+  const max = spec.maximum ?? 1;
   return (
-    <div className={styles.row} data-param={`voice.${spec.name}`}>
-      <div className={styles.label}>
-        <span className={styles.name}>{spec.name}</span>
-        <button
-          type="button"
-          className={styles.help}
-          aria-label={`${spec.name}: ${help}`}
-          data-ui-guide="debate.llmParam"
-          data-ui-guide-text={help}
-        >
-          ?
-        </button>
+    <div className={cn(ROW, VOICE_ROW)} data-param={`voice.${spec.name}`}>
+      <div className={LABEL}>
+        <span className={NAME}>{spec.name}</span>
+        <HelpButton
+          name={spec.name}
+          help={help}
+          extra={spec.kind === "float" ? [] : [t("debateParamsEmpty")]}
+        />
       </div>
-      <div className={styles.control}>
+      <div className={CONTROL}>
         {spec.kind === "text" ? (
           <textarea
-            className={styles.text}
+            className={cn(CREATE_TEXTAREA, "m-0 min-h-11 flex-1")}
             aria-label={spec.name}
             rows={2}
             maxLength={spec.max_length ?? undefined}
-            placeholder={t("debateParamsEmpty")}
             value={typeof value === "string" ? value : ""}
             disabled={disabled}
             onChange={(event) => onChange(event.target.value)}
@@ -381,12 +489,11 @@ function VoiceRow({
         ) : spec.kind === "int" ? (
           <input
             type="number"
-            className={`${styles.number} ${styles.integer}`}
+            className={cn(NUMBER, INTEGER)}
             aria-label={spec.name}
             min={spec.minimum ?? undefined}
             max={spec.maximum ?? undefined}
             step={1}
-            placeholder={t("debateParamsEmpty")}
             value={value === null ? "" : String(value)}
             disabled={disabled}
             onChange={(event) => onChange(numeric(event.target.value, true))}
@@ -395,10 +502,15 @@ function VoiceRow({
           <>
             <input
               type="range"
-              className={styles.slider}
+              className={SLIDER}
+              style={
+                {
+                  "--fill": fillPercent(Number(value ?? 1), min, max),
+                } as CSSProperties
+              }
               aria-label={`${spec.name} slider`}
-              min={spec.minimum ?? 0}
-              max={spec.maximum ?? 1}
+              min={min}
+              max={max}
               step={spec.step ?? 0.05}
               value={Number(value ?? 1)}
               disabled={disabled}
@@ -406,7 +518,7 @@ function VoiceRow({
             />
             <input
               type="number"
-              className={styles.number}
+              className={NUMBER}
               aria-label={spec.name}
               min={spec.minimum ?? undefined}
               max={spec.maximum ?? undefined}
@@ -419,6 +531,7 @@ function VoiceRow({
           </>
         )}
       </div>
+      <div className={OMIT_CELL} />
     </div>
   );
 }

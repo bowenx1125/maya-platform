@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { DismissibleAlert } from "../dismissible-alert";
 import { avatarOptionLabel, avatarTemplateLabel } from "../../lib/i18n";
 import { useT } from "../../lib/i18n";
-import styles from "./avatar.module.css";
 import { AvatarCanvas } from "./avatar-canvas";
 import {
   AVATAR_EYE_COLORS,
@@ -77,27 +76,27 @@ export function AvatarEditor({
   }
 
   return (
-    <section className={styles.editor} aria-label={t("avatarEditor")}>
+    <section className="grid min-w-0 gap-5" aria-label={t("avatarEditor")}>
       <AvatarCanvas
         config={value}
         state={localState}
         framing="full-body"
         fallbackLabel={displayFallbackLabel}
       />
-      <div className={styles.controlGrid}>
-        <div className={`${styles.control} ${styles.controlFull}`}>
-          <span className={styles.label}>{t("avatarTemplate")}</span>
+      <div className="grid min-w-0 grid-cols-2 gap-[0.85rem] max-[620px]:grid-cols-1">
+        <div className="grid min-w-0 gap-[0.42rem] col-span-full max-[620px]:col-auto">
+          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">
+            {t("avatarTemplate")}
+          </span>
           <div
-            className={styles.templateGrid}
+            className="grid min-w-0 grid-cols-3 gap-[0.55rem] max-[620px]:grid-cols-1"
             role="radiogroup"
             aria-label={t("avatarTemplate")}
           >
             {availableTemplates.map((template) => (
               <button
                 key={template.id}
-                className={`${styles.button} ${styles.templateButton} ${
-                  template.id === value.template_id ? styles.selected : ""
-                }`}
+                className={`min-h-11 min-w-0 cursor-pointer rounded-[0.7rem] border px-3 py-[0.55rem] text-left font-[inherit] text-(--workspace-label,#213a47) transition-[border-color,background-color] duration-150 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-[0.56] min-h-[4.1rem] [overflow-wrap:anywhere] ${template.id === value.template_id ? "border-(--workspace-selected,#2f7c78) bg-(--workspace-content,#eaf5f1) outline-none" : "border-[rgba(35,57,72,0.18)] bg-(--surface,#fff) hover:border-(--workspace-selected,#2f7c78) hover:bg-(--workspace-content,#eaf5f1) focus-visible:border-(--workspace-selected,#2f7c78) focus-visible:bg-(--workspace-content,#eaf5f1)"}`}
                 type="button"
                 role="radio"
                 aria-checked={template.id === value.template_id}
@@ -107,17 +106,19 @@ export function AvatarEditor({
                   if (nextConfig) onChange(nextConfig);
                 }}
               >
-                <span className={styles.templateName}>
+                <span className="block text-[0.82rem] leading-[1.2] font-bold">
                   {avatarTemplateLabel(template.id, template.name)}
                 </span>
               </button>
             ))}
           </div>
         </div>
-        <label className={styles.control}>
-          <span className={styles.label}>{t("avatarMaterialTheme")}</span>
+        <label className="grid min-w-0 gap-[0.42rem]">
+          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">
+            {t("avatarMaterialTheme")}
+          </span>
           <select
-            className={styles.select}
+            className="min-h-11 w-full min-w-0 rounded-[0.7rem] border border-[rgba(35,57,72,0.18)] bg-(--surface,#fff) px-[0.7rem] font-[inherit] text-(--workspace-label,#213a47) disabled:cursor-not-allowed disabled:opacity-[0.56]"
             value={value.material_theme}
             disabled={disabled}
             onChange={(event) => update("material_theme", event.target.value)}
@@ -129,10 +130,12 @@ export function AvatarEditor({
             ))}
           </select>
         </label>
-        <label className={styles.control}>
-          <span className={styles.label}>{t("avatarEyeColor")}</span>
+        <label className="grid min-w-0 gap-[0.42rem]">
+          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">
+            {t("avatarEyeColor")}
+          </span>
           <select
-            className={styles.select}
+            className="min-h-11 w-full min-w-0 rounded-[0.7rem] border border-[rgba(35,57,72,0.18)] bg-(--surface,#fff) px-[0.7rem] font-[inherit] text-(--workspace-label,#213a47) disabled:cursor-not-allowed disabled:opacity-[0.56]"
             value={eyeValue(value.eye_color)}
             disabled={disabled}
             onChange={(event) =>
@@ -151,10 +154,12 @@ export function AvatarEditor({
             ))}
           </select>
         </label>
-        <label className={styles.control}>
-          <span className={styles.label}>{t("avatarDefaultExpression")}</span>
+        <label className="grid min-w-0 gap-[0.42rem]">
+          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">
+            {t("avatarDefaultExpression")}
+          </span>
           <select
-            className={styles.select}
+            className="min-h-11 w-full min-w-0 rounded-[0.7rem] border border-[rgba(35,57,72,0.18)] bg-(--surface,#fff) px-[0.7rem] font-[inherit] text-(--workspace-label,#213a47) disabled:cursor-not-allowed disabled:opacity-[0.56]"
             value={value.default_expression}
             disabled={disabled}
             onChange={(event) =>
@@ -171,10 +176,12 @@ export function AvatarEditor({
             ))}
           </select>
         </label>
-        <label className={styles.control}>
-          <span className={styles.label}>{t("avatarExpressionStrength")}</span>
+        <label className="grid min-w-0 gap-[0.42rem]">
+          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">
+            {t("avatarExpressionStrength")}
+          </span>
           <select
-            className={styles.select}
+            className="min-h-11 w-full min-w-0 rounded-[0.7rem] border border-[rgba(35,57,72,0.18)] bg-(--surface,#fff) px-[0.7rem] font-[inherit] text-(--workspace-label,#213a47) disabled:cursor-not-allowed disabled:opacity-[0.56]"
             value={value.expression_strength}
             disabled={disabled}
             onChange={(event) =>
@@ -191,10 +198,12 @@ export function AvatarEditor({
             ))}
           </select>
         </label>
-        <label className={styles.control}>
-          <span className={styles.label}>{t("avatarHeadMotion")}</span>
+        <label className="grid min-w-0 gap-[0.42rem]">
+          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">
+            {t("avatarHeadMotion")}
+          </span>
           <select
-            className={styles.select}
+            className="min-h-11 w-full min-w-0 rounded-[0.7rem] border border-[rgba(35,57,72,0.18)] bg-(--surface,#fff) px-[0.7rem] font-[inherit] text-(--workspace-label,#213a47) disabled:cursor-not-allowed disabled:opacity-[0.56]"
             value={value.motion_style}
             disabled={disabled}
             onChange={(event) =>
@@ -208,19 +217,19 @@ export function AvatarEditor({
             ))}
           </select>
         </label>
-        <div className={`${styles.control} ${styles.controlFull}`}>
-          <span className={styles.label}>{t("avatarPreviewState")}</span>
+        <div className="grid min-w-0 gap-[0.42rem] col-span-full max-[620px]:col-auto">
+          <span className="text-[0.78rem] font-bold tracking-[0.02em] text-(--workspace-label,#38505d)">
+            {t("avatarPreviewState")}
+          </span>
           <div
-            className={styles.buttonRow}
+            className="flex min-w-0 flex-wrap gap-2"
             role="group"
             aria-label={t("avatarPreviewState")}
           >
             {AVATAR_STATES.map((state) => (
               <button
                 key={state}
-                className={`${styles.button} ${styles.stateButton} ${
-                  localState === state ? styles.selected : ""
-                }`}
+                className={`min-h-11 min-w-0 cursor-pointer rounded-[0.7rem] border px-3 py-[0.55rem] text-left font-[inherit] text-(--workspace-label,#213a47) transition-[border-color,background-color] duration-150 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-[0.56] flex-[1_1_6.5rem] text-center ${localState === state ? "border-(--workspace-selected,#2f7c78) bg-(--workspace-content,#eaf5f1) outline-none" : "border-[rgba(35,57,72,0.18)] bg-(--surface,#fff) hover:border-(--workspace-selected,#2f7c78) hover:bg-(--workspace-content,#eaf5f1) focus-visible:border-(--workspace-selected,#2f7c78) focus-visible:bg-(--workspace-content,#eaf5f1)"}`}
                 type="button"
                 disabled={disabled}
                 aria-pressed={localState === state}
@@ -234,7 +243,7 @@ export function AvatarEditor({
       </div>
       {errorMessage ? (
         <DismissibleAlert
-          className={`${styles.message} ${styles.error}`}
+          className="m-0 text-[0.82rem] leading-normal text-(--muted,#62626a) text-[#a54948]"
           resetKey={errorMessage}
         >
           {errorMessage}

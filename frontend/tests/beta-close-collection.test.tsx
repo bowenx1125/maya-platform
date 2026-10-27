@@ -45,10 +45,6 @@ vi.mock("../components/debate-beta/stage", () => ({
     openInteraction: "Interact",
     hideInteraction: "Hide",
     interactionOpening: "Opening…",
-    closeCollection: "Close collection",
-    closeCollectionConfirm:
-      "Close collection? Students will no longer be able to submit, and the debate will keep running.",
-    closingCollection: "Closing…",
   },
 }));
 vi.mock("../components/report", () => ({
@@ -279,7 +275,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("segments_v2 close collection while running", () => {
+describe("segments_v2 interaction dock (A1: no Close collection)", () => {
   it("toggles the join code with Hide and never closes the collection", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const api = pageApi(interaction("open"));
@@ -296,67 +292,14 @@ describe("segments_v2 close collection while running", () => {
     expect(confirm).not.toHaveBeenCalled();
   });
 
-  it("closes collection after confirming once and keeps the debate running", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("does not expose Close collection — collection stays open by default", async () => {
     const api = pageApi(interaction("open"));
     renderPage(api);
-    const close = await screen.findByRole("button", {
-      name: "Close collection",
-    });
-    expect(screen.queryByRole("button", { name: "Conclude" })).toBeNull();
-    fireEvent.click(close);
-    await waitFor(() => expect(api.closeInteraction).toHaveBeenCalledTimes(1));
-    expect(confirm).toHaveBeenCalledTimes(1);
-    expect(api.closeInteraction).toHaveBeenCalledWith(
-      debateId,
-      expect.objectContaining({ idempotency: expect.anything() }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: "Close collection" }),
-      ).toBeNull(),
-    );
-    expect(screen.queryByRole("button", { name: "Interact" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Hide" })).toBeNull();
-    expect(api.regenerateReport).not.toHaveBeenCalled();
-    expect(api.finishDebate).not.toHaveBeenCalled();
-  });
-
-  it("keeps Close collection available and shows the error when closing fails", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    const api = pageApi(interaction("open"));
-    api.closeInteraction.mockRejectedValue(new Error("Close failed"));
-    renderPage(api);
-    const close = await screen.findByRole("button", {
-      name: "Close collection",
-    });
-    fireEvent.click(close);
-    expect((await screen.findByRole("status")).textContent).toContain(
-      "Close failed",
-    );
-    expect(api.closeInteraction).toHaveBeenCalledTimes(1);
+    await screen.findByRole("button", { name: "Interact" });
     expect(
-      screen.getByRole("button", { name: "Close collection" }),
-    ).toBeTruthy();
-    expect(api.regenerateReport).not.toHaveBeenCalled();
-  });
-
-  it("does not call closeInteraction when the confirm is cancelled", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false);
-    const api = pageApi(interaction("open"));
-    renderPage(api);
-    const close = await screen.findByRole("button", {
-      name: "Close collection",
-    });
-    fireEvent.click(close);
-    await waitFor(() => expect(confirmCancelled(api)));
+      screen.queryByRole("button", { name: "Close collection" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Closing…" })).toBeNull();
     expect(api.closeInteraction).not.toHaveBeenCalled();
-    expect(
-      screen.getByRole("button", { name: "Close collection" }),
-    ).toBeTruthy();
   });
 });
-
-function confirmCancelled(api: ReturnType<typeof pageApi>): boolean {
-  return api.closeInteraction.mock.calls.length === 0;
-}

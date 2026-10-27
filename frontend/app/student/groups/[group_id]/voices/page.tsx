@@ -1,8 +1,7 @@
-import { AppShell } from "../../../../../components/app-shell";
-import { GroupWorkspace } from "../../../../../components/student-workspace";
-import { RouteGuard } from "../../../../../components/session-provider";
+import { redirect } from "next/navigation";
 
-export default async function VoicesPage({
+/** Old combined Studyform Voices pane → dedicated Voices page. */
+export default async function StudentGroupVoicesRedirect({
   params,
   searchParams,
 }: {
@@ -11,15 +10,7 @@ export default async function VoicesPage({
 }) {
   const { group_id: groupId } = await params;
   const query = await searchParams;
-  return (
-    <RouteGuard role="student">
-      <AppShell role="student">
-        <GroupWorkspace
-          groupId={groupId}
-          initialVoiceCreate={query.mode === "new"}
-          focusVoices
-        />
-      </AppShell>
-    </RouteGuard>
-  );
+  const next = new URLSearchParams({ group_id: groupId });
+  if (query.mode === "new") next.set("mode", "new");
+  redirect(`/student/voices?${next.toString()}`);
 }

@@ -8,8 +8,6 @@ import {
   type SegmentRagSegment,
   type SegmentRagSource,
 } from "../../evidence";
-import defaultStyles from "./debate-stage.module.css";
-import replyStyles from "./speech-stream.module.css";
 import { useT } from "../../../lib/i18n";
 import type { PlaybackStageLabels } from "./types";
 
@@ -35,7 +33,12 @@ type SpeechStreamProps = {
   turns: StreamTurn[];
   labels: PlaybackStageLabels;
   /** Slot letter and Agent name for a participant id. */
-  describe: (participantId: string) => { slot: string; name: string };
+  describe: (participantId: string) => {
+    slot: string;
+    name: string;
+    /** Speaker colour index (0, 1, 2…) for styles that tint each stub. */
+    tone?: number;
+  };
   /** Phase caption for a turn, or null when the RuleSet has none. */
   phaseOf: (turn: StreamTurn) => string | null;
   emptyMessage: string;
@@ -149,10 +152,12 @@ function StreamItem({
   const visibleSegmentChars = Math.ceil(segmentLength * (progress ?? 1));
   const who = describe(turn.participant_id);
   const phase = phaseOf(turn);
-  const audioUrl = turn.playback_resource?.playback_url ?? null;
-  const reviewRef = useRef<HTMLAudioElement | null>(null);
   return (
-    <article className={styles.streamItem}>
+    <article
+      className={styles.streamItem}
+      data-tone={who.tone}
+      data-live={progress !== null ? "" : undefined}
+    >
       <div className={styles.streamItemTop}>
         <span className={styles.streamWho}>
           {who.slot ? `${who.slot} · ` : ""}
@@ -162,25 +167,6 @@ function StreamItem({
           {labels.round} {turn.round_no}
           {phase ? ` · ${phase}` : ""}
         </span>
-        {audioUrl ? (
-          // Review playback uses its own element. The classroom audio is
-          // driven by server media commands and reports its cursor back;
-          // replaying a past speech through it would desynchronise that.
-          <button
-            aria-label={`${labels.replayTurn ?? "Replay"} — ${who.name}`}
-            className={styles.streamReplay}
-            onClick={() => {
-              const element = reviewRef.current;
-              if (!element) return;
-              element.src = audioUrl;
-              element.currentTime = 0;
-              void element.play().catch(() => undefined);
-            }}
-            type="button"
-          >
-            ↻
-          </button>
-        ) : null}
       </div>
       {segments.length > 0 ? (
         <div className={styles.streamParagraphs}>
@@ -196,10 +182,12 @@ function StreamItem({
               <Fragment key={`${turn.id}-segment-${index}`}>
                 {segment.reply_to && segment.reply_text ? (
                   <blockquote
-                    className={replyStyles.replyQuote}
+                    className="m-0 rounded-[12px] bg-(--surface-subtle) px-4 py-3 text-[0.95rem] leading-[1.6] text-(--ink) [overflow-wrap:anywhere] [&_p]:mt-1 [&_p]:mb-0 [&_p]:whitespace-pre-wrap"
                     aria-label={replyLabel}
                   >
-                    <span className={replyStyles.replyLabel}>{replyLabel}</span>
+                    <span className="text-[0.8rem] text-(--muted)">
+                      {replyLabel}
+                    </span>
                     <p>{segment.reply_text}</p>
                   </blockquote>
                 ) : null}
@@ -238,7 +226,6 @@ function StreamItem({
           </p>
         </>
       )}
-      {audioUrl ? <audio preload="none" ref={reviewRef} /> : null}
     </article>
   );
 }
@@ -252,7 +239,7 @@ function StreamItem({
  * the room looking in one place.
  */
 export function SpeechStream({
-  styles = defaultStyles,
+  styles = {},
   turns,
   labels,
   describe,
@@ -325,7 +312,7 @@ export function SpeechStream({
       {turns.length === 0 ? (
         <p className={styles.streamEmpty}>{emptyMessage}</p>
       ) : (
-        <div className={styles.streamList} ref={listRef}>
+        <div className={styles.streamList} data-stream-list="" ref={listRef}>
           {turns.map((turn) => (
             <StreamItem
               styles={styles}

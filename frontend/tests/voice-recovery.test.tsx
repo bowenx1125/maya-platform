@@ -14,7 +14,7 @@ import { PlatformApiError } from "../lib/api/platform";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({}),
-  usePathname: () => "/student/groups/group-a/voices",
+  usePathname: () => "/student/voices",
 }));
 
 const api = {

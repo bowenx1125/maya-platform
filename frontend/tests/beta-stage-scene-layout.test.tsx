@@ -1,11 +1,16 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ScholarSceneProps } from "../components/stage3d/scholar-scene";
 import { BetaDebateStage } from "../components/debate-beta/stage";
 import type { DebateDetail } from "../lib/api";
+import {
+  BETA_DOCK,
+  BETA_NOTICES,
+  BETA_PROVIDER_GATE_CARD,
+  BETA_TOPIC,
+  BETA_TRANSCRIPT_DRAWER,
+} from "../components/debate-beta/stage/beta-chrome";
 
 const scholarSceneProps: ScholarSceneProps[] = [];
 
@@ -54,10 +59,6 @@ const api = {
   resumeDebate: vi.fn(),
   freezeFinalInput: vi.fn(),
   retryDebatePreparation: vi.fn(),
-  listProviderDataCallManifests: vi.fn().mockResolvedValue({
-    scope_id: debateId,
-    items: [],
-  }),
   replayDebate: vi.fn(),
 } as unknown as Parameters<typeof BetaDebateStage>[0]["api"];
 
@@ -156,21 +157,18 @@ function renderStage(readOnly = true) {
 
 describe("BetaDebateStage scene layout", () => {
   it("keeps Transcript above the title and recovery actions above Transcript", () => {
-    const css = readFileSync(
-      resolve(
-        process.cwd(),
-        "components/debate-beta/stage/beta-stage.module.css",
-      ),
-      "utf8",
+    const layer = (classes: string) => {
+      const z = classes
+        .split(/\s+/)
+        .find((c) => /^z-(\[\d+\]|\d+|auto)$/.test(c));
+      return z === "z-auto" ? NaN : Number(z?.replace(/^z-\[?(\d+)\]?$/, "$1"));
+    };
+    expect(BETA_NOTICES.split(/\s+/)).toContain("z-auto");
+    expect(layer(BETA_TOPIC)).toBeLessThan(layer(BETA_TRANSCRIPT_DRAWER));
+    expect(layer(BETA_TRANSCRIPT_DRAWER)).toBeLessThan(layer(BETA_DOCK));
+    expect(layer(BETA_TRANSCRIPT_DRAWER)).toBeLessThan(
+      layer(BETA_PROVIDER_GATE_CARD),
     );
-    const rule = (name: string) =>
-      css.match(new RegExp("^\\." + name + " \\{([^}]+)\\}", "m"))?.[1] ?? "";
-    const layer = (name: string) =>
-      Number(rule(name).match(/z-index:\s*(\d+)/)?.[1]);
-    expect(rule("notices")).toMatch(/z-index:\s*auto/);
-    expect(layer("stageTopic")).toBeLessThan(layer("transcriptDrawer"));
-    expect(layer("transcriptDrawer")).toBeLessThan(layer("controlsDock"));
-    expect(layer("transcriptDrawer")).toBeLessThan(layer("providerGateCard"));
   });
 
   it("keeps the full-viewport courtyard scene", () => {
@@ -191,7 +189,7 @@ describe("BetaDebateStage scene layout", () => {
 
     const scene = screen.getByTestId("scholar-scene");
     const dock = scene.nextElementSibling as HTMLElement;
-    expect(dock.className).toContain("controlsDock");
+    expect(dock.getAttribute("role")).toBe("group");
     expect(screen.getByRole("button", { name: "Next" })).toBeTruthy();
     expect(dock.querySelector("article")).toBeNull();
     const toggle = screen.getByRole("button", { name: "Transcript" });
@@ -202,7 +200,7 @@ describe("BetaDebateStage scene layout", () => {
     expect(
       screen.getByRole("heading", { name: "Public Debate Completed" }),
     ).toBeTruthy();
-    const speeches = drawer.querySelectorAll('article[class*="streamItem"]');
+    const speeches = drawer.querySelectorAll("[data-stream-list] > article");
     expect(speeches).toHaveLength(1);
     expect(speeches[0].textContent).toContain("A full-bleed speech.");
     fireEvent.keyDown(drawer, { key: "Escape" });
