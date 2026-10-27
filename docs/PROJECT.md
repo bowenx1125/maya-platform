@@ -302,5 +302,5 @@ voice_params (clones; seed best-effort). Playback rate gone (0080):1.0.
 
 ## Oct27 Agent cards (37)
 
-Built, unaccepted: G cards, same 4-col width, Teams 3 columns; Teams empty =
+User-accepted: G cards, same 4-col width, Teams 3 columns; Teams empty =
 Agents empty ([changes](ui-proposals/agent-teams-scale/changes.md)).
