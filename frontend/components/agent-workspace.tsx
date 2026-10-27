@@ -42,6 +42,7 @@ import { useIdempotencyStore } from "../lib/idempotency";
 import { blockerLabel, statusLabel, type MessageKey } from "../lib/i18n";
 import { useT } from "../lib/i18n";
 import { cn } from "../lib/utils";
+import { PRESS_MOTION } from "./ui/button";
 import {
   AVATAR_TEMPLATE_DEFAULT_CONFIGS,
   AvatarEditor,
@@ -112,12 +113,11 @@ const AVATAR_CARD = cn(
   "[&_[class*=canvasFrame]]:border-0 [&_[class*=canvasFrame]]:bg-none [&_[class*=canvasFrame]]:bg-transparent [&_canvas]:drop-shadow-[0_8px_0_#1113]",
   "[&_[class*=controlGrid]]:rounded-[12px] [&_[class*=controlGrid]]:border-[3px] [&_[class*=controlGrid]]:border-[#111] [&_[class*=controlGrid]]:bg-white [&_[class*=controlGrid]]:p-3 [&_[class*=controlGrid]]:shadow-[4px_4px_0_#111]",
   "[&_select]:h-10 [&_select]:rounded-[8px] [&_select]:border-2 [&_select]:border-[#111] [&_select]:bg-white",
-  "[&_:is([class*=buttonRow],[class*=templateGrid])_button]:rounded-[10px] [&_:is([class*=buttonRow],[class*=templateGrid])_button]:border-2 [&_:is([class*=buttonRow],[class*=templateGrid])_button]:border-[#111] [&_:is([class*=buttonRow],[class*=templateGrid])_button]:bg-white [&_:is([class*=buttonRow],[class*=templateGrid])_button]:font-body [&_:is([class*=buttonRow],[class*=templateGrid])_button]:text-[13px] [&_:is([class*=buttonRow],[class*=templateGrid])_button]:font-bold [&_:is([class*=buttonRow],[class*=templateGrid])_button]:shadow-[3px_3px_0_#111]",
+  "[&_:is([class*=buttonRow],[class*=templateGrid])_button]:rounded-[10px] [&_:is([class*=buttonRow],[class*=templateGrid])_button]:border-2 [&_:is([class*=buttonRow],[class*=templateGrid])_button]:border-[#111] [&_:is([class*=buttonRow],[class*=templateGrid])_button]:bg-white [&_:is([class*=buttonRow],[class*=templateGrid])_button]:font-body [&_:is([class*=buttonRow],[class*=templateGrid])_button]:text-[13px] [&_:is([class*=buttonRow],[class*=templateGrid])_button]:font-bold [&_:is([class*=buttonRow],[class*=templateGrid])_button]:shadow-[0_6px_0_#111] [&_:is([class*=buttonRow],[class*=templateGrid])_button]:transition-[translate,box-shadow,background-color,color] [&_:is([class*=buttonRow],[class*=templateGrid])_button]:duration-150 [&_:is([class*=buttonRow],[class*=templateGrid])_button]:ease-[cubic-bezier(.2,.8,.2,1)] [&_:is([class*=buttonRow],[class*=templateGrid])_button]:hover:-translate-y-0.5 [&_:is([class*=buttonRow],[class*=templateGrid])_button]:active:translate-y-1.5 [&_:is([class*=buttonRow],[class*=templateGrid])_button]:active:shadow-none [&_:is([class*=buttonRow],[class*=templateGrid])_button]:active:duration-[80ms] [&_:is([class*=buttonRow],[class*=templateGrid])_button]:motion-reduce:transition-colors [&_:is([class*=buttonRow],[class*=templateGrid])_button]:motion-reduce:hover:translate-y-0 [&_:is([class*=buttonRow],[class*=templateGrid])_button]:motion-reduce:active:translate-y-0 [&_:is([class*=buttonRow],[class*=templateGrid])_button]:motion-reduce:active:shadow-[0_6px_0_#111]",
   "[&_:is([aria-pressed=true],[aria-checked=true])]:bg-[#A3E635]",
   "max-[767px]:[&_[class*=canvasFrame]]:max-h-[300px]",
 );
-const TEMPLATE_BUTTON =
-  "inline-flex h-11 box-border cursor-pointer items-center rounded-[10px] border-2 border-[#111] bg-white px-3.5 py-0 font-body text-sm font-bold text-[#111] no-underline shadow-[3px_3px_0_#111] disabled:cursor-not-allowed disabled:opacity-50";
+const TEMPLATE_BUTTON = `inline-flex h-11 box-border cursor-pointer items-center rounded-[10px] border-2 border-[#111] bg-white px-3.5 py-0 font-body text-sm font-bold text-[#111] no-underline disabled:cursor-not-allowed disabled:opacity-50 ${PRESS_MOTION}`;
 
 export function AgentOverview({ agentId }: { agentId: string }) {
   const t = useT();
