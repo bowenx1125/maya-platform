@@ -301,6 +301,6 @@ voice_params (clones; seed best-effort). Playback rate gone (0080):1.0.
 ## Oct27 UI and Oct28 prod
 
 #305: G Agent cards, Teams 3 columns. Sign-in 38 v3; refresh/logout uses LoadingCard.
-Prod frontend 1590befb (#310) built locally and loaded; no server build. Schema
+Prod frontend 2cc08942 (#312) built locally and loaded; no server build. Schema
 0080_drop_playback_rate. Backup maya-20261027T170559Z.dump.
-https://app.mayaform.net/ 200; /health marker 1590befb.
+https://app.mayaform.net/ 200; /health marker 2cc08942.
