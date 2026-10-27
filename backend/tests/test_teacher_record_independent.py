@@ -12,7 +12,11 @@ from uuid import uuid4
 
 from app.core.models import GroupMember
 from app.modules.learning.attempts import start_or_resume_attempt
-from app.modules.learning.models import AssessmentAttempt
+from app.modules.learning.models import (
+    AssessmentActivity,
+    AssessmentAttempt,
+    LearningBoundaryEvidence,
+)
 from app.modules.teams.models import CourseTeamPublication, Team, TeamVersion
 from app.modules.workspace.models import Conversation
 from app.seed import COURSE_ID, TEACHER_ID
@@ -231,6 +235,134 @@ def test_a_teacher_delete_of_an_answered_attempt_does_not_depend_on_fk_order(
     assert deleted.status_code == 204, deleted.text
     with database.session() as db:
         assert db.get(AssessmentAttempt, made["attempt"]) is None
+
+
+def test_teacher_delete_with_assessment_revision_boundary_evidence(
+    attempt_env: Any,  # noqa: F811
+) -> None:
+    """Production 2026-10-27: teacher Record delete purged learning_assessments
+    first and nulled learning_boundary_evidence.assessment_revision_id. Rows that
+    used an assessment revision as their only source then violated
+    ck_learning_boundary_evidence_source (both sources NULL) and the DELETE
+    returned 500. Evidence that names a deleted assessment revision must go with
+    it.
+    """
+
+    import hashlib
+    import json
+
+    from app.modules.learning.models import (
+        LearningAssessment,
+        LearningAssessmentRevision,
+        LearningBoundary,
+        LearningBoundaryRevision,
+    )
+
+    _app, database, settings, client = attempt_env
+    made = _attempt(database, settings, client)
+    evidence_id = str(uuid4())
+    with database.session() as db:
+        attempt = db.get(AssessmentAttempt, made["attempt"])
+        assert attempt is not None
+        activity = db.get(AssessmentActivity, attempt.activity_id)
+        assert activity is not None
+        now = datetime.now(UTC)
+        assessment_id = str(uuid4())
+        revision_id = str(uuid4())
+        content = json.dumps(
+            {"overall_feedback": "eval", "questions": [], "strengths": [], "next_steps": []},
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        boundary_id = str(uuid4())
+        boundary_revision_id = str(uuid4())
+        boundary_json = json.dumps(
+            {"summary": "boundary"}, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        db.add_all(
+            [
+                LearningAssessment(
+                    id=assessment_id,
+                    owner_user_id=attempt.actor_user_id,
+                    course_id=activity.course_id,
+                    created_conversation_id=made["conversation"],
+                    attempt_id=attempt.id,
+                    current_revision_seq=1,
+                    created_at=now,
+                    updated_at=now,
+                ),
+                LearningAssessmentRevision(
+                    id=revision_id,
+                    assessment_id=assessment_id,
+                    revision_seq=1,
+                    previous_revision_id=None,
+                    actor_user_id=attempt.actor_user_id,
+                    course_id=activity.course_id,
+                    conversation_id=made["conversation"],
+                    team_id=activity.team_id,
+                    team_version_id=activity.team_version_id,
+                    origin="published_course_team",
+                    chat_visibility="private",
+                    activity_id=activity.id,
+                    attempt_id=attempt.id,
+                    revision_source="model_evaluation",
+                    evaluator_team_member_id=activity.evaluator_team_member_id,
+                    evaluator_agent_version_id=activity.evaluator_agent_version_id,
+                    editor_team_member_id=None,
+                    editor_agent_version_id=None,
+                    source_model_call_id=str(uuid4()),
+                    source_tool_call_id=f"record-delete-{uuid4()}",
+                    content_json=content,
+                    content_hash=hashlib.sha256(content.encode()).hexdigest(),
+                    created_at=now,
+                ),
+                LearningBoundary(
+                    id=boundary_id,
+                    attempt_id=attempt.id,
+                    activity_id=activity.id,
+                    owner_user_id=attempt.actor_user_id,
+                    course_id=activity.course_id,
+                    conversation_id=made["conversation"],
+                    current_revision_seq=1,
+                    created_at=now,
+                    updated_at=now,
+                ),
+                LearningBoundaryRevision(
+                    id=boundary_revision_id,
+                    boundary_id=boundary_id,
+                    attempt_id=attempt.id,
+                    revision_seq=1,
+                    previous_revision_id=None,
+                    actor_user_id=attempt.actor_user_id,
+                    summarizer_team_member_id=activity.boundary_team_member_id,
+                    summarizer_agent_version_id=activity.boundary_agent_version_id,
+                    source_model_call_id=str(uuid4()),
+                    source_tool_call_id=f"record-delete-boundary-{uuid4()}",
+                    content_json=boundary_json,
+                    content_hash=hashlib.sha256(boundary_json.encode()).hexdigest(),
+                    created_at=now,
+                ),
+            ]
+        )
+        db.flush()
+        db.add(
+            LearningBoundaryEvidence(
+                id=evidence_id,
+                boundary_revision_id=boundary_revision_id,
+                attempt_id=attempt.id,
+                learning_record_id=None,
+                assessment_revision_id=revision_id,
+                created_at=now,
+            )
+        )
+        db.commit()
+    _token, csrf = _login(client, "maya")
+    deleted = client.delete(f"{TEACHER_URL}/{made['attempt']}", headers={"X-CSRF-Token": csrf})
+    assert deleted.status_code == 204, deleted.text
+    with database.session() as db:
+        assert db.get(AssessmentAttempt, made["attempt"]) is None
+        assert db.get(LearningBoundaryEvidence, evidence_id) is None
 
 
 def test_the_teacher_list_reads_a_fixed_number_of_queries(attempt_env: Any) -> None:  # noqa: F811

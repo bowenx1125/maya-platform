@@ -150,9 +150,11 @@ REFERENCE_RULES: dict[str, Rule] = {
     "learning_assessments.created_conversation_id->agent_conversations": "null",
     "learning_boundaries.attempt_id->assessment_attempts": "delete",
     "learning_boundaries.conversation_id->agent_conversations": "null",
-    "learning_boundary_evidence.assessment_revision_id->learning_assessment_revisions": "null",
+    # Evidence keeps exactly one source (XOR CHECK). Nulling a source on a
+    # staying row fails that CHECK; teacher Record delete must remove the row.
+    "learning_boundary_evidence.assessment_revision_id->learning_assessment_revisions": "delete",
     "learning_boundary_evidence.attempt_id,boundary_revision_id->learning_boundary_revisions": "delete",  # noqa: E501
-    "learning_boundary_evidence.learning_record_id->learning_records": "null",
+    "learning_boundary_evidence.learning_record_id->learning_records": "delete",
     "learning_boundary_revisions.attempt_id,boundary_id->learning_boundaries": "delete",
     "learning_boundary_revisions.boundary_id,previous_revision_id->learning_boundary_revisions": "delete",  # noqa: E501
     "learning_boundary_revisions.summarizer_agent_version_id->agent_versions": "null",
