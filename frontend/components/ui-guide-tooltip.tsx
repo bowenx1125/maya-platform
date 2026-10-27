@@ -23,6 +23,14 @@ function guideTarget(value: EventTarget | null): HTMLElement | null {
   return value instanceof Element ? value.closest<HTMLElement>(selector) : null;
 }
 
+/** Buttons/links keep data-ui-guide for tours/a11y; hover/touch tips are off. */
+const PRESSABLE_GUIDE =
+  'button, a[href], summary, [role="button"], [role="tab"], [role="menuitem"], [role="option"], input[type="button"], input[type="submit"], input[type="reset"], input[type="image"]';
+
+function isPressableGuide(target: HTMLElement): boolean {
+  return target.matches(PRESSABLE_GUIDE);
+}
+
 export function UiGuideTooltip() {
   const pathname = usePathname();
   const [active, setActive] = useState<ActiveGuide | null>(null);
@@ -117,6 +125,12 @@ export function UiGuideTooltip() {
         hide();
         return;
       }
+      // Pressables keep focus tips only — no pointer hover tip text.
+      if (isPressableGuide(target)) {
+        if (hovered && !focused && !touchPinned) hide();
+        else hovered = null;
+        return;
+      }
       if (focused !== target) {
         focused = null;
         focusedDescriptionElement = null;
@@ -156,6 +170,9 @@ export function UiGuideTooltip() {
       if (event.pointerType !== "touch") return;
       const target = guideTarget(event.target);
       if (!target) return;
+      // Pressables need an explicit data-ui-guide-touch opt-in for touch tips.
+      if (isPressableGuide(target) && target.dataset.uiGuideTouch !== "true")
+        return;
       if (touchPinned && described === target) {
         hide();
         return;

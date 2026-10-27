@@ -119,10 +119,13 @@ type SidebarGroup = {
   items: SidebarItem[];
 };
 
-const ITEM = `group/item relative flex min-h-11 items-center gap-2.5 rounded-arc-s border-[3px] px-2 py-1 font-body text-sm font-semibold text-ink no-underline ${PRESS_MOTION}`;
-const ITEM_IDLE = "border-transparent hover:bg-white/60";
+/** Sidebar nav keys match Logout / Meet Problems (border + surface + arc shadow). */
+const ITEM = `group/item relative flex min-h-12 items-center gap-2.5 rounded-arc-s border-[3px] px-3 py-2 font-body text-sm font-semibold text-ink no-underline ${PRESS_MOTION}`;
+const ITEM_IDLE = "border-border bg-surface shadow-arc-s";
 const ITEM_ACTIVE = "border-border bg-main shadow-arc-s";
-const ICON_ITEM = `relative grid size-11 place-items-center rounded-arc-s border-[3px] text-ink no-underline ${PRESS_MOTION}`;
+const ICON_ITEM = `relative grid size-12 place-items-center rounded-arc-s border-[3px] text-ink no-underline ${PRESS_MOTION}`;
+const ICON_ITEM_IDLE = ITEM_IDLE;
+const ICON_ITEM_ACTIVE = ITEM_ACTIVE;
 
 export function AppShell({
   children,
@@ -818,16 +821,12 @@ export function AppShell({
             aria-label={collapsed ? item.label : undefined}
             className={
               collapsed
-                ? `${ICON_ITEM} border-transparent`
-                : `${ITEM} ${ITEM_IDLE} cursor-not-allowed text-arc-muted hover:bg-transparent`
+                ? `${ICON_ITEM} ${ICON_ITEM_IDLE} opacity-55`
+                : `${ITEM} ${ITEM_IDLE} cursor-not-allowed text-arc-muted opacity-55`
             }
           >
-            <span className="opacity-55">
-              <WorkspaceIcon name={item.icon} size={18} />
-            </span>
-            {collapsed ? null : (
-              <span className="opacity-55">{item.label}</span>
-            )}
+            <WorkspaceIcon name={item.icon} size={18} />
+            {collapsed ? null : <span>{item.label}</span>}
             {isLive ? lamp(false, collapsed) : null}
           </span>
         </li>
@@ -842,7 +841,7 @@ export function AppShell({
           data-tour={tour}
           data-sidebar-item={item.key}
           data-lit={lit || undefined}
-          className={`${collapsed ? `${ICON_ITEM}` : ITEM} isolate ${lit ? ITEM_ACTIVE : collapsed ? "border-transparent hover:bg-white/60" : ITEM_IDLE}${current ? " is-active" : ""}`}
+          className={`${collapsed ? ICON_ITEM : ITEM} isolate ${lit ? (collapsed ? ICON_ITEM_ACTIVE : ITEM_ACTIVE) : collapsed ? ICON_ITEM_IDLE : ITEM_IDLE}${current ? " is-active" : ""}`}
         >
           {lit ? pill : null}
           <WorkspaceIcon name={item.icon} size={18} />
@@ -935,7 +934,7 @@ export function AppShell({
                   aria-label={collapsed ? t("appName") : undefined}
                   data-tour="home"
                   data-lit={mayaformLit || undefined}
-                  className={`isolate ${collapsed ? `${ICON_ITEM} ${mayaformLit ? "border-border bg-main shadow-arc-s" : "border-transparent"}` : mobile ? `${ITEM} w-fit justify-self-start border-transparent font-display text-lg font-extrabold` : `${ITEM} w-fit justify-self-start font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " is-active" : ""}`}
+                  className={`isolate ${collapsed ? `${ICON_ITEM} ${mayaformLit ? ICON_ITEM_ACTIVE : ICON_ITEM_IDLE}` : mobile ? `${ITEM} w-fit justify-self-start border-transparent font-display text-lg font-extrabold` : `${ITEM} w-fit justify-self-start font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " is-active" : ""}`}
                 >
                   {mayaformLit && !collapsed && !mobile ? pill : null}
                   <span
@@ -956,8 +955,8 @@ export function AppShell({
                       data-sidebar-group={group.key}
                       className={
                         collapsed
-                          ? `grid gap-1 rounded-arc-s border-[3px] border-border p-1 shadow-arc-s ${group.tile}`
-                          : "grid gap-1.5"
+                          ? `grid gap-1.5 rounded-arc-s border-[3px] border-border p-1.5 shadow-arc-s ${group.tile}`
+                          : "grid gap-2"
                       }
                     >
                       {collapsed ? null : (
@@ -976,8 +975,8 @@ export function AppShell({
                       <ul
                         className={
                           collapsed
-                            ? "m-0 grid list-none gap-1 p-0"
-                            : `m-0 ml-[9px] grid list-none gap-0.5 border-l-4 py-0 pr-0 pl-2 ${group.rail}`
+                            ? "m-0 grid list-none gap-1.5 p-0"
+                            : `m-0 ml-[9px] grid list-none gap-1.5 border-l-4 py-0 pr-0 pl-2 ${group.rail}`
                         }
                       >
                         {group.items.map((item, index) =>
@@ -990,26 +989,15 @@ export function AppShell({
                 {/* Back, Done and New all live in the page header, never here. */}
               </nav>
               <div
-                className={`mt-auto grid gap-2 ${collapsed ? "justify-items-center" : ""}`}
+                className={`mt-auto grid gap-2.5 ${collapsed ? "justify-items-center" : ""}`}
               >
                 {collapsed ? (
                   <a
                     href="mailto:t330034059@mail.bnbu.edu.cn"
-                    className={`${ICON_ITEM} border-border bg-surface shadow-arc-s`}
+                    className={`${ICON_ITEM} ${ICON_ITEM_IDLE}`}
+                    aria-label="Meet Problems? Send to t330034059@mail.bnbu.edu.cn"
                   >
                     <WorkspaceIcon name="mail" size={18} />
-                    <span className="sr-only">
-                      Meet Problems? Send to t330034059@mail.bnbu.edu.cn
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none invisible absolute bottom-0 left-[calc(100%+6px)] z-20 grid w-[190px] gap-[3px] rounded-[6px] border-2 border-border bg-surface px-2.5 py-2 text-left font-body text-xs text-ink shadow-[3px_3px_0_#111] group-hover/tip:visible group-focus-visible/tip:visible"
-                    >
-                      <span className="font-bold">Meet Problems?</span>
-                      <span className="break-all underline">
-                        Send to t330034059@mail.bnbu.edu.cn
-                      </span>
-                    </span>
                   </a>
                 ) : (
                   <p className="m-0 grid gap-[3px] rounded-[6px] border-2 border-border bg-surface px-2.5 py-2 font-body text-xs text-ink shadow-[3px_3px_0_#111]">
@@ -1023,7 +1011,7 @@ export function AppShell({
                   </p>
                 )}
                 <button
-                  className={`${collapsed ? `${ICON_ITEM}` : `${ITEM} w-full`} cursor-pointer border-border bg-surface text-left shadow-arc-s active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-wait disabled:opacity-60`}
+                  className={`${collapsed ? `${ICON_ITEM} ${ICON_ITEM_IDLE}` : `${ITEM} w-full ${ITEM_IDLE}`} cursor-pointer text-left disabled:cursor-wait disabled:opacity-60`}
                   type="button"
                   disabled={busy}
                   data-ui-guide="workspace.logout"

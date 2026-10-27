@@ -9,6 +9,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { cn } from "../../lib/utils";
+import { PRESS_MOTION } from "./button";
 import { placeNoticeTray, revealNoticeTray } from "../notice-tray";
 
 /**
@@ -139,8 +140,7 @@ export function KindSticker({
 }
 
 /** The white Retry pill (same shape as the pink "Show me" pill). */
-export const RETRY_PILL_CLASS =
-  "ml-auto inline-flex flex-none cursor-pointer items-center gap-[5px] self-center rounded-full border-2 border-border bg-white px-[11px] py-1 font-body text-[13px] font-bold whitespace-nowrap text-ink shadow-[3px_3px_0_#111] hover:bg-[#FFE4E4] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main";
+export const RETRY_PILL_CLASS = `ml-auto inline-flex flex-none cursor-pointer items-center gap-[5px] self-center rounded-full border-2 border-border bg-white px-[11px] py-1 font-body text-[13px] font-bold whitespace-nowrap text-ink hover:bg-[#FFE4E4] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main ${PRESS_MOTION}`;
 
 export function RetryPill({
   children,

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { DismissibleAlert } from "../dismissible-alert";
+import { PRESS_MOTION } from "../ui/button";
 import { avatarOptionLabel, avatarTemplateLabel } from "../../lib/i18n";
 import { useT } from "../../lib/i18n";
 import { AvatarCanvas } from "./avatar-canvas";
@@ -89,14 +90,14 @@ export function AvatarEditor({
             {t("avatarTemplate")}
           </span>
           <div
-            className="grid min-w-0 grid-cols-3 gap-[0.55rem] max-[620px]:grid-cols-1"
+            className="templateGrid grid min-w-0 grid-cols-3 gap-[0.55rem] max-[620px]:grid-cols-1"
             role="radiogroup"
             aria-label={t("avatarTemplate")}
           >
             {availableTemplates.map((template) => (
               <button
                 key={template.id}
-                className={`min-h-11 min-w-0 cursor-pointer rounded-[0.7rem] border px-3 py-[0.55rem] text-left font-[inherit] text-(--workspace-label,#213a47) transition-[border-color,background-color] duration-150 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-[0.56] min-h-[4.1rem] [overflow-wrap:anywhere] ${template.id === value.template_id ? "border-(--workspace-selected,#2f7c78) bg-(--workspace-content,#eaf5f1) outline-none" : "border-[rgba(35,57,72,0.18)] bg-(--surface,#fff) hover:border-(--workspace-selected,#2f7c78) hover:bg-(--workspace-content,#eaf5f1) focus-visible:border-(--workspace-selected,#2f7c78) focus-visible:bg-(--workspace-content,#eaf5f1)"}`}
+                className={`min-h-11 min-w-0 cursor-pointer rounded-[0.7rem] border px-3 py-[0.55rem] text-left font-[inherit] text-(--workspace-label,#213a47) focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-[0.56] min-h-[4.1rem] [overflow-wrap:anywhere] ${PRESS_MOTION} ${template.id === value.template_id ? "border-(--workspace-selected,#2f7c78) bg-(--workspace-content,#eaf5f1) outline-none" : "border-[rgba(35,57,72,0.18)] bg-(--surface,#fff) hover:border-(--workspace-selected,#2f7c78) hover:bg-(--workspace-content,#eaf5f1) focus-visible:border-(--workspace-selected,#2f7c78) focus-visible:bg-(--workspace-content,#eaf5f1)"}`}
                 type="button"
                 role="radio"
                 aria-checked={template.id === value.template_id}
