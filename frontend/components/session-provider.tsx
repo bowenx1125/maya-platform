@@ -1,6 +1,7 @@
 "use client";
 
 import { DismissibleAlert } from "./dismissible-alert";
+import { StatusScreen } from "./status-screen";
 import { LoadingCard, StickerBadge } from "./ui";
 import {
   clearLoginQueue,
@@ -10,7 +11,6 @@ import {
   type LoginQueueNotice,
   type SavedLoginQueue,
 } from "../lib/login-queue";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   createContext,
@@ -505,41 +505,35 @@ export function RouteGuard({
   }
   if (status === "anonymous") {
     return (
-      <main className="shell">
-        <section className="empty-card">
-          <span className="eyebrow">{t("appName")}</span>
-          <h1>{t("signInContinue")}</h1>
-          <p>{t("sessionRequired")}</p>
-          <Link
-            className="primary-action"
-            href={`/?next=${encodeURIComponent(pathname)}`}
-          >
-            {t("signIn")}
-          </Link>
-        </section>
-      </main>
+      <StatusScreen
+        eyebrow={t("appName")}
+        title={t("signInContinue")}
+        body={t("sessionRequired")}
+        action={t("signIn")}
+        href={`/?next=${encodeURIComponent(pathname)}`}
+        mascot="wave"
+        mood="attentive"
+      />
     );
   }
 
   if (!hasRole) {
     return (
-      <main className="shell">
-        <section className="empty-card" role="alert">
-          <span className="eyebrow">403</span>
-          <h1>{t("viewUnavailable")}</h1>
-          <p>{t("roleBoundary")}</p>
-          <Link
-            className="secondary-action"
-            href={
-              user?.courses.some((item) => item.role === "teacher")
-                ? "/teacher"
-                : "/student"
-            }
-          >
-            {t("returnWorkspace")}
-          </Link>
-        </section>
-      </main>
+      <StatusScreen
+        alert
+        eyebrow="403"
+        title={t("viewUnavailable")}
+        body={t("roleBoundary")}
+        action={t("returnWorkspace")}
+        href={
+          user?.courses.some((item) => item.role === "teacher")
+            ? "/teacher"
+            : "/student"
+        }
+        primary={false}
+        mascot="tablet"
+        mood="refused"
+      />
     );
   }
 
