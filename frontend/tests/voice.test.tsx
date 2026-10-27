@@ -364,9 +364,9 @@ describe("M08 voice library", () => {
     expect(screen.queryByText(/preview ready/i)).toBeNull();
     expect(screen.queryByText(/^failed$/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /^confirm$/i })).toBeNull();
-    // The status moves into a tooltip instead.
-    expect(failedRow.getAttribute("title")).toBeTruthy();
-    expect(readyRow.getAttribute("title")).toBeTruthy();
+    // Hover tips removed sitewide; status stays out of a pill (aria/status elsewhere).
+    expect(failedRow.getAttribute("title")).toBeNull();
+    expect(readyRow.getAttribute("title")).toBeNull();
     // Exactly Preview and Delete per row; a failed voice cannot be played.
     expect(
       within(readyRow)

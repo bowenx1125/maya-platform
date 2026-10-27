@@ -58,7 +58,8 @@ describe("Chat attachments", () => {
       "conversation-1",
     );
     const add = screen.getByRole("button", { name: "Attach a file" });
-    expect(add.getAttribute("title")).toContain("Only you can see it");
+    expect(add.getAttribute("title")).toBeNull();
+    expect(add.getAttribute("aria-label")).toBe("Attach a file");
     const file = new File(["{}"], "export.json", { type: "application/json" });
     const input = screen.getByTestId("chat-attachment-input");
     expect(input.getAttribute("accept")).toBe(".txt,.md,.json,.csv,.html,.htm");

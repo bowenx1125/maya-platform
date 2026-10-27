@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { cn } from "../lib/utils";
@@ -24,6 +24,28 @@ import { useT } from "../lib/i18n";
 import { IconClose, IconEdit } from "./quiet-icons";
 import { WorkspaceIcon } from "./workspace-icon";
 
+/** The pink pill jump button: icon + short label (Edit / Show me). */
+export const JUMP_BUTTON = `inline-flex flex-none cursor-pointer items-center gap-[5px] whitespace-nowrap rounded-full border-2 border-border bg-[#FF4D8D] px-[11px] py-1 font-body text-xs font-bold text-ink no-underline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main ${PRESS_MOTION}`;
+
+export function JumpArrow() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 12h13M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+/** One checklist line: dashed rule between lines; grey with a black strike once fixed. */
 /**
  * One line per Agent problem, with a pencil that opens that Agent's editor.
  * Owner decision (2026-10-24): every error names the Agent and its fix.
@@ -42,39 +64,44 @@ export function AgentIssueList({
 }) {
   const t = useT();
   return (
-    <ul className="agent-issue-list">
+    <ul className="m-0 list-none p-0">
       {issues.map((item) => {
         const key = issueKey(item);
         const busy = checking === key;
         return (
-          <li key={key} data-issue={item.issue}>
-            <span>
+          <li
+            key={key}
+            data-issue={item.issue}
+            className="group/line flex items-center gap-2.5 border-0 border-t-2 border-dashed border-[#11111833] py-[7px] first:border-t-0 max-[680px]:flex-wrap"
+          >
+            <span className="flex-1 max-[680px]:basis-[calc(100%-40px)]">
               {t(AGENT_ISSUE_MESSAGES[item.issue], { name: item.agent_name })}
             </span>
             {editHref ? (
               <Link
-                className="inline-button"
+                className={cn(JUMP_BUTTON, "max-[680px]:ml-[34px]")}
                 href={editHref(item.agent_id)}
                 aria-label={t("agentIssueEdit", { name: item.agent_name })}
-                title={t("agentIssueEdit", { name: item.agent_name })}
               >
                 <IconEdit />
+                {t("edit")}
               </Link>
             ) : null}
             {onCheck ? (
               <button
                 type="button"
-                className="inline-button"
+                className={cn(JUMP_BUTTON, "max-[680px]:ml-[34px]")}
                 disabled={Boolean(checking)}
+                aria-busy={busy || undefined}
                 aria-label={t("agentIssueCheck")}
-                title={t("agentIssueCheck")}
                 onClick={() => onCheck(item)}
               >
                 {busy ? (
                   <span className="spinner" aria-hidden="true" />
                 ) : (
-                  <WorkspaceIcon name="done" />
+                  <WorkspaceIcon name="done" size={14} />
                 )}
+                {t("done")}
               </button>
             ) : null}
           </li>
@@ -87,9 +114,8 @@ export function AgentIssueList({
 export type BarLine = { text: string; href: string | null };
 
 /**
- * The one bar every Agent hint and Debate form problem uses: the same look
- * whatever it says, pinned to the top of the page and brought into view when
- * its content changes, so a problem is never below the fold.
+ * Agent edit/create readiness problems, spoken by the mascot (U3 tray) —
+ * same shell as CreateChecklist. Per-line actions are icon + short label.
  */
 export function AgentHintBar({
   title,
@@ -113,46 +139,45 @@ export function AgentHintBar({
   onCheck?: (issue: AgentIssue) => void;
   checking?: string | null;
   onDismiss?: () => void;
-  /** Changes when a new problem arrives; the page scrolls back to the bar. */
+  /** Changes when a new problem arrives; the tray reveals again. */
   revealKey?: string | number;
 }) {
   const t = useT();
-  const bar = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (revealKey === undefined) return;
-    const element = bar.current;
-    if (!element || typeof window === "undefined") return;
-    if (element.getBoundingClientRect().top < 0) {
-      window.scrollTo?.({ top: 0, behavior: "smooth" });
-    }
-  }, [revealKey]);
+  const tray = useNoticeTray(true);
+  useRevealNotice(tray, revealKey ?? 0, alert);
+  if (!tray) return null;
   if (issues.length === 0 && lines.length === 0) return null;
-  return (
-    // A hint is a note screen readers hear without interruption; a problem
-    // that stops the page is an alert. The look is the same either way.
+  return createPortal(
     <div
-      ref={bar}
-      className="agent-hint-bar"
+      className={cn(
+        "notice agent-hint-bar agent-hint-bar-bubble relative! top-auto! m-0! block! w-full rounded-[18px] border-[3px]! border-border! pt-[13px]! pr-[46px]! pb-3! pl-4! text-left font-body text-[13px] leading-[1.45] font-medium text-ink shadow-[4px_4px_0_#111]! max-[680px]:pt-[11px]! max-[680px]:pr-10! max-[680px]:pb-2.5! max-[680px]:pl-3! max-[680px]:text-xs!",
+        alert ? "notice-error bg-err-bg" : "notice-warning bg-warn-bg",
+        "pointer-events-auto flex-none",
+        NOTICE_TAIL_CLASS,
+      )}
       role={alert ? "alert" : "note"}
       aria-live={alert ? undefined : "polite"}
     >
-      <strong>{title}</strong>
+      <strong className="mb-1.5 block text-sm font-bold">{title}</strong>
       {lines.length ? (
-        <ul className="agent-issue-list">
+        <ul className="m-0 list-none p-0">
           {lines.map((line) => {
-            const { text, href } =
+            const { text: lineText, href } =
               typeof line === "string" ? { text: line, href: null } : line;
             return (
-              <li key={text}>
-                <span>{text}</span>
+              <li
+                key={lineText}
+                className="flex items-center gap-2.5 border-0 border-t-2 border-dashed border-[#11111833] py-[7px] first:border-t-0 max-[680px]:flex-wrap"
+              >
+                <span className="flex-1">{lineText}</span>
                 {href ? (
                   <a
-                    className="inline-button"
+                    className={cn(JUMP_BUTTON, "max-[680px]:ml-[34px]")}
                     href={href}
                     aria-label={t("debateFieldEdit")}
-                    title={t("debateFieldEdit")}
                   >
                     <IconEdit />
+                    {t("edit")}
                   </a>
                 ) : null}
               </li>
@@ -171,14 +196,15 @@ export function AgentHintBar({
       {onDismiss ? (
         <button
           type="button"
-          className="notice-close"
+          className="notice-close absolute! top-[9px] right-2.5 m-0! grid size-[26px] cursor-pointer place-items-center rounded-full border-2 border-border bg-surface text-ink focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
           aria-label={t("noticeDismiss")}
           onClick={onDismiss}
         >
           <IconClose />
         </button>
       ) : null}
-    </div>
+    </div>,
+    tray,
   );
 }
 
@@ -231,28 +257,6 @@ export function ChecklistBadge({ entry }: { entry?: ChecklistEntry }) {
   return <StickerBadge n={entry.n} done={entry.done} />;
 }
 
-/** The pink pill jump button ("Show me" / "Edit Agent …") with its → arrow. */
-export const JUMP_BUTTON = `inline-flex flex-none cursor-pointer items-center gap-[5px] whitespace-nowrap rounded-full border-2 border-border bg-[#FF4D8D] px-[11px] py-1 font-body text-xs font-bold text-ink no-underline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main ${PRESS_MOTION}`;
-
-export function JumpArrow() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="16"
-      height="16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M5 12h13M13 6l6 6-6 6" />
-    </svg>
-  );
-}
-
-/** One checklist line: dashed rule between lines; grey with a black strike once fixed. */
 export function ChecklistLine({
   entry,
   children,
@@ -283,9 +287,8 @@ export function ChecklistLine({
       <span
         className={cn(
           "flex-1 max-[680px]:basis-[calc(100%-40px)]",
-          entry.done
-            ? "text-[#6B7280] line-through decoration-ink decoration-2"
-            : "decoration-[#FF4D8D] decoration-2 underline-offset-[3px] group-hover/line:underline",
+          entry.done &&
+            "text-[#6B7280] line-through decoration-ink decoration-2",
         )}
       >
         {entry.text}
@@ -340,19 +343,20 @@ export function CreateChecklist({
               <Link
                 className={cn(JUMP_BUTTON, "max-[680px]:ml-[34px]")}
                 href={entry.href}
-                aria-label={entry.editLabel}
+                aria-label={entry.editLabel ?? t("edit")}
               >
-                {entry.editLabel}
-                <JumpArrow />
+                <IconEdit />
+                {t("edit")}
               </Link>
             ) : entry.target ? (
               <button
                 type="button"
                 className={cn(JUMP_BUTTON, "max-[680px]:ml-[34px]")}
+                aria-label={t("debateShowMe")}
                 onClick={() => show(entry.target!)}
               >
-                {t("debateShowMe")}
                 <JumpArrow />
+                {t("debateShowMe")}
               </button>
             ) : null}
           </ChecklistLine>

@@ -1343,7 +1343,8 @@ describe("private Agent chat", () => {
     );
     await screen.findByText("A considered reply");
     const add = await screen.findByRole("button", { name: "Attach a file" });
-    expect(add.getAttribute("title")).toContain("Only you can see it");
+    expect(add.getAttribute("title")).toBeNull();
+    expect(add.getAttribute("aria-label")).toBe("Attach a file");
     // The "+" sits in the composer, next to Send.
     expect(add.closest("form")).toBe(
       screen.getByRole("textbox", { name: "Message" }).closest("form"),

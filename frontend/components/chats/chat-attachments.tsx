@@ -120,7 +120,6 @@ export function ChatAttachments({
         aria-label={t("chatAttach")}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? "chat-attachment-error" : undefined}
-        title={t("chatAttachHelp")}
         disabled={disabled || uploading}
         onClick={() => input.current?.click()}
       >

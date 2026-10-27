@@ -327,7 +327,7 @@ describe("ScholarScene long names", () => {
     expect(labels[2].style.getPropertyValue("--name-plate-right")).toBe("12px");
     labels.forEach((label, index) => {
       expect(label.textContent).toBe(names[index]);
-      expect(label.title).toBe(names[index]);
+      expect(label.getAttribute("aria-label")).toBe(names[index]);
     });
   });
 

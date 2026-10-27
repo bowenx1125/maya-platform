@@ -18,7 +18,7 @@ import {
   forgetVoiceList,
   voiceListIdentity,
 } from "../../lib/voice-list-cache";
-import { statusLabel, type MessageKey } from "../../lib/i18n";
+import { type MessageKey } from "../../lib/i18n";
 import { useSession } from "../session-provider";
 import { useT } from "../../lib/i18n";
 import {
@@ -678,7 +678,6 @@ export function VoiceLibrary({
         disabled={!file || controlsDisabled || !canEnroll}
         aria-busy={busy || undefined}
         aria-describedby={!file ? "voice-consent-hint" : undefined}
-        title={!file ? t("voiceSelectFileFirst") : undefined}
         onClick={() => void submitEnrollment()}
       >
         {busy ? <span className="spinner" aria-hidden="true" /> : null}
@@ -1005,12 +1004,6 @@ export function VoiceLibrary({
           const manageable = profile.can_manage !== false;
           const playable =
             profile.status === "preview_ready" || profile.status === "ready";
-          // No status pill: the row stays one line. A voice that is not ready
-          // explains itself in a tooltip instead.
-          const statusHint =
-            profile.status === "ready"
-              ? undefined
-              : statusLabel(profile.status);
           if (albumList) {
             return (
               <VoiceAlbumCard
@@ -1018,7 +1011,6 @@ export function VoiceLibrary({
                 index={profiles.indexOf(profile)}
                 profile={profile}
                 agents={voiceAgents[profile.id]}
-                title={statusHint}
                 name={nameField(profile, name, editing, manageable, true)}
                 footer={
                   <>
@@ -1043,7 +1035,6 @@ export function VoiceLibrary({
               data-selected={
                 arcadePicker && selectedId === profile.id ? "true" : undefined
               }
-              title={statusHint}
             >
               {editing ? (
                 nameField(profile, name, editing, manageable, false)
@@ -1141,7 +1132,6 @@ export function VoiceLibrary({
       )}
       type="button"
       aria-label={t("cancel")}
-      title={t("cancel")}
       data-ui-guide="voice.cancelCreate"
       disabled={controlsDisabled}
       onClick={cancelCreate}
