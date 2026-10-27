@@ -184,45 +184,6 @@ class FakeAuthorTransport:
         )
 
     def _teacher(self, method: str, path: str, payload: object | None) -> Response:
-        if method == "GET" and "/pending/agent-versions/" in path:
-            version_id = path.rsplit("/", 1)[-1]
-            return Response(
-                200,
-                {
-                    "agent_version_id": version_id,
-                    "items": [
-                        {
-                            "manifest_hash": MANIFEST_HASH,
-                            "confirmation_revision": 9,
-                            "confirmed": False,
-                        }
-                    ],
-                },
-            )
-        if method == "GET" and path.startswith("/api/v1/provider/data-call/disclosure?"):
-            return Response(
-                200,
-                {
-                    "manifest_hash": MANIFEST_HASH,
-                    "policy_hash": POLICY_HASH,
-                    "confirmation_revision": 9,
-                },
-            )
-        if method == "POST" and path.endswith("/disclosure/confirm"):
-            assert isinstance(payload, dict)
-            assert payload == {
-                "manifest_hash": MANIFEST_HASH,
-                "policy_hash": POLICY_HASH,
-                "expected_revision": 9,
-            }
-            return Response(
-                200,
-                {
-                    "manifest_hash": MANIFEST_HASH,
-                    "policy_hash": POLICY_HASH,
-                    "confirmation_revision": 9,
-                },
-            )
         raise AssertionError(f"unexpected teacher request: {method} {path}")
 
 
@@ -310,29 +271,23 @@ def test_authoring_creates_unique_v2_personas_and_uses_live_revisions() -> None:
     )
 
 
-def test_provider_confirmation_is_exact_and_preflight_only() -> None:
+def test_provider_confirmation_failure_has_no_teacher_http_fallback() -> None:
     student = FakeAuthorTransport(require_teacher_confirmation=True)
     teacher = FakeAuthorTransport(role="teacher")
-    spec = SimpleNamespace(session_id="fresh-01-2x2-en", agent_count=2)
 
-    result = author_session_agents(
-        spec,
-        student,
-        teacher=teacher,
-        group_id=GROUP_ID,
-        corpus=CORPUS,
-    )
+    with pytest.raises(AuthoringFailure) as raised:
+        author_session_agents(
+            SimpleNamespace(session_id="fresh-01-2x2-en", agent_count=2),
+            student,
+            teacher=teacher,
+            group_id=GROUP_ID,
+            corpus=CORPUS,
+        )
 
-    stages = [step["stage"] for step in result["steps"]]
-    assert "slot_1.provider_pending" in stages
-    assert "slot_1.provider_disclosure" in stages
-    assert "slot_1.provider_disclosure_confirm" in stages
-    assert "slot_1.publish_after_confirmation" in stages
-    assert len([event for event in student.calls if event["path"].endswith("/publish")]) == 4
-    assert len([event for event in teacher.calls if event["method"] == "POST"]) == 2
-    assert len(_mutation_keys(student)) == 10
-    assert len(_mutation_keys(teacher)) == 2
-    assert len(set(_mutation_keys(student) + _mutation_keys(teacher))) == 12
+    assert raised.value.code == "provider_confirmation_required"
+    assert teacher.calls == []
+    assert len([path for path in _paths(student) if path.endswith("/publish")]) == 1
+    assert not any("provider/data-call" in path for path in _paths(student))
 
 
 @pytest.mark.parametrize(

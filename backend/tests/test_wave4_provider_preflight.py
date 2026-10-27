@@ -11,16 +11,13 @@ from uuid import uuid4
 
 import pytest
 from app.core.db import Database
-from app.core.errors import PlatformError, error_body, unauthenticated
 from app.core.models import Agent, AgentVersion, Course, CourseMember, ProviderOperation, User
-from app.modules.auth.dependencies import require_auth, require_authenticated_mutation
 from app.modules.provider_disclosure import (
     InMemoryProviderDisclosureStore,
     ProviderDataCallConfirmationRequestV1,
     ProviderDisclosureError,
     ProviderDisclosureService,
     SqlAlchemyProviderDisclosureStore,
-    router,
 )
 from app.providers.control import (
     FIXED_MODELS,
@@ -34,8 +31,6 @@ from app.providers.control import (
 )
 from app.providers.control_repository import ProviderRepository
 from app.seed import COURSE_ID, GROUP_DEMO_ID, TEACHER_ID
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -956,149 +951,6 @@ def test_sql_publication_manifest_listing_is_version_and_course_bound_without_op
         assert missing.value.code == "not_found"
 
 
-def _route_app(service: ProviderDisclosureService) -> FastAPI:
-    app = FastAPI()
-    app.state.provider_disclosure_service = service
-    app.include_router(router)
-
-    @app.exception_handler(PlatformError)
-    async def platform_error_handler(request: Request, exc: PlatformError) -> Any:
-        return JSONResponse(status_code=exc.status_code, content=error_body(request, exc))
-
-    return app
-
-
-def test_router_enforces_auth_and_teacher_boundary() -> None:
-    service, _store, policy, manifest = _service()
-    app = _route_app(service)
-
-    def missing_auth() -> Any:
-        raise unauthenticated()
-
-    app.dependency_overrides[require_auth] = missing_auth
-    with TestClient(app, raise_server_exceptions=False) as client:
-        response = client.get(
-            "/provider/data-call/disclosure",
-            params={"manifest_hash": manifest.manifest_hash},
-        )
-    assert response.status_code == 401
-
-    app.dependency_overrides[require_auth] = lambda: SimpleNamespace(
-        user=SimpleNamespace(id="student")
-    )
-    with TestClient(app, raise_server_exceptions=False) as client:
-        response = client.get(
-            "/provider/data-call/disclosure",
-            params={"manifest_hash": manifest.manifest_hash},
-        )
-    assert response.status_code == 403
-
-    app.dependency_overrides[require_auth] = lambda: SimpleNamespace(
-        user=SimpleNamespace(id="teacher")
-    )
-    app.dependency_overrides[require_authenticated_mutation] = lambda: SimpleNamespace(
-        user=SimpleNamespace(id="teacher")
-    )
-    with TestClient(app) as client:
-        disclosed = client.get(
-            "/provider/data-call/disclosure",
-            params={"manifest_hash": manifest.manifest_hash},
-        )
-        assert disclosed.status_code == 200
-        assert disclosed.json()["disclosure"]["supplier_display_name"] == (
-            "Alibaba Cloud Model Studio"
-        )
-        confirmed = client.post(
-            "/provider/data-call/disclosure/confirm",
-            json={
-                "policy_hash": policy.policy_hash,
-                "manifest_hash": manifest.manifest_hash,
-                "expected_revision": 1,
-            },
-        )
-        assert confirmed.status_code == 200, confirmed.text
-        assert confirmed.json()["confirmation_revision"] == 1
-
-
-def test_router_lists_only_teacher_visible_query_manifests() -> None:
-    policy = _policy()
-    manifest = _query_manifest(policy, scope_id="router-query-scope")
-    app = _route_app(ProviderDisclosureService(InMemoryProviderDisclosureStore(policy, manifest)))
-
-    app.dependency_overrides[require_auth] = lambda: SimpleNamespace(
-        user=SimpleNamespace(id="student")
-    )
-    with TestClient(app) as client:
-        forbidden = client.get(
-            "/provider/data-call/pending",
-            params={"scope_id": manifest.scope_id},
-        )
-    assert forbidden.status_code == 403
-
-    app.dependency_overrides[require_auth] = lambda: SimpleNamespace(
-        user=SimpleNamespace(id="teacher")
-    )
-    with TestClient(app) as client:
-        response = client.get(
-            "/provider/data-call/pending",
-            params={"scope_id": manifest.scope_id},
-        )
-    assert response.status_code == 200, response.text
-    assert response.json() == {
-        "scope_id": manifest.scope_id,
-        "items": [
-            {
-                "manifest_hash": manifest.manifest_hash,
-                "turn_id": None,
-                "confirmation_revision": 1,
-                "confirmed": False,
-            }
-        ],
-    }
-
-
-def test_router_lists_publication_manifests_by_agent_version() -> None:
-    policy = _policy()
-    agent_version_id = "agent-version-router-publication"
-    publication = _embedding_manifest(policy, operation_revision=2)
-    service = ProviderDisclosureService(
-        InMemoryProviderDisclosureStore(
-            policy,
-            _manifest(policy),
-            agent_version_id=agent_version_id,
-            publication_manifests=(publication,),
-        )
-    )
-    app = _route_app(service)
-
-    app.dependency_overrides[require_auth] = lambda: SimpleNamespace(
-        user=SimpleNamespace(id="student")
-    )
-    with TestClient(app) as client:
-        forbidden = client.get(f"/provider/data-call/pending/agent-versions/{agent_version_id}")
-    assert forbidden.status_code == 403
-
-    app.dependency_overrides[require_auth] = lambda: SimpleNamespace(
-        user=SimpleNamespace(id="teacher")
-    )
-    with TestClient(app) as client:
-        response = client.get(f"/provider/data-call/pending/agent-versions/{agent_version_id}")
-        assert response.status_code == 200, response.text
-        assert response.json() == {
-            "agent_version_id": agent_version_id,
-            "items": [
-                {
-                    "manifest_hash": publication.manifest_hash,
-                    "confirmation_revision": 2,
-                    "confirmed": False,
-                }
-            ],
-        }
-
-        missing = client.get("/provider/data-call/pending/agent-versions/agent-version-missing")
-    assert missing.status_code == 404
-
-
 def test_outbound_identity_tokens_withhold_user_ids_but_not_names(
     client: TestClient, database: Database
 ) -> None:
@@ -1141,8 +993,6 @@ def test_standing_consent_needs_both_flags_and_never_invents_a_confirmation() ->
     applies only when DEMO_MODE and DEMO_AUTO_CONFIRM_PROVIDER are both on, and
     a store that refuses the write still leaves the turn unconfirmed.
     """
-
-    from types import SimpleNamespace
 
     from app.modules.debates.playback.generation_adapter import _standing_provider_consent
 

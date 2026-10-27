@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
 import pytest
+from app.core.errors import PlatformError
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -47,6 +49,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from tests.conftest import login
+from tests.provider_confirm_helpers import (
+    chat_standing_disclosure,
+    confirm_disclosure,
+    confirm_team_standing,
+    preview_team_standing,
+)
 from tests.test_mayaform_team_conversations import (
     BOWEN_ID,
     COURSE_ID,
@@ -300,13 +308,9 @@ def test_custom_owner_confirms_own_current_resources_without_teacher_identity(
                 service.confirm(_request(manifest), actor_user_id=other)
         disclosed = service.disclose(BOWEN_ID, manifest_ref=manifest.manifest_hash)
         assert "PRIVATE_STUDENT_MESSAGE_CANARY" not in disclosed.model_dump_json()
-    _, csrf = login(client, "bowen")
-    response = client.post(
-        "/api/v1/provider/data-call/disclosure/confirm",
-        headers=_headers(csrf),
-        json=_request(manifest).model_dump(mode="json"),
-    )
-    assert response.status_code == 200, response.text
+        service.confirm(
+            _request(manifest), actor_user_id=BOWEN_ID, manifest_ref=manifest.manifest_hash
+        )
     with database.session() as db:
         confirmation = db.scalar(select(ProviderExportConfirmation))
         assert confirmation.manifest_hash == manifest.manifest_hash
@@ -416,12 +420,6 @@ def test_only_exact_publisher_can_confirm_team_member_and_browser_has_no_private
     _, csrf = login(client, "maya")
     assert client.get(f"/api/v1/conversations/{conversation_id}").status_code == 404
     assert client.get("/api/v1/conversations").json() == []
-    confirmed = client.post(
-        "/api/v1/provider/data-call/disclosure/confirm",
-        headers=_headers(csrf),
-        json=_request(manifest).model_dump(mode="json"),
-    )
-    assert confirmed.status_code == 200, confirmed.text
     with database.session() as db:
         assert db.get(TeamTurnResult, result_id).state == "pending"
         assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
@@ -573,56 +571,17 @@ def test_publisher_can_confirm_static_team_resources_once_without_student_chat_t
         "provider_operation": manifest.provider_operation,
         "policy_hash": manifest.policy_hash,
     }
-    _, teacher_csrf = login(client, "maya")
-    preview = client.post(
-        "/api/v1/provider/data-call/team-standing-grants/preview",
-        headers=_headers(teacher_csrf),
-        json=payload,
-    )
-    assert preview.status_code == 200, preview.text
-    reviewed = preview.json()
-    assert "provider_operation" not in reviewed
-    assert reviewed["team_version_id"] == team_version_id
-    assert reviewed["policy_hash"] == payload["policy_hash"]
-    assert "PRIVATE_STUDENT_MESSAGE_CANARY" not in preview.text
-    assert reviewed["member_count"] >= 2
-    assert reviewed["resource_hash"]
-    confirmation_payload = {
-        **payload,
-        "expected_resource_hash": reviewed["resource_hash"],
-        "expected_team_epoch": reviewed["team_epoch"],
-        "expected_publication_epoch": reviewed["publication_epoch"],
-    }
-    confirmation = client.post(
-        "/api/v1/provider/data-call/team-standing-grants/confirm",
-        headers=_headers(
-            teacher_csrf,
-            f"team-standing-{team_version_id}-{manifest.provider_operation}",
-        ),
-        json=confirmation_payload,
-    )
-    assert confirmation.status_code == 200, confirmation.text
-    assert "provider_operation" not in confirmation.json()
-    assert confirmation.json()["resource_hash"] == reviewed["resource_hash"]
-    assert "PRIVATE_STUDENT_MESSAGE_CANARY" not in confirmation.text
-    replay = client.post(
-        "/api/v1/provider/data-call/team-standing-grants/confirm",
-        headers=_headers(
-            teacher_csrf,
-            f"team-standing-{team_version_id}-{manifest.provider_operation}",
-        ),
-        json=confirmation_payload,
-    )
-    assert replay.status_code == 200, replay.text
-    assert replay.json() == confirmation.json()
-
-    _, student_csrf = login(client, "bowen")
-    denied = client.post(
-        "/api/v1/provider/data-call/team-standing-grants/preview",
-        headers=_headers(student_csrf),
-        json=payload,
-    )
-    assert denied.status_code == 404
+    plan = preview_team_standing(database, MAYA_ID, **payload)
+    assert plan.team_version_id == team_version_id
+    assert plan.policy_hash == payload["policy_hash"]
+    assert "PRIVATE_STUDENT_MESSAGE_CANARY" not in plan.resource_manifest_json
+    assert int(plan.safe_disclosure["member_count"]) >= 2
+    assert plan.resource_hash
+    grant_id = confirm_team_standing(database, MAYA_ID, plan=plan, **payload)
+    assert confirm_team_standing(database, MAYA_ID, plan=plan, **payload) == grant_id
+    with pytest.raises(PlatformError) as denied:
+        preview_team_standing(database, BOWEN_ID, **payload)
+    assert denied.value.status_code == 404
 
 
 @pytest.mark.parametrize("operation", ["llm_agent_chat", "embedding_query"])
@@ -667,21 +626,21 @@ def test_teacher_can_confirm_embedding_chat_policy_for_single_queries(
     result_id, _team_manifest, _document_id, _set_id = _prepared(
         client, database, settings, "embedding_query"
     )
-    _, teacher_csrf = login(client, "maya")
-    response = client.get(
-        "/api/v1/provider/data-call/chat-standing/disclosure",
-        headers=_headers(teacher_csrf),
-        params={"course_id": COURSE_ID, "provider_operation": "embedding_query"},
+    disclosure = chat_standing_disclosure(
+        database,
+        MAYA_ID,
+        course_id=COURSE_ID,
+        policy_hash=policy.policy_hash,
+        provider_operation="embedding_query",
     )
-    assert response.status_code == 200, response.text
-    disclosure = response.json()
+    text = json.dumps(disclosure)
     assert disclosure["policy_hash"] == policy.policy_hash
     assert disclosure["disclosure"]["outbound_field_classes"] == ["current_evidence_excerpt"]
     assert "Embed approved retrieval questions" in disclosure["disclosure"]["purpose"]
     assert "provider_operation" not in disclosure
-    assert result_id not in response.text
+    assert result_id not in text
     assert not any(
-        forbidden in response.text.lower()
+        forbidden in text.lower()
         for forbidden in (
             "private_student_message_canary",
             "turn_id",
@@ -703,16 +662,13 @@ def test_teacher_can_confirm_embedding_chat_policy_for_single_queries(
         assert manifest.agent_version_id is None
         assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
 
-    confirmation = client.post(
-        "/api/v1/provider/data-call/disclosure/confirm",
-        headers=_headers(teacher_csrf),
-        json={
-            "policy_hash": disclosure["policy_hash"],
-            "manifest_hash": disclosure["manifest_hash"],
-            "expected_revision": disclosure["confirmation_revision"],
-        },
+    confirm_disclosure(
+        database,
+        MAYA_ID,
+        policy_hash=disclosure["policy_hash"],
+        manifest_hash=disclosure["manifest_hash"],
+        expected_revision=disclosure["confirmation_revision"],
     )
-    assert confirmation.status_code == 200, confirmation.text
     with database.session() as db:
         course_grant = db.scalar(
             select(ChatProviderStandingGrant).where(
@@ -736,46 +692,12 @@ def test_teacher_can_confirm_embedding_chat_policy_for_single_queries(
         "provider_operation": "embedding_query",
         "policy_hash": policy.policy_hash,
     }
-    preview = client.post(
-        "/api/v1/provider/data-call/team-standing-grants/preview",
-        headers=_headers(teacher_csrf),
-        json=team_payload,
-    )
-    assert preview.status_code == 200, preview.text
-    reviewed = preview.json()
-    assert "provider_operation" not in reviewed
-    assert reviewed["policy_hash"] == policy.policy_hash
-    assert result_id not in preview.text
-    assert not any(
-        forbidden in preview.text.lower()
-        for forbidden in ("private_student_message_canary", "turn_id", "endpoint", "model_key")
-    )
-    confirmation_payload = {
-        **team_payload,
-        "expected_resource_hash": reviewed["resource_hash"],
-        "expected_team_epoch": reviewed["team_epoch"],
-        "expected_publication_epoch": reviewed["publication_epoch"],
-    }
-    confirmation = client.post(
-        "/api/v1/provider/data-call/team-standing-grants/confirm",
-        headers=_headers(teacher_csrf, f"team-standing-{team_version_id}-embedding_query"),
-        json=confirmation_payload,
-    )
-    assert confirmation.status_code == 200, confirmation.text
-    assert "provider_operation" not in confirmation.json()
-    assert confirmation.json()["resource_hash"] == reviewed["resource_hash"]
-    assert result_id not in confirmation.text
-    assert not any(
-        forbidden in confirmation.text.lower()
-        for forbidden in ("private_student_message_canary", "turn_id", "endpoint", "model_key")
-    )
-    replay = client.post(
-        "/api/v1/provider/data-call/team-standing-grants/confirm",
-        headers=_headers(teacher_csrf, f"team-standing-{team_version_id}-embedding_query"),
-        json=confirmation_payload,
-    )
-    assert replay.status_code == 200, replay.text
-    assert replay.json() == confirmation.json()
+    plan = preview_team_standing(database, MAYA_ID, **team_payload)
+    assert plan.policy_hash == policy.policy_hash
+    assert result_id not in plan.resource_manifest_json
+    assert "PRIVATE_STUDENT_MESSAGE_CANARY" not in plan.resource_manifest_json
+    grant_id = confirm_team_standing(database, MAYA_ID, plan=plan, **team_payload)
+    assert confirm_team_standing(database, MAYA_ID, plan=plan, **team_payload) == grant_id
     with database.session() as db:
         grant = db.scalar(
             select(TeamProviderStandingGrant).where(
@@ -785,7 +707,7 @@ def test_teacher_can_confirm_embedding_chat_policy_for_single_queries(
         assert grant is not None
         assert grant.provider_operation == "embedding_query"
         assert grant.policy_hash == policy.policy_hash
-        assert grant.resource_hash == reviewed["resource_hash"]
+        assert grant.resource_hash == plan.resource_hash
         assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
 
 

@@ -14,12 +14,11 @@ from uuid import uuid4
 
 import anyio
 import anyio.to_thread
-from fastapi import Depends, FastAPI, Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core import request_timing
@@ -52,7 +51,6 @@ from app.core.replica import (
 from app.modules.agents.router import router as agents_router
 from app.modules.auth.abuse import AuthAbuseLimiter
 from app.modules.auth.credentials import active_catalog_snapshot
-from app.modules.auth.dependencies import get_db
 from app.modules.auth.models import UserCredential
 from app.modules.auth.router import router as auth_router
 from app.modules.auth.service import bootstrap_demo_accounts
@@ -91,16 +89,6 @@ from app.modules.knowledge_sets.task_manager import KnowledgeGenerationTaskManag
 from app.modules.learning.finalizer import AssessmentFinalizer
 from app.modules.learning.router import router as learning_router
 from app.modules.org.router import router as org_router
-from app.modules.provider_disclosure.router import (
-    get_provider_disclosure_service,
-)
-from app.modules.provider_disclosure.router import (
-    router as provider_disclosure_router,
-)
-from app.modules.provider_disclosure.service import (
-    ProviderDisclosureService,
-    SqlAlchemyProviderDisclosureStore,
-)
 from app.modules.reports.real_provider import RealReportProvider
 from app.modules.reports.router import router as reports_router
 from app.modules.reports.service import (
@@ -605,13 +593,6 @@ def create_app(
 
     app.state.prepare_provider_settings = prepare_provider_settings
 
-    def request_provider_disclosure_service(
-        db: Session = Depends(get_db),
-    ) -> ProviderDisclosureService:
-        return ProviderDisclosureService(SqlAlchemyProviderDisclosureStore(db))
-
-    app.dependency_overrides[get_provider_disclosure_service] = request_provider_disclosure_service
-
     async def platform_error_response(request: Request, exc: PlatformError) -> JSONResponse:
         response = await platform_error_handler(request, exc)
         retry_after = exc.details.get("retry_after_seconds")
@@ -809,7 +790,6 @@ def create_app(
     app.include_router(debate_playback_router, prefix="/api/v1")
     app.include_router(interaction_router, prefix="/api/v1")
     app.include_router(reports_router, prefix="/api/v1")
-    app.include_router(provider_disclosure_router, prefix="/api/v1")
     app.include_router(chat_router, prefix="/api/v1")
     app.include_router(chat_attachments_router, prefix="/api/v1")
     app.include_router(chat_reports_router, prefix="/api/v1")
@@ -906,10 +886,6 @@ def create_app(
             "GeneratingReportRevision": ["english_markdown", "word_count", "safe_error_code"],
             "ReadyReportRevision": ["safe_error_code"],
             "FailedReportRevision": ["english_markdown", "word_count"],
-            "ProviderDataCallManifestSummaryV1": ["turn_id"],
-            "ProviderDataCallManifestListResponseV1": ["items"],
-            "ProviderDataCallDebateManifestListResponseV1": ["items"],
-            "ProviderDataCallPublicationManifestListResponseV1": ["items"],
         }
         for name, fields in required_output_fields.items():
             component = component_schemas.get(name)

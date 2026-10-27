@@ -449,60 +449,6 @@ class _KeyFactory:
         return f"{self.prefix}-s{slot + 1}-{safe_stage}-{uuid4().hex}"
 
 
-def _zero_provider_sends(
-    failure: AuthoringFailure, transport: SessionTransport
-) -> bool:
-    """Accept the exact preflight error only when no send marker is nonzero.
-
-    The public ``provider_confirmation_required`` route is raised before an
-    external request.  Some test/adaptor transports additionally expose a
-    safe count; if one is present, a nonzero value makes the flow fail closed.
-    """
-
-    containers: list[object] = [failure._response_data]
-    details = getattr(failure, "details", None)
-    if details is not None:
-        containers.append(details)
-    for key in (
-        "provider_send_count",
-        "charged_request_count",
-        "provider_attempt_count",
-        "provider_call_count",
-        "provider_calls",
-        "provider_request_count",
-        "external_request_count",
-    ):
-        value = getattr(transport, key, None)
-        if value is not None:
-            containers.append({key: value})
-    marker_names = {
-        "provider_send_count",
-        "provider_sends",
-        "send_count",
-        "sent_count",
-        "sent_requests",
-        "requests_sent",
-        "charged_request_count",
-        "charged_requests",
-        "provider_attempt_count",
-        "provider_attempts",
-        "provider_call_count",
-        "provider_calls",
-        "provider_request_count",
-        "external_request_count",
-    }
-    for container in containers:
-        if not isinstance(container, Mapping):
-            continue
-        for key in marker_names:
-            if key not in container:
-                continue
-            value = container[key]
-            if isinstance(value, bool) or not isinstance(value, int) or value != 0:
-                return False
-    return True
-
-
 class _Recorder:
     def __init__(self) -> None:
         self.steps: list[dict[str, object]] = []
@@ -607,118 +553,6 @@ def _published_response(
     return body, snapshot_id
 
 
-def _pending_manifest(value: object, expected_version_id: str) -> tuple[str, int]:
-    body = _mapping(value, "disclosure_pending_invalid")
-    owner = body.get("agent_version_id")
-    if (
-        owner is not None
-        and _required_id(owner, "disclosure_owner_invalid") != expected_version_id
-    ):
-        raise AuthoringFailure("disclosure_owner_mismatch")
-    items = body.get("items")
-    if not isinstance(items, list) or len(items) != 1:
-        raise AuthoringFailure("disclosure_pending_invalid")
-    item = _mapping(items[0], "disclosure_manifest_invalid")
-    if item.get("confirmed") is not False:
-        raise AuthoringFailure("disclosure_already_confirmed")
-    manifest = _required_sha(item.get("manifest_hash"), "manifest_hash_invalid")
-    revision = _revision(
-        item.get("confirmation_revision"), "disclosure_revision_invalid"
-    )
-    if revision < 1:
-        raise AuthoringFailure("disclosure_revision_invalid")
-    return manifest, revision
-
-
-def _disclosure(
-    value: object, expected_manifest: str, expected_revision: int
-) -> tuple[str, str, int]:
-    body = _mapping(value, "disclosure_response_invalid")
-    manifest = _required_sha(body.get("manifest_hash"), "manifest_hash_invalid")
-    policy = _required_sha(body.get("policy_hash"), "policy_hash_invalid")
-    revision = _revision(
-        body.get("confirmation_revision"), "disclosure_revision_invalid"
-    )
-    if manifest != expected_manifest or revision != expected_revision:
-        raise AuthoringFailure("disclosure_revision_mismatch")
-    return manifest, policy, revision
-
-
-def _confirmed_disclosure(
-    value: object, manifest: str, policy: str, revision: int
-) -> None:
-    body = _mapping(value, "disclosure_confirm_response_invalid")
-    if (
-        _required_sha(body.get("manifest_hash"), "manifest_hash_invalid") != manifest
-        or _required_sha(body.get("policy_hash"), "policy_hash_invalid") != policy
-        or _revision(body.get("confirmation_revision"), "disclosure_revision_invalid")
-        != revision
-    ):
-        raise AuthoringFailure("disclosure_confirmation_mismatch")
-
-
-def _teacher_confirmation(
-    recorder: _Recorder,
-    teacher: SessionTransport,
-    *,
-    version_id: str,
-    slot: int,
-    keys: _KeyFactory,
-) -> None:
-    pending = cast(
-        tuple[str, int],
-        recorder.run(
-            f"slot_{slot + 1}.provider_pending",
-            lambda: _pending_manifest(
-                _call(
-                    teacher,
-                    "GET",
-                    f"/api/v1/provider/data-call/pending/agent-versions/{version_id}",
-                    csrf=False,
-                ),
-                version_id,
-            ),
-        ),
-    )
-    manifest, pending_revision = pending
-    disclosed = cast(
-        tuple[str, str, int],
-        recorder.run(
-            f"slot_{slot + 1}.provider_disclosure",
-            lambda: _disclosure(
-                _call(
-                    teacher,
-                    "GET",
-                    f"/api/v1/provider/data-call/disclosure?manifest_hash={manifest}",
-                    csrf=False,
-                ),
-                manifest,
-                pending_revision,
-            ),
-        ),
-    )
-    manifest, policy, revision = disclosed
-    recorder.run(
-        f"slot_{slot + 1}.provider_disclosure_confirm",
-        lambda: _confirmed_disclosure(
-            _call(
-                teacher,
-                "POST",
-                "/api/v1/provider/data-call/disclosure/confirm",
-                payload={
-                    "policy_hash": policy,
-                    "manifest_hash": manifest,
-                    "expected_revision": revision,
-                },
-                idempotency_key=keys.new("provider-disclosure-confirm", slot),
-            ),
-            manifest,
-            policy,
-            revision,
-        ),
-    )
-
-
 def author_session_agents(
     spec: object,
     transport: SessionTransport | None = None,
@@ -763,7 +597,9 @@ def author_session_agents(
         if student_transport is not None
         else transport
     )
-    resolved_teacher = teacher if teacher is not None else teacher_transport
+    # Teacher transports are accepted for caller compatibility; publication
+    # auto-confirms, so no Teacher step remains.
+    del teacher, teacher_transport
     if resolved_student is None:
         raise AuthoringFailure("student_transport_required")
 
@@ -887,54 +723,12 @@ def author_session_agents(
                 expected_agent_id=agent_id,
             )
         except AuthoringFailure as error:
-            if (
-                error.code != "provider_confirmation_required"
-                or not _zero_provider_sends(error, resolved_student)
-            ):
-                failure = recorder.failure(
-                    f"slot_{slot_index + 1}.publish", publish_started, error
-                )
-                raise failure from None
-            recorder.success(
-                f"slot_{slot_index + 1}.publish",
-                publish_started,
-                status="provider_confirmation_required",
-            )
-            if resolved_teacher is None:
-                failure = AuthoringFailure("teacher_transport_required")
-                failure = recorder.failure(
-                    f"slot_{slot_index + 1}.provider_pending", time.monotonic(), failure
-                )
-                raise failure from None
-            _teacher_confirmation(
-                recorder,
-                resolved_teacher,
-                version_id=version_id,
-                slot=slot_index,
-                keys=keys,
-            )
-            republished = recorder.run(
-                f"slot_{slot_index + 1}.publish_after_confirmation",
-                lambda version_id=version_id, revision=revision, agent_id=agent_id, slot=slot_index: (
-                    _published_response(
-                        _call(
-                            resolved_student,
-                            "POST",
-                            f"/api/v1/agent-versions/{version_id}/publish",
-                            payload={"expected_revision": revision},
-                            idempotency_key=keys.new("publish-confirmed", slot),
-                        ),
-                        version_id,
-                        expected_agent_id=agent_id,
-                    )
-                ),
-            )
-            _published_body, snapshot_id = cast(
-                tuple[dict[str, object], str], republished
-            )
-        else:
-            recorder.success(f"slot_{slot_index + 1}.publish", publish_started)
-            _published_body, snapshot_id = first_publish
+            # Publication auto-confirms its exact Provider disclosure; there is
+            # no Teacher confirmation HTTP route to fall back to.
+            failure = recorder.failure(f"slot_{slot_index + 1}.publish", publish_started, error)
+            raise failure from None
+        recorder.success(f"slot_{slot_index + 1}.publish", publish_started)
+        _published_body, snapshot_id = first_publish
 
         agent_ids.append(agent_id)
         version_ids.append(version_id)

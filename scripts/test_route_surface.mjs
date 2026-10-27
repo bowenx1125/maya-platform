@@ -84,7 +84,8 @@ try {
   // Persona compile/confirm and voice confirm had no caller and are gone;
   // the Record attempt lifecycle-action route had no caller and is gone;
   // stopping a Chat turn had no caller and is gone (pause and resume stay).
-  if (platformOperationCount !== 161 || placeholderCount !== 0) {
+  // provider data-call/disclosure routes (eight) are gone with the provider API.
+  if (platformOperationCount !== 153 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );
