@@ -608,9 +608,12 @@ export const MASCOT_IDS: readonly MascotId[] = [
 export function MascotFigure({
   id,
   className,
+  mood = "idle",
 }: {
   id: MascotId;
   className?: string;
+  /** A held pose (sign-in mockups); the figure never animates on its own. */
+  mood?: AcademyMood;
 }) {
   const clipKey = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const scholar = SCHOLARS.find((item) => item.id === id) ?? SCHOLARS[3];
@@ -630,7 +633,7 @@ export function MascotFigure({
     >
       <Scholar
         scholar={scholar}
-        mood="idle"
+        mood={mood}
         pupilRef={() => undefined}
         still
         clipKey={`-${clipKey}`}

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useEffect,
   useMemo,
   useRef,
@@ -35,7 +36,14 @@ function groupOptionId(index: number) {
 /** Mirrors PASSWORD_MIN in the backend registration service. */
 const PASSWORD_MIN = 5;
 
-export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
+export function RegisterForm({
+  onCancel,
+  onStepChange,
+}: {
+  onCancel?: () => void;
+  /** The sign-in stage moves its picked card with the step. */
+  onStepChange?: (step: 1 | 2) => void;
+}) {
   const t = useT();
   const router = useRouter();
   const { api, register } = useSession();
@@ -54,6 +62,10 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
   const [activeIndex, setActiveIndex] = useState(-1);
   const listRef = useRef<HTMLUListElement | null>(null);
   const setMood = useSetAcademyMood();
+
+  useEffect(() => {
+    onStepChange?.(step);
+  }, [step, onStepChange]);
 
   useEffect(() => {
     if (!error) return;
@@ -207,10 +219,31 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
   return (
     <section className="login-panel" aria-labelledby="register-title">
       <h2 id="register-title">{t("registerTitle")}</h2>
-      <p className="academy-step" aria-live="polite">
-        {t("registerStepOf", { current: step, total: TOTAL_STEPS })} ·{" "}
-        {step === 1 ? t("registerStepAccount") : t("registerStepGroup")}
-      </p>
+      <div className="academy-steps">
+        {/* Step coins: the same count as the line under them, drawn. */}
+        <div className="academy-step-coins" aria-hidden="true">
+          {Array.from({ length: TOTAL_STEPS }, (_, index) => (
+            <Fragment key={index}>
+              {index ? <i /> : null}
+              <span
+                data-state={
+                  index + 1 < step
+                    ? "done"
+                    : index + 1 === step
+                      ? "current"
+                      : "todo"
+                }
+              >
+                {index + 1}
+              </span>
+            </Fragment>
+          ))}
+        </div>
+        <p className="academy-step" aria-live="polite">
+          {t("registerStepOf", { current: step, total: TOTAL_STEPS })} ·{" "}
+          {step === 1 ? t("registerStepAccount") : t("registerStepGroup")}
+        </p>
+      </div>
       {localError ? (
         <DismissibleAlert
           kind="field"
@@ -351,37 +384,46 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
                   required
                 />
                 {showGroupList ? (
-                  <ul
-                    className="academy-combo-list"
-                    id={GROUP_LIST_ID}
-                    ref={listRef}
-                    role="listbox"
-                    aria-label={t("registerSuggestions")}
-                    // Keeps the field focused through the click, so choosing a
-                    // row does not blur the list out from under the pointer.
-                    onMouseDown={(event) => event.preventDefault()}
-                  >
-                    {suggestions.map((group, index) => (
-                      <li
-                        className={
-                          index === activeIndex
-                            ? "academy-combo-option is-active"
-                            : "academy-combo-option"
-                        }
-                        key={group.name}
-                        id={groupOptionId(index)}
-                        role="option"
-                        aria-selected={index === activeIndex}
-                        onMouseEnter={() => setActiveIndex(index)}
-                        onClick={() => chooseGroup(group.name)}
-                      >
-                        <span>{group.name}</span>
-                        <small>
-                          {t("memberCountShort", { count: group.member_count })}
-                        </small>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="academy-combo-list">
+                    {/* The listbox is named by its aria-label; this is the
+                        same words for sighted readers. */}
+                    <p className="academy-combo-head" aria-hidden="true">
+                      {t("registerSuggestions")}
+                    </p>
+                    <ul
+                      className="academy-combo-options"
+                      id={GROUP_LIST_ID}
+                      ref={listRef}
+                      role="listbox"
+                      aria-label={t("registerSuggestions")}
+                      // Keeps the field focused through the click, so choosing a
+                      // row does not blur the list out from under the pointer.
+                      onMouseDown={(event) => event.preventDefault()}
+                    >
+                      {suggestions.map((group, index) => (
+                        <li
+                          className={
+                            index === activeIndex
+                              ? "academy-combo-option is-active"
+                              : "academy-combo-option"
+                          }
+                          key={group.name}
+                          id={groupOptionId(index)}
+                          role="option"
+                          aria-selected={index === activeIndex}
+                          onMouseEnter={() => setActiveIndex(index)}
+                          onClick={() => chooseGroup(group.name)}
+                        >
+                          <span>{group.name}</span>
+                          <small>
+                            {t("memberCountShort", {
+                              count: group.member_count,
+                            })}
+                          </small>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ) : null}
               </div>
               {groupName.trim() ? (
