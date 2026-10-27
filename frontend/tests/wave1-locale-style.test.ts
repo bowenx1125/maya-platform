@@ -93,7 +93,7 @@ describe("Wave 1A copy and V2 style boundary", () => {
     expect(css).toMatch(/font-family:\s*\n\s*Inter,/);
   });
 
-  it("keeps the display serif on the sign-in plate and workspace headings", () => {
+  it("keeps the display serif on workspace headings", () => {
     const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
     const theme = readFileSync(
       resolve(process.cwd(), "components/workspace-theme.module.css"),
@@ -115,12 +115,8 @@ describe("Wave 1A copy and V2 style boundary", () => {
         /(?<![\w-])serif\b/.test(rule),
     );
     expect(stray).toEqual([]);
-    expect(css).toMatch(
-      /\.academy-tagline h1\s*\{[\s\S]*?font-family:\s*var\(--display-serif\)/,
-    );
-    expect(css).toMatch(
-      /\.academy-welcome\s*\{[\s\S]*?font-family:\s*var\(--display-serif\)/,
-    );
+    // Sign-in moved to Arcade type (proposal 38 v3, approved 2026-10-27), so
+    // its tagline and welcome no longer carry the serif.
     expect(css).toMatch(
       /\.section-card-header h2\s*\{[\s\S]*?font-family:\s*var\(--display-serif\)/,
     );

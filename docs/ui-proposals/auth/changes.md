@@ -20,6 +20,16 @@ speech-bubble heading and step coins, and adds:
   the grey-blue rain panel, the cards scatter and the mascots frown and sweat
   (plus the U3 bubble).
 
+### Implemented
+
+`app/page.tsx` + `components/academy/sign-in-stage.tsx`; the forms keep their
+logic and are dressed by `.auth-arcade` in `app/globals.css`. Differences from the
+mockup, all visible in `v3/approved-vs-impl.png`: the refusal rain lasts the
+forms' existing 900 ms `refused` beat; the group list sits in the flow (Create
+account stays below it, the list scrolls past five rows); the cast gets an
+accurate label (`signInCastLabel`), since the cards flip rather than follow the
+cursor.
+
 ## v2: bold, game-like, mascots react to the form
 
 User feedback on v1: wanted more game feel, more youth and energy, bigger mascots

@@ -945,6 +945,8 @@ const enMessages = {
   passwordTooShort: "That password is too short. Use at least 5 characters.",
   registerConfirmPassword: "Confirm password",
   registerPasswordMismatch: "The two passwords do not match.",
+  signInCastLabel:
+    "Four scholars of the academy on character cards, who turn their cards face down while a password is typed.",
   academyMascotsLabel:
     "Four scholars of the academy, whose eyes follow the cursor and look away while a password is typed.",
   academyStageLabel: "The academy courtyard",

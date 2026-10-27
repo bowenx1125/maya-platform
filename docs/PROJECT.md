@@ -297,10 +297,10 @@ max_tokens, seed, thinking, timeout 120; DEBATE_TTS_MODEL. Unset = previous valu
 The create card starts from GET /courses/{id}/debate-llm-defaults; values freeze into
 rule_snapshot_json.llm_params (ruleset_contract_v3; null = not sent). The execution
 contract lives in default_rules/{zh,en}.md ({round}); pre-v3 Debates keep legacy.
-Voice: DEBATE_TTS_RATE 1.25 (0.5–2), _INSTRUCTION, _SEED (0–65535) freeze as
+Voice: DEBATE_TTS_RATE 1.25 (0.5–2), _INSTRUCTION, _SEED freeze as
 voice_params (clones; seed best-effort). Playback rate gone (0080):1.0.
 
-## Oct27 Agent cards (37)
+## Oct27 UI (#305, 38)
 
-User-accepted: G cards, same 4-col width, Teams 3 columns; Teams empty =
-Agents empty ([changes](ui-proposals/agent-teams-scale/changes.md)).
+#305: G Agent cards (4-col width), Teams 3 columns, Teams empty = Agents empty.
+Sign-in/register: accepted 38 v3 (cards react to fields; [auth](ui-proposals/auth)).

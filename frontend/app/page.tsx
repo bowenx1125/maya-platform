@@ -4,12 +4,11 @@ import { useState } from "react";
 
 import { AcademyIntro } from "../components/academy/intro";
 import { AcademyMoodProvider } from "../components/academy/mood";
-import { AcademyMascots } from "../components/academy/mascots";
 import {
-  AcademyBackdrop,
-  AcademyEmblem,
-  AcademyFrame,
-} from "../components/academy/scene";
+  Burst,
+  SignInBackdrop,
+  SignInStage,
+} from "../components/academy/sign-in-stage";
 import { useT } from "../lib/i18n";
 import { RegisterForm } from "../components/register-form";
 import { LoginForm } from "../components/session-provider";
@@ -17,39 +16,50 @@ import { LoginForm } from "../components/session-provider";
 export default function HomePage() {
   const t = useT();
   const [registering, setRegistering] = useState(false);
+  const [step, setStep] = useState(1);
   return (
     <AcademyMoodProvider>
       <AcademyIntro />
-      <main className="academy-shell">
-        <div className="academy-card">
-          <AcademyFrame />
-          <section
-            className="academy-stage"
-            aria-label={t("academyStageLabel")}
-          >
-            <AcademyBackdrop />
-            <AcademyMascots label={t("academyMascotsLabel")} />
-            <div className="academy-tagline">
-              <div className="eyebrow">{t("academyEyebrow")}</div>
-              <h1>{t("appName")}</h1>
+      <main className="auth-arcade relative min-h-screen overflow-hidden bg-[#FFF7CC] bg-[repeating-conic-gradient(from_0deg_at_30%_78%,#FFE14D_0_7deg,#FFF7CC_7deg_14deg)] text-[#111]">
+        <SignInBackdrop />
+        <div className="relative mx-auto grid min-h-screen max-w-[1440px] grid-cols-[1.15fr_1fr] max-[767px]:grid-cols-1">
+          {/* The picked card follows the registration step (2's "select"). */}
+          <SignInStage picked={registering ? step : 1} />
+          <section className="relative flex items-center justify-center px-12 py-14 max-[1100px]:px-8 max-[767px]:px-4 max-[767px]:pt-4 max-[767px]:pb-10">
+            <div className="relative w-full max-w-[470px]">
+              <Burst
+                size={160}
+                fill="#FF4D8D"
+                className="-right-14 -bottom-14 rotate-12 max-[767px]:hidden"
+              />
+              <div className="auth-card relative rotate-[2deg] rounded-[24px] border-[5px] border-[#111] bg-white px-9 pt-[92px] pb-9 shadow-[14px_14px_0_#111] max-[767px]:rotate-0 max-[767px]:px-5 max-[767px]:pt-20">
+                <span
+                  aria-hidden="true"
+                  className="absolute -top-4 left-10 h-8 w-28 -rotate-6 border-[3px] border-[#111] bg-[#67E8F9cc]"
+                />
+                <span
+                  aria-hidden="true"
+                  className="absolute -top-4 right-10 h-8 w-28 rotate-6 border-[3px] border-[#111] bg-[#FFE14Dcc]"
+                />
+                {/* The heading is the cast's speech bubble. */}
+                <div className="absolute -top-14 -left-14 max-[1100px]:-left-6 max-[767px]:-top-10 max-[767px]:-left-1">
+                  <h2 className="relative m-0 -rotate-[5deg] rounded-[28px] border-[5px] border-[#111] bg-[#FFE14D] px-7 py-3 font-display text-[46px] leading-none font-extrabold whitespace-nowrap shadow-[8px_8px_0_#111] after:absolute after:-bottom-[26px] after:left-10 after:h-0 after:w-0 after:border-t-[26px] after:border-r-[26px] after:border-t-[#111] after:border-r-transparent after:content-[''] max-[767px]:text-[32px]">
+                    {registering ? t("registerTitle") : t("academyWelcome")}
+                  </h2>
+                </div>
+                {registering ? (
+                  <RegisterForm
+                    onCancel={() => {
+                      setRegistering(false);
+                      setStep(1);
+                    }}
+                    onStepChange={setStep}
+                  />
+                ) : (
+                  <LoginForm onRegister={() => setRegistering(true)} />
+                )}
+              </div>
             </div>
-          </section>
-
-          <section className="academy-panel">
-            <AcademyEmblem />
-            <h2 className="academy-welcome">
-              {registering ? t("registerTitle") : t("academyWelcome")}
-            </h2>
-            <div className="academy-rule" aria-hidden="true">
-              <span />
-              <i />
-              <span />
-            </div>
-            {registering ? (
-              <RegisterForm onCancel={() => setRegistering(false)} />
-            ) : (
-              <LoginForm onRegister={() => setRegistering(true)} />
-            )}
           </section>
         </div>
       </main>
