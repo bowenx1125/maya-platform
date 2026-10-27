@@ -1,7 +1,7 @@
 "use client";
 
 import { DismissibleAlert } from "./dismissible-alert";
-import { StickerBadge } from "./ui";
+import { LoadingCard, StickerBadge } from "./ui";
 import {
   clearLoginQueue,
   loadLoginQueue,
@@ -474,9 +474,7 @@ export function RouteGuard({
   if (status === "loading" || (awaitingTeacherVisit && visitCheck !== "done")) {
     return (
       <main className="shell">
-        <div className="loading-card" role="status">
-          {t("loading")}
-        </div>
+        <LoadingCard />
       </main>
     );
   }

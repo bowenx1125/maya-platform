@@ -217,15 +217,11 @@ describe("page-load round trips", () => {
     h.pathname = "/student/groups/group-1";
     const { first, soon, later } = await visits(
       "studyform-student",
-      () => <GroupWorkspace groupId="group-1" />,
+      () => <GroupWorkspace groupId="group-1" view="teams" />,
       "Debate Team",
     );
-    // Two rounds for Agents/Teams; the embedded RAG and Record cards
-    // (moved from Brainform, 2026-10-20) add their own after the group.
+    // Teams page: group + teams (and any quiet re-check).
     expect(first.rounds).toBeLessThanOrEqual(4);
-    // The embedded Brainform cards quietly re-check their group, as on
-    // their own page; everything else is reused.
-    expect(soon.names.every((name) => name.startsWith("group@"))).toBe(true);
     expect(soon.requests).toBeLessThanOrEqual(1);
     expect(later.requests).toBe(first.requests);
   });
@@ -235,11 +231,9 @@ describe("page-load round trips", () => {
     h.pathname = "/teacher/studyform";
     const { first, soon } = await visits(
       "studyform-teacher",
-      () => <TeacherStudyformWorkspace />,
+      () => <TeacherStudyformWorkspace view="teams" />,
       "Debate Team",
     );
-    // The embedded RAG / Knowledge / Record cards (moved from Brainform,
-    // 2026-10-20) read the course library after the page's own round.
     expect(first.rounds).toBeLessThanOrEqual(2);
     expect(soon.requests).toBe(0);
   });

@@ -235,16 +235,17 @@
     background: var(--surface-hover);
   }
 
-  .appearance
-    :is(:global(.notice), :global(.loading-card), :global(.empty-card)) {
+  .appearance :is(:global(.notice), :global(.empty-card)) {
     border-radius: 16px;
     box-shadow: none;
   }
 
+  /* B-v2 LoadingCard keeps its hard border + shadow sitewide. */
   .appearance :global(.loading-card) {
-    background: var(--surface);
-    color: var(--muted);
-    border-color: var(--line);
+    background: #fff;
+    color: #111;
+    border-color: #111;
+    box-shadow: 4px 5px 0 #111;
   }
 
   .appearance :global(.notice-error) {

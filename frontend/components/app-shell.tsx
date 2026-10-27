@@ -36,7 +36,12 @@ import {
   SIDEBAR_MOBILE_QUERY,
   SIDEBAR_REVEAL_EVENT,
 } from "../lib/sidebar-reveal";
-import { ICON_MOTION, PRESS_MOTION } from "./ui/button";
+import {
+  BUSY_MOTION,
+  BUSY_MOTION_PRIMARY,
+  ICON_MOTION,
+  PRESS_MOTION,
+} from "./ui/button";
 import { NoticeTraySlot } from "./ui/error-kit";
 
 type ActionRegistration = {
@@ -444,12 +449,14 @@ export function AppShell({
     visitingGroup && visitGroupId
       ? encodeURIComponent(visitGroupId)
       : undefined;
+  // Studyform section header opens Agents (first split child). Old combined
+  // /student/groups/[id] and /teacher/studyform URLs redirect there too.
   const studyformHref = visit
-    ? `/student/groups/${visit}`
+    ? `/student/agents?group_id=${visit}`
     : teacherSurface
-      ? `/teacher/studyform${routeGroupId && !visitingGroup ? `?group_id=${encodeURIComponent(routeGroupId)}` : ""}`
+      ? `/teacher/agents${routeGroupId && !visitingGroup ? `?group_id=${encodeURIComponent(routeGroupId)}` : ""}`
       : groupId
-        ? `/student/groups/${groupId}`
+        ? `/student/agents?group_id=${encodeURIComponent(groupId)}`
         : "/student#student-groups";
   // The sidebar's Teams item opens the Teams page, like Agents.
   const teamsHref = visit
@@ -485,10 +492,8 @@ export function AppShell({
   }[] = [
     { href: home, label: t("appName"), icon: "home" },
     { href: studyformHref, label: t("studyform"), icon: "knowledge" },
-    // Owner request (2026-10-20): RAG, Knowledge and Record live on
-    // Studyform for students and teachers alike; only a teacher visiting a
-    // group keeps a Brainform entry for that group's read-only library.
-    // /teacher/knowledge stays routable for its deep links.
+    // Split pages own RAG / Knowledge / Record / Voices. A teacher visiting
+    // a group keeps a Brainform entry for that group's read-only library.
     ...(visit
       ? [
           {
@@ -538,25 +543,23 @@ export function AppShell({
       ? pathname
       : studyformHref.split("?", 1)[0]
     : isStudent && groupId && agentRoute
-      ? `/student/groups/${groupId}`
-      : teacherSurface &&
-          (pathname === "/student/knowledge" ||
-            pathname === "/teacher/knowledge")
-        ? "/teacher/studyform"
-        : teacherSurface && pathname.startsWith("/teacher/agents/")
-          ? "/teacher/studyform"
-          : pathname.startsWith("/teacher/debates")
-            ? "/teacher/debates"
+      ? agentsHref.split("?", 1)[0]
+      : teacherSurface && pathname.startsWith("/teacher/agents/")
+        ? "/teacher/agents"
+        : pathname.startsWith("/teacher/debates")
+          ? "/teacher/debates"
+          : pathname.startsWith("/student/groups/") &&
+              pathname.endsWith("/voices")
+            ? "/student/voices"
             : pathname.startsWith("/student/groups/") &&
-                pathname.endsWith("/voices")
-              ? pathname.slice(0, -"/voices".length)
-              : // A new Agent is made from Studyform, so Studyform stays lit.
-                pathname.startsWith("/student/groups/") &&
-                  pathname.endsWith("/agents/new")
-                ? pathname.slice(0, -"/agents/new".length)
-                : pathname.startsWith("/student/groups/") &&
-                    pathname.endsWith("/knowledge")
-                  ? "/student/knowledge"
+                pathname.endsWith("/agents/new")
+              ? "/student/agents"
+              : pathname.startsWith("/student/groups/") &&
+                  pathname.endsWith("/knowledge")
+                ? "/student/knowledge"
+                : pathname === "/teacher/studyform" ||
+                    pathname.startsWith("/student/groups/")
+                  ? studyformHref.split("?", 1)[0]
                   : pathname;
   const studentGroupPicker =
     !teacherSurface &&
@@ -621,13 +624,14 @@ export function AppShell({
     return () => window.removeEventListener(SIDEBAR_REVEAL_EVENT, onReveal);
   }, []);
 
+  // Legacy /student/groups/.../voices redirects here; keep lighting both.
   const studentVoicesHref =
-    !teacherSurface && groupId
-      ? `/student/groups/${groupId}/voices`
-      : undefined;
+    !teacherSurface && groupId ? `/student/voices` : undefined;
   const brainHref = visit ? `/teacher/knowledge?group_id=${visit}` : undefined;
   const chatHref = links.find((link) => link.icon === "chat")?.href ?? "";
-  const brainItemHref = brainHref ?? studyformHref;
+  // Knowledge is its own split page (not the old combined Studyform grid).
+  const brainItemHref =
+    brainHref ?? (teacherSurface ? "/teacher/knowledge" : studyformHref);
   const ragHref = visit
     ? `/teacher/rag?group_id=${visit}`
     : teacherSurface
@@ -796,12 +800,15 @@ export function AppShell({
     pathname === "/student/record" || pathname === "/teacher/record";
   const teamsArea =
     pathname === "/student/teams" || pathname === "/teacher/teams";
+  const knowledgeArea =
+    pathname === "/student/knowledge" || pathname === "/teacher/knowledge";
   const mayaformLit =
     !agentsArea &&
     !ragArea &&
     !voicesArea &&
     !recordArea &&
     !teamsArea &&
+    !knowledgeArea &&
     activeHref === home;
 
   function renderItem(group: SidebarGroup, item: SidebarItem, index: number) {
@@ -1084,7 +1091,9 @@ export function AppShell({
                 const action = actions[name];
                 if (!action || action.placement === "page") return null;
                 const faded = Boolean(action.disabled);
-                const cls = `inline-flex items-center gap-1.5 rounded-[10px] border-[3px] border-border px-[18px] py-2 font-body text-sm font-bold text-ink no-underline ${PRESS_MOTION} max-[480px]:px-3 max-[480px]:py-1.5 max-[480px]:text-[13px] ${name === "back" ? "bg-surface" : "bg-main"}`;
+                const busyTone =
+                  name === "back" ? BUSY_MOTION : BUSY_MOTION_PRIMARY;
+                const cls = `inline-flex items-center gap-1.5 rounded-[10px] border-[3px] border-border px-[18px] py-2 font-body text-sm font-bold text-ink no-underline ${PRESS_MOTION} ${busyTone} max-[480px]:px-3 max-[480px]:py-1.5 max-[480px]:text-[13px] ${name === "back" ? "bg-surface" : "bg-main"}`;
                 const content = (
                   <>
                     {action.busy ? (
@@ -1111,7 +1120,7 @@ export function AppShell({
                 ) : (
                   <button
                     key={name}
-                    className={`${cls} cursor-pointer disabled:cursor-not-allowed disabled:opacity-50`}
+                    className={`${cls} cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:aria-busy:opacity-100`}
                     type={action.form ? "submit" : "button"}
                     form={action.form}
                     disabled={faded}
@@ -1143,8 +1152,7 @@ export function AppShell({
   );
 }
 
-/** Pages whose own row shares its href with another row (Knowledge opens
- * Studyform), keyed by pathname. */
+/** Pages whose own row is looked up by pathname when hrefs carry query. */
 const PAGE_ROW: Record<string, string> = {
   "/teacher/knowledge": "knowledge",
   "/student/knowledge": "knowledge",

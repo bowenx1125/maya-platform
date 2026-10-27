@@ -708,57 +708,61 @@ describe("Studyform Teams", () => {
 });
 
 describe("Studyform Team cards", () => {
-  it("lists the six teacher Studyform cards in DOM order", async () => {
+  it("lists Teams on the dedicated Teams page with split-page edit links", async () => {
     state.role = "teacher";
-    state.api.workspaceAgents = vi.fn().mockResolvedValue([]);
+    state.userId = "team-chat-teacher";
     state.api.teams.mockResolvedValue([
-      { ...team, display_name: "Private circle" },
+      {
+        ...team,
+        display_name: "Private circle",
+        owner_user_id: "team-chat-teacher",
+        can_edit: true,
+      },
       {
         ...publicTeam,
         id: "published-team",
         display_name: "Course Dialogue Team",
+        can_edit: true,
       },
       {
         ...publicTeam,
         id: "group-team",
         display_name: "Group circle",
         group_id: "group-1",
+        can_edit: true,
       },
     ]);
+    state.api.chatAgents = vi.fn().mockResolvedValue(agents);
+    state.api.publishedAgents = vi.fn().mockResolvedValue([]);
+    state.api.workspaceAgents = vi.fn().mockResolvedValue([]);
     render(
       <>
-        <TeacherStudyformWorkspace />
+        <TeacherStudyformWorkspace view="teams" />
       </>,
     );
 
-    const headings = await screen.findAllByRole("heading", { level: 2 });
-    // Agents left Studyform for its own page.
-    expect(headings.map((heading) => heading.textContent)).toEqual([
-      "Teams",
-      "Voices",
-      "RAG",
-      "Knowledge",
-      "Record",
-    ]);
+    await screen.findByRole("heading", { name: "Teams" });
     expect(
-      screen.getByRole("link", { name: "Private circle" }).getAttribute("href"),
-    ).toBe("/teacher/studyform?mode=team-edit&team_id=team-1");
+      screen.getByRole("link", { name: /Private circle/ }).getAttribute("href"),
+    ).toBe("/teacher/teams?mode=team-edit&team_id=team-1");
     expect(
       screen
-        .getByRole("link", { name: "Course Dialogue Team" })
+        .getByRole("link", { name: /Course Dialogue Team/ })
         .getAttribute("href"),
-    ).toBe("/teacher/studyform?mode=team-edit&team_id=published-team");
+    ).toBe("/teacher/teams?mode=team-edit&team_id=published-team");
     expect(
-      screen.getByRole("link", { name: "Group circle" }).getAttribute("href"),
-    ).toBe("/teacher/studyform?mode=team-edit&team_id=group-team");
+      screen.getByRole("link", { name: /Group circle/ }).getAttribute("href"),
+    ).toBe("/teacher/teams?mode=team-edit&team_id=group-team");
     expect(
       screen
         .getAllByRole("link", { name: "New" })
         .map((link) => link.getAttribute("href")),
-    ).toEqual(["/teacher/studyform?mode=team-new"]);
+    ).toEqual(["/teacher/teams?mode=team-new"]);
   });
 
-  it("lets a student create a private Team beside Agents and Voices", async () => {
+  it("lets a student create a private Team on the Teams page", async () => {
+    state.role = "student";
+    state.userId = "team-chat-student";
     state.api.group = vi.fn().mockResolvedValue({
       id: "group-1",
       course_id: "course",
@@ -777,29 +781,26 @@ describe("Studyform Team cards", () => {
     ]);
     render(
       <>
-        <GroupWorkspace groupId="group-1" />
+        <GroupWorkspace groupId="group-1" view="teams" />
       </>,
     );
 
-    const headings = await screen.findAllByRole("heading", { level: 2 });
-    // Agents left Studyform for its own page.
-    expect(headings.map((heading) => heading.textContent)).toEqual([
-      "Teams",
-      "Voices",
-    ]);
+    await screen.findByRole("heading", { name: "Teams" });
     expect(
       screen
-        .getByRole("link", { name: "Course Dialogue Team" })
+        .getByRole("link", { name: /Course Dialogue Team/ })
         .getAttribute("href"),
-    ).toBe("/student/groups/group-1?mode=team-edit&team_id=published-team");
+    ).toBe(
+      "/student/teams?group_id=group-1&mode=team-edit&team_id=published-team",
+    );
     expect(
-      screen.getByRole("link", { name: "Private circle" }).getAttribute("href"),
-    ).toBe("/student/groups/group-1?mode=team-edit&team_id=team-1");
+      screen.getByRole("link", { name: /Private circle/ }).getAttribute("href"),
+    ).toBe("/student/teams?group_id=group-1&mode=team-edit&team_id=team-1");
     expect(
       screen
         .getAllByRole("link", { name: "New" })
         .map((link) => link.getAttribute("href")),
-    ).toEqual(["/student/groups/group-1?mode=team-new"]);
+    ).toEqual(["/student/teams?group_id=group-1&mode=team-new"]);
   });
 
   it("shows a visiting teacher the group's Teams read-only, without creating one", async () => {
@@ -814,19 +815,15 @@ describe("Studyform Team cards", () => {
     state.api.voiceProfiles = vi.fn().mockResolvedValue([]);
     render(
       <>
-        <GroupWorkspace groupId="group-1" initialMode="team-new" />
+        <GroupWorkspace groupId="group-1" view="teams" initialMode="team-new" />
       </>,
     );
 
     await screen.findByRole("heading", { name: "Teams" });
-    // The group's Teams are listed for the teacher to look at, asked for by
-    // group so its members' private Teams come too.
     expect(screen.getByRole("heading", { name: "Teams" })).toBeTruthy();
     expect(state.api.teams).toHaveBeenCalledWith("course", "group-1");
-    // But a visit never starts one: no form, and no New.
     expect(screen.queryByLabelText("Name")).toBeNull();
     expect(screen.queryByRole("link", { name: "New" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Voices" })).toBeTruthy();
   });
 });
 

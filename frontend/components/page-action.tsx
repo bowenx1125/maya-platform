@@ -1,5 +1,5 @@
 "use client";
-import { PRESS_MOTION } from "./ui/button";
+import { BUSY_MOTION, BUSY_MOTION_PRIMARY, PRESS_MOTION } from "./ui/button";
 
 import Link from "next/link";
 import type { MouseEventHandler } from "react";
@@ -15,7 +15,7 @@ const LABELS: Record<WorkspaceActionName, string> = {
 };
 
 /** Agent banner button (approved O2 / option A `.ph .pa`). */
-const BANNER_ACTION = `inline-flex h-auto min-h-11 w-auto shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] px-4 py-[7px] font-body text-sm [line-height:normal] font-extrabold text-[#111] no-underline disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:size-4 ${PRESS_MOTION}`;
+const BANNER_ACTION = `inline-flex h-auto min-h-11 w-auto shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] px-4 py-[7px] font-body text-sm [line-height:normal] font-extrabold text-[#111] no-underline disabled:cursor-not-allowed disabled:opacity-50 disabled:aria-busy:opacity-100 [&_svg]:size-4 ${PRESS_MOTION}`;
 
 /**
  * Compatibility wrapper for page-owned actions. AppShell renders the single
@@ -66,6 +66,7 @@ export function PageAction({
   const classes = cn(
     BANNER_ACTION,
     name === "done" ? "bg-[#FF4D8D]" : "bg-white",
+    name === "done" ? BUSY_MOTION_PRIMARY : BUSY_MOTION,
     className,
   );
   const faded = Boolean(disabled || busy);

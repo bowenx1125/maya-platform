@@ -332,8 +332,8 @@ describe("student shell navigation", () => {
     expect(studyform.getAttribute("href")).toBe(
       "/student/agents?group_id=group-b",
     );
-    // Studyform lights Teams; Agents is its own page.
-    expect(studyform.getAttribute("aria-current")).toBeNull();
+    // Old group home redirects to Agents; Agents lights on that visit path.
+    expect(studyform.getAttribute("aria-current")).toBe("page");
     expect(nav.getByRole("link", { name: "RAG" }).getAttribute("href")).toBe(
       "/teacher/rag?group_id=group-b",
     );

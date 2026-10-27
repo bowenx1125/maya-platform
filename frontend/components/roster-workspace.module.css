@@ -261,8 +261,19 @@
   }
 
   .acts .sticker {
-    flex: 1;
-    justify-content: center;
+    font-size: 12px;
+    font-weight: 800;
+    border: 2px solid #111;
+    border-radius: 6px;
+    padding: 5px 10px;
+    background: #fff;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    line-height: 1;
+    color: #111;
+    font-family: inherit;
   }
 }
 
@@ -286,11 +297,6 @@
 .sticker:disabled {
   opacity: 0.55;
   cursor: not-allowed;
-}
-
-.sticker:not(:disabled):active {
-  transform: translate(1px, 1px);
-  box-shadow: 1px 1px 0 #111;
 }
 
 .stickerEdit {
@@ -392,10 +398,6 @@
 .polar:disabled {
   opacity: 0.55;
   cursor: not-allowed;
-}
-
-.polar:not(:disabled):active {
-  box-shadow: 3px 3px 0 #111;
 }
 
 .polarTape {

@@ -123,8 +123,8 @@ describe("legacy group Brainform actor context", () => {
     expect(state.api.workspaceDocuments).not.toHaveBeenCalled();
   });
 
-  it("keeps a visiting Teacher's joined-group Studyform read-only", async () => {
-    state.pathname = "/student/groups/joined-group";
+  it("keeps a visiting Teacher's joined-group Agents page read-only", async () => {
+    state.pathname = "/student/agents";
     state.user = {
       id: "teacher-user",
       courses: [{ course_id: "course", role: "teacher" }],
@@ -139,23 +139,20 @@ describe("legacy group Brainform actor context", () => {
       agents: vi.fn().mockResolvedValue([]),
       versions: vi.fn().mockResolvedValue([]),
       chatAgents: vi.fn().mockResolvedValue([]),
-      voiceProfiles: vi.fn().mockResolvedValue([]),
+      teams: vi.fn().mockResolvedValue([]),
     };
     render(
       <>
         <AppShell role="student">
-          <GroupWorkspace groupId="joined-group" />
+          <GroupWorkspace groupId="joined-group" view="agents" />
         </AppShell>
       </>,
     );
 
-    await screen.findByRole("heading", { name: "Teams" });
+    await screen.findByRole("heading", { name: "Agents" });
     expect(screen.queryByRole("link", { name: "New" })).toBeNull();
     expect(screen.queryByRole("button", { name: "New" })).toBeNull();
-    expect(await screen.findByRole("heading", { name: "Voices" })).toBeTruthy();
-    await waitFor(() =>
-      expect(state.api.voiceProfiles).toHaveBeenCalledWith("joined-group"),
-    );
+    expect(screen.queryByRole("heading", { name: "Voices" })).toBeNull();
     expect(
       screen.getByRole("link", { name: "Back" }).getAttribute("href"),
     ).toBe("/teacher/roster");

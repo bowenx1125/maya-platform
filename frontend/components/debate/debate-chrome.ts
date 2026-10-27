@@ -1,5 +1,5 @@
 import { cn } from "../../lib/utils";
-import { PRESS_MOTION } from "../ui/button";
+import { BUSY_MOTION, PRESS_MOTION } from "../ui/button";
 
 /*
  * Debates chrome, ported from the approved final mockup
@@ -8,7 +8,7 @@ import { PRESS_MOTION } from "../ui/button";
  */
 
 /** F `.bt`: flat outline pill, icon + text. */
-export const DEBATE_BUTTON = `m-0 inline-flex h-auto w-auto shrink-0 cursor-pointer items-center gap-[7px] rounded-full border-2 border-[#111] bg-white py-[7px] pr-[15px] pl-[11px] font-body text-sm leading-[normal] font-bold whitespace-nowrap text-[#111] no-underline hover:bg-[#F1F7FF] disabled:cursor-default disabled:border-[#D6D3D1] disabled:bg-[#FAFAF9] disabled:text-[#A8A29E] disabled:opacity-100 disabled:shadow-none [&_svg]:flex-none ${PRESS_MOTION}`;
+export const DEBATE_BUTTON = `m-0 inline-flex h-auto w-auto shrink-0 cursor-pointer items-center gap-[7px] rounded-full border-2 border-[#111] bg-white py-[7px] pr-[15px] pl-[11px] font-body text-sm leading-[normal] font-bold whitespace-nowrap text-[#111] no-underline hover:bg-[#F1F7FF] disabled:cursor-default disabled:border-[#D6D3D1] disabled:bg-[#FAFAF9] disabled:text-[#A8A29E] disabled:opacity-100 disabled:shadow-none [&_svg]:flex-none ${PRESS_MOTION} ${BUSY_MOTION}`;
 
 /**
  * F `.bt.pri`: the single pink primary action. Applied on top of the shared
@@ -19,13 +19,11 @@ export const DEBATE_PRIMARY =
   "h-auto w-auto shrink-0 gap-[7px] rounded-full border-2 border-[#111] bg-[#FF4D8D] py-[7px] pr-[15px] pl-[11px] font-body text-sm leading-[normal] font-bold text-[#111] no-underline [&_svg]:flex-none";
 
 /** F `.bt.ld`: a busy button keeps its label, sinks and fills. */
-export const DEBATE_BUSY =
-  "aria-busy:cursor-progress aria-busy:translate-y-[2px] aria-busy:border-[#111] aria-busy:text-[#111] aria-busy:shadow-none aria-busy:bg-[linear-gradient(90deg,#FFE14D_var(--p,0%),#fff_0)] aria-busy:animate-debate-fill motion-reduce:aria-busy:animate-none";
+export const DEBATE_BUSY = BUSY_MOTION;
 
 /** List row action (`.ticket .acts .bt`). */
 export const DEBATE_ROW_BUTTON = cn(
   DEBATE_BUTTON,
-  DEBATE_BUSY,
   "py-1 pr-3 pl-[9px] text-[13px] leading-[normal] disabled:pointer-events-none",
 );
 

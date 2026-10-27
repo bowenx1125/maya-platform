@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 
-import { AppShell } from "../../../components/app-shell";
-import { TeacherStudyformWorkspace } from "../../../components/teacher-workspace";
-import { RouteGuard } from "../../../components/session-provider";
-
-export default async function TeacherStudyformPage({
+/**
+ * Old combined teacher Studyform grid (Teams + Voices + Brainform). Split
+ * pages are the real UI; keep this URL as a stub for bookmarks and old links.
+ */
+export default async function TeacherStudyformRedirect({
   searchParams,
 }: {
   searchParams: Promise<{
@@ -15,13 +15,13 @@ export default async function TeacherStudyformPage({
   }>;
 }) {
   const query = await searchParams;
-  // Teams moved to /teacher/teams; old Studyform Team links land there.
   const teamMode =
     query.mode === "maya-new"
       ? "team-new"
       : query.mode === "maya-edit"
         ? "team-edit"
         : query.mode;
+
   if (
     teamMode === "teams" ||
     teamMode === "team-new" ||
@@ -35,16 +35,26 @@ export default async function TeacherStudyformPage({
     const next = params.toString();
     redirect(`/teacher/teams${next ? `?${next}` : ""}`);
   }
-  return (
-    <RouteGuard role="teacher">
-      <AppShell role="teacher">
-        <TeacherStudyformWorkspace
-          initialGroupId={query.group_id}
-          initialMode={query.mode}
-          initialTeamId={query.team_id}
-          initialDocumentId={query.document_id}
-        />
-      </AppShell>
-    </RouteGuard>
-  );
+
+  if (
+    query.mode === "rag-view" ||
+    query.mode === "rag-edit" ||
+    query.mode === "rag-new" ||
+    query.mode === "knowledge-view" ||
+    query.mode === "knowledge-edit"
+  ) {
+    const params = new URLSearchParams();
+    if (query.group_id) params.set("group_id", query.group_id);
+    params.set("mode", query.mode);
+    if (query.document_id) params.set("document_id", query.document_id);
+    const base = query.mode.startsWith("rag-")
+      ? "/teacher/rag"
+      : "/teacher/knowledge";
+    redirect(`${base}?${params.toString()}`);
+  }
+
+  const params = new URLSearchParams();
+  if (query.group_id) params.set("group_id", query.group_id);
+  const next = params.toString();
+  redirect(`/teacher/agents${next ? `?${next}` : ""}`);
 }

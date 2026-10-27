@@ -1,4 +1,4 @@
-import { PRESS_MOTION } from "../../ui/button";
+import { BUSY_MOTION, PRESS_MOTION } from "../../ui/button";
 /*
  * Debates Immerse (beta) chrome — A1 candy dock, title pill, yellow QR ticket,
  * V1 票根卷 transcript drawer (incl. Check RAG dress). Tailwind only; ported 1:1 from
@@ -64,7 +64,7 @@ const CARD =
 export const BETA_CONNECTION_OVERLAY = `absolute z-[13] top-5 left-5 max-w-[min(420px,calc(100%_-_48px))] ${CARD}`;
 export const BETA_FAILURE_CARD = CARD;
 export const BETA_PROVIDER_GATE_CARD = `relative z-[13] ${CARD} [&_ul]:m-0 [&_ul]:pl-4`;
-export const BETA_RECONNECT_BUTTON = `min-h-[44px] border-[3px] border-[#111] rounded-[10px] [color:var(--accent)] [background:var(--accent-soft)] py-2 px-4 cursor-pointer ${PRESS_MOTION}`;
+export const BETA_RECONNECT_BUTTON = `min-h-[44px] border-[3px] border-[#111] rounded-[10px] [color:var(--accent)] [background:var(--accent-soft)] py-2 px-4 cursor-pointer ${PRESS_MOTION} ${BUSY_MOTION}`;
 
 export const BETA_NOTICES =
   "absolute z-auto top-[max(72px,calc(env(safe-area-inset-top)_+_52px))] right-auto bottom-auto left-[max(22px,env(safe-area-inset-left))] grid gap-3 max-w-[min(560px,58vw)] max-h-[calc(100dvh_-_140px_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain pointer-events-none [&>*]:pointer-events-auto max-[600px]:top-[max(12px,env(safe-area-inset-top))] max-[600px]:left-[max(10px,env(safe-area-inset-left))] max-[600px]:right-[max(10px,env(safe-area-inset-right))] max-[600px]:max-w-none";

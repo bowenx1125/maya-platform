@@ -8,6 +8,7 @@ import { PlatformApiError } from "../lib/api/platform";
 import { useT } from "../lib/i18n";
 import { useSession } from "./session-provider";
 import { ErrorNotice, SectionCard, StickerBadge } from "./ui";
+import { BUSY_MOTION_PRIMARY, PRESS_MOTION } from "./ui/button";
 import { USER_AVATAR_CHOICES, UserAvatar } from "./user-avatar";
 
 /** The profile module: a white card with a lime ring and a tape title. */
@@ -20,9 +21,8 @@ const FIELD =
   "min-h-[46px] max-[640px]:min-h-[51px] w-full rounded-lg border-[3px] border-ink bg-white px-3 py-2 font-body text-sm text-ink focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#67E8F9] disabled:opacity-60";
 const SAVED =
   "rotate-[-3deg] rounded border-2 border-ink bg-[#A3E635] px-2 py-px text-xs font-extrabold text-ink shadow-[2px_2px_0_#111]";
-/** Save as an arcade key: pink, inked, pressing down 6px into its shadow. */
-const PRESS =
-  "min-h-10 rounded-lg border-[3px] border-ink bg-[#FF4D8D] px-5 font-display text-base font-extrabold text-ink shadow-[0_6px_0_#111] transition-[translate,box-shadow] duration-[120ms] hover:bg-[#FF4D8D] active:translate-y-1.5 active:shadow-[0_0_0_#111] disabled:opacity-60 motion-reduce:transition-none motion-reduce:active:translate-y-0";
+/** Save as an arcade key: pink, inked; shared PRESS_MOTION. */
+const PRESS = `inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border-[3px] border-ink bg-[#FF4D8D] px-5 font-display text-base font-extrabold text-ink hover:bg-[#FF4D8D] disabled:opacity-60 disabled:aria-busy:opacity-100 ${PRESS_MOTION} ${BUSY_MOTION_PRIMARY}`;
 
 export function AccountSettings({ onSaved }: { onSaved?: () => void }) {
   const { user, identityGeneration } = useSession();
@@ -300,7 +300,11 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
                 className={`primary-action ${PRESS}`}
                 type="submit"
                 disabled={busy !== null}
+                aria-busy={busy === "name" || undefined}
               >
+                {busy === "name" ? (
+                  <span className="spinner" aria-hidden="true" />
+                ) : null}
                 {t("save")}
               </button>
             ) : saved === "name" ? (
@@ -337,7 +341,11 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
                   className={`primary-action ${PRESS}`}
                   type="submit"
                   disabled={busy !== null}
+                  aria-busy={busy === "group" || undefined}
                 >
+                  {busy === "group" ? (
+                    <span className="spinner" aria-hidden="true" />
+                  ) : null}
                   {t("save")}
                 </button>
               ) : saved === "group" ? (
@@ -441,7 +449,11 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
               className={`primary-action ${PRESS}`}
               type="submit"
               disabled={busy !== null}
+              aria-busy={busy === "password" || undefined}
             >
+              {busy === "password" ? (
+                <span className="spinner" aria-hidden="true" />
+              ) : null}
               {t("save")}
             </button>
             {saved === "password" ? (

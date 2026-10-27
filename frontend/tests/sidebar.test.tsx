@@ -139,8 +139,7 @@ describe("sidebar groups", () => {
     expect(
       nav().getByRole("link", { name: "Agents" }).getAttribute("href"),
     ).toBe("/teacher/agents");
-    // RAG and Voices are their own pages (2026-10-26 / 2026-10-27);
-    // Knowledge stays on Studyform.
+    // RAG, Voices, Knowledge are their own split pages.
     expect(nav().getByRole("link", { name: "RAG" }).getAttribute("href")).toBe(
       "/teacher/rag",
     );
@@ -149,7 +148,7 @@ describe("sidebar groups", () => {
     ).toBe("/teacher/voices");
     expect(
       nav().getByRole("link", { name: "Knowledge" }).getAttribute("href"),
-    ).toBe("/teacher/studyform");
+    ).toBe("/teacher/knowledge");
   });
 
   it("keeps a visiting teacher's Brainform entry for that group", () => {
@@ -180,17 +179,13 @@ describe("sidebar groups", () => {
   });
 
   it("lights one row: Voices on its page, else the first row for the page", () => {
-    const view = renderShell("student", "/student/groups/group-a/voices");
+    const view = renderShell("student", "/student/voices");
     const lit = () =>
       [...document.querySelectorAll("[data-lit]")].map((element) =>
         element.getAttribute("data-sidebar-item"),
       );
     expect(lit()).toEqual(["voices"]);
     view.unmount();
-    const studyform = renderShell("student", "/student/groups/group-a");
-    // The Studyform grid lights no row; Teams lights on ?mode=teams only.
-    expect(lit()).toEqual([]);
-    studyform.unmount();
     const agents = renderShell("student", "/student/agents");
     expect(lit()).toEqual(["agents"]);
     agents.unmount();

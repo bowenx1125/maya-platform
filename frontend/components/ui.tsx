@@ -43,15 +43,36 @@ export { NOTICE_TAIL_CLASS, useNoticeTray };
 export function LoadingCard({ label }: { label?: string }) {
   const t = useT();
   return (
-    <div className="loading-card" role="status">
-      {/* The sign-in's four scholar blocks, still waiting their turn. */}
-      <span className="academy-loader" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-        <i />
+    <div
+      className="loading-card flex w-full flex-col gap-3 rounded-[18px] border-[3px] border-[#111] bg-white px-5 py-4 text-[#111] shadow-[4px_5px_0_#111]"
+      role="status"
+    >
+      {/* B-v2 LoadingCard: thick-border card + skeleton avatar/bars. */}
+      <div className="flex flex-col gap-3" aria-hidden="true">
+        <LoadingSkeletonRow barClass="w-[70%]" subClass="w-[46%]" />
+        <LoadingSkeletonRow barClass="w-[64%]" subClass="w-[32%]" />
+      </div>
+      <span className="font-body text-sm font-bold leading-none">
+        {label ?? t("loading")}
       </span>
-      {label ?? t("loading")}
+    </div>
+  );
+}
+
+function LoadingSkeletonRow({
+  barClass,
+  subClass,
+}: {
+  barClass: string;
+  subClass: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="size-10 shrink-0 rounded-[8px] bg-[#D9D9D9]" />
+      <span className="flex min-w-0 flex-1 flex-col gap-2">
+        <span className={cn("h-3 rounded-full bg-[#D9D9D9]", barClass)} />
+        <span className={cn("h-3 rounded-full bg-[#D9D9D9]", subClass)} />
+      </span>
     </div>
   );
 }
@@ -402,8 +423,8 @@ function ErrorFixLinks({ error }: { error: unknown }) {
       links.push({
         href:
           student && typeof groupId === "string"
-            ? `/student/groups/${encodeURIComponent(groupId)}?${query}`
-            : `/teacher/studyform?${query}`,
+            ? `/student/teams?group_id=${encodeURIComponent(groupId)}&${query}`
+            : `/teacher/teams?${query}`,
         label: t("errorEditTeam", { name: teamName }),
       });
     }
