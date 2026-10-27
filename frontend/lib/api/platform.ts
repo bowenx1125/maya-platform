@@ -209,7 +209,7 @@ export type AssessmentRuntimeResult = {
   };
   answers: Array<{
     question_ordinal: number;
-    question_version_id: string;
+    question_version_id: string | null;
     answer_text: string;
     created_at: string;
   }>;

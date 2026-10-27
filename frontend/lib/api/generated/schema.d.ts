@@ -5261,11 +5261,8 @@ export interface components {
             created_at: string;
             /** Question Ordinal */
             question_ordinal: number;
-            /**
-             * Question Version Id
-             * Format: uuid
-             */
-            question_version_id: string;
+            /** Question Version Id */
+            question_version_id?: string | null;
         };
         /** AssessmentRuntimeContext */
         AssessmentRuntimeContext: {

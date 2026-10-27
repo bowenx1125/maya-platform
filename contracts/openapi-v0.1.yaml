@@ -12184,12 +12184,13 @@ components:
           title: Question Ordinal
           type: integer
         question_version_id:
-          format: uuid
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
           title: Question Version Id
-          type: string
       required:
       - question_ordinal
-      - question_version_id
       - answer_text
       - created_at
       title: AssessmentAnswerDTO

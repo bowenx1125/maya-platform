@@ -1359,7 +1359,9 @@ def _raw_answers(db: Session, attempt: AssessmentAttempt) -> list[AssessmentAnsw
     return [
         AssessmentAnswerDTO(
             question_ordinal=question.ordinal - ordinal_offset,
-            question_version_id=UUID(question.question_version_id or ""),
+            question_version_id=(
+                UUID(question.question_version_id) if question.question_version_id else None
+            ),
             answer_text=str(json.loads(record.payload_json)["answer_text"]),
             created_at=record.created_at,
         )

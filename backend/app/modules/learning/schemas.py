@@ -225,7 +225,9 @@ AssessmentRuntimeResponseKey = Literal[
 
 class AssessmentAnswerDTO(StrictModel):
     question_ordinal: int = Field(ge=0)
-    question_version_id: UUID
+    # Nullable: older/partial attempt rows may lack a frozen version id; Record
+    # still lists those answers (prod 2026-10-27 my-assessment-attempts 500).
+    question_version_id: UUID | None = None
     answer_text: str = Field(min_length=1)
     created_at: datetime
 
