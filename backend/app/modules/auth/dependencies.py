@@ -5,6 +5,7 @@ from __future__ import annotations
 import hmac
 from collections.abc import Generator
 from dataclasses import dataclass
+from datetime import datetime
 
 from fastapi import Depends, Request, Security
 from fastapi.security import APIKeyCookie
@@ -51,13 +52,26 @@ def get_db(
         session.close()
 
 
+
+def get_auth_clock() -> datetime | None:
+    """Internal auth clock for TTL checks.
+
+    Default ``None`` keeps the service-layer ``utc_now()`` path. Tests may
+    override this dependency with a fixed timezone-aware UTC datetime; clients
+    cannot supply a clock value.
+    """
+
+    return None
+
+
 def require_auth(
     request: Request,
     raw_session_token: str | None = Security(session_cookie),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    now: datetime | None = Depends(get_auth_clock),
 ) -> AuthContext:
-    context = get_auth_context(db, settings, raw_session_token)
+    context = get_auth_context(db, settings, raw_session_token, now=now)
     if context is None:
         raise unauthenticated()
     return context
@@ -95,6 +109,7 @@ def require_demo_auth(
     raw_session_token: str | None = Security(session_cookie),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    now: datetime | None = Depends(get_auth_clock),
 ) -> AuthContext:
     """Check Demo mode before looking at credentials.
 
@@ -103,7 +118,7 @@ def require_demo_auth(
     """
 
     require_demo_mode(settings)
-    context = get_auth_context(db, settings, raw_session_token)
+    context = get_auth_context(db, settings, raw_session_token, now=now)
     if context is None:
         raise unauthenticated()
     return context
