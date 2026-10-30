@@ -3,16 +3,119 @@
 from __future__ import annotations
 
 import csv
+import json
 import sys
 import threading
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / "scripts") not in sys.path:
     sys.path.insert(0, str(ROOT / "scripts"))
 
 import load_tune as lt  # noqa: E402
+
+
+def test_login_ci_profile_parse_and_frozen_configuration() -> None:
+    assert lt.selected_profile(None) == "classroom"
+    assert lt.selected_profile("classroom") == "classroom"
+    assert lt.selected_profile("other") == "classroom"
+    assert lt.selected_profile("login-ci") == "login-ci"
+    config = lt.load_login_ci_config()
+    assert (config.warmup, config.samples, config.concurrency, config.repeat) == (2, 20, 2, 3)
+    assert (config.errors_max, config.p95_ms_max) == (0, 200)
+    assert "9c68d42b" in config.source
+
+
+def test_login_ci_configuration_rejects_changed_fixed_workload(tmp_path: Path) -> None:
+    config_path = Path(lt.__file__).with_name("load_tune_login_ci.json")
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload["samples"] = 21
+    altered = tmp_path / "login-ci.json"
+    altered.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="frozen 2/20/2/3"):
+        lt.load_login_ci_config(altered)
+
+
+def test_login_ci_attempt_posts_only_login_and_counts_non_200_as_error(
+    monkeypatch: Any,
+) -> None:
+    calls: list[tuple[str, str, dict[str, str]]] = []
+
+    class FakeClient:
+        def __init__(self, _base_url: str, _timeout: float) -> None:
+            pass
+
+        def call(self, method: str, path: str, body: dict[str, str]) -> lt.HttpResult:
+            calls.append((method, path, body))
+            return lt.HttpResult(204, "")
+
+    monkeypatch.setattr(lt, "Client", FakeClient)
+    attempt = lt.login_ci_attempt("http://example.test", "student", "secret", 3, 1.0)
+    assert calls == [
+        ("POST", "/api/v1/auth/login", {"username": "student-003", "password": "secret"})
+    ]
+    assert attempt.error is True
+    assert attempt.latency_ms >= 0
+
+
+def test_login_ci_report_fields_and_median_p95_gate() -> None:
+    config = lt.load_login_ci_config()
+    batches = [
+        lt.LoginCiBatch([float(value) for value in range(start, start + 20)], 0, 2.0)
+        for start in (100, 120, 140)
+    ]
+    report = lt.build_login_ci_report(config, batches)
+    assert set(report) >= {
+        "profile",
+        "warmup",
+        "samples",
+        "concurrency",
+        "repeat",
+        "rounds",
+        "aggregate",
+        "gates",
+        "passed",
+    }
+    assert report["profile"] == "login-ci"
+    assert (report["warmup"], report["samples"], report["concurrency"], report["repeat"]) == (
+        2,
+        20,
+        2,
+        3,
+    )
+    assert [round_report["total_requests"] for round_report in report["rounds"]] == [20, 20, 20]
+    assert [round_report["p95_ms"] for round_report in report["rounds"]] == [118.0, 138.0, 158.0]
+    assert report["aggregate"] == {
+        "total_requests": 60,
+        "errors": 0,
+        "p50_ms": 129.0,
+        "p95_ms": 156.0,
+        "p95_median_ms": 138.0,
+        "throughput_rps": 10.0,
+    }
+    assert report["gates"]["errors_max"] == 0
+    assert report["gates"]["p95_ms_max"] == 200
+    assert "测试-性能压测-50用户-9c68d42b.md" in report["gates"]["source"]
+    assert report["passed"] is True
+    assert lt.login_ci_exit_code(report) == 0
+
+
+def test_login_ci_failures_return_nonzero_for_errors_slow_p95_or_warmup_error() -> None:
+    config = lt.load_login_ci_config()
+    fast = [lt.LoginCiBatch([120.0] * 20, 0, 1.0) for _ in range(3)]
+    request_error = fast.copy()
+    request_error[0] = lt.LoginCiBatch([120.0] * 20, 1, 1.0)
+    slow = [lt.LoginCiBatch([201.0] * 20, 0, 1.0) for _ in range(3)]
+    assert lt.login_ci_exit_code(lt.build_login_ci_report(config, request_error)) != 0
+    assert lt.login_ci_exit_code(lt.build_login_ci_report(config, slow)) != 0
+    assert lt.login_ci_exit_code(lt.build_login_ci_report(config, fast, warmup_errors=1)) != 0
+
+
+def test_login_ci_invalid_parameter_exits_nonzero_without_server() -> None:
+    assert lt.main(["--profile", "login-ci", "--base-url", "not-a-url"]) == 2
 
 
 def test_percentile_is_nearest_rank() -> None:

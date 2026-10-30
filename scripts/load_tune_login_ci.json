@@ -1,0 +1,12 @@
+{
+  "profile": "login-ci",
+  "warmup": 2,
+  "samples": 20,
+  "concurrency": 2,
+  "repeat": 3,
+  "gates": {
+    "errors_max": 0,
+    "p95_ms_max": 200,
+    "source": "测试-性能压测-50用户-9c68d42b.md §3 零报错 PASS; 方案-性能稳定性-会话哈希与知识库NUL-架构A.md §5「陆续 50（10s均摊）login p95 ≤ 200ms」; 并发2属于陆续/低并发档，使用200ms而非同刻50爆发档5000ms，两档均为方案§5通过准入线，未放宽; #234/#235压测报告测试-性能压测-50用户-9c68d42b.md 实测148ms PASS @ tip 9c68d42b"
+  }
+}
