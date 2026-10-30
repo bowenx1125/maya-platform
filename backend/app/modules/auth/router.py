@@ -25,6 +25,7 @@ from app.modules.auth.credentials import (
     verify_password,
 )
 from app.modules.auth.dependencies import (
+    get_auth_clock,
     get_db,
     require_auth,
     require_authenticated_mutation,
@@ -209,13 +210,14 @@ def login(
     response: Response,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    now: datetime | None = Depends(get_auth_clock),
 ) -> AuthSession:
     _require_production_auth_origin(request, settings)
     # Join the unified pressure queue before the abuse limiter and password
     # check: under host pressure sign-in waits (not fails) and does not spend
     # the failed-login allowance. Only timeout / full queue returns a 503.
     with adaptive_slot("login", settings):
-        return _login_admitted(payload, request, response, db, settings)
+        return _login_admitted(payload, request, response, db, settings, now=now)
 
 
 def _login_admitted(
@@ -224,6 +226,7 @@ def _login_admitted(
     response: Response,
     db: Session,
     settings: Settings,
+    now: datetime | None = None,
 ) -> AuthSession:
     limiter = _limiter(request) if settings.is_production else None
     reservation = None
@@ -273,6 +276,7 @@ def _login_admitted(
             user,
             settings,
             old_raw_token=request.cookies.get(SESSION_COOKIE_NAME),
+            now=now,
         )
         _set_session_cookie(response, raw_token, settings, request)
         context = AuthContext(raw_token, session_row, user, raw_csrf)
@@ -400,6 +404,7 @@ def switch_demo_identity(
     context: AuthContext = Depends(require_demo_authenticated_mutation),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    now: datetime | None = Depends(get_auth_clock),
 ) -> AuthSession:
     require_demo_mode(settings)
     snapshot = _safe_demo_snapshot(settings)
@@ -415,6 +420,7 @@ def switch_demo_identity(
         user,
         settings,
         old_raw_token=context.raw_session_token,
+        now=now,
     )
     _set_session_cookie(response, raw_token, settings, request)
     return _auth_response(db, AuthContext(raw_token, session_row, user, raw_csrf), raw_csrf)
@@ -454,6 +460,7 @@ def quick_login(
     response: Response,
     db: Session = Depends(get_db),
     settings: Settings = Depends(require_demo_quick_login),
+    now: datetime | None = Depends(get_auth_clock),
 ) -> AuthSession:
     """Rotate a session for one currently active catalog identity.
 
@@ -475,6 +482,7 @@ def quick_login(
         user,
         settings,
         old_raw_token=request.cookies.get(SESSION_COOKIE_NAME),
+        now=now,
     )
     _set_session_cookie(response, raw_token, settings, request)
     return _auth_response(db, AuthContext(raw_token, session_row, user, raw_csrf), raw_csrf)
@@ -554,6 +562,7 @@ def register(
     response: Response,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    now: datetime | None = Depends(get_auth_clock),
 ) -> AuthSession:
     """Create a student account, attach it to a group and start its session.
 
@@ -573,7 +582,7 @@ def register(
     limiter_key = client_key(request, settings) if limiter is not None else ""
     attempt = limiter.consume_registration(limiter_key, settings) if limiter is not None else None
     try:
-        result, raw_token = _register_admitted(payload, request, db, settings)
+        result, raw_token = _register_admitted(payload, request, db, settings, now=now)
     except PlatformError as exc:
         # A retryable refusal (queue full, wait timeout, busy turn) did no
         # work; it must not spend the client's registration allowance.
@@ -585,7 +594,11 @@ def register(
 
 
 def _register_admitted(
-    payload: RegisterRequest, request: Request, db: Session, settings: Settings
+    payload: RegisterRequest,
+    request: Request,
+    db: Session,
+    settings: Settings,
+    now: datetime | None = None,
 ) -> tuple[AuthSession, str]:
     # Same unified pressure queue as sign-in (Argon2 + a short write): under
     # host pressure a registration waits instead of piling on.
@@ -610,6 +623,7 @@ def _register_admitted(
                 user,
                 settings,
                 old_raw_token=request.cookies.get(SESSION_COOKIE_NAME),
+                now=now,
             )
             result = _auth_response(
                 db, AuthContext(raw_token, session_row, user, raw_csrf), raw_csrf
