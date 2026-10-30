@@ -258,3 +258,81 @@ jobs:
 
       - name: Compose configuration
         run: docker compose config --quiet
+
+  login-load-regression:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+psycopg://postgres:maya-ci@127.0.0.1:5432/maya_test
+      ADAPTIVE_ADMISSION_ENABLED: "false"
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: maya-ci
+          POSTGRES_DB: maya_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Check out product repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@0c5e2b8115b80b4c7c5ddf6ffdd634974642d182 # v5.4.1
+        with:
+          version: 0.12.0
+
+      - name: Backend dependency sync
+        run: uv sync --directory backend --frozen
+
+      - name: Migrate login regression database
+        run: uv run --directory backend alembic upgrade head
+
+      - name: Start login regression API
+        working-directory: backend
+        run: |
+          mkdir -p artifacts
+          uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/login-load-api.log" 2>&1 &
+
+      - name: Wait for login regression API
+        run: |
+          for attempt in {1..60}; do
+            if [ "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 2 http://127.0.0.1:8000/health/ready)" = "200" ]; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/login-load-api.log"
+          exit 1
+
+      - name: Register login regression accounts
+        run: |
+          for index in {0..19}; do
+            username="$(printf 'loadtune-%03d' "$index")"
+            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              --max-time 30 --request POST \
+              --header 'Content-Type: application/json' \
+              --header 'Origin: http://127.0.0.1:8000' \
+              --data "{\"username\":\"$username\",\"password\":\"load-tune-password-1\",\"group_name\":\"Load tune\"}" \
+              http://127.0.0.1:8000/api/v1/auth/register)"
+            case "$status" in
+              200|201|409) ;;
+              *) echo "Registration failed for $username: HTTP $status" >&2; exit 1 ;;
+            esac
+          done
+
+      - name: Login load regression
+        run: uv run --directory backend python ../scripts/load_tune.py --profile login-ci --base-url http://127.0.0.1:8000 --json-out artifacts/login-load.json
+
+      - name: Upload login load report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: login-load-regression
+          # uv --directory backend resolves --json-out from backend.
+          path: backend/artifacts/login-load.json
+          if-no-files-found: error
