@@ -38,6 +38,7 @@ limit. Without ``--team-id`` each student builds a private Team from
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import csv
 import functools
 import http.cookiejar
@@ -50,6 +51,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from collections.abc import Callable, Iterator
@@ -313,6 +315,227 @@ class Plan:
     messages: list[str]
     timeout: float
     send_again: int
+
+
+@dataclass(frozen=True)
+class LoginCiConfig:
+    profile: str
+    warmup: int
+    samples: int
+    concurrency: int
+    repeat: int
+    errors_max: int
+    p95_ms_max: float
+    source: str
+
+
+@dataclass(frozen=True)
+class LoginCiBatch:
+    latencies_ms: list[float]
+    errors: int
+    elapsed_seconds: float
+
+
+@dataclass(frozen=True)
+class LoginCiAttempt:
+    latency_ms: float
+    error: bool
+
+
+def selected_profile(value: str | None) -> str:
+    """Select login-ci explicitly; all other values retain the classroom flow."""
+
+    return "login-ci" if value == "login-ci" else "classroom"
+
+
+def load_login_ci_config(path: Path | None = None) -> LoginCiConfig:
+    config_path = path or Path(__file__).with_name("load_tune_login_ci.json")
+    try:
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise ValueError("could not read login-ci configuration") from None
+    if not isinstance(payload, dict) or set(payload) != {
+        "profile",
+        "warmup",
+        "samples",
+        "concurrency",
+        "repeat",
+        "gates",
+    }:
+        raise ValueError("invalid login-ci configuration fields")
+    expected_workload = {"warmup": 2, "samples": 20, "concurrency": 2, "repeat": 3}
+    for name, expected in expected_workload.items():
+        value = payload.get(name)
+        if type(value) is not int or value != expected:
+            raise ValueError("login-ci workload must match the frozen 2/20/2/3 profile")
+    gates = payload.get("gates")
+    if not isinstance(gates, dict) or set(gates) != {"errors_max", "p95_ms_max", "source"}:
+        raise ValueError("invalid login-ci gate configuration")
+    if payload.get("profile") != "login-ci":
+        raise ValueError("login-ci configuration profile is invalid")
+    if type(gates.get("errors_max")) is not int or gates["errors_max"] != 0:
+        raise ValueError("login-ci errors_max must remain 0")
+    if type(gates.get("p95_ms_max")) not in (int, float) or gates["p95_ms_max"] != 200:
+        raise ValueError("login-ci p95_ms_max must remain 200")
+    source = gates.get("source")
+    required_sources = (
+        "测试-性能压测-50用户-9c68d42b.md",
+        "§3",
+        "方案-性能稳定性-会话哈希与知识库NUL-架构A.md",
+        "§5",
+        "9c68d42b",
+    )
+    if not isinstance(source, str) or any(
+        reference not in source for reference in required_sources
+    ):
+        raise ValueError("login-ci gate source must cite the approved reports and tip")
+    return LoginCiConfig(
+        profile="login-ci",
+        warmup=2,
+        samples=20,
+        concurrency=2,
+        repeat=3,
+        errors_max=0,
+        p95_ms_max=200.0,
+        source=source,
+    )
+
+
+def login_ci_attempt(
+    base_url: str, account_prefix: str, password: str, index: int, timeout: float
+) -> LoginCiAttempt:
+    username = f"{account_prefix}-{index:03d}"
+    started = time.perf_counter()
+    try:
+        result = Client(base_url, timeout).call(
+            "POST", "/api/v1/auth/login", {"username": username, "password": password}
+        )
+        error = result.status != 200
+    except Exception:
+        error = True
+    elapsed_ms = (time.perf_counter() - started) * 1000.0
+    return LoginCiAttempt(latency_ms=elapsed_ms, error=error)
+
+
+def _run_login_ci_batch(
+    base_url: str,
+    account_prefix: str,
+    password: str,
+    count: int,
+    concurrency: int,
+    timeout: float,
+) -> LoginCiBatch:
+    started = time.perf_counter()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
+        attempts = list(
+            executor.map(
+                lambda index: login_ci_attempt(
+                    base_url, account_prefix, password, index, timeout
+                ),
+                range(count),
+            )
+        )
+    elapsed = max(0.0, time.perf_counter() - started)
+    return LoginCiBatch(
+        latencies_ms=[attempt.latency_ms for attempt in attempts],
+        errors=sum(attempt.error for attempt in attempts),
+        elapsed_seconds=elapsed,
+    )
+
+
+def build_login_ci_report(
+    config: LoginCiConfig, rounds: list[LoginCiBatch], warmup_errors: int = 0
+) -> dict[str, Any]:
+    if len(rounds) != config.repeat or warmup_errors < 0:
+        raise ValueError("login-ci round count or warmup error count is invalid")
+    if any(
+        len(batch.latencies_ms) != config.samples
+        or batch.errors < 0
+        or batch.elapsed_seconds < 0
+        for batch in rounds
+    ):
+        raise ValueError("login-ci sample batch is invalid")
+    round_reports: list[dict[str, Any]] = []
+    all_latencies: list[float] = []
+    for number, batch in enumerate(rounds, start=1):
+        all_latencies.extend(batch.latencies_ms)
+        round_reports.append(
+            {
+                "round": number,
+                "total_requests": len(batch.latencies_ms),
+                "errors": batch.errors,
+                "p50_ms": percentile(batch.latencies_ms, 0.5),
+                "p95_ms": percentile(batch.latencies_ms, 0.95),
+                "throughput_rps": (
+                    len(batch.latencies_ms) / batch.elapsed_seconds
+                    if batch.elapsed_seconds
+                    else 0.0
+                ),
+            }
+        )
+    total_requests = len(all_latencies)
+    total_errors = sum(batch.errors for batch in rounds)
+    round_p95s = [float(report["p95_ms"]) for report in round_reports]
+    p95_median = statistics.median(round_p95s)
+    elapsed_total = sum(batch.elapsed_seconds for batch in rounds)
+    passed = (
+        warmup_errors == 0
+        and total_errors <= config.errors_max
+        and p95_median <= config.p95_ms_max
+    )
+    return {
+        "profile": config.profile,
+        "warmup": config.warmup,
+        "samples": config.samples,
+        "concurrency": config.concurrency,
+        "repeat": config.repeat,
+        "warmup_errors": warmup_errors,
+        "rounds": round_reports,
+        "aggregate": {
+            "total_requests": total_requests,
+            "errors": total_errors,
+            "p50_ms": percentile(all_latencies, 0.5),
+            "p95_ms": percentile(all_latencies, 0.95),
+            "p95_median_ms": p95_median,
+            "throughput_rps": total_requests / elapsed_total if elapsed_total else 0.0,
+        },
+        "gates": {
+            "errors_max": config.errors_max,
+            "p95_ms_max": config.p95_ms_max,
+            "source": config.source,
+        },
+        "passed": passed,
+    }
+
+
+def login_ci_exit_code(report: dict[str, Any]) -> int:
+    return 0 if report.get("passed") is True else 1
+
+
+def run_login_ci(
+    base_url: str, account_prefix: str, password: str, timeout: float
+) -> dict[str, Any]:
+    parsed_url = urllib.parse.urlsplit(base_url)
+    if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+        raise ValueError("base URL must be an absolute HTTP(S) URL")
+    if not account_prefix or not password or not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("account prefix, password, and positive timeout are required")
+    config = load_login_ci_config()
+    warmup = _run_login_ci_batch(
+        base_url, account_prefix, password, config.warmup, config.concurrency, timeout
+    )
+    rounds = [
+        _run_login_ci_batch(
+            base_url,
+            account_prefix,
+            password,
+            config.samples,
+            config.concurrency,
+            timeout,
+        )
+        for _ in range(config.repeat)
+    ]
+    return build_login_ci_report(config, rounds, warmup.errors)
 
 
 def ensure_account(plan: Plan, index: int) -> None:
@@ -597,6 +820,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--base-url", required=True)
     parser.add_argument(
+        "--profile",
+        help="login-ci uses existing <prefix>-000..019 accounts; otherwise classroom",
+    )
+    parser.add_argument("--json-out", help="write the login-ci report to this path")
+    parser.add_argument(
         "--health-url",
         action="append",
         default=[],
@@ -623,6 +851,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--apply-cmd", help="shell template with {name} and {value}")
     parser.add_argument("--apply-timeout", type=float, default=300.0)
     args = parser.parse_args(argv)
+
+    if selected_profile(args.profile) == "login-ci":
+        try:
+            report = run_login_ci(args.base_url, args.account_prefix, args.password, args.timeout)
+        except ValueError as error:
+            print(f"login-ci configuration/parameter error: {error}", file=sys.stderr)
+            return 2
+        encoded = json.dumps(report, ensure_ascii=False, allow_nan=False)
+        if args.json_out:
+            try:
+                Path(args.json_out).write_text(encoded + "\n", encoding="utf-8")
+            except OSError:
+                print("could not write login-ci JSON report", file=sys.stderr)
+                return 2
+        print(encoded)
+        return login_ci_exit_code(report)
 
     if args.team_id is None and not args.member_version_ids:
         parser.error("give --team-id, or --member-version-ids for private Teams")
