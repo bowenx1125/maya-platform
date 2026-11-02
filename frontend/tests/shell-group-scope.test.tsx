@@ -59,7 +59,8 @@ describe("group navigation scope", () => {
     render(content());
     expect(links()).toContain("/student/agents?group_id=group-b");
     expect(links()).not.toContain("/student/agents?group_id=group-a");
-    expect(screen.queryByRole("button", { name: "Backward" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Backout" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Logout" })).toBeTruthy();
     expect(state.api.agent).not.toHaveBeenCalled();
   });
 
@@ -111,17 +112,14 @@ describe("group navigation scope", () => {
     expect(
       screen.getByRole("link", { name: "Back" }).getAttribute("href"),
     ).toBe("/teacher/roster");
-    const backward = screen.getByRole("button", { name: "Backward" });
-    const logout = screen.getByRole("button", { name: "Logout" });
+    expect(screen.queryByRole("button", { name: "Backward" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Logout" })).toBeNull();
+    const backout = screen.getByRole("button", { name: "Backout" });
     const mail = screen.getByRole("link", { name: /Send to/ });
     expect(
-      backward.compareDocumentPosition(mail) & Node.DOCUMENT_POSITION_FOLLOWING,
+      mail.compareDocumentPosition(backout) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(
-      backward.compareDocumentPosition(logout) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    fireEvent.click(backward);
+    fireEvent.click(backout);
     await waitFor(() => expect(leave).toHaveBeenCalledWith("group-b"));
     expect(leave).toHaveBeenCalledWith("group-a");
     expect(state.push).toHaveBeenCalledWith("/teacher/roster");

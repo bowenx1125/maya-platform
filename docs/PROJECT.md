@@ -303,7 +303,7 @@ Agent and Chat with Team are separate histories; no kind stays the Agent list.
 
 Accounts group cards were a no-op (`onGroupPress` empty since 2026-10-27). Enter
 writes one expiring `teacher_group_access` row (0082, 2h, refreshed, not a roster
-member). Backward deletes it and returns to Accounts. The visit edits that group's
+member). Backout, in Logout's place, deletes it and returns to Accounts. The visit edits that group's
 Studyform agents and public Brainform library/Knowledge, not the group, its
 agents' deletion, members, or another group. Expired rows fail reads; the minute
 sweep deletes them.

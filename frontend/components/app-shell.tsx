@@ -475,7 +475,7 @@ export function AppShell({
       await refresh?.();
       router.push("/teacher/roster");
     } catch {
-      // The visit row is still there, so the teacher can try Backward again.
+      // The visit row is still there, so the teacher can try Backout again.
     } finally {
       setBusy(false);
     }
@@ -1142,21 +1142,6 @@ export function AppShell({
               <div
                 className={`mt-auto grid gap-2.5 ${collapsed ? "justify-items-center" : ""}`}
               >
-                {visitingGroup ? (
-                  <button
-                    className={`${collapsed ? `${ICON_ITEM} ${ICON_ITEM_KEY}` : `${ITEM} w-full ${ITEM_KEY}`} cursor-pointer text-left disabled:cursor-wait disabled:opacity-60`}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void leaveVisit()}
-                  >
-                    <WorkspaceIcon name="back" size={18} />
-                    {collapsed ? (
-                      <span className="sr-only">{t("backward")}</span>
-                    ) : (
-                      t("backward")
-                    )}
-                  </button>
-                ) : null}
                 {collapsed ? (
                   <a
                     href="mailto:t330034059@mail.bnbu.edu.cn"
@@ -1180,12 +1165,21 @@ export function AppShell({
                   className={`${collapsed ? `${ICON_ITEM} ${ICON_ITEM_KEY}` : `${ITEM} w-full ${ITEM_KEY}`} cursor-pointer text-left disabled:cursor-wait disabled:opacity-60`}
                   type="button"
                   disabled={busy}
-                  data-ui-guide="workspace.logout"
-                  onClick={() => void signOut()}
+                  data-ui-guide={visitingGroup ? undefined : "workspace.logout"}
+                  onClick={() =>
+                    void (visitingGroup ? leaveVisit() : signOut())
+                  }
                 >
-                  <WorkspaceIcon name="logout" size={18} />
+                  <WorkspaceIcon
+                    name={visitingGroup ? "back" : "logout"}
+                    size={18}
+                  />
                   {collapsed ? (
-                    <span className="sr-only">{t("logout")}</span>
+                    <span className="sr-only">
+                      {visitingGroup ? t("backout") : t("logout")}
+                    </span>
+                  ) : visitingGroup ? (
+                    t("backout")
                   ) : (
                     t("logout")
                   )}
