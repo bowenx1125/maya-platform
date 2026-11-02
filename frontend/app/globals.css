@@ -323,8 +323,8 @@ textarea {
   background: rgba(255, 255, 255, 0.78);
 }
 
-/* LoadingCard draws itself with Tailwind; this only keeps its frame when an
-   older page scope (workspace appearance) restyles plain cards. */
+/* LoadingCard draws itself with Tailwind; this only keeps its root full width
+   and clear of any padding a page scope gives plain cards. */
 .loading-card {
   width: 100%;
   padding: 0;

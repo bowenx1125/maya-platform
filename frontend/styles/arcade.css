@@ -121,29 +121,32 @@
       opacity: 0.35;
     }
   }
-  /* LoadingCard: the cast hops in turn; the candy stripe rolls. */
-  --animate-loading-hop: loading-hop 1.1s cubic-bezier(0.3, 0.7, 0.4, 1)
+  /* LoadingCard (proposal 39 C): the cards flip one by one, the dots follow. */
+  --animate-loading-flip: loading-flip 3.2s cubic-bezier(0.5, 0, 0.3, 1)
     infinite;
-  @keyframes loading-hop {
+  @keyframes loading-flip {
     0%,
-    55%,
+    18% {
+      transform: rotateY(0) translateY(0);
+    }
+    28%,
+    72% {
+      transform: rotateY(180deg) translateY(-14%);
+    }
+    82%,
     100% {
-      transform: translateY(0) scale(1, 1);
-    }
-    12% {
-      transform: translateY(0) scale(1.08, 0.9);
-    }
-    30% {
-      transform: translateY(-16px) scale(0.94, 1.06);
-    }
-    46% {
-      transform: translateY(0) scale(1.06, 0.92);
+      transform: rotateY(360deg) translateY(0);
     }
   }
-  --animate-loading-stripes: loading-stripes 0.8s linear infinite;
-  @keyframes loading-stripes {
-    to {
-      background-position: 22.6px 0;
+  --animate-loading-dot: loading-dot 3.2s infinite;
+  @keyframes loading-dot {
+    0%,
+    100% {
+      background-color: #fff;
+    }
+    40%,
+    60% {
+      background-color: #ff4d8d;
     }
   }
   --animate-live-rise: live-rise 3s linear infinite;

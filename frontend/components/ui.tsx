@@ -41,90 +41,106 @@ export {
 
 export { NOTICE_TAIL_CLASS, useNoticeTray };
 
-/** The whole-page wait: one LoadingCard, centred in the shell column. */
+const STRIPES =
+  "bg-[#67E8F9] [background-image:repeating-linear-gradient(-35deg,#A5F3FC_0_46px,#67E8F9_46px_92px)]";
+
+/** The whole-page wait: the flipping cards across the cyan-striped screen. */
 export function LoadingPage() {
   return (
-    <main className="shell grid min-h-[70vh] place-items-center">
-      <LoadingCard />
+    <main className={cn("grid min-h-screen place-items-center px-4", STRIPES)}>
+      <LoadingCard bare />
     </main>
   );
 }
 
-const LOADING_CAST: { id: MascotId }[] = [
-  { id: "scroll" },
-  { id: "wreath" },
-  { id: "tablet" },
-  { id: "wave" },
+const LOADING_CAST: { id: MascotId; bg: string }[] = [
+  { id: "scroll", bg: "#C4B5FD" },
+  { id: "wreath", bg: "#FFB4C8" },
+  { id: "tablet", bg: "#A3E635" },
+  { id: "wave", bg: "#FFE14D" },
 ];
 
-function LoadingStar({ className, fill }: { className: string; fill: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={cn("absolute", className)}
-      aria-hidden="true"
-    >
-      <path
-        d="M12 1l3 7.5 8 .8-6 5.4 1.8 8L12 18.6 5.2 22.7 7 14.7 1 9.3l8-.8z"
-        fill={fill}
-        stroke="#111"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
+/** Card faces, sized by the room the card gets (the @container). */
+const FACE =
+  "absolute inset-0 overflow-hidden rounded-[12px] border-[3px] border-[#111] shadow-[3px_3px_0_#111] [backface-visibility:hidden] @min-[640px]:rounded-[18px] @min-[640px]:border-[5px] @min-[640px]:shadow-[8px_8px_0_#111]";
 
 /**
- * The one loading look, sign-in stage style: the four scholars hop in turn on
- * a lime stage under a sunburst, and a candy stripe rolls beside the label.
- * Reduced motion keeps them still.
+ * The one loading look (proposal 39 C, chosen 2026-11-02): the sign-in's
+ * four character cards flip face up one after another, and four dots light
+ * in step beside the label. It sizes itself by the room it gets: a page's
+ * content area gets a framed striped panel with big cards, a small panel
+ * gets small cards. Reduced motion leaves every card face up and still.
  */
-export function LoadingCard({ label }: { label?: string }) {
+export function LoadingCard({
+  label,
+  bare = false,
+}: {
+  label?: string;
+  /** No frame of its own (LoadingPage already paints the stripes). */
+  bare?: boolean;
+}) {
   const t = useT();
   return (
-    <div
-      className="loading-card @container relative mx-auto w-full max-w-[520px] overflow-hidden rounded-[20px] border-[3px] border-[#111] bg-white text-[#111] shadow-[6px_7px_0_#111]"
-      role="status"
-    >
+    <div className="loading-card @container w-full" role="status">
       <div
-        aria-hidden="true"
-        className="relative h-[150px] overflow-hidden border-b-[3px] border-[#111] bg-[#FFF7CC] [background-image:repeating-conic-gradient(from_0deg_at_50%_105%,#FFE14D_0_8deg,transparent_8deg_16deg)] @max-[440px]:h-[124px]"
+        className={cn(
+          "relative grid place-items-center overflow-hidden pt-6 pb-4 @min-[640px]:pt-10 @min-[900px]:pt-14",
+          !bare &&
+            cn(
+              "@min-[640px]:min-h-[min(70vh,640px)] @min-[640px]:rounded-[22px] @min-[640px]:border-[4px] @min-[640px]:border-[#111] @min-[640px]:shadow-[8px_8px_0_#111]",
+              "@min-[640px]:bg-[#67E8F9] @min-[640px]:[background-image:repeating-linear-gradient(-35deg,#A5F3FC_0_46px,#67E8F9_46px_92px)]",
+            ),
+        )}
       >
-        <LoadingStar
-          className="top-4 left-[9%] size-8 rotate-12"
-          fill="#FFE14D"
-        />
-        <LoadingStar
-          className="top-6 right-[10%] size-6 -rotate-12"
-          fill="#67E8F9"
-        />
-        <LoadingStar className="top-14 right-[24%] size-4" fill="#A3E635" />
-        <LoadingStar className="top-16 left-[22%] size-4" fill="#FF4D8D" />
-        <span className="absolute inset-x-0 bottom-0 h-6 border-t-[3px] border-[#111] bg-[#A3E635] bg-[repeating-linear-gradient(90deg,#0000_0_24px,#0001_24px_48px)]" />
-        <span className="absolute inset-x-0 bottom-[14px] flex items-end justify-center gap-1 @max-[440px]:-space-x-3">
-          {LOADING_CAST.map((cast, index) => (
-            <span
-              key={cast.id}
-              className="relative origin-bottom animate-loading-hop motion-reduce:animate-none"
-              style={{ animationDelay: `${index * 140}ms` }}
-            >
-              <MascotFigure
-                id={cast.id}
-                className="h-[96px] w-auto drop-shadow-[3px_3px_0_#1112] @max-[440px]:h-[72px]"
-              />
+        <div className="grid justify-items-center gap-3 @min-[640px]:gap-9">
+          <div
+            aria-hidden="true"
+            className="flex items-end gap-1.5 [perspective:900px] @max-[288px]:gap-1 @min-[640px]:gap-[22px]"
+          >
+            {LOADING_CAST.map((cast, index) => (
+              <span
+                key={cast.id}
+                className="relative block h-[90px] w-16 animate-loading-flip @max-[288px]:h-[68px] @max-[288px]:w-12 @min-[320px]:h-[104px] @min-[320px]:w-[74px] [transform-style:preserve-3d] motion-reduce:animate-none motion-reduce:[transform:rotateY(180deg)] @min-[640px]:h-[170px] @min-[640px]:w-[120px] @min-[900px]:h-[256px] @min-[900px]:w-[180px]"
+                style={{ animationDelay: `${(index * 8) / 10}s` }}
+              >
+                <span
+                  className={cn(
+                    FACE,
+                    "bg-[#FF4D8D] [background-image:radial-gradient(circle,#FFE14D_0_3px,transparent_3.5px),radial-gradient(circle,#fff_0_2px,transparent_2.5px)] [background-position:0_0,10px_10px] bg-size-[20px_20px] @min-[640px]:[background-image:radial-gradient(circle,#FFE14D_0_9px,transparent_10px),radial-gradient(circle,#fff_0_6px,transparent_7px)] @min-[640px]:[background-position:0_0,22px_22px] @min-[640px]:bg-size-[44px_44px]",
+                  )}
+                >
+                  <span className="absolute top-1/2 left-1/2 aspect-square w-[34%] -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-[#111] bg-[linear-gradient(90deg,#111_50%,#FF4D8D_50%)] @min-[640px]:border-[4px]" />
+                </span>
+                <span
+                  className={cn(
+                    FACE,
+                    "[transform:rotateY(180deg)] [background-image:repeating-conic-gradient(from_0deg_at_50%_72%,#ffffff66_0_9deg,transparent_9deg_18deg)]",
+                  )}
+                  style={{ backgroundColor: cast.bg }}
+                >
+                  <MascotFigure
+                    id={cast.id}
+                    className="absolute bottom-[-4%] left-1/2 h-[88%] w-auto -translate-x-1/2"
+                  />
+                </span>
+              </span>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 @min-[640px]:gap-4">
+            <span className="-rotate-2 rounded-[8px] border-[3px] border-[#111] bg-white px-2.5 py-0.5 font-display text-base leading-tight font-extrabold text-[#111] shadow-[2px_2px_0_#111] @min-[640px]:rounded-[16px] @min-[640px]:border-[4px] @min-[640px]:px-[22px] @min-[640px]:py-1.5 @min-[640px]:text-[34px] @min-[640px]:shadow-[6px_6px_0_#FF4D8D,6px_6px_0_4px_#111]">
+              {label ?? t("loading")}
             </span>
-          ))}
-        </span>
-      </div>
-      <div className="flex items-center gap-3 px-4 py-3.5">
-        <span className="-rotate-2 rounded-[8px] border-[3px] border-[#111] bg-[#FFE14D] px-2.5 py-1 font-body text-sm leading-none font-extrabold shadow-[2px_2px_0_#111]">
-          {label ?? t("loading")}
-        </span>
-        <span
-          aria-hidden="true"
-          className="h-4 min-w-10 flex-1 animate-loading-stripes rounded-full border-[3px] border-[#111] bg-[repeating-linear-gradient(-45deg,#FF4D8D_0_8px,#FFE14D_8px_16px)] bg-size-[22.6px_22.6px] motion-reduce:animate-none"
-        />
+            <span aria-hidden="true" className="flex gap-1 @min-[640px]:gap-2">
+              {[0, 1, 2, 3].map((index) => (
+                <i
+                  key={index}
+                  className="block size-2.5 animate-loading-dot rounded-full border-2 border-[#111] bg-white motion-reduce:animate-none @min-[640px]:size-5 @min-[640px]:border-[4px]"
+                  style={{ animationDelay: `${(index * 8) / 10}s` }}
+                />
+              ))}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );
