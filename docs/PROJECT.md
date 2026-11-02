@@ -262,11 +262,9 @@ adds prefetch/audio_serve. Browser samples 25% to POST /client-metrics (logged o
 
 ## Oct24 PostgreSQL only (PR B)
 
-SQLite DATABASE_URL is refused; the startup import is gone. scripts/migrate_sqlite_to_postgres.py
-copies an old file: dry-run default, --apply --confirm-production, read-only source, one
-transaction + receipt (re-run no-op), never deletes it. Tests need MAYA_TEST_POSTGRES_URL
-(a database per test). Fixed: budget lost update, Agent and
-document races, attempt vs knowledge update, purge order, alembic %, peer lock scope.
+SQLite DATABASE_URL is refused. scripts/migrate_sqlite_to_postgres.py copies an old file
+(dry-run default, --apply --confirm-production, one transaction, never deletes it). Tests
+need MAYA_TEST_POSTGRES_URL. Fixed races: budget, Agent/document, attempt vs knowledge.
 
 ## Oct24 Immerse audio predownload (PR A2)
 
@@ -305,4 +303,6 @@ move; a sidebar click lights its row with a wait; sidebar pages read the query (
 Single Chat: `draft` SSE (unsaved text as written), then delta/text_done after commit;
 ledger keeps the folded completion. Turn runners hold a pg advisory lock; each process
 sweeps per 60s, freeing claims unheld twice (startup with a live peer: only those).
-Team streams wake on committed events; fallback poll ≤2s.
+Team streams wake on committed events; fallback poll ≤2s. Debate default Rulesets: en
+mirrors the spoken zh one (no spoken RAG/I-feel labels or +5/+2), both address a listener
+who missed earlier speeches; a copy mid-paragraph is rewritten, not cut out.

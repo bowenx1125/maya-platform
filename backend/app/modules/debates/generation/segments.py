@@ -81,18 +81,11 @@ def _sentence_spans(text: str) -> list[tuple[int, int]]:
     return spans
 
 
-def strip_history_copies(
-    text: str, history_keys: Sequence[str], *, protected: Sequence[str] = ()
-) -> str:
-    """Remove sentences copied verbatim from earlier public speeches.
+def _copied_sentences(
+    text: str, history_keys: Sequence[str], protected: Sequence[str]
+) -> tuple[list[tuple[int, int]], list[bool]]:
+    """Each sentence of ``text`` and whether it is a verbatim history copy."""
 
-    The flash model sometimes re-emits a whole earlier speech (its own or the
-    previous speaker's) as the start of a new turn; the teaching rules already
-    forbid it, so the server enforces it instead of publishing the echo.
-    """
-
-    if not history_keys:
-        return text
     spans = _sentence_spans(text)
     keys = [_copy_key(text[start:end]) for start, end in spans]
     protected_keys = tuple(key for key in (_copy_key(item) for item in protected) if key)
@@ -113,6 +106,50 @@ def strip_history_copies(
             neighbours = copied[index - 1 : index] + copied[index + 1 : index + 2]
             if any(neighbours):
                 copied[index] = True
+    return spans, copied
+
+
+def history_copy_leaves_a_hole(
+    text: str, history_keys: Sequence[str], *, protected: Sequence[str] = ()
+) -> bool:
+    """A copied sentence sits between new ones in the same paragraph.
+
+    Cutting a copy off the start or end of a paragraph leaves a whole thought;
+    cutting one out of the middle leaves an argument with a step missing, which
+    listeners cannot follow. Such a turn is rewritten instead.
+    """
+
+    if not history_keys:
+        return False
+    spans, copied = _copied_sentences(text, history_keys, protected)
+    kept = [
+        not drop and bool(_copy_key(text[start:end]).strip("。！？!?；;,.，、"))
+        for (start, end), drop in zip(spans, copied, strict=True)
+    ]
+    kept_at = [index for index, keep in enumerate(kept) if keep]
+    for index, drop in enumerate(copied):
+        before = [kept_index for kept_index in kept_at if kept_index < index]
+        after = [kept_index for kept_index in kept_at if kept_index > index]
+        # New text on both sides with no paragraph break between them.
+        if drop and before and after:
+            if "\n" not in text[spans[before[-1]][1] : spans[after[0]][0]]:
+                return True
+    return False
+
+
+def strip_history_copies(
+    text: str, history_keys: Sequence[str], *, protected: Sequence[str] = ()
+) -> str:
+    """Remove sentences copied verbatim from earlier public speeches.
+
+    The flash model sometimes re-emits a whole earlier speech (its own or the
+    previous speaker's) as the start of a new turn; the teaching rules already
+    forbid it, so the server enforces it instead of publishing the echo.
+    """
+
+    if not history_keys:
+        return text
+    spans, copied = _copied_sentences(text, history_keys, protected)
     if not any(copied):
         return text
     pieces: list[str] = []
@@ -1716,6 +1753,15 @@ def validate_segment_output(
         protected = (
             (str(raw_question.get("text") or ""),) if isinstance(raw_question, Mapping) else ()
         )
+        if not allow_history_copy and any(
+            history_copy_leaves_a_hole(segment.text, history_keys, protected=protected)
+            for segment in segments_list
+        ):
+            raise _error(
+                "a paragraph repeats an earlier speech between new sentences.",
+                code="segment_history_copy",
+                pointer="/segments",
+            )
         deduplicated = []
         for segment in segments_list:
             text = strip_history_copies(segment.text, history_keys, protected=protected)
