@@ -277,11 +277,9 @@ document races, attempt vs knowledge update, purge order, alembic %, peer lock s
 
 ## Oct24 Immerse audio predownload (PR A2)
 
-From mount (after the 3D scene, Start, or 10 s) the stage downloads ready speeches as
-blobs, one at a time in speaking order, independent of Next/pause
-(snapshot audio_ready_turn_ids, turn.audio_ready). next-audio takes turn_id. Playing uses the
-blob, waits ≤3 s for its download, else the URL (never twice). Next returns media_url;
-no seek at cursor 0. Leaving aborts and frees blobs.
+From mount (after the 3D scene, Start, or 10 s) speeches download one at a time in
+speaking order, independent of Next/pause (audio_ready_turn_ids). Playing uses the blob,
+waits ≤3 s, else the URL once. Next returns media_url; no seek at 0. Leaving frees blobs.
 
 ## Oct25 audio, locks and Next cost (PR C)
 
@@ -300,7 +298,9 @@ contract lives in default_rules/{zh,en}.md ({round}); pre-v3 Debates keep legacy
 Voice: DEBATE_TTS_RATE 1.25 (0.5–2), _INSTRUCTION, _SEED freeze as
 voice_params (clones; seed best-effort). Playback rate gone (0080):1.0.
 
-## Oct27 UI (#305, 38)
+## Oct27 UI and Oct28 prod
 
-#305: G Agent cards (4-col width), Teams 3 columns, Teams empty = Agents empty.
-Sign-in: 38 v3 ([auth](ui-proposals/auth)); refresh/logout: LoadingCard, no intro.
+#305: G Agent cards, Teams 3 columns. Sign-in 38 v3; refresh/logout uses LoadingCard.
+Prod frontend 2cc08942 (#312) built locally and loaded; no server build. Schema
+0080_drop_playback_rate. Backup maya-20261027T170559Z.dump.
+https://app.mayaform.net/ 200; /health marker 2cc08942.
