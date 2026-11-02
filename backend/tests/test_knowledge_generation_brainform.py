@@ -440,20 +440,28 @@ def test_student_private_knowledge_is_full_but_manual_public_markdown_fails_clos
     assert teacher_row["generation_job_id"] is None
     # Visiting teachers read the full bank and may edit it. They must not get
     # the empty student projection that hid Download content during Accounts visits.
+    # The save must change the markdown: an identical body is a product no-op and
+    # does not bump version_seq (same rule as any other Brainform editor).
     teacher_markdown = client.get(f"/api/v1/knowledge-sets/{public_set['id']}/markdown")
     assert teacher_markdown.status_code == 200, teacher_markdown.text
     assert teacher_markdown.json()["audience"] == "full"
     assert teacher_markdown.json()["can_edit"] is True
     assert "REFERENCE_ANSWER_SECRET" in teacher_markdown.json()["markdown"]
+    visit_markdown = full_markdown.replace(
+        "Explain the water cycle in your own words.",
+        "Explain the water cycle in your own words. (teacher visit edit)",
+    )
     edited = _save(
         client,
         teacher_csrf,
         public_set["id"],
-        full_markdown,
+        visit_markdown,
         expected_version_seq=teacher_markdown.json()["version_seq"],
         key=f"visit-edit-{uuid4()}",
     )
     assert edited.status_code == 200, edited.text
+    assert edited.json()["version_seq"] == 2
+    assert edited.json()["markdown"] == visit_markdown
 
     peer, _peer_csrf = login(client, "kaikai")
     assert peer

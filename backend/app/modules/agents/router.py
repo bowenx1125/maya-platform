@@ -91,6 +91,7 @@ from app.modules.knowledge.providers.product_publication import (
 )
 from app.modules.knowledge.services import (
     _enabled_documents,
+    _visit_edits_agent,
     abandon_claim,
     agent_detail,
     agent_summary,
@@ -125,7 +126,6 @@ from app.modules.knowledge_sets.generation import (
     validate_generation_intent,
 )
 from app.modules.org.access import WorkspaceMember
-from app.modules.org.teacher_visit import teacher_may_edit_group_content
 from app.providers.control_repository import ProviderRepository
 from app.providers.factory import embedding_provider as select_embedding_provider
 from app.providers.standing_consent import apply_standing_provider_consent
@@ -1514,10 +1514,9 @@ def create_next_agent_version(
             },
         )
     # A private published Agent is the creator's, unless the caller is inside
-    # that group on a live teacher visit. The visit may open the next draft.
-    visiting = scoped.agent.group_id is not None and teacher_may_edit_group_content(
-        db, context.user.id, scoped.agent.group_id
-    )
+    # that group on a live teacher visit. The visit may open the next draft
+    # only when the Agent still has a publishing account.
+    visiting = _visit_edits_agent(db, context, scoped.agent)
     if (
         scoped.agent.owner_user_id != context.user.id
         and not version_is_currently_public(current, scoped.agent)

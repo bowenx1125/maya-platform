@@ -108,7 +108,10 @@ from app.modules.knowledge.schemas import AffectedAgentDTO, JobStatus
 from app.modules.knowledge.schemas import KnowledgeDocument as KnowledgeDocumentDTO
 from app.modules.knowledge.source_versions import source_version_filename
 from app.modules.org.access import WorkspaceMember
-from app.modules.org.teacher_visit import teacher_may_edit_group_content
+from app.modules.org.teacher_visit import (
+    prefetch_teacher_visit_edits,
+    teacher_may_edit_group_content,
+)
 
 
 @dataclass(frozen=True)
@@ -465,10 +468,15 @@ def can_read_source(
 
 
 def _visit_edits_agent(db: Session, context: AuthContext, agent: Agent) -> bool:
-    """A live visit may edit Studyform content that belongs to this group only."""
+    """A live visit may edit Studyform content that belongs to this group only.
+
+    An Agent with no publishing account (``owner_user_id is None``) stays
+    non-editable: the visit is not a substitute for ownership.
+    """
 
     return (
         agent.deleted_at is None
+        and agent.owner_user_id is not None
         and agent.ownership_scope == "group"
         and agent.group_id is not None
         and teacher_may_edit_group_content(db, context.user.id, agent.group_id)
@@ -1478,6 +1486,7 @@ def prefetch_agent_reads(
             if group_roles.get((viewer_id, group)) is None:
                 group_roles[(viewer_id, group)] = "teacher" if member is None else "student"
         store(db, "scoped_group_role", group_roles)
+        prefetch_teacher_visit_edits(db, user_id=viewer_id, group_ids=group_ids)
     enabled: dict[str, list[KnowledgeDocument]] = {version_id: [] for version_id in versions}
     for version_id, document in db.execute(
         select(AgentVersionDocument.agent_version_id, KnowledgeDocument)
@@ -1803,12 +1812,7 @@ def agent_summary(
         if context is not None
         else ("owner" if role == "owner" else None)
     )
-    visit_edit = bool(
-        context is not None
-        and agent.deleted_at is None
-        and agent.group_id is not None
-        and teacher_may_edit_group_content(db, context.user.id, agent.group_id)
-    )
+    visit_edit = context is not None and _visit_edits_agent(db, context, agent)
     if draft is None and include_draft and editor in {"groupmate", "course_teacher"}:
         shared = db.scalar(
             select(AgentVersion).where(

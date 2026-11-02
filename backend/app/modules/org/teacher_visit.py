@@ -9,6 +9,7 @@ the sweeper deletes it.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import UTC, datetime
 
 from sqlalchemy import and_, select
@@ -68,6 +69,43 @@ def grant_teacher_visit(
     )
 
 
+def prefetch_teacher_visit_edits(db: Session, *, user_id: str, group_ids: Collection[str]) -> None:
+    """One IN query covering ``teacher_may_edit_group_content`` for ``group_ids``.
+
+    List routes call this before per-Agent helpers so visit ACL does not add
+    one SELECT per row. Every requested key is stored (False when absent).
+    """
+
+    from app.core.prefetch import store
+
+    if not group_ids:
+        return
+    flags: dict[tuple[str, str], bool] = dict.fromkeys(
+        ((user_id, group_id) for group_id in group_ids), False
+    )
+    now = datetime.now(UTC)
+    for group_id, expires_at in db.execute(
+        select(TeacherGroupAccess.group_id, TeacherGroupAccess.expires_at)
+        .join(Group, Group.id == TeacherGroupAccess.group_id)
+        .join(
+            CourseMember,
+            and_(
+                CourseMember.course_id == Group.course_id,
+                CourseMember.user_id == TeacherGroupAccess.user_id,
+            ),
+        )
+        .join(User, User.id == TeacherGroupAccess.user_id)
+        .where(
+            TeacherGroupAccess.group_id.in_(group_ids),
+            TeacherGroupAccess.user_id == user_id,
+            CourseMember.role == "teacher",
+            User.status == "active",
+        )
+    ).all():
+        flags[(user_id, group_id)] = expires_at is not None and _as_utc(expires_at) > now
+    store(db, "teacher_may_edit_group", flags)
+
+
 def teacher_may_edit_group_content(db: Session, user_id: str, group_id: str) -> bool:
     """True only for an active teacher of this group's course, during a live visit.
 
@@ -75,6 +113,17 @@ def teacher_may_edit_group_content(db: Session, user_id: str, group_id: str) -> 
     account is not a grant. The check does not extend the window.
     """
 
+    from app.core.prefetch import prefetched
+
+    return prefetched(
+        db,
+        "teacher_may_edit_group",
+        (user_id, group_id),
+        lambda: _teacher_may_edit_group_content_uncached(db, user_id, group_id),
+    )
+
+
+def _teacher_may_edit_group_content_uncached(db: Session, user_id: str, group_id: str) -> bool:
     expires_at = db.scalar(
         select(TeacherGroupAccess.expires_at)
         .join(Group, Group.id == TeacherGroupAccess.group_id)
