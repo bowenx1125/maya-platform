@@ -2047,6 +2047,13 @@ function BrainformWorkspaceBody({
     if (handledUrlMode.current === modeKey || loading || !courseId) return;
     const timer = window.setTimeout(() => {
       if (handledUrlMode.current === modeKey) return;
+      // The Guide's "Add the RAG" step lands here: open the RAG create form,
+      // as the page's own New does, once the groups that may hold it are known.
+      if (initialMode === "rag-new") {
+        handledUrlMode.current = modeKey;
+        if (canAddRag) beginNewRag();
+        return;
+      }
       if (initialMode === "rag-view" || initialMode === "rag-edit") {
         if (!documentId) {
           handledUrlMode.current = modeKey;
@@ -2993,9 +3000,7 @@ function BrainformWorkspaceBody({
               )}
             </div>
             {loading && !ragDocuments.length ? (
-              <p className={styles.empty} aria-busy="true">
-                {t("loading")}
-              </p>
+              <LoadingCard />
             ) : ragDocuments.length ? (
               <ul className={styles.list}>
                 {ragDocuments.map((document) => {
@@ -3595,7 +3600,7 @@ function BrainformWorkspaceBody({
                 </div>
               </div>
             ) : (
-              <p className={album.eb}>{t("loading")}</p>
+              <LoadingCard />
             )}
           </div>
         </>

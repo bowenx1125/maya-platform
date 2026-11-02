@@ -205,7 +205,8 @@ export function StudentDashboard() {
         {
           label: t("studentGuideKnowledge"),
           complete: primary.knowledgeCount > 0,
-          href: "/student/knowledge",
+          // Students add RAG on the RAG page; Knowledge is not theirs.
+          href: `/student/rag?group_id=${encodeURIComponent(primary.group.id)}&mode=rag-new`,
         },
         {
           label: t("studentGuideVoice"),
