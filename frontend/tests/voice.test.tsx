@@ -425,7 +425,9 @@ describe("M08 voice library", () => {
     const sampleHint =
       "Upload a 10–20 second clip of yourself reading aloud (16-bit WAV, MP3, or M4A; max 10 MB).";
     const input = screen.getByLabelText(sampleHint) as HTMLInputElement;
-    expect(screen.queryByText(sampleHint)).toBeNull();
+    // The create panel is the Voices album's (2026-11-02): it shows the
+    // sample rules on its card, and labels the file input with them too.
+    expect(screen.getByText(sampleHint)).toBeTruthy();
     const file = new File([new Uint8Array([1, 2, 3])], "sample.wav", {
       type: "audio/wav",
     });
@@ -470,7 +472,7 @@ describe("M08 voice library", () => {
     fireEvent.click(screen.getByRole("button", { name: "New" }));
     const sampleHint =
       "Upload a 10–20 second clip of yourself reading aloud (16-bit WAV, MP3, or M4A; max 10 MB).";
-    expect(screen.queryByText(sampleHint)).toBeNull();
+    expect(screen.getByText(sampleHint)).toBeTruthy();
     const input = screen.getByLabelText(sampleHint) as HTMLInputElement;
     fireEvent.change(input, {
       target: {

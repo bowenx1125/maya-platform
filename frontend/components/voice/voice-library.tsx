@@ -28,7 +28,7 @@ import {
   PageIntro,
   SectionCard,
 } from "../ui";
-import { IconClose, IconPlay, IconPlus, IconUpload } from "../quiet-icons";
+import { IconClose, IconPlay, IconPlus } from "../quiet-icons";
 import { ModuleCard } from "../studyform-layout";
 import { WorkspaceIcon } from "../workspace-icon";
 import { PageAction } from "../page-action";
@@ -620,8 +620,10 @@ export function VoiceLibrary({
     setFile(null);
   }
 
+  // The album's record player; its consent card is the create button here.
+  // No sidebar Done, and the sidebar never changes while this panel is open.
   const form = (
-    <div className={"grid gap-6"}>
+    <div className="grid min-w-0 gap-4">
       {failure ? (
         <ErrorNotice
           inline
@@ -631,15 +633,17 @@ export function VoiceLibrary({
           }
         />
       ) : null}
-      <div className={"grid min-w-0 gap-2.5"}>
-        <label
-          className={
-            "inline-grid w-full min-h-11 place-items-center rounded-[10px] border border-(--workspace-border,var(--line)) bg-(--workspace-content,var(--surface-subtle)) text-(--ink) cursor-pointer hover:border-[#d8cfbd] hover:bg-[#f5eddc] focus-within:outline focus-within:outline-[3px] focus-within:outline-[#967c50] focus-within:outline-offset-2 has-[input:disabled]:text-[#8b887f] has-[input:disabled]:cursor-not-allowed"
-          }
-          data-ui-guide="voice.uploadSample"
-          aria-busy={controlsDisabled || undefined}
-        >
-          <IconUpload />
+      <VoiceAlbumCreate
+        fileName={file?.name ?? null}
+        requirement={t("voiceSampleFile")}
+        consent={t("voiceConsent")}
+        consentAction={{
+          onConfirm: () => void submitEnrollment(),
+          disabled: !file || controlsDisabled || !canEnroll,
+          busy,
+          describedBy: !file ? "voice-consent-hint" : "voice-sample-req",
+        }}
+        input={
           <input
             className="sr-only"
             type="file"
@@ -655,40 +659,17 @@ export function VoiceLibrary({
               event.target.value = "";
             }}
             aria-label={t("voiceSampleFile")}
+            aria-describedby="voice-sample-req"
+            data-ui-guide="voice.uploadSample"
           />
-        </label>
-        {file ? (
-          <span
-            className={
-              "min-w-0 text-(--ink) text-[0.92rem] leading-[1.4] [overflow-wrap:anywhere]"
-            }
-            aria-live="polite"
-          >
-            {file.name}
-          </span>
-        ) : null}
-      </div>
-      {/* Confirming consent is the create step: no sidebar Done, and the
-          sidebar never changes while this panel is open. */}
-      <button
-        className={
-          "flex w-full min-h-11 items-center gap-2.5 px-[14px] py-2.5 rounded-[10px] border border-(--workspace-border,var(--line)) bg-(--workspace-content,var(--surface-subtle)) text-(--ink) font-[inherit] text-[0.9rem] leading-[1.6] text-left cursor-pointer hover:enabled:border-[#d8cfbd] hover:enabled:bg-[#f5eddc] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#967c50] focus-visible:outline-offset-2 disabled:text-[#8b887f] disabled:cursor-not-allowed"
         }
-        type="button"
-        disabled={!file || controlsDisabled || !canEnroll}
-        aria-busy={busy || undefined}
-        aria-describedby={!file ? "voice-consent-hint" : undefined}
-        onClick={() => void submitEnrollment()}
-      >
-        {busy ? <span className="spinner" aria-hidden="true" /> : null}
-        <span>{t("voiceConsent")}</span>
-      </button>
-      {/* Students read the grey button as "upload is broken" (2026-10-20):
+      />
+      {/* Students read a grey button as "upload is broken" (2026-10-20):
           say why it is waiting. */}
       {!file ? (
         <p
           id="voice-consent-hint"
-          className={"m-[4px_0_0] text-[0.85em] text-(--muted,#666)"}
+          className="m-0 font-body text-sm font-bold text-[#555]"
         >
           {t("voiceSelectFileFirst")}
         </p>
