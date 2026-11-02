@@ -6,8 +6,8 @@ real-provider acceptance.
 
 ## Start
 
-1. Follow the [current startup procedure](../validation/MAYAFORM_V14_STARTUP.md)
-   for validation, PostgreSQL backup and the scoped Docker rebuild.
+1. Follow the [local startup](../../README.md) steps, then the PostgreSQL backup
+   and rebuild checks in [Release policy](../RELEASE_POLICY.md).
 2. Confirm `docker compose ps` shows healthy backend and frontend.
 3. Open [localhost:8080](http://localhost:8080) and sign in as the teacher.
 
