@@ -4,8 +4,8 @@ Existing visits are kept and given a window measured from when they were
 created, matching ``TEACHER_GROUP_VISIT_TTL`` (2 hours). Downgrade drops only
 the new column and its index.
 
-Revision ID: 0081_teacher_visit_expiry
-Revises: 0080_drop_playback_rate
+Revision ID: 0082_teacher_visit_expiry
+Revises: 0081_conversation_chat_type
 """
 
 from collections.abc import Sequence
@@ -13,8 +13,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0081_teacher_visit_expiry"
-down_revision: str | Sequence[str] | None = "0080_drop_playback_rate"
+revision: str = "0082_teacher_visit_expiry"
+down_revision: str | Sequence[str] | None = "0081_conversation_chat_type"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

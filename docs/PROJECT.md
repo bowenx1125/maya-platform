@@ -301,7 +301,7 @@ move; a sidebar click lights its row with a wait; sidebar pages read the query (
 ## Nov2 Accounts group visit
 
 Accounts group cards were a no-op (`onGroupPress` empty since 2026-10-27). Enter
-writes one expiring `teacher_group_access` row (0081, 2h, refreshed, not a roster
+writes one expiring `teacher_group_access` row (0082, 2h, refreshed, not a roster
 member). Backward deletes it and returns to Accounts. The visit edits that group's
 Studyform agents and public Brainform library/Knowledge, not the group, its
 agents' deletion, members, or another group. Expired rows fail reads; the minute
