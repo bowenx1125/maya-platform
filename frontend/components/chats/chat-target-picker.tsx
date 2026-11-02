@@ -22,6 +22,8 @@ export type ChatTargetTeam = {
   member_count?: number;
   /** Prefer member Agent mascots (Studyform Teams list). */
   members?: TeamFaceMember[] | null;
+  leaderName?: string | null;
+  memberNames?: string[];
 };
 
 /**
@@ -34,12 +36,15 @@ export function ChatTargetPicker({
   value,
   disabled,
   onPick,
+  surface = "both",
 }: {
   teams: ChatTargetTeam[];
   agents: ChatAgent[];
   value: string;
   disabled: boolean;
   onPick: (value: string) => void;
+  /** Agent and Team Chats each open only their own column. */
+  surface?: "agent" | "team" | "both";
 }) {
   const t = useT();
 
@@ -78,6 +83,26 @@ export function ChatTargetPicker({
             }}
           >
             <MascotFigure id={mascot} className="h-24 w-auto" />
+          </span>
+          <span className={styles.pickMeta}>
+            <span
+              className={cn(
+                styles.pickBadge,
+                agent.visibility === "private" && styles.pickBadgeMuted,
+              )}
+            >
+              {agent.visibility === "private"
+                ? t("privateOption")
+                : t("publicOption")}
+            </span>
+            <span
+              className={cn(
+                styles.pickBadge,
+                unavailable && styles.pickBadgeMuted,
+              )}
+            >
+              {unavailable ? t("unavailable") : t("available")}
+            </span>
           </span>
           {picked ? (
             <span className={styles.pickMark} aria-hidden="true">
@@ -123,6 +148,35 @@ export function ChatTargetPicker({
           >
             <TeamFaces faces={faces} more={Math.max(memberCount - 4, 0)} />
           </span>
+          <span className={styles.pickMeta}>
+            {team.visibility ? (
+              <span
+                className={cn(
+                  styles.pickBadge,
+                  team.visibility === "private" && styles.pickBadgeMuted,
+                )}
+              >
+                {team.visibility === "private"
+                  ? t("privateOption")
+                  : t("publicOption")}
+              </span>
+            ) : null}
+            <span className={cn(styles.pickBadge, styles.pickBadgeMuted)}>
+              {memberCount} members
+            </span>
+          </span>
+          {team.leaderName || team.memberNames?.length ? (
+            <span className={styles.pickRoster}>
+              {team.leaderName ? (
+                <span>
+                  <b>Leader</b> {team.leaderName}
+                </span>
+              ) : null}
+              {team.memberNames?.length ? (
+                <span>{team.memberNames.join(", ")}</span>
+              ) : null}
+            </span>
+          ) : null}
           {picked ? (
             <span className={styles.pickMark} aria-hidden="true">
               <IconCheck size={14} />
@@ -134,27 +188,43 @@ export function ChatTargetPicker({
   };
 
   return (
-    <div className={styles.pickLayout}>
-      <section className={styles.pickCol} aria-labelledby="chat-pick-agents">
-        <h2 id="chat-pick-agents" className={styles.pickColTitle}>
-          {t("agents")}
-        </h2>
-        {agents.length ? (
-          <ul className={styles.pickGrid}>{agents.map(agentTile)}</ul>
-        ) : (
-          <p className={styles.pickEmpty}>{t("noAgents")}</p>
-        )}
-      </section>
-      <section className={styles.pickCol} aria-labelledby="chat-pick-teams">
-        <h2 id="chat-pick-teams" className={styles.pickColTitle}>
-          {t("chatTargetTeams")}
-        </h2>
-        {teams.length ? (
-          <ul className={styles.pickGrid}>{teams.map(teamTile)}</ul>
-        ) : (
-          <p className={styles.pickEmpty}>{t("teamNoneYet")}</p>
-        )}
-      </section>
+    <div
+      className={cn(
+        styles.pickLayout,
+        surface !== "both" && styles.pickLayoutSingle,
+      )}
+    >
+      {surface === "team" ? null : (
+        <section className={styles.pickCol} aria-labelledby="chat-pick-agents">
+          <h2 id="chat-pick-agents" className={styles.pickColTitle}>
+            {t("agents")}
+          </h2>
+          {agents.length ? (
+            <ul className={styles.pickGrid}>{agents.map(agentTile)}</ul>
+          ) : (
+            <p className={styles.pickEmpty}>{t("noAgents")}</p>
+          )}
+        </section>
+      )}
+      {surface === "agent" ? null : (
+        <section className={styles.pickCol} aria-labelledby="chat-pick-teams">
+          <h2 id="chat-pick-teams" className={styles.pickColTitle}>
+            {t("chatTargetTeams")}
+          </h2>
+          {teams.length ? (
+            <ul
+              className={cn(
+                styles.pickGrid,
+                surface === "team" && styles.pickGridWide,
+              )}
+            >
+              {teams.map(teamTile)}
+            </ul>
+          ) : (
+            <p className={styles.pickEmpty}>{t("teamNoneYet")}</p>
+          )}
+        </section>
+      )}
     </div>
   );
 }

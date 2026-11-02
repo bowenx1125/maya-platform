@@ -79,6 +79,7 @@ from app.modules.knowledge_sets.schemas import (
     StudentAssetContent,
     StudentQuestionContent,
 )
+from app.modules.org.teacher_visit import teacher_may_edit_group_content
 from app.modules.teams.models import Team, TeamVersion, TeamVersionSet
 
 SetRole = Literal["owner", "student", "teacher"]
@@ -136,7 +137,16 @@ def save_knowledge_markdown_version(
     """Append one immutable Markdown version and atomically advance its Set head."""
 
     set_row = db.scalar(select(KnowledgeSet).where(KnowledgeSet.id == set_id).with_for_update())
-    if set_row is None or set_row.deleted_at is not None or set_row.owner_user_id != actor_user_id:
+    # A visit may save a manual edit of this group's public Knowledge. Generation
+    # stays with the owner, so an AI write cannot ride the visit.
+    visitor = (
+        set_row is not None and origin == "manual" and _visit_edits_set(db, actor_user_id, set_row)
+    )
+    if (
+        set_row is None
+        or set_row.deleted_at is not None
+        or (set_row.owner_user_id != actor_user_id and not visitor)
+    ):
         raise not_found()
     if set_row.current_markdown_version_seq != expected_version_seq:
         raise stale_revision(set_row.current_markdown_version_seq)
@@ -270,6 +280,18 @@ def _set_role_for_user(db: Session, user_id: str, row: KnowledgeSet) -> SetRole 
 
 def _set_role(db: Session, context: AuthContext, row: KnowledgeSet) -> SetRole | None:
     return _set_role_for_user(db, context.user.id, row)
+
+
+def _visit_edits_set(db: Session, user_id: str, row: KnowledgeSet) -> bool:
+    """A live visit may edit this group's public Brainform Knowledge only."""
+
+    return (
+        row.deleted_at is None
+        and row.ownership_scope == "group"
+        and row.visibility == "public"
+        and row.group_id is not None
+        and teacher_may_edit_group_content(db, user_id, row.group_id)
+    )
 
 
 def _source_matches_current(
@@ -966,7 +988,7 @@ def list_brainform_knowledge(
                 knowledge_display_name=summary.display_name,
                 generation_job_id=generation_job_id,
                 can_read=True,
-                can_edit=summary.can_edit,
+                can_edit=summary.can_edit or _visit_edits_set(db, context.user.id, set_row),
                 version_seq=markdown_version.version_seq if markdown_version is not None else None,
                 content_hash=content_hash,
                 generation_state=cast(Any, generation_state),
@@ -1049,7 +1071,7 @@ def get_brainform_markdown(
         markdown=markdown,
         projection_available=full or projection_available,
         can_read=True,
-        can_edit=access.can_edit,
+        can_edit=access.can_edit or _visit_edits_set(db, context.user.id, access.knowledge_set),
         created_at=version.created_at,
     )
 
@@ -1855,13 +1877,31 @@ def _save_manual_question_projection(
     return version_ids, _student_safe_markdown(markdown, parsed)
 
 
+def _content_edit_access(db: Session, context: AuthContext, set_id: str) -> SetAccess:
+    """Owner edit, or a live visit editing this group's public Knowledge.
+
+    Delete and regeneration keep ``_editable_access``, which is owner-only.
+    """
+
+    row = db.get(KnowledgeSet, set_id)
+    if row is None or row.deleted_at is not None:
+        raise not_found()
+    if row.owner_user_id == context.user.id:
+        return _editable_access(db, context, set_id)
+    if not _visit_edits_set(db, context.user.id, row):
+        raise not_found()
+    if not _set_sources_readable(db, context, row, "teacher"):
+        raise not_found()
+    return SetAccess(row, "teacher")
+
+
 def save_brainform_markdown(
     db: Session,
     context: AuthContext,
     set_id: str,
     request: SaveKnowledgeMarkdownRequest,
 ) -> KnowledgeMarkdownDocument:
-    access = _editable_access(db, context, set_id)
+    access = _content_edit_access(db, context, set_id)
     set_row = access.knowledge_set
     current_markdown = _current_markdown_version(db, set_row)
     if current_markdown is not None and current_markdown.content_hash == _sha256(request.markdown):
@@ -3225,7 +3265,14 @@ def get_agent_knowledge_sets(
             continue
         if observing:
             if row.group_id is None or row.group_id == agent.group_id:
-                sets.append(_summary(db, context, row, can_edit=False))
+                sets.append(
+                    _summary(
+                        db,
+                        context,
+                        row,
+                        can_edit=_visit_edits_set(db, context.user.id, row),
+                    )
+                )
             continue
         role = _set_role(db, context, row)
         if role is None or not _set_sources_readable(db, context, row, role):
@@ -3236,7 +3283,14 @@ def get_agent_knowledge_sets(
             and row.group_id != agent.group_id
         ):
             continue
-        sets.append(_summary(db, context, row, can_edit=role == "owner"))
+        sets.append(
+            _summary(
+                db,
+                context,
+                row,
+                can_edit=role == "owner" or _visit_edits_set(db, context.user.id, row),
+            )
+        )
     return agent.metadata_revision, sets
 
 

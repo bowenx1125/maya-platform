@@ -29,6 +29,17 @@ CONVERSATION_ENTRY_CHECK = (
     "AND history_team_version_id IS NOT NULL)))"
 )
 
+# Coarse list type stored beside entry_kind (0081). A published Maya Team keeps
+# entry_kind maya_team and is still a team chat.
+CHAT_TYPE_ENTRY_CHECK = (
+    "(chat_type = 'agent' AND entry_kind = 'agent') OR "
+    "(chat_type = 'team' AND entry_kind IN ('team', 'maya_team'))"
+)
+CHAT_TYPE_CHECK = f"({CHAT_TYPE_ENTRY_CHECK})"
+# Used only when a row's entry_kind and bindings disagree, so the migration
+# can finish without guessing or deleting that row.
+CHAT_TYPE_CHECK_ALLOWING_UNKNOWN = f"(chat_type IS NULL OR {CHAT_TYPE_ENTRY_CHECK})"
+
 LEARNING_TEAM_ORIGIN_CHECK = (
     "((origin = 'single_agent' AND team_id IS NULL AND team_version_id IS NULL) OR "
     "(origin IN ('custom_team', 'published_course_team') AND team_id IS NOT NULL "

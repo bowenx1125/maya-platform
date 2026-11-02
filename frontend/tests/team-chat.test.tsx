@@ -828,6 +828,10 @@ describe("Studyform Team cards", () => {
 });
 
 describe("Chatform", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/student/chat?kind=team");
+  });
+
   // TODO(ui-release): Chatform redo keeps a New button in the empty history card
   it.skip.each(["student", "teacher"])(
     "shows No chats yet before any Chat exists for a %s",
@@ -853,43 +857,43 @@ describe("Chatform", () => {
     },
   );
 
-  it("lists Agents then Teams on the New page and creates nothing until Done", async () => {
+  it("lists Agents and Teams on separate New pages and creates nothing until a pick", async () => {
     state.api.teams.mockResolvedValue([
       { ...team, can_edit: false, visibility: "public" },
     ]);
-    renderChats();
+    const teamPage = renderChats();
     await openNewChat();
-    const page = within(screen.getByRole("main"));
-    const socrates = await page.findByRole("button", { name: /Socrates/ });
-    // Agents is the first card (left column on desktop, top when stacked).
+    const teams = within(screen.getByRole("main"));
+    expect(teams.getByRole("heading", { name: "New Team chat" })).toBeTruthy();
+    expect(teams.getByRole("heading", { name: "Teams" })).toBeTruthy();
+    expect(teams.queryByRole("heading", { name: "Agents" })).toBeNull();
+    const circle = teams.getByRole("button", { name: /Reasoning circle/ });
+    expect(circle.textContent).toContain("Leader");
+    expect(circle.textContent).toContain("Socrates");
     expect(
-      page
-        .getAllByRole("heading", { name: /^(Agents|Teams)$/ })
-        .map((heading) => heading.textContent),
-    ).toEqual(["Agents", "Teams"]);
-    const agentsCard = page.getByRole("heading", { name: "Agents" });
-    const teamsCard = page.getByRole("heading", { name: "Teams" });
-    expect(
-      agentsCard.compareDocumentPosition(teamsCard) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    const socratesFirst = page.getByRole("button", { name: /Socrates/ });
-    const teamTile = page.getByRole("button", { name: /Reasoning circle/ });
-    expect(
-      socratesFirst.compareDocumentPosition(teamTile) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(page.getByRole("button", { name: /Mencius/ })).toBeTruthy();
-    expect(page.getByRole("button", { name: /Reasoning circle/ })).toBeTruthy();
-    expect(
-      page.getByRole("button", { name: /Course Dialogue Team/ }),
+      teams.getByRole("button", { name: /Course Dialogue Team/ }),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Private" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Public" })).toBeNull();
-    expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
     expect(screen.queryByLabelText("Name")).toBeNull();
-    expect(sidebarButton("Done").disabled).toBe(true);
+    teamPage.unmount();
 
+    window.history.replaceState(null, "", "/student/chat?kind=agent");
+    renderChats();
+    await openNewChat();
+    const agents = within(screen.getByRole("main"));
+    const socrates = await agents.findByRole("button", { name: /Socrates/ });
+    expect(
+      agents.getByRole("heading", { name: "New Agent chat" }),
+    ).toBeTruthy();
+    expect(agents.getByRole("heading", { name: "Agents" })).toBeTruthy();
+    expect(agents.getByRole("button", { name: /Mencius/ })).toBeTruthy();
+    expect(agents.queryByRole("heading", { name: "Teams" })).toBeNull();
+    expect(
+      agents.queryByRole("button", { name: /Reasoning circle/ }),
+    ).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
+    expect(sidebarButton("Done").disabled).toBe(true);
     fireEvent.click(socrates);
     expect(socrates.getAttribute("aria-pressed")).toBe("true");
     expect(sidebarButton("Done").disabled).toBe(false);
@@ -899,6 +903,115 @@ describe("Chatform", () => {
     fireEvent.click(sidebarButton("Done"));
     expect(state.api.createConversation).not.toHaveBeenCalled();
     expect(state.api.createTeamConversation).not.toHaveBeenCalled();
+  });
+
+  it("shows Agent and Team history on separate lists", async () => {
+    const agentHistory = {
+      id: "conversation-agent-1",
+      entry_kind: "agent" as const,
+      agent: agents[0],
+      revision: 1,
+      title: null,
+      pinned_at: null,
+      created_at: "2026-10-02T00:00:00Z",
+      turns: [
+        {
+          id: "agent-turn",
+          user_text: "An agent question",
+          assistant_text: "An agent answer",
+          mode: "mock",
+          state: "ready",
+          sources: [],
+          safe_error_code: null,
+        },
+      ],
+    };
+    const teamHistory = {
+      ...teamSession,
+      turns: [
+        {
+          id: "team-turn",
+          user_text: "A team question",
+          state: "ready",
+          routing: { mode: "auto", participant_ids: [] },
+          member_results: [],
+        },
+      ],
+    };
+    state.api.conversationSessions.mockResolvedValue([
+      agentHistory,
+      teamHistory,
+    ]);
+    const teamPage = renderChats();
+    expect(
+      await screen.findByRole("button", { name: "A team question" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "An agent question" }),
+    ).toBeNull();
+    expect(state.api.conversationSessions).toHaveBeenCalledWith("team");
+    teamPage.unmount();
+
+    state.api.conversationSessions.mockClear();
+    window.history.replaceState(null, "", "/student/chat?kind=agent");
+    renderChats();
+    expect(
+      await screen.findByRole("button", { name: "An agent question" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "A team question" }),
+    ).toBeNull();
+    expect(state.api.conversationSessions).toHaveBeenCalledWith("agent");
+  });
+
+  it("shows a Team member's sources in Check RAG", async () => {
+    const history = {
+      ...teamSession,
+      turns: [
+        {
+          id: "team-turn-src",
+          user_text: "Where is that from?",
+          state: "ready",
+          routing: { mode: "auto", participant_ids: [] },
+          member_results: [
+            {
+              id: "result-src",
+              participant_id: "participant-1",
+              speaker_name: "Bowen",
+              ordinal: 0,
+              state: "ready",
+              assistant_text: "From the reading.",
+              sources: [
+                {
+                  chunk_id: "chunk-1",
+                  filename: "ethics-week-3.pdf",
+                  excerpt: "Courage is a habit.",
+                },
+              ],
+              safe_error_code: null,
+            },
+          ],
+        },
+      ],
+    };
+    state.api.conversationSessions.mockResolvedValue([history]);
+    state.api.conversationSession.mockResolvedValue(history);
+    renderChats();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Where is that from?" }),
+    );
+    const summary = await screen.findByText("Check RAG");
+    expect(summary.closest("summary")?.textContent).toContain(
+      "ethics-week-3.pdf",
+    );
+    expect(
+      screen.getByText("Courage is a habit.").closest("details"),
+    ).toHaveProperty("open", false);
+    fireEvent.click(summary);
+    fireEvent.click(screen.getAllByText("ethics-week-3.pdf").at(-1)!);
+    expect(
+      screen.getByText("Courage is a habit.").closest("details"),
+    ).toHaveProperty("open", true);
   });
 
   // TODO(ui-release): ChatTargetPicker cards repeat the Agent/Team label; text query is ambiguous
@@ -952,7 +1065,7 @@ describe("Chatform", () => {
         );
       });
     await openNewChat();
-    showUrl("/student/chat?mode=new");
+    showUrl("/student/chat?kind=team&mode=new");
     fireEvent.click(
       await screen.findByRole("button", { name: /Reasoning circle/ }),
     );
@@ -962,7 +1075,7 @@ describe("Chatform", () => {
     await screen.findByRole("textbox", { name: "Message" });
     const historyReads = state.api.conversationSessions.mock.calls.length;
 
-    showUrl("/student/chat");
+    showUrl("/student/chat?kind=team");
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
@@ -973,6 +1086,7 @@ describe("Chatform", () => {
   });
 
   it("keeps the New page when Done cannot create the Chat", async () => {
+    window.history.replaceState(null, "", "/student/chat?kind=agent");
     state.api.createConversation.mockRejectedValue(new Error("stop here"));
     renderChats();
     await chooseTarget(/Socrates/);

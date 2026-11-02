@@ -108,6 +108,10 @@ from app.modules.knowledge.schemas import AffectedAgentDTO, JobStatus
 from app.modules.knowledge.schemas import KnowledgeDocument as KnowledgeDocumentDTO
 from app.modules.knowledge.source_versions import source_version_filename
 from app.modules.org.access import WorkspaceMember
+from app.modules.org.teacher_visit import (
+    prefetch_teacher_visit_edits,
+    teacher_may_edit_group_content,
+)
 
 
 @dataclass(frozen=True)
@@ -201,10 +205,9 @@ def observes_group(db: Session, user_id: str, group_id: str | None) -> bool:
 
     Entering is the membership row the roster's Enter creates for the visit.
     That row is a temporary membership: the group library answers the teacher
-    the way it answers a groupmate. Private Agents stay readable and not
-    editable. The read routes below are the only places that grant the
-    ``observer`` role, so it never edits, publishes, chats with or reuses a
-    student's private Agent.
+    the way it answers a groupmate. The ``observer`` role only reads. Content
+    edits go through an unexpired visit (``teacher_may_edit_group_content``),
+    which does not publish, chat with, or reuse a student's private Agent.
     """
 
     if group_id is None:
@@ -404,7 +407,7 @@ def can_read_version(
 ) -> bool:
     """Single version-visibility rule shared by summaries, history and routes."""
 
-    if role == "observer":
+    if role in {"observer", "visit_editor"}:
         return True
     if role == "owner":
         return context is None or version_sources_are_readable(
@@ -464,6 +467,22 @@ def can_read_source(
     return document.owner_user_id == user_id or document.visibility == "public"
 
 
+def _visit_edits_agent(db: Session, context: AuthContext, agent: Agent) -> bool:
+    """A live visit may edit Studyform content that belongs to this group only.
+
+    An Agent with no publishing account (``owner_user_id is None``) stays
+    non-editable: the visit is not a substitute for ownership.
+    """
+
+    return (
+        agent.deleted_at is None
+        and agent.owner_user_id is not None
+        and agent.ownership_scope == "group"
+        and agent.group_id is not None
+        and teacher_may_edit_group_content(db, context.user.id, agent.group_id)
+    )
+
+
 def can_mutate_source(
     db: Session,
     actor: AuthContext | str,
@@ -471,23 +490,28 @@ def can_mutate_source(
     *,
     require_active: bool = True,
 ) -> bool:
-    """Source mutation is owner-only and requires the active workspace scope."""
+    """Who may replace, rename, or hide a library file.
+
+    The owner may, once they are inside the group. An unexpired teacher visit
+    may also change a public file in that same group. Private files stay with
+    their owner. A course teacher who has not entered the group gets nothing
+    from the course role alone, including no authority to change visibility.
+    """
 
     user_id = _actor_user_id(actor)
-    if (
-        require_active and document.workspace_state != "active"
-    ) or document.owner_user_id != user_id:
+    if require_active and document.workspace_state != "active":
         return False
     if not _owner_has_course_access(db, user_id, document.course_id):
         return False
     if document.ownership_scope == "personal":
-        return document.group_id is None
+        return document.owner_user_id == user_id and document.group_id is None
     if document.group_id is None:
         return False
-    # A same-course Teacher can read a published Group summary without
-    # entering it. That read role must not become authority to replace, hide,
-    # reindex, or change the source's visibility.
-    return scoped_group_role_for_user(db, user_id, document.group_id) == "student"
+    if document.owner_user_id == user_id:
+        return scoped_group_role_for_user(db, user_id, document.group_id) == "student"
+    return document.visibility == "public" and teacher_may_edit_group_content(
+        db, user_id, document.group_id
+    )
 
 
 def can_bind_source(
@@ -762,6 +786,10 @@ def visible_student_version(db: Session, context: AuthContext, version_id: str) 
         draft_shared_with_editors(db, version, agent) or version_is_currently_public(version, agent)
     ):
         return ScopedVersion(version, agent, editor)
+    # A visit edits the group's draft. It does not become the creator, so
+    # delete stays on ``public_agent_editor_role``.
+    if _visit_edits_agent(db, context, agent) and version.state == "draft":
+        return ScopedVersion(version, agent, "visit_editor")
     raise not_found()
 
 
@@ -775,6 +803,8 @@ def visible_student_agent(db: Session, context: AuthContext, agent_id: str) -> S
     editor = public_agent_editor_role(db, context, agent)
     if editor in {"groupmate", "course_teacher"}:
         return ScopedAgent(agent, editor)
+    if _visit_edits_agent(db, context, agent):
+        return ScopedAgent(agent, "visit_editor")
     raise not_found()
 
 
@@ -1456,6 +1486,7 @@ def prefetch_agent_reads(
             if group_roles.get((viewer_id, group)) is None:
                 group_roles[(viewer_id, group)] = "teacher" if member is None else "student"
         store(db, "scoped_group_role", group_roles)
+        prefetch_teacher_visit_edits(db, user_id=viewer_id, group_ids=group_ids)
     enabled: dict[str, list[KnowledgeDocument]] = {version_id: [] for version_id in versions}
     for version_id, document in db.execute(
         select(AgentVersionDocument.agent_version_id, KnowledgeDocument)
@@ -1781,6 +1812,7 @@ def agent_summary(
         if context is not None
         else ("owner" if role == "owner" else None)
     )
+    visit_edit = context is not None and _visit_edits_agent(db, context, agent)
     if draft is None and include_draft and editor in {"groupmate", "course_teacher"}:
         shared = db.scalar(
             select(AgentVersion).where(
@@ -1813,7 +1845,9 @@ def agent_summary(
         course_id=UUID(agent.course_id),
         ownership_scope=cast(Literal["group", "personal"], agent.ownership_scope),
         visibility=cast(Literal["private", "public"], agent.visibility),
-        can_edit=editor is not None,
+        can_edit=editor is not None or visit_edit,
+        # Delete stays with the creator and the public-agent editors. A visit
+        # can change the Agent's content without removing it.
         can_delete=editor is not None,
         is_creator=context is not None and agent.owner_user_id == context.user.id,
         last_edited_by_name=last_editor,
@@ -1856,7 +1890,7 @@ def agent_detail(
         **agent_summary(
             db,
             agent,
-            include_draft=role in {"owner", "student", "observer"},
+            include_draft=role in {"owner", "student", "observer", "visit_editor"},
             role=role,
             context=context,
         ).model_dump(),
@@ -1865,7 +1899,7 @@ def agent_detail(
                 db,
                 version,
                 agent,
-                include_private_sources=role in {"owner", "observer"},
+                include_private_sources=role in {"owner", "observer", "visit_editor"},
             )
             for version in versions
         ],

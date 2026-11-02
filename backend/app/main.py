@@ -236,6 +236,7 @@ async def _agent_cascade_sweeper(database: Any, settings: Any) -> None:
 
     from app.modules.agents.cascade import sweep_stale_agents
     from app.modules.debates.voice_clones import sweep_debate_voice_clones
+    from app.modules.org.teacher_visit import purge_expired_teacher_visits
     from app.providers.factory import voice_provider
 
     def clones() -> None:
@@ -246,6 +247,14 @@ async def _agent_cascade_sweeper(database: Any, settings: Any) -> None:
                 settings=settings,
                 provider=voice_provider(settings),
             )
+
+    def expire_teacher_visits() -> None:
+        # A teacher who closed the browser never clicks Backout. The visit
+        # row already fails its expiry check; this removes it.
+        with database.session() as session:
+            count = purge_expired_teacher_visits(session)
+        if count:
+            logging.getLogger(__name__).info("teacher_visit_expired purged=%s", count)
 
     tick = 0
     while True:
@@ -258,6 +267,10 @@ async def _agent_cascade_sweeper(database: Any, settings: Any) -> None:
             await asyncio.to_thread(clones)
         except Exception:  # noqa: BLE001
             logging.getLogger(__name__).exception("Debate voice release sweep crashed")
+        try:
+            await asyncio.to_thread(expire_teacher_visits)
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).exception("Teacher visit expiry sweep crashed")
         tick += 1
         await asyncio.sleep(60)
 

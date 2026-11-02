@@ -242,8 +242,8 @@ def list_knowledge_documents(
     scoped_student_group_role(db, context, str(group_id))
     # Entering the group makes a course teacher a temporary member, so the
     # library is the one groupmates browse: their own files and public files.
-    # Another student's private file stays with that student. Private Agents
-    # are a separate visit and stay readable without becoming editable.
+    # Another student's private file stays with that student. A live visit may
+    # edit the public files; it does not take over a private one.
     docs = db.scalars(
         select(KnowledgeDocument)
         .where(
@@ -260,7 +260,7 @@ def list_knowledge_documents(
         db,
         context,
         list(docs),
-        manage=lambda document: document.owner_user_id == context.user.id,
+        manage=lambda document: can_mutate_source(db, context, document),
     )
 
 
@@ -1045,7 +1045,7 @@ def get_knowledge_document(
     scoped = visible_student_document(db, context, str(document_id))
     return _document_dto(
         scoped.document,
-        can_manage_visibility=scoped.document.owner_user_id == context.user.id,
+        can_manage_visibility=can_mutate_source(db, context, scoped.document),
     )
 
 

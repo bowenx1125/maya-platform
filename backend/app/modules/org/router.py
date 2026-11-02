@@ -7,7 +7,6 @@ joining is what lets them sit inside one as a participant.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Header, status
@@ -17,7 +16,6 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.errors import Error, forbidden, not_found
 from app.core.models import Course, CourseMember, Group, GroupMember, TeacherGroupAccess, User
-from app.core.sqlutil import dialect_insert
 from app.modules.auth.dependencies import (
     CourseScope,
     get_db,
@@ -40,6 +38,7 @@ from app.modules.org.schemas import (
     UpdateCourseMemberRequest,
 )
 from app.modules.org.schemas import Group as GroupDTO
+from app.modules.org.teacher_visit import grant_teacher_visit, purge_expired_teacher_visits
 from app.modules.voices.withdrawal import finish_withdrawn_voices
 
 router = APIRouter(tags=["Organization"])
@@ -299,9 +298,10 @@ def _teacher_group(db: Session, context: AuthContext, group_id: str) -> Group:
     if row is None:
         raise not_found()
     group, role = row
-    if role != "teacher":
+    if role != "teacher" or context.user.status != "active":
         # The group is visible to this student, so 403 rather than 404 is the
         # honest answer: they may read it but may not join it this way.
+        # A teacher who no longer has an active account is refused the same way.
         raise forbidden()
     assert isinstance(group, Group)
     return group
@@ -326,15 +326,14 @@ def join_group(
     """Join a group in a course the caller teaches.
 
     Access belongs to the teacher identity and survives catalog synchronization.
-    Joining is idempotent and does not add the teacher to the student roster.
+    Joining refreshes the one temporary row for this teacher and group. It does
+    not add the teacher to the student roster, and it does not grant a second
+    visit when they enter again.
     """
 
     group = _teacher_group(db, context, str(group_id))
-    db.execute(
-        dialect_insert(db, TeacherGroupAccess)
-        .values(group_id=group.id, user_id=context.user.id, created_at=datetime.now(UTC))
-        .on_conflict_do_nothing(index_elements=["group_id", "user_id"])
-    )
+    purge_expired_teacher_visits(db)
+    grant_teacher_visit(db, group_id=group.id, user_id=context.user.id)
     dto = _group_dto(group)
     return GroupDetail(**dto.model_dump(), members=_members_for_group(db, group.id))
 
@@ -358,6 +357,7 @@ def leave_group(
     """Leave a group the caller teaches. Leaving is idempotent."""
 
     group = _teacher_group(db, context, str(group_id))
+    purge_expired_teacher_visits(db)
     membership = db.scalar(
         select(TeacherGroupAccess).where(
             TeacherGroupAccess.group_id == group.id,

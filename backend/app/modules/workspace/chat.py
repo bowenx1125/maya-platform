@@ -77,6 +77,7 @@ from .models import (
     ConversationTurn,
     TeamProviderCall,
     TeamTurnResult,
+    chat_type_for_entry_kind,
 )
 from .poll_cache import CONVERSATION_POLL_CACHE, POLL_AFTER_HEADER
 from .schemas import (
@@ -1495,8 +1496,9 @@ _CONVERSATION_ENTRY_FILTERS: dict[str, tuple[str, ...]] = {
 
 def _conversation_filters(
     entry_kind: str | None, course_id: str | None
-) -> tuple[tuple[str, ...] | None, str | None]:
+) -> tuple[tuple[str, ...] | None, str | None, str | None]:
     kinds = None
+    chat_type = None
     if entry_kind is not None:
         kinds = _CONVERSATION_ENTRY_FILTERS.get(entry_kind)
         if kinds is None:
@@ -1505,6 +1507,9 @@ def _conversation_filters(
                 "entry_kind must be agent or team.",
                 {"fields": ["entry_kind"]},
             )
+        # chat_type is the two-value list. team covers team and maya_team.
+        # A row left null by the backfill matches neither typed list.
+        chat_type = chat_type_for_entry_kind(entry_kind)
     course = None
     if course_id is not None:
         try:
@@ -1515,7 +1520,7 @@ def _conversation_filters(
                 "course_id must be a UUID.",
                 {"fields": ["course_id"]},
             ) from None
-    return kinds, course
+    return kinds, course, chat_type
 
 
 @router.get(
@@ -1537,10 +1542,12 @@ def list_conversations(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> list[ConversationSession]:
-    kinds, course = _conversation_filters(entry_kind, course_id)
+    kinds, course, chat_type = _conversation_filters(entry_kind, course_id)
     query = select(Conversation)
     if kinds is not None:
         query = query.where(Conversation.entry_kind.in_(kinds))
+    if chat_type is not None:
+        query = query.where(Conversation.chat_type == chat_type)
     if course is not None:
         query = query.where(Conversation.course_id == course)
     rows = db.scalars(
@@ -1610,6 +1617,7 @@ def create_conversation(
             user_id=context.user.id,
             course_id=agent.course_id,
             entry_kind="agent",
+            chat_type=chat_type_for_entry_kind("agent"),
             chat_visibility="private",
             origin="single_agent",
             agent_version_id=version.id,
@@ -1677,6 +1685,7 @@ def _memory_conversation(
             user_id=context.user.id,
             course_id=course_id,
             entry_kind="agent",
+            chat_type=chat_type_for_entry_kind("agent"),
             chat_visibility="private",
             origin="single_agent",
             agent_version_id=version.id,

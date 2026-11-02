@@ -116,7 +116,7 @@ describe("sidebar groups", () => {
     ).toBe("/student/voices?group_id=group-a");
     expect(
       nav().getByRole("link", { name: "Chat with Team" }).getAttribute("href"),
-    ).toBe("/student/chat");
+    ).toBe("/student/chat?kind=team");
     // Brainform has no page of its own for a student: a heading, not a link,
     // and the Guide's Brainform step points at that heading.
     expect(

@@ -2377,12 +2377,19 @@ function BrainformWorkspaceBody({
   const assessmentRecord = useAssessmentRecord(courseId, true, recordScope);
   // Owner request (2026-10-19): the sidebar New is gone; RAG and Knowledge
   // each add from a + at their top right, the same + as Studyform's Agents
-  // and Teams. Only a teacher adds Knowledge; a teacher reading a group's
-  // Brainform adds neither (that group's library is read-only to them).
+  // and Teams. Only a teacher adds Knowledge. Inside a group the teacher
+  // entered, that group's library is editable until they leave.
   const teacherGroupView = role === "teacher" && Boolean(initialGroupId);
-  const canAddKnowledge = role === "teacher" && !teacherGroupView;
+  const visitingGroupLibrary =
+    teacherGroupView &&
+    (user?.groups ?? []).some(
+      (membership) => membership.group_id === initialGroupId,
+    );
+  const canAddKnowledge =
+    role === "teacher" && (!teacherGroupView || visitingGroupLibrary);
   const canAddRag =
-    !teacherGroupView && (role === "teacher" || ragGroupIds.length > 0);
+    (!teacherGroupView || visitingGroupLibrary) &&
+    (role === "teacher" || ragGroupIds.length > 0);
 
   const knowledgePage = knowledgePageProp && role === "teacher";
   const knowledgeEditor =

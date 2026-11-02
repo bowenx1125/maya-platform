@@ -91,6 +91,7 @@ from app.modules.knowledge.providers.product_publication import (
 )
 from app.modules.knowledge.services import (
     _enabled_documents,
+    _visit_edits_agent,
     abandon_claim,
     agent_detail,
     agent_summary,
@@ -1512,8 +1513,14 @@ def create_next_agent_version(
                 "current_version_label": agent_version_label(current.version_seq),
             },
         )
-    if scoped.agent.owner_user_id != context.user.id and not version_is_currently_public(
-        current, scoped.agent
+    # A private published Agent is the creator's, unless the caller is inside
+    # that group on a live teacher visit. The visit may open the next draft
+    # only when the Agent still has a publishing account.
+    visiting = _visit_edits_agent(db, context, scoped.agent)
+    if (
+        scoped.agent.owner_user_id != context.user.id
+        and not version_is_currently_public(current, scoped.agent)
+        and not visiting
     ):
         abandon_claim(db, record)
         raise not_found()
