@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
 
@@ -40,6 +41,7 @@ import {
   BUSY_MOTION,
   BUSY_MOTION_PRIMARY,
   ICON_MOTION,
+  PRESS_HIT,
   PRESS_MOTION,
 } from "./ui/button";
 import { NoticeTraySlot } from "./ui/error-kit";
@@ -124,8 +126,7 @@ type SidebarGroup = {
  * lift; press sinks. Active / Logout / Meet Problems keep always-on key chrome
  * + PRESS_MOTION. Roomier sizing from polish-2 kept.
  */
-const FLAT_PRESS =
-  "shadow-none transition-[translate,box-shadow,background-color,border-color,color] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-0.5 hover:border-border hover:bg-surface hover:shadow-[0_6px_0_#111] active:translate-y-1.5 active:border-border active:bg-surface active:shadow-none active:duration-[80ms] motion-reduce:transition-colors motion-reduce:hover:translate-y-0 motion-reduce:hover:shadow-none motion-reduce:active:translate-y-0";
+const FLAT_PRESS = `shadow-none transition-[translate,box-shadow,background-color,border-color,color] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-0.5 hover:border-border hover:bg-surface hover:shadow-[0_6px_0_#111] active:translate-y-1.5 active:border-border active:bg-surface active:shadow-none active:duration-[80ms] motion-reduce:transition-colors motion-reduce:hover:translate-y-0 motion-reduce:hover:shadow-none motion-reduce:active:translate-y-0 ${PRESS_HIT}`;
 const ITEM =
   "group/item relative flex min-h-12 items-center gap-2.5 rounded-arc-s border-[3px] px-3 py-2 font-body text-sm font-semibold text-ink no-underline";
 const ITEM_IDLE = `border-transparent bg-transparent ${FLAT_PRESS}`;
@@ -801,7 +802,43 @@ export function AppShell({
     pathname === "/student/teams" || pathname === "/teacher/teams";
   const knowledgeArea =
     pathname === "/student/knowledge" || pathname === "/teacher/knowledge";
-  const mayaformLit =
+  // A sidebar click lights its row and shows a wait at once; the page itself
+  // arrives when the router commits. The new path, or a 15 s timeout for a
+  // navigation that never lands, clears it.
+  const [pendingNav, setPendingNav] = useState<{
+    from: string;
+    key: string;
+  } | null>(null);
+  // Once the path moves on, the wait is over; dropping it here keeps a later
+  // return to the old path from relighting the row.
+  if (pendingNav && pendingNav.from !== pathname) setPendingNav(null);
+  const pendingKey =
+    pendingNav && pendingNav.from === pathname ? pendingNav.key : null;
+  useEffect(() => {
+    if (!pendingKey) return;
+    const timer = window.setTimeout(() => setPendingNav(null), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [pendingKey]);
+  function startNav(key: string, href: string) {
+    return (event: ReactMouseEvent<HTMLAnchorElement>) => {
+      // New-tab and modified clicks leave this page where it is.
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      )
+        return;
+      if (href.split(/[?#]/, 1)[0] === pathname) return;
+      setPendingNav({ from: pathname, key });
+    };
+  }
+  const navSpinner = (
+    <span className="spinner ml-auto shrink-0" aria-hidden="true" />
+  );
+  const mayaformHere =
     !agentsArea &&
     !ragArea &&
     !voicesArea &&
@@ -809,12 +846,16 @@ export function AppShell({
     !teamsArea &&
     !knowledgeArea &&
     activeHref === home;
+  const mayaformLit = pendingKey ? pendingKey === "home" : mayaformHere;
 
   function renderItem(group: SidebarGroup, item: SidebarItem, index: number) {
-    const lit = litKey === `${group.key}:${item.key}`;
+    const key = `${group.key}:${item.key}`;
+    const here = litKey === key;
+    const lit = pendingKey ? pendingKey === key : here;
+    const waiting = pendingKey === key;
     // Live, Debates and Accounts keep today's aria-current and active class.
     const legacy = links.find((link) => link.icon === item.key);
-    const current = legacy ? activeHref === legacy.href : lit;
+    const current = legacy ? activeHref === legacy.href : here;
     // A collapsed rail hides headings, so their target falls to the first row.
     const tour =
       item.tour ??
@@ -851,11 +892,18 @@ export function AppShell({
           data-tour={tour}
           data-sidebar-item={item.key}
           data-lit={lit || undefined}
+          aria-busy={waiting || undefined}
+          onClick={startNav(key, item.href)}
           className={`${collapsed ? ICON_ITEM : ITEM} isolate ${lit ? (collapsed ? ICON_ITEM_ACTIVE : ITEM_ACTIVE) : collapsed ? ICON_ITEM_IDLE : ITEM_IDLE}${current ? " is-active" : ""}`}
         >
           {lit ? pill : null}
-          <WorkspaceIcon name={item.icon} size={18} />
+          {waiting && collapsed ? (
+            <span className="spinner" aria-hidden="true" />
+          ) : (
+            <WorkspaceIcon name={item.icon} size={18} />
+          )}
           {collapsed ? null : <span>{item.label}</span>}
+          {waiting && !collapsed ? navSpinner : null}
           {isLive ? (
             collapsed ? (
               lamp(true, true)
@@ -940,7 +988,9 @@ export function AppShell({
               >
                 <Link
                   href={home}
-                  aria-current={mayaformLit ? "page" : undefined}
+                  aria-current={mayaformHere ? "page" : undefined}
+                  aria-busy={pendingKey === "home" || undefined}
+                  onClick={startNav("home", home)}
                   aria-label={collapsed ? t("appName") : undefined}
                   data-tour="home"
                   data-lit={mayaformLit || undefined}

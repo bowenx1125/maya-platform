@@ -5,12 +5,22 @@ import type { ComponentProps } from "react";
 import { cn } from "../../lib/utils";
 
 /**
+ * Keeps a pressable's hit area where it stood while it moves. The lift and
+ * the sink translate the element, and the browser hit-tests the moved box:
+ * a press in the top 6px ended outside it and the click was lost. A clear
+ * ::after fills the gap the motion opens (2px under a lifted key, 6px over a
+ * sunk one; sized for a 3px border). It only exists while the key moves, when
+ * the translate also makes the key its containing block.
+ */
+export const PRESS_HIT =
+  "hover:after:absolute hover:after:inset-x-0 hover:after:top-0 hover:after:-bottom-[5px] hover:after:content-[''] active:after:absolute active:after:inset-x-0 active:after:-top-[9px] active:after:bottom-0 active:after:content-[''] motion-reduce:after:hidden";
+
+/**
  * DESIGN-RULES L28/L44-49 press motion for every pressable button: rest
  * shadow 0 6px 0, hover lifts 2px, press sinks 6px and the shadow goes to 0
  * (80ms press, 150ms ui, --ease). Reduced motion keeps only colour changes.
  */
-export const PRESS_MOTION =
-  "shadow-[0_6px_0_#111] transition-[translate,box-shadow,background-color,color] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-0.5 active:translate-y-1.5 active:shadow-none active:duration-[80ms] motion-reduce:transition-colors motion-reduce:hover:translate-y-0 motion-reduce:active:translate-y-0 motion-reduce:active:shadow-[0_6px_0_#111]";
+export const PRESS_MOTION = `shadow-[0_6px_0_#111] transition-[translate,box-shadow,background-color,color] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-0.5 active:translate-y-1.5 active:shadow-none active:duration-[80ms] motion-reduce:transition-colors motion-reduce:hover:translate-y-0 motion-reduce:active:translate-y-0 motion-reduce:active:shadow-[0_6px_0_#111] ${PRESS_HIT}`;
 
 /**
  * DESIGN-RULES L44-49 for icon and ghost buttons: no shadow and no lift;
