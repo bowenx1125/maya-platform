@@ -39,6 +39,38 @@ describe("litSidebarKey", () => {
       "brainform:record",
     );
   });
+  it("lights Team chat only for a team list URL", () => {
+    const rows = [
+      {
+        key: "chatform",
+        items: [
+          { key: "chat-agent", href: "/teacher/chat" },
+          { key: "chat-team", href: "/teacher/chat?kind=team" },
+        ],
+      },
+    ];
+    expect(litSidebarKey(rows, "/teacher/chat", "/teacher/chat")).toBe(
+      "chatform:chat-agent",
+    );
+    expect(
+      litSidebarKey(
+        rows,
+        "/teacher/chat",
+        "/teacher/chat",
+        undefined,
+        "?kind=team",
+      ),
+    ).toBe("chatform:chat-team");
+    expect(
+      litSidebarKey(
+        rows,
+        "/teacher/chat",
+        "/teacher/chat?group_id=g",
+        undefined,
+        "?group_id=g&kind=team",
+      ),
+    ).toBe("chatform:chat-team");
+  });
   it("lights the first row opening the active page", () => {
     expect(litSidebarKey(teacher, "/teacher/agents", "/teacher/agents")).toBe(
       "studyform:agents",

@@ -100,6 +100,60 @@ function readMobile() {
   return Boolean(window.matchMedia?.(MOBILE_QUERY).matches);
 }
 
+// Same-path query changes (Agent chat vs Team chat) do not fire popstate.
+// Wrap history once so the sidebar reads the URL it just navigated to.
+const searchListeners = new Set<() => void>();
+let searchPatched = false;
+
+function notifySearch() {
+  for (const listener of searchListeners) listener();
+}
+
+function ensureSearchPatch() {
+  if (searchPatched || typeof window === "undefined") return;
+  searchPatched = true;
+  const { pushState, replaceState } = window.history;
+  window.history.pushState = function (
+    this: History,
+    ...args: Parameters<History["pushState"]>
+  ) {
+    pushState.apply(this, args);
+    notifySearch();
+  };
+  window.history.replaceState = function (
+    this: History,
+    ...args: Parameters<History["replaceState"]>
+  ) {
+    replaceState.apply(this, args);
+    notifySearch();
+  };
+  window.addEventListener("popstate", notifySearch);
+}
+
+function subscribeLocationSearch(listener: () => void) {
+  ensureSearchPatch();
+  searchListeners.add(listener);
+  return () => {
+    searchListeners.delete(listener);
+  };
+}
+
+function readLocationSearch() {
+  return window.location.search;
+}
+
+/** Team chats are ?kind=team. A URL without it stays the Agent list. */
+export function withTeamChatKind(href: string): string {
+  if (!href) return href;
+  const hashAt = href.indexOf("#");
+  const hash = hashAt >= 0 ? href.slice(hashAt) : "";
+  const bare = hashAt >= 0 ? href.slice(0, hashAt) : href;
+  const [path, query = ""] = bare.split("?");
+  const params = new URLSearchParams(query);
+  params.set("kind", "team");
+  return `${path}?${params.toString()}${hash}`;
+}
+
 type SidebarItem = {
   key: string;
   href: string;
@@ -150,7 +204,14 @@ export function AppShell({
   const router = useRouter();
   const pathname = usePathname();
   const [locationHash, setLocationHash] = useState("");
+  // Visit detection depends on this arriving a render late. The chat-list
+  // highlight reads the URL on this render so Agent and Team can share /chat.
   const [locationSearch, setLocationSearch] = useState("");
+  const sidebarSearch = useSyncExternalStore(
+    subscribeLocationSearch,
+    readLocationSearch,
+    () => "",
+  );
   const [busy, setBusy] = useState(false);
   const courseId = user?.courses?.[0]?.course_id;
   const [live, setLive] = useState(false);
@@ -735,7 +796,7 @@ export function AppShell({
         },
         {
           key: "chat-team",
-          href: chatHref,
+          href: withTeamChatKind(chatHref),
           label: t("sidebarChatTeam"),
           icon: "chatTeam",
         },
@@ -771,7 +832,13 @@ export function AppShell({
       ? "studyform:teams"
       : onStudyformGrid
         ? undefined
-        : litSidebarKey(groups, pathname, activeHref, studentVoicesHref);
+        : litSidebarKey(
+            groups,
+            pathname,
+            activeHref,
+            studentVoicesHref,
+            sidebarSearch,
+          );
   const pill = (
     <ViewTransition name="nav-active" share="nav-pill" default="none">
       <span
@@ -1196,6 +1263,7 @@ export function litSidebarKey(
   pathname: string,
   activeHref: string,
   voicesHref?: string,
+  search = "",
 ): string | undefined {
   const rows = groups.flatMap((group) =>
     group.items.map((item) => ({ ...item, id: `${group.key}:${item.key}` })),
@@ -1204,9 +1272,17 @@ export function litSidebarKey(
     const voices = rows.find((row) => row.key === "voices");
     if (voices) return voices.id;
   }
-  const samePage = rows.find(
-    (row) => row.href.split(/[?#]/, 1)[0] === pathname,
-  );
+  // Agent and Team share /chat. kind=team lights Team; anything else is Agent.
+  const wantedChat =
+    new URLSearchParams(search.replace(/^\?/, "")).get("kind") === "team"
+      ? "chat-team"
+      : "chat-agent";
+  const samePage = rows.find((row) => {
+    if (row.href.split(/[?#]/, 1)[0] !== pathname) return false;
+    if (row.key === "chat-agent" || row.key === "chat-team")
+      return row.key === wantedChat;
+    return true;
+  });
   if (samePage) return samePage.id;
   const own = rows.find((row) => row.key === PAGE_ROW[pathname]);
   if (own) return own.id;
