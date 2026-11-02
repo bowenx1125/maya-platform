@@ -1,36 +1,41 @@
+"use client";
+
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+
 import { AppShell } from "../../../components/app-shell";
 import { BrainformWorkspace } from "../../../components/knowledge/brainform-workspace";
 import { RouteGuard } from "../../../components/session-provider";
+import { LoadingPage } from "../../../components/ui";
 
-export default async function TeacherKnowledgePage({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    agent_id?: string;
-    set_id?: string;
-    job_id?: string;
-    course_id?: string;
-    group_id?: string;
-    mode?: string;
-    document_id?: string;
-  }>;
-}) {
-  const query = await searchParams;
+function TeacherKnowledgeRoute() {
+  const query = useSearchParams();
+  const q = (key: string) => query.get(key) ?? undefined;
   return (
     <RouteGuard role="teacher">
       <AppShell role="teacher">
         <BrainformWorkspace
           role="teacher"
-          knowledgePage={!query.group_id}
-          initialAgentId={query.agent_id}
-          initialSetId={query.set_id}
-          initialCourseId={query.course_id}
-          initialJobId={query.job_id}
-          initialGroupId={query.group_id}
-          initialMode={query.mode}
-          initialDocumentId={query.document_id}
+          knowledgePage={!q("group_id")}
+          initialAgentId={q("agent_id")}
+          initialSetId={q("set_id")}
+          initialCourseId={q("course_id")}
+          initialJobId={q("job_id")}
+          initialGroupId={q("group_id")}
+          initialMode={q("mode")}
+          initialDocumentId={q("document_id")}
         />
       </AppShell>
     </RouteGuard>
+  );
+}
+
+// The query (and path) is read in the browser, so following a link here
+// needs no server render; only the page's own data requests wait.
+export default function TeacherKnowledgePage() {
+  return (
+    <Suspense fallback={<LoadingPage />}>
+      <TeacherKnowledgeRoute />
+    </Suspense>
   );
 }

@@ -388,3 +388,62 @@ describe("nav chrome", () => {
     expect(logout.className).toContain("shadow-[0_6px_0_#111]");
   });
 });
+
+describe("click feedback", () => {
+  it("lights the clicked row and shows a wait before the page arrives", () => {
+    const view = renderShell("student", "/student");
+    const rag = nav().getByRole("link", { name: "RAG" });
+    fireEvent.click(rag, { button: 0 });
+    expect(rag.getAttribute("data-lit")).toBe("true");
+    expect(rag.getAttribute("aria-busy")).toBe("true");
+    expect(rag.querySelector(".spinner")).toBeTruthy();
+    // The current page stays the current page until the router commits.
+    expect(rag.getAttribute("aria-current")).toBeNull();
+    expect(
+      document
+        .querySelector('[data-tour="home"]')
+        ?.getAttribute("aria-current"),
+    ).toBe("page");
+
+    state.pathname = "/student/rag";
+    view.rerender(
+      <AppShell role="student">
+        <p>content</p>
+      </AppShell>,
+    );
+    const arrived = nav().getByRole("link", { name: "RAG" });
+    expect(arrived.getAttribute("aria-busy")).toBeNull();
+    expect(arrived.getAttribute("aria-current")).toBe("page");
+
+    // Coming back to the page the click started on does not relight it.
+    state.pathname = "/student";
+    view.rerender(
+      <AppShell role="student">
+        <p>content</p>
+      </AppShell>,
+    );
+    const back = nav().getByRole("link", { name: "RAG" });
+    expect(back.getAttribute("data-lit")).toBeNull();
+    expect(back.getAttribute("aria-busy")).toBeNull();
+  });
+
+  it("leaves new-tab clicks and the current page alone", () => {
+    renderShell("student", "/student/rag");
+    const voices = nav().getByRole("link", { name: "Voices" });
+    fireEvent.click(voices, { button: 0, ctrlKey: true });
+    expect(voices.getAttribute("aria-busy")).toBeNull();
+    const rag = nav().getByRole("link", { name: "RAG" });
+    fireEvent.click(rag, { button: 0 });
+    expect(rag.getAttribute("aria-busy")).toBeNull();
+  });
+
+  it("keeps each row's hit area in place while it lifts and sinks", () => {
+    renderShell("student", "/student");
+    const idle = nav().getByRole("link", { name: "Voices" });
+    const logout = screen.getByRole("button", { name: /Logout/ });
+    for (const element of [idle, logout]) {
+      expect(element.className).toContain("active:after:-top-[9px]");
+      expect(element.className).toContain("hover:after:-bottom-[5px]");
+    }
+  });
+});

@@ -40,6 +40,15 @@ export {
 
 export { NOTICE_TAIL_CLASS, useNoticeTray };
 
+/** The whole-page wait: the shell column holding one LoadingCard. */
+export function LoadingPage() {
+  return (
+    <main className="shell">
+      <LoadingCard />
+    </main>
+  );
+}
+
 export function LoadingCard({ label }: { label?: string }) {
   const t = useT();
   return (

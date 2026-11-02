@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
     groups: [] as { group_id: string; role: string }[],
   },
   pathname: "/student/knowledge",
+  search: new URLSearchParams(),
   redirect: vi.fn(),
 }));
 
@@ -25,6 +26,7 @@ vi.mock("../components/session-provider", () => ({
 }));
 vi.mock("next/navigation", () => ({
   usePathname: () => state.pathname,
+  useSearchParams: () => state.search,
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   redirect: state.redirect,
 }));
@@ -43,6 +45,7 @@ afterEach(() => {
     groups: [],
   };
   state.pathname = "/student/knowledge";
+  state.search = new URLSearchParams();
   state.redirect.mockReset();
 });
 
@@ -81,17 +84,15 @@ function setupActor(role: "teacher" | "student", includeJob = false) {
       state: "succeeded",
     }),
   };
-  return {
-    page: StudentKnowledgePage({
-      searchParams: Promise.resolve({
-        group_id: "joined-group",
-        course_id: "course",
-        agent_id: "teacher-agent",
-        set_id: "set-1",
-        job_id: includeJob ? "teacher-job" : undefined,
-      }),
-    }),
-  };
+  // The page reads its query in the browser (useSearchParams).
+  state.search = new URLSearchParams({
+    group_id: "joined-group",
+    course_id: "course",
+    agent_id: "teacher-agent",
+    set_id: "set-1",
+    ...(includeJob ? { job_id: "teacher-job" } : {}),
+  });
+  return { page: <StudentKnowledgePage /> };
 }
 
 describe("legacy group Brainform actor context", () => {
