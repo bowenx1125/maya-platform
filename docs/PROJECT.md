@@ -259,13 +259,11 @@ that line. Topic copy: any language.
 
 ## Oct24 timing logs (PR A)
 
-Each request logs a `request_timing` JSON line (method,route template,status,ms,
-db_ms/queries,provider ms per kind,host,slow≥1s; streams to headers; fast /health
-probes omitted); debate_timing adds prefetch_request and audio_serve authorize/read. Browser samples 25%
-of page loads: Next→speech,first contentful paint,assessment send→reply; POST
-/client-metrics logs `client_metric`,stores nothing. Read-only
-`scripts/slow_endpoints_report.py` summarises docker logs: route p50/p95/p99/max,db,
-provider,top20 by p95,browser metrics,Debate stages. No ids,user data or payloads logged.
+Requests log `request_timing` JSON (method,route,status,ms,db ms/queries,provider ms,
+host,slow≥1s; no fast /health); debate_timing adds prefetch_request, audio_serve
+authorize/read. Browser samples 25% (Next→speech,FCP,send→reply) to POST
+/client-metrics (logged only). `scripts/slow_endpoints_report.py` (read-only) gives
+route p50/p95/p99/max,db,provider,top20,browser,Debate. No ids/user data/payloads.
 
 ## Oct24 PostgreSQL only (PR B)
 
@@ -304,3 +302,5 @@ voice_params (clones; seed best-effort). Playback rate gone (0080):1.0.
 
 #305: G Agent cards (4-col width), Teams 3 columns, Teams empty = Agents empty.
 Sign-in: 38 v3 ([auth](ui-proposals/auth)); refresh/logout: LoadingCard, no intro.
+Sidebar/press keys: hit area stays put while keys move (1–5px presses were lost); a
+click lights its row with a wait at once; sidebar pages read the query client-side (○).

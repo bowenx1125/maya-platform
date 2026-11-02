@@ -1,18 +1,31 @@
+"use client";
+
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+
 import { AppShell } from "../../../../components/app-shell";
 import { RouteGuard } from "../../../../components/session-provider";
 import { TeacherPersonalAgentCreate } from "../../../../components/teacher-workspace";
+import { LoadingPage } from "../../../../components/ui";
 
-export default async function NewTeacherAgentPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ return?: string }>;
-}) {
-  const query = await searchParams;
+function NewTeacherAgentRoute() {
+  const query = useSearchParams();
+  const q = (key: string) => query.get(key) ?? undefined;
   return (
     <RouteGuard role="teacher">
       <AppShell role="teacher">
-        <TeacherPersonalAgentCreate returnHref={query.return} />
+        <TeacherPersonalAgentCreate returnHref={q("return")} />
       </AppShell>
     </RouteGuard>
+  );
+}
+
+// The query (and path) is read in the browser, so following a link here
+// needs no server render; only the page's own data requests wait.
+export default function NewTeacherAgentPage() {
+  return (
+    <Suspense fallback={<LoadingPage />}>
+      <NewTeacherAgentRoute />
+    </Suspense>
   );
 }

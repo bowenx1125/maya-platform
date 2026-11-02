@@ -1,22 +1,35 @@
+"use client";
+
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+
 import { AppShell } from "../../../components/app-shell";
 import { TeacherStudyformWorkspace } from "../../../components/teacher-workspace";
 import { RouteGuard } from "../../../components/session-provider";
+import { LoadingPage } from "../../../components/ui";
 
-/** The teacher's Agents page (sidebar Agents). */
-export default async function TeacherAgentsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ group_id?: string }>;
-}) {
-  const query = await searchParams;
+function TeacherAgentsRoute() {
+  const query = useSearchParams();
+  const q = (key: string) => query.get(key) ?? undefined;
   return (
     <RouteGuard role="teacher">
       <AppShell role="teacher">
         <TeacherStudyformWorkspace
           view="agents"
-          initialGroupId={query.group_id}
+          initialGroupId={q("group_id")}
         />
       </AppShell>
     </RouteGuard>
+  );
+}
+
+/** The teacher's Agents page (sidebar Agents). */
+// The query (and path) is read in the browser, so following a link here
+// needs no server render; only the page's own data requests wait.
+export default function TeacherAgentsPage() {
+  return (
+    <Suspense fallback={<LoadingPage />}>
+      <TeacherAgentsRoute />
+    </Suspense>
   );
 }
