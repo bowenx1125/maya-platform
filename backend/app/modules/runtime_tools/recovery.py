@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Collection
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -32,12 +33,15 @@ def accepted_chat_stage_complete(db: Session, operation: ProviderOperation) -> b
     )
 
 
-def recover_single_chat_runs(db: Session) -> None:
-    for conversation in db.scalars(
-        select(Conversation).where(
-            Conversation.entry_kind == "agent", Conversation.active_request_id.is_not(None)
-        )
-    ):
+def recover_single_chat_runs(db: Session, conversation_ids: Collection[str] | None = None) -> None:
+    """Settle Single Chats left mid-turn; ``conversation_ids`` limits it to those."""
+
+    query = select(Conversation).where(
+        Conversation.entry_kind == "agent", Conversation.active_request_id.is_not(None)
+    )
+    if conversation_ids is not None:
+        query = query.where(Conversation.id.in_(tuple(conversation_ids)))
+    for conversation in db.scalars(query):
         turn = db.get(ConversationTurn, conversation.active_request_id)
         if turn is not None and turn.state == "pending":
             stages = list(

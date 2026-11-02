@@ -350,6 +350,11 @@ export type ChatStreamResult = {
 };
 
 export type ChatStreamHooks = {
+  /**
+   * The reply so far, while the model is still writing it. Unsaved: a Tool
+   * round starts the text over, and text_done's saved reply replaces it.
+   */
+  onDraft?: (text: string) => void;
   /** Fired when text_done is parsed, before the stream closes. */
   onTextDone?: (session: ChatSession) => void;
   /** Fired while the request's persisted turn is still pending. */
@@ -1514,6 +1519,8 @@ export class PlatformApi {
   ): Promise<ChatStreamResult> {
     let sawText = false;
     let session: ChatSession | null = null;
+    let draftCall: number | null = null;
+    let draftText = "";
     const resultFor = (saved: ChatSession): ChatStreamResult => ({
       session: saved,
     });
@@ -1570,6 +1577,17 @@ export class PlatformApi {
     }
     try {
       await readSseEvents(response, async (event) => {
+        if (event.event === "draft") {
+          if (sawText || typeof event.text !== "string") return;
+          const call = typeof event.call === "number" ? event.call : 0;
+          if (call !== draftCall) {
+            draftCall = call;
+            draftText = "";
+          }
+          draftText += event.text;
+          hooks?.onDraft?.(draftText);
+          return;
+        }
         if (event.event === "error") {
           const code =
             typeof event.safe_error_code === "string"

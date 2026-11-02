@@ -1,4 +1,9 @@
-"""Text-only SSE chat events publish deltas after committing the full reply."""
+"""Text-only SSE chat events publish deltas after committing the full reply.
+
+While the reply is still being written, ``draft`` events carry its text as it
+streams from the model. Drafts are unsaved and provisional: ``text_done``
+(after the commit) is the reply, and a client replaces any draft with it.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +15,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.chat_turn_locks import chat_turn_locks
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import PlatformError, not_found
@@ -18,6 +24,7 @@ from app.modules.auth.service import AuthContext
 
 from .models import Conversation, ConversationTurn
 from .schemas import ChatSource
+from .team_event_signals import TeamEventWatch
 from .team_runtime import TeamClaim
 
 _TEAM_BACKGROUND_RUNS: set[asyncio.Task[None]] = set()
@@ -103,7 +110,12 @@ async def stream_events(
         settled = True
         return code
 
+    # Marks this turn as running in this process, so an orphan sweep never
+    # takes it while the reply is still being written (core/chat_turn_locks).
+    turn_locks = chat_turn_locks(database.engine) if created else None
     try:
+        if turn_locks is not None:
+            await asyncio.to_thread(turn_locks.hold, request_id)
         if not created:
             if write_slot is not None:
                 write_slot.release()
@@ -115,8 +127,14 @@ async def stream_events(
                 claim_revision,
             )
             return
-        try:
-            reply, sources, operation_id = await asyncio.to_thread(
+        loop = asyncio.get_running_loop()
+        drafts: asyncio.Queue[tuple[int, str]] = asyncio.Queue()
+
+        def on_draft(call: int, text: str) -> None:
+            loop.call_soon_threadsafe(drafts.put_nowait, (call, text))
+
+        reply_task = asyncio.ensure_future(
+            asyncio.to_thread(
                 _reply_segment,
                 database,
                 settings,
@@ -127,7 +145,13 @@ async def stream_events(
                 actor_context,
                 generation_waker,
                 write_slot,
+                on_draft,
             )
+        )
+        try:
+            async for event in _draft_events(reply_task, drafts, request_id):
+                yield event
+            reply, sources, operation_id = await reply_task
         except Exception as exc:
             code = settle(exc)
             release()
@@ -172,6 +196,45 @@ async def stream_events(
         if created and not settled:
             settle(PlatformError("chat_interrupted", "This chat request was interrupted.", 503))
         release()
+        if turn_locks is not None:
+            turn_locks.release(request_id)
+
+
+async def _draft_events(
+    reply_task: asyncio.Future[Any],
+    drafts: asyncio.Queue[tuple[int, str]],
+    request_id: str,
+) -> AsyncIterator[bytes]:
+    """Yield the reply's text pieces until the reply thread finishes.
+
+    Pieces that arrived together are sent as one event per model call. What is
+    still queued when the thread ends is dropped: ``text_done`` follows.
+    """
+
+    seq = 0
+    while not reply_task.done():
+        getter = asyncio.ensure_future(drafts.get())
+        try:
+            done, _pending = await asyncio.wait(
+                {reply_task, getter}, return_when=asyncio.FIRST_COMPLETED
+            )
+        finally:
+            if not getter.done():
+                getter.cancel()
+        if getter not in done or getter.cancelled():
+            return
+        pieces = [getter.result()]
+        while not drafts.empty():
+            pieces.append(drafts.get_nowait())
+        merged: list[tuple[int, str]] = []
+        for call, text in pieces:
+            if merged and merged[-1][0] == call:
+                merged[-1] = (call, merged[-1][1] + text)
+            else:
+                merged.append((call, text))
+        for call, text in merged:
+            seq += 1
+            yield sse("draft", {"request_id": request_id, "call": call, "seq": seq, "text": text})
 
 
 def _replay_event(
@@ -235,6 +298,7 @@ def _reply_segment(
     actor_context: AuthContext | None = None,
     generation_waker: Callable[[str], None] | None = None,
     write_slot: WriteSlot | None = None,
+    on_draft: Callable[[int, str], None] | None = None,
 ) -> tuple[str, list[ChatSource], str | None]:
     from .chat import generate_reply
 
@@ -252,6 +316,7 @@ def _reply_segment(
             actor_context=actor_context,
             generation_waker=generation_waker,
             write_slot=write_slot,
+            on_draft=on_draft,
         )
 
 
@@ -302,14 +367,17 @@ def _failure_code(
 # database load of a class, most of them finding nothing new.
 POLL_MIN_SECONDS = 0.05
 POLL_MAX_SECONDS = 0.5
+# A stream its turn's commits wake (team_event_signals) only polls as a
+# fallback, so it can back off much further while a member is thinking.
+WOKEN_POLL_MAX_SECONDS = 2.0
 
 
-def next_poll_delay(previous: float, got_events: bool) -> float:
+def next_poll_delay(previous: float, got_events: bool, ceiling: float = POLL_MAX_SECONDS) -> float:
     """Back to the minimum after an event; otherwise double, up to the cap."""
 
     if got_events:
         return POLL_MIN_SECONDS
-    return min(POLL_MAX_SECONDS, previous * 2)
+    return min(ceiling, previous * 2)
 
 
 async def stream_team_events(
@@ -353,17 +421,24 @@ async def stream_team_events(
         # Runs even if the browser left; the run itself is not tied to it.
         task.add_done_callback(lambda _task: on_finished())
     delay = POLL_MIN_SECONDS
-    while True:
-        events, state, active = await asyncio.to_thread(poll)
-        for sequence, kind, payload in events:
-            cursor = sequence
-            yield f"id: {sequence}\n".encode() + sse(kind, payload)
-        if not active or state != "pending":
-            return
-        delay = next_poll_delay(delay, bool(events))
-        if task.done():
-            await asyncio.sleep(delay)
-        else:
-            # Wake at once when the run finishes, so the last result is not
-            # held back by an idle interval.
-            await asyncio.wait({task}, timeout=delay)
+    with TeamEventWatch(claim.turn_id) as watch:
+        while True:
+            watch.clear()
+            events, state, active = await asyncio.to_thread(poll)
+            for sequence, kind, payload in events:
+                cursor = sequence
+                yield f"id: {sequence}\n".encode() + sse(kind, payload)
+            if not active or state != "pending":
+                return
+            delay = next_poll_delay(delay, bool(events), WOKEN_POLL_MAX_SECONDS)
+            # Wake at once on a committed event or when the run finishes, so
+            # a result is not held back by an idle interval.
+            woken = asyncio.ensure_future(watch.wait())
+            try:
+                await asyncio.wait(
+                    {woken} if task.done() else {woken, task},
+                    timeout=delay,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+            finally:
+                woken.cancel()

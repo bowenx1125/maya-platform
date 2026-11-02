@@ -1314,6 +1314,42 @@ describe("private Agent chat", () => {
     expect(screen.getByText("A considered reply")).toBeTruthy();
   });
 
+  it("shows the reply as it streams in, then the saved reply in its place", async () => {
+    let resolve!: (value: unknown) => void;
+    let hooks!: ChatStreamHooks;
+    state.api.streamConversation.mockImplementation(
+      (_id: string, _body: unknown, given: ChatStreamHooks) => {
+        hooks = given;
+        return new Promise((done) => {
+          resolve = done;
+        });
+      },
+    );
+    renderChat({ newChat: true });
+    const input = await chooseSocrates();
+    fireEvent.change(input, { target: { value: "Hello" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    const log = within(screen.getByRole("log"));
+    expect(log.getByRole("status").textContent).toContain("Loading");
+    act(() => hooks.onDraft?.("A consid"));
+    expect(log.getByText("A consid")).toBeTruthy();
+    expect(log.queryByRole("status")).toBeNull();
+    expect(
+      document
+        .querySelector('[data-streaming="true"]')
+        ?.getAttribute("aria-busy"),
+    ).toBe("true");
+    act(() => hooks.onDraft?.("A considered rep"));
+    expect(log.getByText("A considered rep")).toBeTruthy();
+    await act(async () => {
+      hooks.onTextDone?.(completedConversation as unknown as ChatSession);
+      resolve({ session: completedConversation });
+    });
+    expect(log.getByText("A considered reply")).toBeTruthy();
+    expect(log.queryByText("A considered rep")).toBeNull();
+    expect(document.querySelector('[data-streaming="true"]')).toBeNull();
+  });
+
   it("offers the same + attachments in a writable Agent chat, for that chat only", async () => {
     state.api.conversations.mockResolvedValue([completedConversation]);
     state.api.conversationAttachments = vi.fn().mockResolvedValue([

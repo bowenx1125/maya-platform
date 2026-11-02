@@ -678,6 +678,16 @@ function AgentChatScope({
       ? pending.message
       : "";
   });
+  // The reply as it streams in, tied to the message it answers so a draft is
+  // never shown beside a different pending message.
+  const [streamingReply, setStreamingReply] = useState<{
+    message: string;
+    text: string;
+  } | null>(null);
+  const liveDraft =
+    streamingReply && streamingReply.message === pendingMessage
+      ? streamingReply.text
+      : "";
   const [loading, setLoading] = useState(true);
   const [renaming, setRenaming] = useState<{
     session: ChatSession | TeamChatSession;
@@ -2226,6 +2236,7 @@ function AgentChatScope({
       isChatRequestAttemptCurrent(attemptId, scopeKey);
     setBusy(true);
     setPendingMessage(message);
+    setStreamingReply(null);
     setDraft("");
     setError(null);
     try {
@@ -2265,10 +2276,15 @@ function AgentChatScope({
             expected_revision: revision,
           },
           {
+            onDraft: (text) => {
+              if (!ownsSend()) return;
+              setStreamingReply({ message, text });
+            },
             onTextDone: (refreshed) => {
               if (!ownsSend()) return;
               settleChatRequest(requestId, refreshed, scopeKey, attemptId);
               setPendingMessage("");
+              setStreamingReply(null);
               setBusy(false);
             },
             onPending: (refreshed, pendingTurnId) => {
@@ -3386,12 +3402,22 @@ function AgentChatScope({
                           materialTheme={peekTheme}
                           size={30}
                         />
-                        <div className={styles.reply}>
-                          <span className={styles.pending} role="status">
-                            <span className="spinner" aria-hidden="true" />
-                            {t("loading")}
-                          </span>
-                        </div>
+                        {liveDraft ? (
+                          <div
+                            className={styles.reply}
+                            aria-busy="true"
+                            data-streaming="true"
+                          >
+                            <ReportMarkdown>{liveDraft}</ReportMarkdown>
+                          </div>
+                        ) : (
+                          <div className={styles.reply}>
+                            <span className={styles.pending} role="status">
+                              <span className="spinner" aria-hidden="true" />
+                              {t("loading")}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : null}

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import set_committed_value
 
 from app.core.adaptive_admission import polling_pressure
+from app.core.chat_turn_locks import holding_chat_turn
 from app.core.config import Settings, get_settings
 from app.core.create_admission import create_admission_slot
 from app.core.db import Database
@@ -724,6 +725,7 @@ def generate_reply(
     allow_not_sent_retry: bool = False,
     generation_waker: Callable[[str], None] | None = None,
     write_slot: WriteSlot | None = None,
+    on_draft: Callable[[int, str], None] | None = None,
 ) -> tuple[str, list[ChatSource], str | None]:
     """Produce one full reply in memory.  This does not store assistant text.
 
@@ -747,6 +749,7 @@ def generate_reply(
             actor_context=actor_context,
             allow_not_sent_retry=allow_not_sent_retry,
             generation_waker=generation_waker,
+            on_draft=on_draft,
         )
 
 
@@ -761,6 +764,7 @@ def _generate_reply_body(
     actor_context: AuthContext | None = None,
     allow_not_sent_retry: bool = False,
     generation_waker: Callable[[str], None] | None = None,
+    on_draft: Callable[[int, str], None] | None = None,
 ) -> tuple[str, list[ChatSource], str | None]:
     require_single_runtime(row)
     current_turn = require_current_chat_claim(db, row.id, request_id, claim_revision)
@@ -860,6 +864,9 @@ def _generate_reply_body(
         allow_not_sent_retry=allow_not_sent_retry,
         generation_waker=generation_waker,
         required_tool="assessment_action" if assessment_active else None,
+        # An assessment reply is rewritten from the ledger after the call, so
+        # its model text is never shown as a draft.
+        on_draft=None if assessment_active else on_draft,
     )
     assessment_result = _assessment_result_for_turn(db, row.id, request_id, row.user_id)
     if assessment_active and assessment_result is None:
@@ -2031,6 +2038,42 @@ def pause_team_conversation_turn(
     return session_view(db, owned_conversation(db, context, row.id), context, settings)
 
 
+def _resume_single_reply(
+    db: Session,
+    settings: Settings,
+    row: Conversation,
+    turn: ConversationTurn,
+    claim_revision: int,
+    context: AuthContext,
+    request: Request,
+) -> None:
+    try:
+        reply, sources, operation_id = generate_reply(
+            db,
+            settings,
+            row,
+            turn.id,
+            claim_revision,
+            turn.user_text,
+            actor_context=context,
+            allow_not_sent_retry=True,
+            generation_waker=_knowledge_generation_waker(request),
+        )
+        store_assistant_text(
+            db,
+            row.id,
+            turn.id,
+            claim_revision,
+            reply,
+            sources,
+            operation_id,
+        )
+    except Exception as exc:
+        record_chat_failure(db, row.id, turn.id, claim_revision, exc)
+    release_chat_request(db, row.id, turn.id, claim_revision)
+    db.commit()
+
+
 @router.post(
     "/conversations/{conversation_id}/turns/{turn_id}:resume",
     response_model=ConversationSession,
@@ -2055,31 +2098,8 @@ def resume_team_conversation_turn(
             actor_context=context,
             turn_id=str(turn_id),
         )
-        try:
-            reply, sources, operation_id = generate_reply(
-                db,
-                settings,
-                row,
-                turn.id,
-                claim_revision,
-                turn.user_text,
-                actor_context=context,
-                allow_not_sent_retry=True,
-                generation_waker=_knowledge_generation_waker(request),
-            )
-            store_assistant_text(
-                db,
-                row.id,
-                turn.id,
-                claim_revision,
-                reply,
-                sources,
-                operation_id,
-            )
-        except Exception as exc:
-            record_chat_failure(db, row.id, turn.id, claim_revision, exc)
-        release_chat_request(db, row.id, turn.id, claim_revision)
-        db.commit()
+        with holding_chat_turn(database.engine, turn.id):
+            _resume_single_reply(db, settings, row, turn, claim_revision, context, request)
         db.expire_all()
         return session_view(db, owned_conversation(db, context, row.id), context, settings)
     _require_canonical_assessment_conversation(db, context, row)

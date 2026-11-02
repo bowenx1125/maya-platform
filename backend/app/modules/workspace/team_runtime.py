@@ -6,7 +6,7 @@ import hashlib
 import json
 import logging
 import re
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -18,6 +18,7 @@ from agno.models.response import ModelResponse
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, object_session
 
+from app.core.chat_turn_locks import holding_chat_turn
 from app.core.config import Settings
 from app.core.errors import PlatformError, conflict, not_found
 from app.core.links import live_link
@@ -44,6 +45,7 @@ from .models import (
 )
 from .schemas import ChatSource, TeamChatTurn, TeamMemberResult, TeamRouting
 from .team_conversation import _assessment_stage, frozen_team_selection
+from .team_event_signals import note_team_event
 
 SessionFactory = Callable[[], Session]
 LOGGER = logging.getLogger("maya.workspace")
@@ -397,6 +399,7 @@ def _append_event(
         )
     )
     db.flush()
+    note_team_event(db, turn.id)
 
 
 def persist_assessment_knowledge_update_notice(
@@ -3638,6 +3641,8 @@ def execute_team_turn(
         write_guard_slot(reserved=write_slot),
         # Repeated access checks read once per model-call phase of this turn.
         request_read_memo(),
+        # Running here: an orphan sweep must not take this turn.
+        holding_chat_turn(factory, claim.turn_id),
     ):
         _execute_team_turn_body(factory, claim)
 
@@ -4690,18 +4695,22 @@ def interrupt_team_turn(factory: SessionFactory, claim: TeamClaim) -> None:
             _interrupt(db, *current)
 
 
-def recover_team_runs(db: Session) -> int:
-    """Fence old workers and leave accepted receipts explicitly resumable."""
+def recover_team_runs(db: Session, conversation_ids: Collection[str] | None = None) -> int:
+    """Fence old workers and leave accepted receipts explicitly resumable.
+
+    ``conversation_ids`` limits it to those Chats (an orphan sweep).
+    """
     from app.providers.control_repository import ProviderRepository
 
     repository = ProviderRepository(db)
     recovered = 0
-    for row in db.scalars(
-        select(Conversation).where(
-            Conversation.entry_kind != "agent",
-            Conversation.active_request_id.is_not(None),
-        )
-    ):
+    query = select(Conversation).where(
+        Conversation.entry_kind != "agent",
+        Conversation.active_request_id.is_not(None),
+    )
+    if conversation_ids is not None:
+        query = query.where(Conversation.id.in_(tuple(conversation_ids)))
+    for row in db.scalars(query):
         turn = db.get(ConversationTurn, row.active_request_id)
         if turn is not None and turn.state == "pending" and turn.routing_json is not None:
             turn.claim_token = str(uuid4())

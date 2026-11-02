@@ -205,8 +205,8 @@ sends expected_base_version_id,409 stale_base_version keeps edits;per-user draft
 Performance: hash waits free DB connections;Chat history SELECTs constant (5);
 Brainform coalesces/fences/aborts reads. #237 82d68ffa released;charged14331 unchanged.
 
-Oct23 50-user Mock passed (logins 100/100, p95≤7.85s); PG poll race: REPEATABLE READ. Release #239 aa6d6ffd; voice enrollment off the event loop.
-0 real Provider calls in all Oct releases.
+Oct23 50-user Mock passed (logins 100/100, p95≤7.85s); PG poll race: REPEATABLE READ.
+Release #239 aa6d6ffd; voice enrollment off the event loop. 0 real Provider calls in Oct.
 
 ## Oct24 Team chats and junk (#241)
 
@@ -229,8 +229,7 @@ backfill_debate_snapshots, backfill_debate_voice_clones, cleanup_soft_deleted.
 
 Next: live prepares up to3 turns ahead,each after its predecessor is final-ready;
 per-Debate lock;controller-only POST /debates/{id}/next-audio prefetch ticket,stage
-plays the blob. debate_timing logs:generation/tts/lock_wait/audio_serve/
-next_request;browser logs audio_prefetch/audio_start. Uploaded voice auto-selected;
+plays the blob (debate_timing logs each step). Uploaded voice auto-selected;
 Team errors name the Agent;agent_in_team names own Teams;unknown codes show the code.
 
 ## Oct24 cleanup and Record hotfix
@@ -250,20 +249,16 @@ current published version (archived,unpublished,no RAG,AGENT.md without # headin
 Avatar,Voice None non-blocking) and AgentDetail/PublishedAgentSummary carry it as
 readiness_issues. Debate form checks each Agent when picked; one top, sticky bar (same
 look for every line) names each Agent with a pencil to /teacher/agents/{id}; blocking
-lines stop the send. The server still refuses (fail closed: races,API clients) with
-debate_agents_not_ready, now also for not found (no name: existence not told) and
-resolver/fence drift (agent_not_current etc.), shown in the same bar. malformed_request
-details.errors gives field+type; the form writes one sentence per field; Retry resends.
-Agent page bar lines each have a Done that publishes edits in place and re-checks only
-that line. Topic copy: any language.
+lines stop the send. Server still refuses (fail closed) with debate_agents_not_ready,
+also for not found (unnamed) and resolver/fence drift, in the same bar. malformed_request
+details.errors gives field+type, one sentence per field; Retry resends. Bar line Done
+publishes in place, rechecks that line. Topic: any language.
 
 ## Oct24 timing logs (PR A)
 
-Requests log `request_timing` JSON (method,route,status,ms,db ms/queries,provider ms,
-host,slow≥1s; no fast /health); debate_timing adds prefetch_request, audio_serve
-authorize/read. Browser samples 25% (Next→speech,FCP,send→reply) to POST
-/client-metrics (logged only). `scripts/slow_endpoints_report.py` (read-only) gives
-route p50/p95/p99/max,db,provider,top20,browser,Debate. No ids/user data/payloads.
+Requests log `request_timing` JSON (route,status,ms,db/provider ms,slow≥1s); debate_timing
+adds prefetch/audio_serve. Browser samples 25% to POST /client-metrics (logged only).
+`scripts/slow_endpoints_report.py` (read-only): route p50/p95/p99,top20. No user data.
 
 ## Oct24 PostgreSQL only (PR B)
 
@@ -304,3 +299,10 @@ voice_params (clones; seed best-effort). Playback rate gone (0080):1.0.
 Sign-in: 38 v3 ([auth](ui-proposals/auth)). Every wait: one LoadingCard, 39 C flip
 cards ([loading](ui-proposals/loading)). Press keys: hit area stays put while keys
 move; a sidebar click lights its row with a wait; sidebar pages read the query (○).
+
+## Nov2 chat speed and recovery
+
+Single Chat: `draft` SSE (unsaved text as written), then delta/text_done after commit;
+ledger keeps the folded completion. Turn runners hold a pg advisory lock; each process
+sweeps per 60s, freeing claims unheld twice (startup with a live peer: only those).
+Team streams wake on committed events; fallback poll ≤2s.

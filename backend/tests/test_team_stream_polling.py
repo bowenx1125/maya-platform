@@ -125,3 +125,90 @@ async def test_a_slow_member_is_polled_far_less_and_no_event_is_lost(
     assert body.count(b"event: member_result") == 2
     assert body.count(b"event: turn_started") == 1
     assert body.rstrip().endswith(b"}") and b"event: turn_done" in body
+
+
+def test_a_woken_stream_backs_off_further_while_idle() -> None:
+    delay = chat_stream.POLL_MIN_SECONDS
+    seen = []
+    for _ in range(7):
+        delay = chat_stream.next_poll_delay(delay, False, chat_stream.WOKEN_POLL_MAX_SECONDS)
+        seen.append(delay)
+    assert seen == [0.1, 0.2, 0.4, 0.8, 1.6, 2.0, 2.0]
+
+
+@pytest.mark.asyncio
+async def test_a_commit_wakes_its_stream_and_a_rollback_does_not(database: Any) -> None:
+    from app.modules.workspace.team_event_signals import TeamEventWatch, note_team_event
+
+    turn_id = str(uuid4())
+    with TeamEventWatch(turn_id) as watch, TeamEventWatch(str(uuid4())) as other:
+        with database.session_factory() as db:
+            note_team_event(db, turn_id)
+            db.rollback()
+        await asyncio.sleep(0.05)
+        assert not watch._event.is_set()
+        with database.session_factory() as db:
+            note_team_event(db, turn_id)
+            db.commit()
+        await asyncio.wait_for(watch.wait(), timeout=1)
+        assert not other._event.is_set()
+
+
+@pytest.mark.asyncio
+async def test_each_result_arrives_as_it_commits_while_idle_polls_stay_rare(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    session, _csrf, actor_id = _chat(client, database)
+    ids = [member["id"] for member in session["team"]["members"]]
+    first_done = threading.Event()
+    release_last = threading.Event()
+
+    def reply(request: runtime.MemberRequest) -> runtime.MemberReply:
+        if request.participant_id == ids[1]:
+            assert first_done.wait(10)
+        if request.participant_id == ids[2]:
+            assert release_last.wait(10)
+        return runtime.MemberReply(f"Reply from {request.participant_id[:8]}")
+
+    polls = {"count": 0}
+    real_poll = runtime.poll_team_events
+
+    def counted_poll(*args: Any, **kwargs: Any) -> Any:
+        polls["count"] += 1
+        return real_poll(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "invoke_mock_member", reply)
+    monkeypatch.setattr(runtime, "poll_team_events", counted_poll)
+    claim = _claim(database, app_bundle[2], session, actor_id, ids[1:])
+    stream = chat_stream.stream_team_events(database, session["id"], actor_id, claim)
+    loop = asyncio.get_running_loop()
+    arrivals: list[float] = []
+
+    async def collect() -> list[bytes]:
+        chunks = []
+        async for chunk in stream:
+            if b"event: member_result" in chunk:
+                arrivals.append(loop.time())
+            chunks.append(chunk)
+        return chunks
+
+    collecting = asyncio.create_task(collect())
+    await asyncio.sleep(3.0)  # both members still thinking
+    idle_polls = polls["count"]
+    # Let the first member finish while the turn keeps running: the stream is
+    # deep in its idle back-off, so only the commit's wake-up delivers it fast.
+    released_at = loop.time()
+    first_done.set()
+    while not arrivals and loop.time() - released_at < 3:
+        await asyncio.sleep(0.01)
+    assert arrivals, "the first result never arrived"
+    assert arrivals[0] - released_at < 0.5, arrivals[0] - released_at
+    release_last.set()
+    chunks = await asyncio.wait_for(collecting, timeout=10)
+
+    # 3 s at the old 0.5 s cap was ~10 polls; woken streams need about 6.
+    assert idle_polls <= 7, idle_polls
+    body = b"".join(chunks)
+    assert body.count(b"event: member_result") == 2
+    assert body.count(b"event: turn_started") == 1
+    assert b"event: turn_done" in body

@@ -32,6 +32,65 @@ function sseResponse(chunks: string[], gate?: Promise<void>): Response {
   });
 }
 
+describe("streamed reply drafts", () => {
+  const draft = (call: number, seq: number, text: string) =>
+    `event: draft\ndata: ${JSON.stringify({ request_id: "req-1", call, seq, text })}\n\n`;
+
+  it("hands on the reply so far, starts over on a new call, and stops at text_done", async () => {
+    let releaseRest: () => void = () => undefined;
+    const rest = new Promise<void>((resolve) => {
+      releaseRest = resolve;
+    });
+    const textDone = `event: delta\ndata: ${JSON.stringify({ request_id: "req-1", seq: 1, text: "Final" })}\n\nevent: text_done\ndata: ${JSON.stringify(
+      {
+        request_id: "req-1",
+        assistant_text: "Final",
+        revision: 1,
+        sources: [],
+      },
+    )}\n\n`;
+    const session = {
+      id: "conversation",
+      revision: 1,
+      turns: [{ id: "req-1", assistant_text: "Final", state: "ready" }],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/messages:stream"))
+        return sseResponse(
+          [
+            draft(0, 1, "Let me "),
+            draft(0, 2, "check."),
+            draft(1, 3, "Fin"),
+            draft(1, 4, "al"),
+            textDone + draft(1, 5, "stale"),
+          ],
+          rest,
+        );
+      return new Response(JSON.stringify(session), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const api = new PlatformApi({
+      baseUrl: "http://maya.test/api/v1",
+      csrfToken: "csrf-token-csrf-token-csrf-token",
+    });
+    const drafts: string[] = [];
+    const pending = api.streamConversation(
+      "conversation",
+      { request_id: "req-1", expected_revision: 0, message: "Hello" },
+      { onDraft: (text) => drafts.push(text) },
+    );
+    // The first draft arrives before the rest of the stream is released.
+    await vi.waitFor(() => expect(drafts).toEqual(["Let me "]));
+    releaseRest();
+    const result = await pending;
+    expect(drafts).toEqual(["Let me ", "Let me check.", "Fin", "Final"]);
+    expect(result.session.turns[0]?.assistant_text).toBe("Final");
+  });
+});
+
 describe("chat SSE parsing", () => {
   it("rejects a bad JSON block and releases the reader", async () => {
     const response = sseResponse(["event: delta\ndata: {not-json\n\n"]);
