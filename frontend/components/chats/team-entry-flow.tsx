@@ -30,7 +30,13 @@ import { PageAction } from "../page-action";
 import { PageBanner } from "../page-banner";
 import { teamVersionLabel } from "../studyform-layout";
 import { useSession } from "../session-provider";
-import { Notice, RetryPill, SectionCard, StickerBadge } from "../ui";
+import {
+  LoadingCard,
+  Notice,
+  RetryPill,
+  SectionCard,
+  StickerBadge,
+} from "../ui";
 import { cn } from "../../lib/utils";
 import {
   clearTeamDraft,
@@ -765,7 +771,7 @@ export function TeamEntryFlow({
             />
           )}
         </PageBanner>
-        {loading ? <p role="status">{t("loading")}</p> : null}
+        {loading ? <LoadingCard /> : null}
         {loadError && loadError !== dismissedError ? (
           <Notice
             inline
@@ -1058,7 +1064,7 @@ export function TeamEntryFlow({
       aria-label={title}
     >
       <div className={styles.entrySection}>
-        {loading ? <p role="status">{t("loading")}</p> : null}
+        {loading ? <LoadingCard /> : null}
         {loadError && loadError !== dismissedError ? (
           <Notice
             inline

@@ -301,6 +301,6 @@ voice_params (clones; seed best-effort). Playback rate gone (0080):1.0.
 ## Oct27 UI (#305, 38)
 
 #305: G Agent cards (4-col width), Teams 3 columns, Teams empty = Agents empty.
-Sign-in: 38 v3 ([auth](ui-proposals/auth)); refresh/logout: LoadingCard, no intro.
-Sidebar/press keys: hit area stays put while keys move (1–5px presses were lost); a
-click lights its row with a wait at once; sidebar pages read the query client-side (○).
+Sign-in: 38 v3 ([auth](ui-proposals/auth)). Every wait: one LoadingCard, 39 C flip
+cards ([loading](ui-proposals/loading)). Press keys: hit area stays put while keys
+move; a sidebar click lights its row with a wait; sidebar pages read the query (○).

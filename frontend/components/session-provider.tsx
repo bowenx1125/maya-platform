@@ -2,7 +2,7 @@
 
 import { DismissibleAlert } from "./dismissible-alert";
 import { StatusScreen } from "./status-screen";
-import { LoadingCard, StickerBadge } from "./ui";
+import { LoadingPage, StickerBadge } from "./ui";
 import {
   clearLoginQueue,
   loadLoginQueue,
@@ -497,11 +497,7 @@ export function RouteGuard({
     (status === "anonymous" && signingOut) ||
     (awaitingTeacherVisit && visitCheck !== "done")
   ) {
-    return (
-      <main className="shell">
-        <LoadingCard />
-      </main>
-    );
+    return <LoadingPage />;
   }
   if (status === "anonymous") {
     return (

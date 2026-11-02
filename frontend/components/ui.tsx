@@ -15,6 +15,7 @@ import { localizeError, statusLabel, type MessageKey } from "../lib/i18n";
 import type { UiGuideKey } from "../lib/ui-guide-copy";
 import { useT } from "../lib/i18n";
 import { cn } from "../lib/utils";
+import { MascotFigure, type MascotId } from "./academy/mascots";
 import { IconClose, IconEdit } from "./quiet-icons";
 import { buttonVariants } from "./ui/button";
 import { NOTICE_TAIL_CLASS, noticeTray, useNoticeTray } from "./notice-tray";
@@ -40,48 +41,107 @@ export {
 
 export { NOTICE_TAIL_CLASS, useNoticeTray };
 
-/** The whole-page wait: the shell column holding one LoadingCard. */
+const STRIPES =
+  "bg-[#67E8F9] [background-image:repeating-linear-gradient(-35deg,#A5F3FC_0_46px,#67E8F9_46px_92px)]";
+
+/** The whole-page wait: the flipping cards across the cyan-striped screen. */
 export function LoadingPage() {
   return (
-    <main className="shell">
-      <LoadingCard />
+    <main className={cn("grid min-h-screen place-items-center px-4", STRIPES)}>
+      <LoadingCard bare />
     </main>
   );
 }
 
-export function LoadingCard({ label }: { label?: string }) {
+const LOADING_CAST: { id: MascotId; bg: string }[] = [
+  { id: "scroll", bg: "#C4B5FD" },
+  { id: "wreath", bg: "#FFB4C8" },
+  { id: "tablet", bg: "#A3E635" },
+  { id: "wave", bg: "#FFE14D" },
+];
+
+/** Card faces, sized by the room the card gets (the @container). */
+const FACE =
+  "absolute inset-0 overflow-hidden rounded-[12px] border-[3px] border-[#111] shadow-[3px_3px_0_#111] [backface-visibility:hidden] @min-[640px]:rounded-[18px] @min-[640px]:border-[5px] @min-[640px]:shadow-[8px_8px_0_#111]";
+
+/**
+ * The one loading look (proposal 39 C, chosen 2026-11-02): the sign-in's
+ * four character cards flip face up one after another, and four dots light
+ * in step beside the label. It sizes itself by the room it gets: a page's
+ * content area gets a framed striped panel with big cards, a small panel
+ * gets small cards. Reduced motion leaves every card face up and still.
+ */
+export function LoadingCard({
+  label,
+  bare = false,
+}: {
+  label?: string;
+  /** No frame of its own (LoadingPage already paints the stripes). */
+  bare?: boolean;
+}) {
   const t = useT();
   return (
-    <div
-      className="loading-card flex w-full flex-col gap-3 rounded-[18px] border-[3px] border-[#111] bg-white px-5 py-4 text-[#111] shadow-[4px_5px_0_#111]"
-      role="status"
-    >
-      {/* B-v2 LoadingCard: thick-border card + skeleton avatar/bars. */}
-      <div className="flex flex-col gap-3" aria-hidden="true">
-        <LoadingSkeletonRow barClass="w-[70%]" subClass="w-[46%]" />
-        <LoadingSkeletonRow barClass="w-[64%]" subClass="w-[32%]" />
+    <div className="loading-card @container w-full" role="status">
+      <div
+        className={cn(
+          "relative grid place-items-center overflow-hidden pt-6 pb-4 @min-[640px]:pt-10 @min-[900px]:pt-14",
+          !bare &&
+            cn(
+              "@min-[640px]:min-h-[min(70vh,640px)] @min-[640px]:rounded-[22px] @min-[640px]:border-[4px] @min-[640px]:border-[#111] @min-[640px]:shadow-[8px_8px_0_#111]",
+              "@min-[640px]:bg-[#67E8F9] @min-[640px]:[background-image:repeating-linear-gradient(-35deg,#A5F3FC_0_46px,#67E8F9_46px_92px)]",
+            ),
+        )}
+      >
+        <div className="grid justify-items-center gap-3 @min-[640px]:gap-9">
+          <div
+            aria-hidden="true"
+            className="flex items-end gap-1.5 [perspective:900px] @max-[288px]:gap-1 @min-[640px]:gap-[22px]"
+          >
+            {LOADING_CAST.map((cast, index) => (
+              <span
+                key={cast.id}
+                className="relative block h-[90px] w-16 animate-loading-flip @max-[288px]:h-[68px] @max-[288px]:w-12 @min-[320px]:h-[104px] @min-[320px]:w-[74px] [transform-style:preserve-3d] motion-reduce:animate-none motion-reduce:[transform:rotateY(180deg)] @min-[640px]:h-[170px] @min-[640px]:w-[120px] @min-[900px]:h-[256px] @min-[900px]:w-[180px]"
+                style={{ animationDelay: `${(index * 8) / 10}s` }}
+              >
+                <span
+                  className={cn(
+                    FACE,
+                    "bg-[#FF4D8D] [background-image:radial-gradient(circle,#FFE14D_0_3px,transparent_3.5px),radial-gradient(circle,#fff_0_2px,transparent_2.5px)] [background-position:0_0,10px_10px] bg-size-[20px_20px] @min-[640px]:[background-image:radial-gradient(circle,#FFE14D_0_9px,transparent_10px),radial-gradient(circle,#fff_0_6px,transparent_7px)] @min-[640px]:[background-position:0_0,22px_22px] @min-[640px]:bg-size-[44px_44px]",
+                  )}
+                >
+                  <span className="absolute top-1/2 left-1/2 aspect-square w-[34%] -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-[#111] bg-[linear-gradient(90deg,#111_50%,#FF4D8D_50%)] @min-[640px]:border-[4px]" />
+                </span>
+                <span
+                  className={cn(
+                    FACE,
+                    "[transform:rotateY(180deg)] [background-image:repeating-conic-gradient(from_0deg_at_50%_72%,#ffffff66_0_9deg,transparent_9deg_18deg)]",
+                  )}
+                  style={{ backgroundColor: cast.bg }}
+                >
+                  <MascotFigure
+                    id={cast.id}
+                    className="absolute bottom-[-4%] left-1/2 h-[88%] w-auto -translate-x-1/2"
+                  />
+                </span>
+              </span>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 @min-[640px]:gap-4">
+            <span className="-rotate-2 rounded-[8px] border-[3px] border-[#111] bg-white px-2.5 py-0.5 font-display text-base leading-tight font-extrabold text-[#111] shadow-[2px_2px_0_#111] @min-[640px]:rounded-[16px] @min-[640px]:border-[4px] @min-[640px]:px-[22px] @min-[640px]:py-1.5 @min-[640px]:text-[34px] @min-[640px]:shadow-[6px_6px_0_#FF4D8D,6px_6px_0_4px_#111]">
+              {label ?? t("loading")}
+            </span>
+            <span aria-hidden="true" className="flex gap-1 @min-[640px]:gap-2">
+              {[0, 1, 2, 3].map((index) => (
+                <i
+                  key={index}
+                  className="block size-2.5 animate-loading-dot rounded-full border-2 border-[#111] bg-white motion-reduce:animate-none @min-[640px]:size-5 @min-[640px]:border-[4px]"
+                  style={{ animationDelay: `${(index * 8) / 10}s` }}
+                />
+              ))}
+            </span>
+          </div>
+        </div>
       </div>
-      <span className="font-body text-sm font-bold leading-none">
-        {label ?? t("loading")}
-      </span>
-    </div>
-  );
-}
-
-function LoadingSkeletonRow({
-  barClass,
-  subClass,
-}: {
-  barClass: string;
-  subClass: string;
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="size-10 shrink-0 rounded-[8px] bg-[#D9D9D9]" />
-      <span className="flex min-w-0 flex-1 flex-col gap-2">
-        <span className={cn("h-3 rounded-full bg-[#D9D9D9]", barClass)} />
-        <span className={cn("h-3 rounded-full bg-[#D9D9D9]", subClass)} />
-      </span>
     </div>
   );
 }
