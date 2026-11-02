@@ -479,6 +479,7 @@ describe("Brainform Memory and Assessment Chat path", () => {
     state.api.conversationSessions.mockResolvedValueOnce([paused]);
     state.api.conversationSession.mockResolvedValueOnce(paused);
     state.api.streamTeamConversation.mockResolvedValueOnce(continued);
+    window.history.replaceState({}, "", `/${state.role}/chat?kind=team`);
     renderChat();
 
     fireEvent.click(

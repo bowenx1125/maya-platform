@@ -11,11 +11,12 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.models import Base
-from app.modules.real_delete_checks import CONVERSATION_ENTRY_CHECK
+from app.modules.real_delete_checks import CHAT_TYPE_CHECK, CONVERSATION_ENTRY_CHECK
 
 
 class Conversation(Base):
@@ -39,6 +40,9 @@ class Conversation(Base):
     entry_kind: Mapped[str] = mapped_column(
         String(16), nullable=False, default="agent", server_default="agent"
     )
+    # agent, or team (ordinary Team and Maya Team). entry_kind stays the
+    # finer value; this is the two-list type.
+    chat_type: Mapped[str] = mapped_column(String(16), nullable=False)
     chat_visibility: Mapped[str] = mapped_column(
         String(16), nullable=False, default="private", server_default="private"
     )
@@ -84,6 +88,7 @@ class Conversation(Base):
             "chat_visibility IN ('private', 'public')", name="ck_conversations_privacy"
         ),
         CheckConstraint(CONVERSATION_ENTRY_CHECK, name="ck_conversations_entry"),
+        CheckConstraint(CHAT_TYPE_CHECK, name="ck_conversations_chat_type"),
         ForeignKeyConstraint(
             ["team_id", "team_version_id"],
             ["team_versions.team_id", "team_versions.id"],
@@ -93,6 +98,29 @@ class Conversation(Base):
         UniqueConstraint("id", "team_version_id", name="uq_conversations_team_version"),
         Index("ix_conversations_course_privacy", "course_id", "chat_visibility", "user_id"),
     )
+
+
+def chat_type_for_entry_kind(entry_kind: str) -> str:
+    """The two-list type for a stored entry. Maya Team is a team chat."""
+
+    if entry_kind == "agent":
+        return "agent"
+    if entry_kind in ("team", "maya_team"):
+        return "team"
+    raise ValueError(f"unknown entry_kind {entry_kind!r}")
+
+
+@event.listens_for(Conversation, "before_insert")
+def _fill_chat_type(_mapper: object, _connection: object, target: Conversation) -> None:
+    # Copies and tests that predate the column omit it. An explicit value is
+    # left alone so a mismatch fails ck_conversations_chat_type instead of
+    # being rewritten.
+    if target.chat_type:
+        return
+    kind = target.entry_kind if isinstance(target.entry_kind, str) else "agent"
+    if kind not in ("agent", "team", "maya_team"):
+        kind = "agent"
+    target.chat_type = chat_type_for_entry_kind(kind)
 
 
 class ConversationParticipant(Base):

@@ -111,8 +111,9 @@ def test_session_time_zone_is_utc_whatever_the_client_says(
 
 
 def test_database_at_the_baseline_runs_no_ddl_and_keeps_its_version(tmp_path: Path) -> None:
-    # A database already at head must not replay DDL. The squashed baseline
-    # stays 0080; later revisions run only when the database is behind head.
+    # An empty database is created from the models and stamped at head.
+    # Starting again must not replay DDL. The squashed baseline stays 0080;
+    # later revisions run only when the database is behind head.
     from sqlalchemy import event
 
     db = Database(named_url(f"{tmp_path / 'baseline.sqlite3'}"))

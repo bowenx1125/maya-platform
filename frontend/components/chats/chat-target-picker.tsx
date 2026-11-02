@@ -34,12 +34,15 @@ export function ChatTargetPicker({
   value,
   disabled,
   onPick,
+  surface = "both",
 }: {
   teams: ChatTargetTeam[];
   agents: ChatAgent[];
   value: string;
   disabled: boolean;
   onPick: (value: string) => void;
+  /** Agent and Team Chats each open only their own column. */
+  surface?: "agent" | "team" | "both";
 }) {
   const t = useT();
 
@@ -135,26 +138,30 @@ export function ChatTargetPicker({
 
   return (
     <div className={styles.pickLayout}>
-      <section className={styles.pickCol} aria-labelledby="chat-pick-agents">
-        <h2 id="chat-pick-agents" className={styles.pickColTitle}>
-          {t("agents")}
-        </h2>
-        {agents.length ? (
-          <ul className={styles.pickGrid}>{agents.map(agentTile)}</ul>
-        ) : (
-          <p className={styles.pickEmpty}>{t("noAgents")}</p>
-        )}
-      </section>
-      <section className={styles.pickCol} aria-labelledby="chat-pick-teams">
-        <h2 id="chat-pick-teams" className={styles.pickColTitle}>
-          {t("chatTargetTeams")}
-        </h2>
-        {teams.length ? (
-          <ul className={styles.pickGrid}>{teams.map(teamTile)}</ul>
-        ) : (
-          <p className={styles.pickEmpty}>{t("teamNoneYet")}</p>
-        )}
-      </section>
+      {surface === "team" ? null : (
+        <section className={styles.pickCol} aria-labelledby="chat-pick-agents">
+          <h2 id="chat-pick-agents" className={styles.pickColTitle}>
+            {t("agents")}
+          </h2>
+          {agents.length ? (
+            <ul className={styles.pickGrid}>{agents.map(agentTile)}</ul>
+          ) : (
+            <p className={styles.pickEmpty}>{t("noAgents")}</p>
+          )}
+        </section>
+      )}
+      {surface === "agent" ? null : (
+        <section className={styles.pickCol} aria-labelledby="chat-pick-teams">
+          <h2 id="chat-pick-teams" className={styles.pickColTitle}>
+            {t("chatTargetTeams")}
+          </h2>
+          {teams.length ? (
+            <ul className={styles.pickGrid}>{teams.map(teamTile)}</ul>
+          ) : (
+            <p className={styles.pickEmpty}>{t("teamNoneYet")}</p>
+          )}
+        </section>
+      )}
     </div>
   );
 }

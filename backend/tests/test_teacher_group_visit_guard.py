@@ -318,6 +318,15 @@ def test_visit_expiry_migration_keeps_rows_and_downgrades(tmp_path: Any) -> None
     with database.engine.begin() as connection:
         connection.execute(text("DROP INDEX IF EXISTS ix_teacher_group_access_expires_at"))
         connection.execute(text("ALTER TABLE teacher_group_access DROP COLUMN expires_at"))
+        # The models already include chat_type. Replaying from 0080 runs 0081,
+        # which adds that column, so the stamped copy has to look like 0080.
+        connection.execute(
+            text(
+                "ALTER TABLE agent_conversations "
+                "DROP CONSTRAINT IF EXISTS ck_conversations_chat_type"
+            )
+        )
+        connection.execute(text("ALTER TABLE agent_conversations DROP COLUMN IF EXISTS chat_type"))
         connection.execute(
             text("UPDATE alembic_version SET version_num = :version"),
             {"version": MIGRATION_BASELINE},

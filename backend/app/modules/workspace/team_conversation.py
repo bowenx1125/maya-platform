@@ -29,6 +29,7 @@ from .models import (
     ConversationParticipantSet,
     ConversationSharedSet,
     ConversationTurn,
+    chat_type_for_entry_kind,
 )
 from .schemas import (
     ChatTeam,
@@ -175,6 +176,7 @@ def create_team_conversation(
         user_id=context.user.id,
         course_id=selection.course_id,
         entry_kind=entry_kind,
+        chat_type=chat_type_for_entry_kind(entry_kind),
         chat_visibility="private",
         origin="published_course_team" if stored_publication else "custom_team",
         agent_version_id=None,
