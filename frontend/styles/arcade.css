@@ -121,10 +121,29 @@
       opacity: 0.35;
     }
   }
-  --animate-live-hop: live-hop 1s infinite;
-  @keyframes live-hop {
-    50% {
-      transform: translateY(-6px);
+  /* LoadingCard: the cast hops in turn; the candy stripe rolls. */
+  --animate-loading-hop: loading-hop 1.1s cubic-bezier(0.3, 0.7, 0.4, 1)
+    infinite;
+  @keyframes loading-hop {
+    0%,
+    55%,
+    100% {
+      transform: translateY(0) scale(1, 1);
+    }
+    12% {
+      transform: translateY(0) scale(1.08, 0.9);
+    }
+    30% {
+      transform: translateY(-16px) scale(0.94, 1.06);
+    }
+    46% {
+      transform: translateY(0) scale(1.06, 0.92);
+    }
+  }
+  --animate-loading-stripes: loading-stripes 0.8s linear infinite;
+  @keyframes loading-stripes {
+    to {
+      background-position: 22.6px 0;
     }
   }
   --animate-live-rise: live-rise 3s linear infinite;

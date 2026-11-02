@@ -17,7 +17,7 @@ import { useSession } from "../session-provider";
 import { IconClose, IconDownload } from "../quiet-icons";
 import { PageAction } from "../page-action";
 import { ASSESSMENT_COMPLETED_EVENT } from "../../lib/assessment-events";
-import { ErrorNotice } from "../ui";
+import { ErrorNotice, LoadingCard } from "../ui";
 
 type Translate = ReturnType<typeof useT>;
 
@@ -382,18 +382,7 @@ export function RecordSection({
       {error ? (
         <ErrorNotice inline error={error} onRetry={onRetry} />
       ) : !loaded ? (
-        <ul
-          className="m-0 flex list-none flex-col gap-4 p-0"
-          aria-busy="true"
-          aria-label={t("loading")}
-        >
-          {[0, 1, 2].map((index) => (
-            <li key={index} className={`${cardShell(index)} animate-pulse`}>
-              <span className="h-3.5 w-3/5 rounded bg-[#EBE5DA]" />
-              <span className="ml-auto h-[38px] w-[38px] rounded-full bg-[#EBE5DA]" />
-            </li>
-          ))}
-        </ul>
+        <LoadingCard />
       ) : teams.length ? (
         <>
           <ul className="m-0 flex list-none flex-col gap-4 p-0">

@@ -240,12 +240,12 @@
     box-shadow: none;
   }
 
-  /* B-v2 LoadingCard keeps its hard border + shadow sitewide. */
+  /* LoadingCard keeps its hard border + shadow sitewide. */
   .appearance :global(.loading-card) {
     background: #fff;
     color: #111;
     border-color: #111;
-    box-shadow: 4px 5px 0 #111;
+    box-shadow: 5px 6px 0 #111;
   }
 
   .appearance :global(.notice-error) {
