@@ -1,8 +1,16 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   pathname: "/student",
+  push: vi.fn(),
   identityGeneration: 0,
   user: {
     id: "user-a",
@@ -10,12 +18,16 @@ const state = vi.hoisted(() => ({
     courses: [] as { course_id: string; role: string }[],
     groups: [{ group_id: "group-a" }, { group_id: "group-b" }],
   },
-  api: { agent: vi.fn(), version: vi.fn() },
+  api: {
+    agent: vi.fn(),
+    version: vi.fn(),
+    leaveGroupAsTeacher: undefined as ReturnType<typeof vi.fn> | undefined,
+  },
 }));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => state.pathname,
-  useRouter: () => ({ replace: vi.fn() }),
+  useRouter: () => ({ replace: vi.fn(), push: state.push }),
 }));
 vi.mock("../components/session-provider", () => ({
   useSession: () => ({ ...state, logout: vi.fn() }),
@@ -47,6 +59,7 @@ describe("group navigation scope", () => {
     render(content());
     expect(links()).toContain("/student/agents?group_id=group-b");
     expect(links()).not.toContain("/student/agents?group_id=group-a");
+    expect(screen.queryByRole("button", { name: "Backward" })).toBeNull();
     expect(state.api.agent).not.toHaveBeenCalled();
   });
 
@@ -73,9 +86,15 @@ describe("group navigation scope", () => {
     expect(links()).not.toContain("/student/agents?group_id=group-a");
   });
 
-  it("keeps teacher identity inside a visited group and offers the way back to Accounts", () => {
+  it("keeps teacher identity inside a visited group and offers the way back to Accounts", async () => {
     state.pathname = "/student/groups/group-b";
     state.user.courses = [{ course_id: "course", role: "teacher" }];
+    const leave = vi.fn(async () => undefined);
+    state.api = {
+      agent: vi.fn(),
+      version: vi.fn(),
+      leaveGroupAsTeacher: leave,
+    };
     render(content());
     expect(
       screen.getByRole("link", { name: "Mayaform" }).getAttribute("href"),
@@ -92,5 +111,19 @@ describe("group navigation scope", () => {
     expect(
       screen.getByRole("link", { name: "Back" }).getAttribute("href"),
     ).toBe("/teacher/roster");
+    const backward = screen.getByRole("button", { name: "Backward" });
+    const logout = screen.getByRole("button", { name: "Logout" });
+    const mail = screen.getByRole("link", { name: /Send to/ });
+    expect(
+      backward.compareDocumentPosition(mail) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      backward.compareDocumentPosition(logout) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    fireEvent.click(backward);
+    await waitFor(() => expect(leave).toHaveBeenCalledWith("group-b"));
+    expect(leave).toHaveBeenCalledWith("group-a");
+    expect(state.push).toHaveBeenCalledWith("/teacher/roster");
   });
 });

@@ -275,11 +275,8 @@ document races, attempt vs knowledge update, purge order, alembic %, peer lock s
 
 ## Oct24 Immerse audio predownload (PR A2)
 
-From mount (after the 3D scene, Start, or 10 s) the stage downloads ready speeches as
-blobs, one at a time in speaking order, independent of Next/pause
-(snapshot audio_ready_turn_ids, turn.audio_ready). next-audio takes turn_id. Playing uses the
-blob, waits ≤3 s for its download, else the URL (never twice). Next returns media_url;
-no seek at cursor 0. Leaving aborts and frees blobs.
+From mount the stage downloads ready speeches as blobs, in speaking order, independent
+of Next/pause. Playing uses the blob (≤3s) else the URL once. Leaving aborts and frees blobs.
 
 ## Oct25 audio, locks and Next cost (PR C)
 
@@ -290,13 +287,9 @@ WAV default; private,max-age=300, 304. Playback routes/WS commands off the event
 
 ## Oct24 Debate generation parameters (PR E)
 
-DEBATE_LLM_* env (no MAYA_ prefix): model, temperature 0.65, top_p 0.8, penalties,
-max_tokens, seed, thinking, timeout 120; DEBATE_TTS_MODEL. Unset = previous values.
-The create card starts from GET /courses/{id}/debate-llm-defaults; values freeze into
-rule_snapshot_json.llm_params (ruleset_contract_v3; null = not sent). The execution
-contract lives in default_rules/{zh,en}.md ({round}); pre-v3 Debates keep legacy.
-Voice: DEBATE_TTS_RATE 1.25 (0.5–2), _INSTRUCTION, _SEED freeze as
-voice_params (clones; seed best-effort). Playback rate gone (0080):1.0.
+DEBATE_LLM_* (no MAYA_ prefix; unset = previous) and DEBATE_TTS_* freeze into
+rule_snapshot_json (ruleset_contract_v3; null = not sent). Contract:
+default_rules/{zh,en}.md. Pre-v3 Debates keep legacy. Playback rate gone (0080):1.0.
 
 ## Oct27 UI (#305, 38)
 
@@ -304,3 +297,12 @@ voice_params (clones; seed best-effort). Playback rate gone (0080):1.0.
 Sign-in: 38 v3 ([auth](ui-proposals/auth)). Every wait: one LoadingCard, 39 C flip
 cards ([loading](ui-proposals/loading)). Press keys: hit area stays put while keys
 move; a sidebar click lights its row with a wait; sidebar pages read the query (○).
+
+## Nov2 Accounts group visit
+
+Accounts group cards were a no-op (`onGroupPress` empty since 2026-10-27). Enter
+writes one expiring `teacher_group_access` row (0081, 2h, refreshed, not a roster
+member). Backward deletes it and returns to Accounts. The visit edits that group's
+Studyform agents and public Brainform library/Knowledge, not the group, its
+agents' deletion, members, or another group. Expired rows fail reads; the minute
+sweep deletes them.

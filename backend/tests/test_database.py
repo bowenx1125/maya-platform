@@ -48,7 +48,7 @@ def test_alembic_upgrade_is_idempotent_and_readiness_checks_head(tmp_path: Path)
     db.upgrade_schema()
     db.upgrade_schema()
     assert db.using_migrations
-    assert ALEMBIC_HEAD == "0080_drop_playback_rate"
+    assert ALEMBIC_HEAD == "0081_teacher_visit_expiry"
     assert db.check_ready()
     with db.engine.connect() as connection:
         assert (
@@ -111,8 +111,8 @@ def test_session_time_zone_is_utc_whatever_the_client_says(
 
 
 def test_database_at_the_baseline_runs_no_ddl_and_keeps_its_version(tmp_path: Path) -> None:
-    # Production is at 0080_drop_playback_rate when the squash deploys: the
-    # baseline keeps that id, so startup must only find it, never replay DDL.
+    # A database already at head must not replay DDL. The squashed baseline
+    # stays 0080; later revisions run only when the database is behind head.
     from sqlalchemy import event
 
     db = Database(named_url(f"{tmp_path / 'baseline.sqlite3'}"))
@@ -127,10 +127,11 @@ def test_database_at_the_baseline_runs_no_ddl_and_keeps_its_version(tmp_path: Pa
         db.upgrade_schema()
     finally:
         event.remove(db.engine, "before_cursor_execute", record)
-    assert MIGRATION_BASELINE == ALEMBIC_HEAD == "0080_drop_playback_rate"
+    assert MIGRATION_BASELINE == "0080_drop_playback_rate"
+    assert ALEMBIC_HEAD == "0081_teacher_visit_expiry"
     assert not {"CREATE", "ALTER", "DROP", "INSERT", "UPDATE", "DELETE"} & set(statements)
     with db.engine.connect() as connection:
         assert (
             connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-            == MIGRATION_BASELINE
+            == ALEMBIC_HEAD
         )

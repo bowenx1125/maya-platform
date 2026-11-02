@@ -125,6 +125,7 @@ from app.modules.knowledge_sets.generation import (
     validate_generation_intent,
 )
 from app.modules.org.access import WorkspaceMember
+from app.modules.org.teacher_visit import teacher_may_edit_group_content
 from app.providers.control_repository import ProviderRepository
 from app.providers.factory import embedding_provider as select_embedding_provider
 from app.providers.standing_consent import apply_standing_provider_consent
@@ -1512,8 +1513,15 @@ def create_next_agent_version(
                 "current_version_label": agent_version_label(current.version_seq),
             },
         )
-    if scoped.agent.owner_user_id != context.user.id and not version_is_currently_public(
-        current, scoped.agent
+    # A private published Agent is the creator's, unless the caller is inside
+    # that group on a live teacher visit. The visit may open the next draft.
+    visiting = scoped.agent.group_id is not None and teacher_may_edit_group_content(
+        db, context.user.id, scoped.agent.group_id
+    )
+    if (
+        scoped.agent.owner_user_id != context.user.id
+        and not version_is_currently_public(current, scoped.agent)
+        and not visiting
     ):
         abandon_claim(db, record)
         raise not_found()

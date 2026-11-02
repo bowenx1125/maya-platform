@@ -199,12 +199,12 @@ def test_course_teacher_cannot_browse_unjoined_group_library(client):
 def test_entered_teacher_browses_and_uploads_the_library_like_a_groupmate(client):
     """Join is a temporary membership for the group library.
 
-    Public Agents stay editable. Private Agents stay readable and not editable.
-    Another student's private file stays hidden. Leaving closes the library.
+    Public and private Agents in the group are editable for the visit. Another
+    student's private file stays hidden. Leaving closes the library.
     """
 
     public_id, public_version, _ = _published_student_agent(client, "public")
-    private_id, _, _ = _published_student_agent(client, "private")
+    private_id, private_version, _ = _published_student_agent(client, "private")
     _, student_csrf = login(client, "bowen")
     library = f"/api/v1/groups/{GROUP_ID}/knowledge-documents"
     shared = client.post(
@@ -262,12 +262,12 @@ def test_entered_teacher_browses_and_uploads_the_library_like_a_groupmate(client
     assert edited.status_code == 200, edited.text
 
     private = client.get(f"/api/v1/agents/{private_id}")
-    assert private.status_code == 200 and private.json()["can_edit"] is False
-    denied = client.post(
-        f"/api/v1/agents/{private_id}/versions",
-        headers=_headers(teacher_csrf),
+    assert private.status_code == 200 and private.json()["can_edit"] is True
+    assert private.json()["can_delete"] is False
+    edited_private = _edit_and_publish(
+        client, teacher_csrf, private_id, private_version, "\nteacher visit"
     )
-    assert denied.status_code == 404
+    assert edited_private.status_code == 200, edited_private.text
 
     assert (
         client.delete(
