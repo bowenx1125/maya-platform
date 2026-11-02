@@ -290,13 +290,9 @@ WAV default; private,max-age=300, 304. Playback routes/WS commands off the event
 
 ## Oct24 Debate generation parameters (PR E)
 
-DEBATE_LLM_* env (no MAYA_ prefix): model, temperature 0.65, top_p 0.8, penalties,
-max_tokens, seed, thinking, timeout 120; DEBATE_TTS_MODEL. Unset = previous values.
-The create card starts from GET /courses/{id}/debate-llm-defaults; values freeze into
-rule_snapshot_json.llm_params (ruleset_contract_v3; null = not sent). The execution
-contract lives in default_rules/{zh,en}.md ({round}); pre-v3 Debates keep legacy.
-Voice: DEBATE_TTS_RATE 1.25 (0.5–2), _INSTRUCTION, _SEED freeze as
-voice_params (clones; seed best-effort). Playback rate gone (0080):1.0.
+DEBATE_LLM_* / DEBATE_TTS_* (no MAYA_ prefix) freeze into rule_snapshot_json;
+null means not sent. Contract: default_rules/{zh,en}.md. Playback rate removed
+in 0080 (always 1.0).
 
 ## Oct27 UI (#305, 38)
 
@@ -304,3 +300,10 @@ voice_params (clones; seed best-effort). Playback rate gone (0080):1.0.
 Sign-in: 38 v3 ([auth](ui-proposals/auth)). Every wait: one LoadingCard, 39 C flip
 cards ([loading](ui-proposals/loading)). Press keys: hit area stays put while keys
 move; a sidebar click lights its row with a wait; sidebar pages read the query (○).
+
+## Nov2 Chatform lists
+
+0081_conversation_chat_type adds chat_type agent|team beside entry_kind.
+Backfill requires the entry check (binding agrees); leftovers stay null, counted
+in the migration log, and typed lists skip them. maya_team is team. Chat with
+Agent and Chat with Team are separate histories; no kind stays the Agent list.

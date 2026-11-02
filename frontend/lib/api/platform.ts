@@ -1224,12 +1224,17 @@ export class PlatformApi {
     );
   }
 
-  conversations(): Promise<ConversationSession[]> {
-    return this.getJson("conversations");
+  conversations(entryKind?: "agent" | "team"): Promise<ConversationSession[]> {
+    const query = entryKind
+      ? `?entry_kind=${encodeURIComponent(entryKind)}`
+      : "";
+    return this.getJson(`conversations${query}`);
   }
 
-  conversationSessions(): Promise<ConversationSession[]> {
-    return this.getJson("conversations");
+  conversationSessions(
+    entryKind?: "agent" | "team",
+  ): Promise<ConversationSession[]> {
+    return this.conversations(entryKind);
   }
 
   /** The course's Teams, or with `groupId` one group's (an entered teacher's view). */

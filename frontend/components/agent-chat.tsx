@@ -282,6 +282,23 @@ function isAgentSession(
   return session.entry_kind === undefined || session.entry_kind === "agent";
 }
 
+/**
+ * Which Chatform list this URL is. No kind is the Agent list, so older
+ * /chat links stay there. A Brainform memory link for a Team opens the Team
+ * list; a conversation memory link is not known until the session returns.
+ */
+export function chatListKind(search: string): "agent" | "team" | null {
+  const params = new URLSearchParams(search);
+  const kind = params.get("kind");
+  if (kind === "team") return "team";
+  if (kind === "agent") return "agent";
+  const memory = params.get("memory_source_kind");
+  if (memory === "team" || memory === "maya_team") return "team";
+  if (memory === "agent") return "agent";
+  if (memory === "conversation") return null;
+  return "agent";
+}
+
 const ASSESSMENT_STAGE_PERCENT = {
   scoring: 40,
   summarizing: 75,
@@ -570,6 +587,7 @@ function AgentChatScope({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const memoryRouteSearch = searchParams?.toString() ?? "";
+  const listKind = chatListKind(memoryRouteSearch);
   const newChatRouteFromUrl = searchParams?.get("mode") === "new";
   const [newChatRouteState, setNewChatRouteState] = useState({
     search: memoryRouteSearch,
@@ -966,11 +984,17 @@ function AgentChatScope({
     const preserveSelection = !newChatRoute && skipHistoryReadOnce.current;
     const skipHistoryRead = newChatRoute || skipHistoryReadOnce.current;
     skipHistoryReadOnce.current = false;
+    const readHistory = () => {
+      if (typeof api.conversationSessions === "function") {
+        return listKind
+          ? api.conversationSessions(listKind)
+          : api.conversationSessions();
+      }
+      return listKind ? api.conversations(listKind) : api.conversations();
+    };
     const historyRequest = skipHistoryRead
       ? Promise.resolve([])
-      : typeof api.conversationSessions === "function"
-        ? api.conversationSessions()
-        : api.conversations();
+      : readHistory();
     // The catalog is a shared, briefly cached read; history is always read
     // fresh because pending sends are reconciled against it.
     void Promise.all([
@@ -992,8 +1016,11 @@ function AgentChatScope({
           setVersionId("");
           return;
         }
-        const history = allHistory.filter(isAgentSession);
-        setTeamSessions(allHistory.filter(isTeamSession));
+        const history =
+          listKind === "team" ? [] : allHistory.filter(isAgentSession);
+        setTeamSessions(
+          listKind === "agent" ? [] : allHistory.filter(isTeamSession),
+        );
         const settled = getSettledChatSession(scopeKey);
         let nextHistory = history;
         if (settled) {
@@ -1158,6 +1185,7 @@ function AgentChatScope({
     courseId,
     invalidMemoryRoute,
     newChatRoute,
+    listKind,
     parsedMemoryRoute,
     scopeKey,
   ]);
@@ -2866,7 +2894,8 @@ function AgentChatScope({
           left.session.pinned_at ?? "",
         ) ||
         right.session.created_at.localeCompare(left.session.created_at),
-    );
+    )
+    .filter((item) => listKind === null || item.kind === listKind);
 
   const mentionMembers: {
     key: string;
@@ -2980,6 +3009,9 @@ function AgentChatScope({
       ) : null}
       {newChatRoute ? (
         <ChatTargetPicker
+          surface={
+            listKind === "team" ? "team" : listKind === null ? "both" : "agent"
+          }
           teams={teamOptions}
           agents={agents}
           value={pick}
