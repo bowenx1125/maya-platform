@@ -63,7 +63,7 @@ const enMessages = {
   teacher: "Teacher view",
   student: "Student view",
   logout: "Logout",
-  backward: "Backward",
+  backout: "Backout",
   signIn: "Sign in",
   username: "Username",
   password: "Password",

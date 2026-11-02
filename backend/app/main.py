@@ -235,7 +235,7 @@ async def _agent_cascade_sweeper(database: Any, settings: Any) -> None:
             )
 
     def expire_teacher_visits() -> None:
-        # A teacher who closed the browser never clicks Backward. The visit
+        # A teacher who closed the browser never clicks Backout. The visit
         # row already fails its expiry check; this removes it.
         with database.session() as session:
             count = purge_expired_teacher_visits(session)
