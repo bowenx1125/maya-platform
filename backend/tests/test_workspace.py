@@ -2321,6 +2321,7 @@ async def test_chat_sse_releases_claim_before_terminal_events(
         _actor_context: Any | None = None,
         _generation_waker: Any | None = None,
         _write_slot: Any | None = None,
+        _on_draft: Any | None = None,
     ) -> tuple[str, list[Any], None]:
         if message == "Terminal failure":
             raise PlatformError("chat_acceptance_unknown", "Unknown outcome.", 503)
@@ -2889,3 +2890,106 @@ def test_live_lease_authorization_expiry_readonly_socket_and_safe_projection(
     assert expired["active"] is False
     assert expired["interaction_url"] is None
     assert app.state.settings.tts_provider == "mock"
+
+
+def _sse_events(text: str) -> list[tuple[str, dict[str, Any]]]:
+    events: list[tuple[str, dict[str, Any]]] = []
+    for block in text.split("\n\n"):
+        name = next((line[7:] for line in block.splitlines() if line.startswith("event: ")), None)
+        data = next((line[6:] for line in block.splitlines() if line.startswith("data: ")), None)
+        if name and data:
+            events.append((name, json.loads(data)))
+    return events
+
+
+def test_single_chat_streams_draft_text_before_the_committed_reply(
+    workspace: Any, monkeypatch: Any
+) -> None:
+    from app.modules.runtime_tools.models import RuntimeModelCallStage
+    from app.providers.llm_transport import LLMStreamedResponse, fold_chat_stream
+
+    app, database, client = workspace
+    adapter = _adapter(None)
+    policy = replace(_valid_policy(), endpoint=adapter.config.resolved_endpoint)
+    ProviderRepository(database).save_policy_snapshot(policy)
+    app.state.settings = app.state.settings.model_copy(
+        update={
+            "llm_provider": "dashscope",
+            "llm_provider_policy_hash": policy.policy_hash,
+            "demo_auto_confirm_provider": True,
+        }
+    )
+    monkeypatch.setattr("app.modules.workspace.chat_provider.llm_provider", lambda _: adapter)
+    monkeypatch.setattr("app.modules.workspace.chat.retrieve_sources", lambda *a, **kw: [])
+    sent: list[dict[str, Any]] = []
+
+    def streaming_supplier(_self: Any, _url: str, **kwargs: Any) -> LLMStreamedResponse:
+        sent.append(json.loads(kwargs["content"]))
+        chunks = ["正义", "是每个人", "得其所应得。"]
+        lines = [
+            f"data: {json.dumps({'choices': [{'index': 0, 'delta': {'content': c}}]})}"
+            for c in chunks
+        ]
+        lines.append(
+            'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],'
+            '"usage":{"prompt_tokens":5}}'
+        )
+        body, _first = fold_chat_stream(lines, kwargs["on_delta"])
+        return LLMStreamedResponse(status_code=200, content=body)
+
+    monkeypatch.setattr(
+        "app.modules.workspace.chat_provider.HttpxLLMTransport.post_bytes", streaming_supplier
+    )
+    _, csrf = login(client)
+    created = client.post(
+        "/api/v1/conversations",
+        headers={"X-CSRF-Token": csrf},
+        json={"version_id": BASELINE_VERSION_ID},
+    ).json()
+    request_id = str(uuid4())
+    response = client.post(
+        f"/api/v1/conversations/{created['id']}/messages:stream",
+        headers={"X-CSRF-Token": csrf, "Accept": "text/event-stream"},
+        json={"request_id": request_id, "expected_revision": 0, "message": "什么是正义？"},
+    )
+    assert response.status_code == 200, response.text
+    events = _sse_events(response.text)
+    names = [name for name, _payload in events]
+    assert names[0] == "draft"
+    assert names[-1] == "text_done"
+    # Drafts come first; the committed deltas and text_done only after the save.
+    first_committed = names.index("delta")
+    assert set(names[:first_committed]) == {"draft"}
+    assert "draft" not in names[first_committed:]
+    drafts = [payload for name, payload in events if name == "draft"]
+    assert all(item["call"] == 0 and item["request_id"] == request_id for item in drafts)
+    assert [item["seq"] for item in drafts] == list(range(1, len(drafts) + 1))
+    done = events[-1][1]
+    assert (
+        "".join(item["text"] for item in drafts)
+        == done["assistant_text"]
+        == ("正义是每个人得其所应得。")
+    )
+    assert len(sent) == 1
+    assert sent[0]["stream"] is True
+    assert sent[0]["stream_options"] == {"include_usage": True}
+    with database.session() as db:
+        turn = db.get(ConversationTurn, request_id)
+        assert turn is not None and turn.state == "ready"
+        assert turn.assistant_text == "正义是每个人得其所应得。"
+        stage = db.scalar(
+            select(RuntimeModelCallStage).where(RuntimeModelCallStage.turn_id == request_id)
+        )
+        assert stage is not None
+        assert json.loads(stage.request_json)["stream"] is True
+        stored = json.loads(stage.accepted_response_json or "{}")
+        assert stored["choices"][0]["message"]["content"] == "正义是每个人得其所应得。"
+        assert stored["usage"] == {"prompt_tokens": 5}
+
+
+def test_a_call_staged_before_streaming_resumes_with_its_own_body() -> None:
+    from app.modules.workspace.chat_provider import _stage_streamed
+
+    assert _stage_streamed('{"model":"m","stream":false}') is False
+    assert _stage_streamed('{"model":"m","stream":true}') is True
+    assert _stage_streamed("not json") is True

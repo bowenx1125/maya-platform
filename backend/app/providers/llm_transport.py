@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 import httpx
 
@@ -84,6 +85,157 @@ class LLMTransportResponse:
         return self.payload
 
 
+DeltaSink = Callable[[str], None]
+
+# What a stream that cannot be folded into one completion is stored as: an
+# accepted, charged response that the chat validator then rejects, exactly as a
+# malformed non-stream body is.
+STREAM_INVALID_BODY = b'{"stream_invalid":true}'
+
+
+@dataclass(frozen=True, slots=True)
+class LLMStreamedResponse:
+    """A streamed chat completion folded back into one non-stream body.
+
+    The ledger stores and replays ``content`` exactly as it stores a plain
+    response, so a streamed call is recovered, audited and validated the same
+    way as one that was not streamed.
+    """
+
+    status_code: int
+    content: bytes
+    headers: Mapping[str, str] = field(default_factory=dict)
+    ttft_ms: float | None = None
+
+
+def _event_stream(content_type: str | None) -> bool:
+    return (content_type or "").split(";", 1)[0].strip().lower() == "text/event-stream"
+
+
+def _emit(on_delta: DeltaSink, piece: str) -> None:
+    try:
+        on_delta(piece)
+    except Exception:  # noqa: BLE001 - a listener gone away must not fail the call
+        pass
+
+
+def fold_chat_stream(
+    lines: Iterable[str],
+    on_delta: DeltaSink | None = None,
+    *,
+    deadline: float | None = None,
+    clock: Callable[[], float] = time.monotonic,
+) -> tuple[bytes, float | None]:
+    """Fold OpenAI-compatible ``chat.completion.chunk`` events into one body.
+
+    Returns the body and the seconds (on ``clock``) at which the first text
+    arrived. Tool calls arrive split by ``index``: the first non-empty id and
+    name win and argument fragments are joined, which is how the supplier
+    sends them (later fragments repeat an empty id and no name).
+    """
+
+    started = clock()
+    parts: list[str] = []
+    calls: dict[int, dict[str, Any]] = {}
+    finish: object = None
+    usage: object = None
+    meta: dict[str, object] = {}
+    first: float | None = None
+    for raw in lines:
+        if deadline is not None and clock() > deadline:
+            # The same outcome as a read that ran past the total timeout.
+            raise LLMAcceptanceUnknown()
+        line = raw.strip()
+        if not line.startswith("data:"):
+            continue
+        data = line[5:].strip()
+        if data == "[DONE]":
+            break
+        try:
+            chunk = json.loads(data)
+        except json.JSONDecodeError:
+            return STREAM_INVALID_BODY, first
+        if not isinstance(chunk, dict):
+            return STREAM_INVALID_BODY, first
+        for key in ("id", "model", "created"):
+            if key not in meta and chunk.get(key) is not None:
+                meta[key] = chunk[key]
+        if chunk.get("usage") is not None:
+            usage = chunk["usage"]
+        choices = chunk.get("choices") or []
+        if not isinstance(choices, list):
+            return STREAM_INVALID_BODY, first
+        for choice in choices:
+            delta = choice.get("delta") if isinstance(choice, dict) else None
+            if not isinstance(choice, dict) or choice.get("index", 0) != 0:
+                return STREAM_INVALID_BODY, first
+            if delta is None:
+                delta = {}
+            if not isinstance(delta, dict):
+                return STREAM_INVALID_BODY, first
+            piece = delta.get("content")
+            if piece is not None and not isinstance(piece, str):
+                return STREAM_INVALID_BODY, first
+            if piece:
+                parts.append(piece)
+                if first is None:
+                    first = clock() - started
+                if on_delta is not None:
+                    _emit(on_delta, piece)
+            fragments = delta.get("tool_calls") or []
+            if not isinstance(fragments, list):
+                return STREAM_INVALID_BODY, first
+            for fragment in fragments:
+                index = fragment.get("index") if isinstance(fragment, dict) else None
+                function = fragment.get("function") or {} if isinstance(fragment, dict) else None
+                if (
+                    not isinstance(index, int)
+                    or isinstance(index, bool)
+                    or not isinstance(function, dict)
+                ):
+                    return STREAM_INVALID_BODY, first
+                call = calls.setdefault(
+                    index, {"id": "", "type": "function", "name": "", "arguments": ""}
+                )
+                for key, value in (
+                    ("id", fragment.get("id")),
+                    ("name", function.get("name")),
+                ):
+                    if value is not None and not isinstance(value, str):
+                        return STREAM_INVALID_BODY, first
+                    if value and not call[key]:
+                        call[key] = value
+                arguments = function.get("arguments")
+                if arguments is not None and not isinstance(arguments, str):
+                    return STREAM_INVALID_BODY, first
+                call["arguments"] += arguments or ""
+                if isinstance(fragment.get("type"), str) and fragment["type"]:
+                    call["type"] = fragment["type"]
+            if choice.get("finish_reason") is not None:
+                finish = choice["finish_reason"]
+    message: dict[str, object] = {
+        "role": "assistant",
+        "content": "".join(parts) if parts or not calls else None,
+    }
+    if calls:
+        message["tool_calls"] = [
+            {
+                "id": call["id"],
+                "type": call["type"],
+                "function": {"name": call["name"], "arguments": call["arguments"]},
+            }
+            for _, call in sorted(calls.items())
+        ]
+    body: dict[str, object] = {
+        **meta,
+        "object": "chat.completion",
+        "choices": [{"index": 0, "message": message, "finish_reason": finish}],
+    }
+    if usage is not None:
+        body["usage"] = usage
+    return json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), first
+
+
 class LLMTransport(Protocol):
     """The only side-effecting port accepted by :class:`DashScopeLLMAdapter`."""
 
@@ -155,8 +307,14 @@ class HttpxLLMTransport:
         headers: Mapping[str, str],
         content: bytes,
         timeout: object = LLM_TOTAL_TIMEOUT_SECONDS,
+        on_delta: DeltaSink | None = None,
     ) -> object:
-        """Send canonical JSON bytes without decoding or re-encoding them."""
+        """Send canonical JSON bytes without decoding or re-encoding them.
+
+        With ``on_delta`` the request body must ask for a stream: each text
+        piece is handed to it as it arrives, and the result is still one
+        response whose body is the folded completion. Still exactly one call.
+        """
         json_headers = {
             key: value for key, value in headers.items() if key.lower() != "content-type"
         }
@@ -166,6 +324,7 @@ class HttpxLLMTransport:
             headers=json_headers,
             timeout=timeout,
             content=content,
+            on_delta=on_delta,
         )
 
     def _post(
@@ -176,6 +335,7 @@ class HttpxLLMTransport:
         timeout: object,
         json_payload: Mapping[str, object] | None = None,
         content: bytes | None = None,
+        on_delta: DeltaSink | None = None,
     ) -> object:
         # Take an LLM slot (unified queue, then the LLM_ADMISSION_LIMIT backstop). Host
         # memory/load pressure suspends the attempt until recovery; only a
@@ -191,6 +351,7 @@ class HttpxLLMTransport:
                     timeout=timeout,
                     json_payload=json_payload,
                     content=content,
+                    on_delta=on_delta,
                 )
                 return response
             finally:
@@ -204,6 +365,7 @@ class HttpxLLMTransport:
         timeout: object,
         json_payload: Mapping[str, object] | None,
         content: bytes | None,
+        on_delta: DeltaSink | None = None,
     ) -> object:
         # A caller may pass the frozen total as a float or an HTTPX timeout;
         # either way redirects stay disabled and this method performs one call.
@@ -221,6 +383,7 @@ class HttpxLLMTransport:
                     timeout=resolved_timeout,
                     json_payload=json_payload,
                     content=content,
+                    on_delta=on_delta,
                 )
             with httpx.Client(follow_redirects=False) as client:
                 return self._dispatch(
@@ -230,6 +393,7 @@ class HttpxLLMTransport:
                     timeout=resolved_timeout,
                     json_payload=json_payload,
                     content=content,
+                    on_delta=on_delta,
                 )
         except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
             raise LLMTransportNotSent() from exc
@@ -258,8 +422,18 @@ class HttpxLLMTransport:
         timeout: float | httpx.Timeout,
         json_payload: Mapping[str, object] | None,
         content: bytes | None,
-    ) -> httpx.Response:
+        on_delta: DeltaSink | None = None,
+    ) -> httpx.Response | LLMStreamedResponse:
         request_headers = dict(headers)
+        if content is not None and on_delta is not None:
+            return _dispatch_stream_impl(
+                client,
+                url,
+                headers=request_headers,
+                timeout=timeout,
+                content=content,
+                on_delta=on_delta,
+            )
         if content is not None:
             return client.post(
                 url,
@@ -276,6 +450,43 @@ class HttpxLLMTransport:
             json=dict(json_payload),
             timeout=timeout,
             follow_redirects=False,
+        )
+
+
+def _dispatch_stream_impl(
+    client: httpx.Client,
+    url: str,
+    *,
+    headers: Mapping[str, str],
+    timeout: float | httpx.Timeout,
+    content: bytes,
+    on_delta: DeltaSink,
+) -> LLMStreamedResponse:
+    # HTTPX's read timeout is per read, so a slow trickle could outlive the
+    # frozen total; the fold enforces the total as a wall-clock deadline.
+    deadline = time.monotonic() + LLM_TOTAL_TIMEOUT_SECONDS
+    with client.stream(
+        "POST",
+        url,
+        headers=dict(headers),
+        content=content,
+        timeout=timeout,
+        follow_redirects=False,
+    ) as response:
+        if response.status_code != LLM_ACCEPTED_HTTP_STATUS or not _event_stream(
+            response.headers.get("content-type")
+        ):
+            return LLMStreamedResponse(
+                status_code=response.status_code,
+                content=response.read(),
+                headers=dict(response.headers),
+            )
+        body, first = fold_chat_stream(response.iter_lines(), on_delta, deadline=deadline)
+        return LLMStreamedResponse(
+            status_code=response.status_code,
+            content=body,
+            headers=dict(response.headers),
+            ttft_ms=None if first is None else first * 1000.0,
         )
 
 
@@ -307,11 +518,18 @@ def _record_model_call(
         add_provider_time("llm", duration_ms)
         status = getattr(response, "status_code", None)
         status_code = status if isinstance(status, int) else None
+        streamed_ttft = getattr(response, "ttft_ms", None)
         add_model_call(
             label=_model_label(url, json_payload, content),
             duration_ms=duration_ms,
             # Non-streaming: the first token arrives with the whole body.
-            ttft_ms=duration_ms if status_code is not None else None,
+            ttft_ms=(
+                streamed_ttft
+                if isinstance(streamed_ttft, float)
+                else duration_ms
+                if status_code is not None
+                else None
+            ),
             status=status_code,
             failed=status_code != LLM_ACCEPTED_HTTP_STATUS,
         )
@@ -333,6 +551,7 @@ __all__ = [
     "LLMAcceptanceUnknown",
     "LLMAcceptanceUnknownError",
     "LLMHTTPRejected",
+    "LLMStreamedResponse",
     "LLMTransport",
     "LLMTransportAcceptanceUnknown",
     "LLMTransportAcceptanceUnknownError",
@@ -343,4 +562,5 @@ __all__ = [
     "LLMTransportResponseV1",
     "TransportAcceptance",
     "classify_http_status",
+    "fold_chat_stream",
 ]

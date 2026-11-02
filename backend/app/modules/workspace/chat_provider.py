@@ -399,7 +399,14 @@ def real_reply(
     allow_not_sent_retry: bool = False,
     generation_waker: Callable[[str], None] | None = None,
     required_tool: str | None = None,
+    on_draft: Callable[[int, str], None] | None = None,
 ) -> tuple[str, str]:
+    """``on_draft(call, text)`` receives the reply text as it streams in.
+
+    Drafts are unsaved and may be replaced: ``call`` is the model call within
+    this turn (a Tool round starts a new one), and the stored reply is
+    whatever the turn returns, never the drafts.
+    """
     selected = llm_provider(
         settings.chat_settings().model_copy(update={"llm_provider": "dashscope"})
     )
@@ -476,12 +483,20 @@ def real_reply(
         dispatch_ordinal = cursors.get(member_id, 0)
         cursors[member_id] = dispatch_ordinal + 1
         wire_messages = [_chat_wire_message(item) for item in current_messages]
+        # A call staged before replies streamed is resumed with its own body,
+        # so its stored request still matches byte for byte.
+        staged = repository.get_runtime_model_call_stage(
+            request_id, participant_id, dispatch_ordinal
+        )
+        streamed = staged is None or _stage_streamed(staged.request_json)
         body: dict[str, object] = {
             "model": config.model_key,
             "messages": wire_messages,
-            "stream": False,
+            "stream": streamed,
             "enable_thinking": False,
         }
+        if streamed:
+            body["stream_options"] = {"include_usage": True}
         if tool_schemas is not None:
             body["tools"] = tool_schemas
         offered = {
@@ -707,6 +722,7 @@ def real_reply(
                         },
                         content=wire,
                         timeout=HttpxLLMTransport.timeout(),
+                        on_delta=_draft_sink(on_draft, dispatch_ordinal) if streamed else None,
                     )
                 except PlatformError as exc:
                     # Memory pressure (and any future pre-send PlatformError)
@@ -805,6 +821,21 @@ def real_reply(
     if latest_operation is None:
         raise PlatformError("chat_response_unavailable", "The reply was not saved.", 503)
     return output.content, latest_operation
+
+
+def _stage_streamed(request_json: str) -> bool:
+    try:
+        loaded = json.loads(request_json)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return True
+    return not (isinstance(loaded, dict) and loaded.get("stream") is False)
+
+
+def _draft_sink(on_draft: Callable[[int, str], None] | None, call: int) -> Callable[[str], None]:
+    # A streamed body always needs a reader, listened to or not.
+    if on_draft is None:
+        return lambda _piece: None
+    return lambda piece: on_draft(call, piece)
 
 
 def _chat_wire_message(message: Message) -> dict[str, Any]:

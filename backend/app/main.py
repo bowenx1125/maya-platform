@@ -216,6 +216,20 @@ def _bootstrap_accounts(database: Database, settings: Settings) -> None:
             seed_demo_data(session)
 
 
+async def _orphan_chat_sweeper(database: Any) -> None:
+    """Free Chats whose running turn lost its process (workspace/orphan_chats)."""
+
+    from app.modules.workspace.orphan_chats import SWEEP_SECONDS, OrphanChatSweeper
+
+    sweeper = OrphanChatSweeper(database)
+    while True:
+        await asyncio.sleep(SWEEP_SECONDS)
+        try:
+            await asyncio.to_thread(sweeper.sweep)
+        except Exception:  # noqa: BLE001 - a sweep failure must not kill the loop
+            logging.getLogger(__name__).exception("Orphaned chat sweep crashed")
+
+
 async def _agent_cascade_sweeper(database: Any, settings: Any) -> None:
     """Startup, then every minute: release the voices of deleted Debates;
     every 5 min: Agent auto-publishes a restart lost."""
@@ -425,6 +439,7 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         orphan_task: asyncio.Task[None] | None = None
         cascade_task: asyncio.Task[None] | None = None
+        orphan_chat_task: asyncio.Task[None] | None = None
         limiter = anyio.to_thread.current_default_thread_limiter()
         # Sync handlers and admission waits run in this pool. AnyIO's default
         # 40 threads would be gone at 48 admitted requests plus waiters, and
@@ -470,7 +485,9 @@ def create_app(
                 if preferences is not None:
                     next_settings = preferences_settings(app.state.base_settings, preferences)
                     app.state.prepare_provider_settings(next_settings)()
-                if background_leader:
+                # With a live peer its running chats are held, not stranded:
+                # the orphan sweep below frees only the ones nobody holds.
+                if background_leader and not peers_alive:
                     recover_single_chat_runs(session)
                     from app.modules.workspace.team_runtime import recover_team_runs
 
@@ -478,7 +495,7 @@ def create_app(
             with runtime_database.session() as session:
                 stranded = (
                     []
-                    if not background_leader
+                    if not background_leader or peers_alive
                     else [
                         (operation.id, accepted_chat_stage_complete(session, operation))
                         for operation in session.scalars(
@@ -550,11 +567,16 @@ def create_app(
                     )
             else:
                 logger.info("Background recovery is owned by another backend replica")
+            if not runtime_settings.is_test:
+                # Every process sweeps: the leader may be the one that died.
+                orphan_chat_task = asyncio.create_task(_orphan_chat_sweeper(runtime_database))
         try:
             yield
         finally:
             if orphan_task is not None:
                 orphan_task.cancel()
+            if orphan_chat_task is not None:
+                orphan_chat_task.cancel()
             if cascade_task is not None:
                 cascade_task.cancel()
             if presence is not None:

@@ -344,6 +344,9 @@ class Database:
             return False
 
     def dispose(self) -> None:
+        from app.core.chat_turn_locks import forget_chat_turn_locks
+
+        forget_chat_turn_locks(self.engine)
         leader = self._leader_connection
         self._leader_connection = None
         if leader is not None:

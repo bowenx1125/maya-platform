@@ -205,8 +205,8 @@ sends expected_base_version_id,409 stale_base_version keeps edits;per-user draft
 Performance: hash waits free DB connections;Chat history SELECTs constant (5);
 Brainform coalesces/fences/aborts reads. #237 82d68ffa released;charged14331 unchanged.
 
-Oct23 50-user Mock passed (logins 100/100, p95≤7.85s); PG poll race: REPEATABLE READ. Release #239 aa6d6ffd; voice enrollment off the event loop.
-0 real Provider calls in all Oct releases.
+Oct23 50-user Mock passed (logins 100/100, p95≤7.85s); PG poll race: REPEATABLE READ.
+Release #239 aa6d6ffd; voice enrollment off the event loop. 0 real Provider calls in Oct.
 
 ## Oct24 Team chats and junk (#241)
 
@@ -229,8 +229,7 @@ backfill_debate_snapshots, backfill_debate_voice_clones, cleanup_soft_deleted.
 
 Next: live prepares up to3 turns ahead,each after its predecessor is final-ready;
 per-Debate lock;controller-only POST /debates/{id}/next-audio prefetch ticket,stage
-plays the blob. debate_timing logs:generation/tts/lock_wait/audio_serve/
-next_request;browser logs audio_prefetch/audio_start. Uploaded voice auto-selected;
+plays the blob (debate_timing logs each step). Uploaded voice auto-selected;
 Team errors name the Agent;agent_in_team names own Teams;unknown codes show the code.
 
 ## Oct24 cleanup and Record hotfix
@@ -252,19 +251,15 @@ malformed_request lists field+type. Each bar line's Done publishes that line. To
 
 ## Oct24 timing logs (PR A)
 
-Requests log `request_timing` JSON (method,route,status,ms,db ms/queries,provider ms,
-host,slow≥1s; no fast /health); debate_timing adds prefetch_request, audio_serve
-authorize/read. Browser samples 25% (Next→speech,FCP,send→reply) to POST
-/client-metrics (logged only). `scripts/slow_endpoints_report.py` (read-only) gives
-route p50/p95/p99/max,db,provider,top20,browser,Debate. No ids/user data/payloads.
+Requests log `request_timing` JSON (route,status,ms,db/provider ms,slow≥1s); debate_timing
+adds prefetch/audio_serve. Browser samples 25% to POST /client-metrics (logged only).
+`scripts/slow_endpoints_report.py` (read-only): route p50/p95/p99,top20. No user data.
 
 ## Oct24 PostgreSQL only (PR B)
 
-SQLite DATABASE_URL is refused; the startup import is gone. scripts/migrate_sqlite_to_postgres.py
-copies an old file: dry-run default, --apply --confirm-production, read-only source, one
-transaction + receipt (re-run no-op), never deletes it. Tests need MAYA_TEST_POSTGRES_URL
-(a database per test). Fixed: budget lost update, Agent and
-document races, attempt vs knowledge update, purge order, alembic %, peer lock scope.
+SQLite DATABASE_URL is refused. scripts/migrate_sqlite_to_postgres.py copies an old file
+(dry-run default, --apply --confirm-production, one transaction, never deletes it). Tests
+need MAYA_TEST_POSTGRES_URL. Fixed races: budget, Agent/document, attempt vs knowledge.
 
 ## Oct24 Immerse audio predownload (PR A2)
 
@@ -307,3 +302,12 @@ member). Backout, in Logout's place, deletes it and returns to Accounts. The vis
 Studyform agents and public Brainform library/Knowledge, not the group, its
 agents' deletion, members, or another group. Expired rows fail reads; the minute
 sweep deletes them.
+
+## Nov2 chat speed and recovery
+
+Single Chat: `draft` SSE (unsaved text as written), then delta/text_done after commit;
+ledger keeps the folded completion. Turn runners hold a pg advisory lock; each process
+sweeps per 60s, freeing claims unheld twice (startup with a live peer: only those).
+Team streams wake on committed events; fallback poll ≤2s. Debate default Rulesets: en
+mirrors the spoken zh one (no spoken RAG/I-feel labels or +5/+2), both address a listener
+who missed earlier speeches; a copy mid-paragraph is rewritten, not cut out.
