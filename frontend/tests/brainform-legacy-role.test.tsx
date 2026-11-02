@@ -124,7 +124,7 @@ describe("legacy group Brainform actor context", () => {
     expect(state.api.workspaceDocuments).not.toHaveBeenCalled();
   });
 
-  it("keeps a visiting Teacher's joined-group Agents page read-only", async () => {
+  it("lets a visiting Teacher add an Agent in the joined group", async () => {
     state.pathname = "/student/agents";
     state.user = {
       id: "teacher-user",
@@ -151,8 +151,9 @@ describe("legacy group Brainform actor context", () => {
     );
 
     await screen.findByRole("heading", { name: "Agents" });
-    expect(screen.queryByRole("link", { name: "New" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
+    expect(screen.getByRole("link", { name: "New" }).getAttribute("href")).toBe(
+      "/student/groups/joined-group/agents/new",
+    );
     expect(screen.queryByRole("heading", { name: "Voices" })).toBeNull();
     expect(
       screen.getByRole("link", { name: "Back" }).getAttribute("href"),

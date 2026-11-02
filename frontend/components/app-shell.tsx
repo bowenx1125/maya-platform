@@ -453,10 +453,34 @@ export function AppShell({
     teacherSurface &&
     (pathname.startsWith("/student/groups/") ||
       pathname === "/student/agents" ||
+      pathname === "/student/teams" ||
       Boolean(agentRoute) ||
       visitPage);
   const visitGroupId =
     routeGroupId ?? (visitPage ? visitPageGroupId : groupId) ?? undefined;
+
+  async function leaveVisit() {
+    const ids = [
+      ...new Set(
+        [visitGroupId, ...membershipGroupIds].filter((id): id is string =>
+          Boolean(id),
+        ),
+      ),
+    ];
+    setBusy(true);
+    try {
+      if (typeof api?.leaveGroupAsTeacher === "function" && ids.length) {
+        await Promise.all(ids.map((id) => api.leaveGroupAsTeacher(id)));
+      }
+      await refresh?.();
+      router.push("/teacher/roster");
+    } catch {
+      // The visit row is still there, so the teacher can try Backward again.
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const onTeacherPage =
     teacherSurface && !pathname.startsWith("/student/") && !visitPage;
   const membershipKey = membershipGroupIds.join("|");
@@ -566,7 +590,7 @@ export function AppShell({
     { href: home, label: t("appName"), icon: "home" },
     { href: studyformHref, label: t("studyform"), icon: "knowledge" },
     // Split pages own RAG / Knowledge / Record / Voices. A teacher visiting
-    // a group keeps a Brainform entry for that group's read-only library.
+    // a group keeps a Brainform entry for that group's library.
     ...(visit
       ? [
           {
@@ -1118,6 +1142,21 @@ export function AppShell({
               <div
                 className={`mt-auto grid gap-2.5 ${collapsed ? "justify-items-center" : ""}`}
               >
+                {visitingGroup ? (
+                  <button
+                    className={`${collapsed ? `${ICON_ITEM} ${ICON_ITEM_KEY}` : `${ITEM} w-full ${ITEM_KEY}`} cursor-pointer text-left disabled:cursor-wait disabled:opacity-60`}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void leaveVisit()}
+                  >
+                    <WorkspaceIcon name="back" size={18} />
+                    {collapsed ? (
+                      <span className="sr-only">{t("backward")}</span>
+                    ) : (
+                      t("backward")
+                    )}
+                  </button>
+                ) : null}
                 {collapsed ? (
                   <a
                     href="mailto:t330034059@mail.bnbu.edu.cn"

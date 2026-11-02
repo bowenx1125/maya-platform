@@ -244,18 +244,11 @@ Prod-shaped 0076→0078 run: dry-run→apply→second apply 0, snapshots unchang
 
 ## Oct24 Agent hints and Debate create
 
-Agent checks are hints, never save/publish blockers (Avatar dropped from publish
-blockers; empty AGENT.md and unindexed RAG still block). agents/readiness.py judges the
-current published version (archived,unpublished,no RAG,AGENT.md without # heading+text,
-Avatar,Voice None non-blocking) and AgentDetail/PublishedAgentSummary carry it as
-readiness_issues. Debate form checks each Agent when picked; one top, sticky bar (same
-look for every line) names each Agent with a pencil to /teacher/agents/{id}; blocking
-lines stop the send. The server still refuses (fail closed: races,API clients) with
-debate_agents_not_ready, now also for not found (no name: existence not told) and
-resolver/fence drift (agent_not_current etc.), shown in the same bar. malformed_request
-details.errors gives field+type; the form writes one sentence per field; Retry resends.
-Agent page bar lines each have a Done that publishes edits in place and re-checks only
-that line. Topic copy: any language.
+Agent checks are hints, never save/publish blockers (empty AGENT.md and unindexed RAG
+still block). readiness_issues covers the published version. Debate create names each
+Agent in one sticky bar (pencil to /teacher/agents/{id}); blocking lines stop the send.
+Server still refuses with debate_agents_not_ready (not found unnamed; fence drift named).
+malformed_request lists field+type. Each bar line's Done publishes that line. Topic: any language.
 
 ## Oct24 timing logs (PR A)
 
@@ -275,11 +268,8 @@ document races, attempt vs knowledge update, purge order, alembic %, peer lock s
 
 ## Oct24 Immerse audio predownload (PR A2)
 
-From mount (after the 3D scene, Start, or 10 s) the stage downloads ready speeches as
-blobs, one at a time in speaking order, independent of Next/pause
-(snapshot audio_ready_turn_ids, turn.audio_ready). next-audio takes turn_id. Playing uses the
-blob, waits ≤3 s for its download, else the URL (never twice). Next returns media_url;
-no seek at cursor 0. Leaving aborts and frees blobs.
+From mount the stage downloads ready speeches as blobs, in speaking order, independent
+of Next/pause. Playing uses the blob (≤3s) else the URL once. Leaving aborts and frees blobs.
 
 ## Oct25 audio, locks and Next cost (PR C)
 
@@ -290,8 +280,9 @@ WAV default; private,max-age=300, 304. Playback routes/WS commands off the event
 
 ## Oct24 Debate generation parameters (PR E)
 
-DEBATE_LLM_* / DEBATE_TTS_* (no MAYA_ prefix) freeze into rule_snapshot_json;
-null means not sent. Contract: default_rules/{zh,en}.md. Playback rate removed
+DEBATE_LLM_* (no MAYA_ prefix; unset = previous) and DEBATE_TTS_* freeze into
+rule_snapshot_json (ruleset_contract_v3; null = not sent). Contract:
+default_rules/{zh,en}.md. Pre-v3 Debates keep legacy. Playback rate removed
 in 0080 (always 1.0).
 
 ## Oct27 UI (#305, 38)
@@ -307,3 +298,12 @@ move; a sidebar click lights its row with a wait; sidebar pages read the query (
 Backfill requires the entry check (binding agrees); leftovers stay null, counted
 in the migration log, and typed lists skip them. maya_team is team. Chat with
 Agent and Chat with Team are separate histories; no kind stays the Agent list.
+
+## Nov2 Accounts group visit
+
+Accounts group cards were a no-op (`onGroupPress` empty since 2026-10-27). Enter
+writes one expiring `teacher_group_access` row (0082, 2h, refreshed, not a roster
+member). Backward deletes it and returns to Accounts. The visit edits that group's
+Studyform agents and public Brainform library/Knowledge, not the group, its
+agents' deletion, members, or another group. Expired rows fail reads; the minute
+sweep deletes them.

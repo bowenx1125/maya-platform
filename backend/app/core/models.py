@@ -7,7 +7,7 @@ inside the server-side database model.  The API projections in
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 from sqlalchemy import (
@@ -211,7 +211,23 @@ class GroupMember(Base):
     )
 
 
+# How long an Accounts visit stays a member after the teacher enters.
+# Re-entering refreshes it. Closing the browser does not; the sweep removes
+# the row once this window has passed. Keep the migration backfill in step.
+TEACHER_GROUP_VISIT_TTL = timedelta(hours=2)
+
+
+def _teacher_visit_expires_at() -> datetime:
+    return datetime.now(UTC) + TEACHER_GROUP_VISIT_TTL
+
+
 class TeacherGroupAccess(Base):
+    """A course teacher's temporary membership of one group.
+
+    This is not a student roster row. The teacher keeps their own account and
+    acts only inside this group until they leave or the row expires.
+    """
+
     __tablename__ = "teacher_group_access"
 
     group_id: Mapped[str] = mapped_column(
@@ -221,6 +237,11 @@ class TeacherGroupAccess(Base):
         String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_teacher_visit_expires_at
+    )
+
+    __table_args__ = (Index("ix_teacher_group_access_expires_at", "expires_at"),)
 
 
 class AgentEditAudit(Base):

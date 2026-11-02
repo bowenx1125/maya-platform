@@ -2,13 +2,18 @@
 
 import { LIST_CARD_LIFT } from "./agent-chrome";
 import { PRESS_MOTION } from "./ui/button";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type Group,
   type RosterEntry,
   type UpdateCourseMemberRequest,
 } from "../lib/api";
-import { teacherLeavesSettled } from "../lib/teacher-visit";
+import {
+  beginTeacherEnter,
+  endTeacherEnter,
+  teacherLeavesSettled,
+} from "../lib/teacher-visit";
 import { useT } from "../lib/i18n";
 import { PageAction } from "./page-action";
 import {
@@ -32,7 +37,8 @@ const POLAROID_COLORS = ["#FFE14D", "#A3E635", "#67E8F9"] as const;
 
 export function RosterWorkspace() {
   const t = useT();
-  const { api, user } = useSession();
+  const router = useRouter();
+  const { api, refresh, user } = useSession();
   const [entries, setEntries] = useState<RosterEntry[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,10 +133,28 @@ export function RosterWorkspace() {
     [api, courseId],
   );
 
-  // Deferred (2026-10-27): group cards keep press motion but do not join or
-  // navigate. Sidebar has no Back/New/Done, so the return path from the
-  // group's Studyform is unclear until 徐伯闻 redesigns that flow.
-  const onGroupPress = useCallback((_group: Group) => {}, []);
+  // Enter registers one temporary membership for this teacher, then opens the
+  // group's Studyform. beginTeacherEnter keeps the roster shell from deleting
+  // that row while the session refresh is still on this page.
+  const onGroupPress = useCallback(
+    async (group: Group) => {
+      setBusy(group.id);
+      setError(null);
+      beginTeacherEnter();
+      try {
+        await teacherLeavesSettled();
+        await api.joinGroupAsTeacher(group.id);
+        await refresh?.();
+        router.push(`/student/agents?group_id=${encodeURIComponent(group.id)}`);
+      } catch (cause) {
+        endTeacherEnter();
+        setError(cause);
+      } finally {
+        setBusy(null);
+      }
+    },
+    [api, refresh, router],
+  );
 
   if (loading) return <LoadingCard />;
 
@@ -438,6 +462,8 @@ export function RosterWorkspace() {
                     type="button"
                     id={`roster-group-${group.id}`}
                     aria-label={t("enter")}
+                    aria-busy={busy === group.id || undefined}
+                    disabled={busy === group.id}
                     data-ui-guide="roster.openGroup"
                     style={{
                       background:

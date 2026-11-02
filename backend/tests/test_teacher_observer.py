@@ -1,8 +1,9 @@
-"""A teacher who enters a group reads its private Agents, and only reads them.
+"""A teacher who enters a group can read and edit its Studyform Agents.
 
 The group library is the members' library: an entered teacher browses and
 uploads it the way a groupmate does, and does not see another student's
-private file.
+private file. Editing an Agent does not make it deletable, and private files
+stay with their owner.
 """
 
 from __future__ import annotations
@@ -115,10 +116,12 @@ def test_an_entered_teacher_reads_a_groups_private_work(client: TestClient, data
 
     listed = {item["id"]: item for item in client.get(agents).json()}
     assert work["agent"] in listed
-    assert listed[work["agent"]]["can_edit"] is False
+    assert listed[work["agent"]]["can_edit"] is True
+    assert listed[work["agent"]]["can_delete"] is False
     detail = client.get(f"/api/v1/agents/{work['agent']}")
     assert detail.status_code == 200, detail.text
-    assert detail.json()["can_edit"] is False
+    assert detail.json()["can_edit"] is True
+    assert detail.json()["can_delete"] is False
     assert client.get(f"/api/v1/agents/{work['agent']}/versions").status_code == 200
     assert client.get(f"/api/v1/agents/{work['agent']}/knowledge-sets").status_code == 200
     version = client.get(f"/api/v1/agent-versions/{work['version']}")
@@ -161,9 +164,13 @@ def test_an_entered_teacher_reads_a_groups_private_work(client: TestClient, data
     assert client.get(f"/api/v1/teams/{work['team']}").status_code == 404
 
 
-def test_an_entered_teacher_cannot_change_or_talk_to_private_work(
+def test_an_entered_teacher_can_edit_studyform_but_not_delete_or_chat(
     client: TestClient, database: Any
 ) -> None:
+    """A visit may change the group's Agent content. It cannot delete it,
+    take a private library file, or open a chat with it.
+    """
+
     work = _group_with_private_work(client, database)
     _, csrf = login(client, "maya")
     headers = _headers(csrf)
@@ -177,7 +184,9 @@ def test_an_entered_teacher_cannot_change_or_talk_to_private_work(
         headers=headers,
         json={"name": "Taken over", "expected_metadata_revision": 0},
     )
-    assert rename.status_code in {403, 404}, rename.text
+    assert rename.status_code == 200, rename.text
+    assert rename.json()["name"] == "Taken over"
+    assert rename.json()["can_delete"] is False
     delete = client.delete(
         f"/api/v1/agents/{work['agent']}",
         headers=_headers(csrf, f"observer-delete-{uuid4()}"),

@@ -48,7 +48,7 @@ def test_alembic_upgrade_is_idempotent_and_readiness_checks_head(tmp_path: Path)
     db.upgrade_schema()
     db.upgrade_schema()
     assert db.using_migrations
-    assert ALEMBIC_HEAD == "0081_conversation_chat_type"
+    assert ALEMBIC_HEAD == "0082_teacher_visit_expiry"
     assert db.check_ready()
     with db.engine.connect() as connection:
         assert (
@@ -112,7 +112,8 @@ def test_session_time_zone_is_utc_whatever_the_client_says(
 
 def test_database_at_the_baseline_runs_no_ddl_and_keeps_its_version(tmp_path: Path) -> None:
     # An empty database is created from the models and stamped at head.
-    # Starting again must not replay DDL. The squashed baseline stays 0080.
+    # Starting again must not replay DDL. The squashed baseline stays 0080;
+    # later revisions run only when the database is behind head.
     from sqlalchemy import event
 
     db = Database(named_url(f"{tmp_path / 'baseline.sqlite3'}"))
@@ -128,7 +129,7 @@ def test_database_at_the_baseline_runs_no_ddl_and_keeps_its_version(tmp_path: Pa
     finally:
         event.remove(db.engine, "before_cursor_execute", record)
     assert MIGRATION_BASELINE == "0080_drop_playback_rate"
-    assert ALEMBIC_HEAD == "0081_conversation_chat_type"
+    assert ALEMBIC_HEAD == "0082_teacher_visit_expiry"
     assert not {"CREATE", "ALTER", "DROP", "INSERT", "UPDATE", "DELETE"} & set(statements)
     with db.engine.connect() as connection:
         assert (

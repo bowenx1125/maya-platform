@@ -23,6 +23,7 @@ vi.mock("../components/session-provider", () => ({
 import { useSession } from "../components/session-provider";
 import { RosterWorkspace } from "../components/roster-workspace";
 import { AppShell } from "../components/app-shell";
+import { endTeacherEnter } from "../lib/teacher-visit";
 
 const mockedUseSession = vi.mocked(useSession);
 const courseId = "course-id";
@@ -120,6 +121,7 @@ function mount(api: ReturnType<typeof apiForTeacher>) {
 
 describe("teacher account management", () => {
   afterEach(() => {
+    endTeacherEnter();
     cleanup();
     vi.restoreAllMocks();
     push.mockReset();
@@ -350,18 +352,18 @@ describe("teacher account management", () => {
     expect(screen.getByRole("status").textContent).toContain("swift-otter-42");
   });
 
-  it("keeps group Enter pressable without joining or navigating (deferred)", async () => {
+  it("enters the group and opens that group's Studyform", async () => {
     const api = apiForTeacher();
     mount(api);
 
-    // Parked until Accounts → group Studyform has a clear Back path (sidebar
-    // has no Back/New/Done). Cards stay buttons for press motion only.
     const enter = await screen.findAllByRole("button", { name: "Enter" });
     fireEvent.click(enter[0]);
-    fireEvent.click(enter[1]);
-    await waitFor(() => expect(enter[0]).toBeTruthy());
-    expect(api.joinGroupAsTeacher).not.toHaveBeenCalled();
-    expect(push).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(api.joinGroupAsTeacher).toHaveBeenCalledWith(groupId),
+    );
+    expect(push).toHaveBeenCalledWith(
+      `/student/agents?group_id=${encodeURIComponent(groupId)}`,
+    );
   });
 
   it("leaves test results to Brainform Record", async () => {

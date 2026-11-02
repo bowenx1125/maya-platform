@@ -436,24 +436,24 @@ def test_student_private_knowledge_is_full_but_manual_public_markdown_fails_clos
         if item["canonical_set_id"] == public_set["id"]
         and item["agent_id"] == first_public_agent["id"]
     )
-    assert teacher_row["can_edit"] is False
+    assert teacher_row["can_edit"] is True
     assert teacher_row["generation_job_id"] is None
-    # Visiting teachers read the full bank read-only; they must not get the
-    # empty student projection that hid Download content during Accounts visits.
+    # Visiting teachers read the full bank and may edit it. They must not get
+    # the empty student projection that hid Download content during Accounts visits.
     teacher_markdown = client.get(f"/api/v1/knowledge-sets/{public_set['id']}/markdown")
     assert teacher_markdown.status_code == 200, teacher_markdown.text
     assert teacher_markdown.json()["audience"] == "full"
-    assert teacher_markdown.json()["can_edit"] is False
+    assert teacher_markdown.json()["can_edit"] is True
     assert "REFERENCE_ANSWER_SECRET" in teacher_markdown.json()["markdown"]
-    refused = _save(
+    edited = _save(
         client,
         teacher_csrf,
         public_set["id"],
-        "# Taken over\n",
+        full_markdown,
         expected_version_seq=teacher_markdown.json()["version_seq"],
         key=f"visit-edit-{uuid4()}",
     )
-    assert refused.status_code in {403, 404}, refused.text
+    assert edited.status_code == 200, edited.text
 
     peer, _peer_csrf = login(client, "kaikai")
     assert peer
@@ -469,7 +469,7 @@ def test_student_private_knowledge_is_full_but_manual_public_markdown_fails_clos
         "Another Agent using the same Knowledge",
     }
     assert all(item["can_read"] is True and item["can_edit"] is False for item in listed)
-    assert all(item["version_seq"] == 1 for item in listed)
+    assert all(item["version_seq"] == 2 for item in listed)
     projected = client.get(f"/api/v1/knowledge-sets/{public_set['id']}/markdown")
     assert projected.status_code == 200, projected.text
     assert projected.json()["audience"] == "student"
@@ -489,7 +489,7 @@ def test_student_private_knowledge_is_full_but_manual_public_markdown_fails_clos
         owner_csrf,
         public_set["id"],
         changed_heading,
-        expected_version_seq=1,
+        expected_version_seq=2,
     )
     assert renamed.status_code == 200, renamed.text
     assert renamed.json()["markdown"] == changed_heading
@@ -497,7 +497,7 @@ def test_student_private_knowledge_is_full_but_manual_public_markdown_fails_clos
     assert peer
     fail_closed = client.get(f"/api/v1/knowledge-sets/{public_set['id']}/markdown")
     assert fail_closed.status_code == 200, fail_closed.text
-    assert fail_closed.json()["version_seq"] == 2
+    assert fail_closed.json()["version_seq"] == 3
     assert fail_closed.json()["projection_available"] is False
     assert fail_closed.json()["markdown"] == ""
     assert "REFERENCE_ANSWER_SECRET" not in fail_closed.text
@@ -507,7 +507,7 @@ def test_student_private_knowledge_is_full_but_manual_public_markdown_fails_clos
     current_row = next(
         item for item in listed.json() if item["canonical_set_id"] == public_set["id"]
     )
-    assert current_row["version_seq"] == 2
+    assert current_row["version_seq"] == 3
     assert current_row["content_hash"] is None
 
 

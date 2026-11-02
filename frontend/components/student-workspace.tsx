@@ -762,7 +762,7 @@ function GroupWorkspaceSession({
           title={t("agents")}
           action={
             // With no Agents yet, New sits inside the empty card instead.
-            teacherIdentity || !(items.length || sharedAgents.length) ? null : (
+            !(items.length || sharedAgents.length) ? null : (
               <PageAction
                 name="new"
                 placement="page"
@@ -790,7 +790,7 @@ function GroupWorkspaceSession({
                     (!teacherIdentity && agent.can_edit === true)
                   }
                   rename={
-                    !teacherIdentity && agent.can_edit
+                    agent.can_edit
                       ? {
                           fieldLabel: t("agentName"),
                           onRename: (name) => renameAgent(agent.id, name),
@@ -845,7 +845,7 @@ function GroupWorkspaceSession({
                 />
               ))}
             </ModuleTiles>
-          ) : teacherIdentity ? undefined : (
+          ) : (
             <AgentsEmpty
               title={t("noAgents")}
               newHref={`/student/groups/${groupId}/agents/new`}
