@@ -15,6 +15,7 @@ import { flushSync } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { ChatAttachments } from "./chats/chat-attachments";
+import { CheckRag } from "./chats/check-rag";
 import { DismissibleAlert } from "./dismissible-alert";
 import {
   CHAT_BUSY_CODE,
@@ -2772,16 +2773,55 @@ function AgentChatScope({
     : sendRefusalHint(error);
   const activeSession = selectedTeam ?? selected;
   const teamIds = new Set(teamChoices.map((team) => team.id));
+  const rosterOf = (
+    members:
+      | {
+          agent_id?: string | null;
+          is_leader?: boolean;
+          display_name?: string;
+        }[]
+      | null
+      | undefined,
+  ) => {
+    const named = (members ?? []).map((member) => ({
+      isLeader: Boolean(member.is_leader),
+      name:
+        (typeof member.display_name === "string" && member.display_name) ||
+        (member.agent_id
+          ? (agents.find((agent) => agent.agent_id === member.agent_id)?.name ??
+            null)
+          : null),
+    }));
+    return {
+      leaderName: named.find((member) => member.isLeader)?.name ?? null,
+      memberNames: named.flatMap((member) =>
+        member.name ? [member.name] : [],
+      ),
+    };
+  };
   const teamOptions: ChatTargetTeam[] = [
-    ...teamChoices.map((team) => ({
-      id: team.id,
-      display_name: team.display_name,
-      current_version_seq: team.current_version_seq,
-      visibility: team.visibility,
-      member_count: team.member_count,
-      // TeamSummary may carry members once the directory lists them.
-      members: (team as { members?: ChatTargetTeam["members"] }).members,
-    })),
+    ...teamChoices.map((team) => {
+      const faces = (
+        team as { members?: ChatTargetTeam["members"] }
+      ).members?.map((member) => ({
+        ...member,
+        display_name:
+          "display_name" in member &&
+          typeof (member as { display_name?: unknown }).display_name ===
+            "string"
+            ? (member as { display_name: string }).display_name
+            : undefined,
+      }));
+      return {
+        id: team.id,
+        display_name: team.display_name,
+        current_version_seq: team.current_version_seq,
+        visibility: team.visibility,
+        member_count: team.member_count,
+        members: faces,
+        ...rosterOf(faces),
+      };
+    }),
     ...mayaChoices
       .filter((team) => !teamIds.has(team.id))
       .map((team) => ({
@@ -2789,6 +2829,8 @@ function AgentChatScope({
         display_name: team.display_name,
         visibility: "public" as const,
         member_count: team.members.length,
+        leaderName: team.leader_display_name,
+        memberNames: team.members.map((member) => member.display_name),
         members: team.members.map((member) => ({
           agent_id: null as string | null,
           material_theme:
@@ -2940,7 +2982,29 @@ function AgentChatScope({
 
   return (
     <>
-      <PageBanner title="Chatform">
+      <PageBanner
+        title={
+          <>
+            {listKind ? (
+              <span
+                aria-hidden="true"
+                className={
+                  listKind === "team"
+                    ? `${styles.kindSticker} ${styles.kindStickerTeam}`
+                    : styles.kindSticker
+                }
+              >
+                {listKind === "team" ? "Team chat" : "Agent chat"}
+              </span>
+            ) : null}
+            {newChatRoute && listKind
+              ? listKind === "team"
+                ? "New Team chat"
+                : "New Agent chat"
+              : "Chatform"}
+          </>
+        }
+      >
         {newChatRoute ? (
           <>
             <PageAction
@@ -3008,16 +3072,29 @@ function AgentChatScope({
         </Notice>
       ) : null}
       {newChatRoute ? (
-        <ChatTargetPicker
-          surface={
-            listKind === "team" ? "team" : listKind === null ? "both" : "agent"
-          }
-          teams={teamOptions}
-          agents={agents}
-          value={pick}
-          disabled={creating}
-          onPick={setPick}
-        />
+        <>
+          {listKind ? (
+            <p className={styles.pickHint}>
+              {listKind === "team"
+                ? "Pick one Team. Done opens a Team chat."
+                : "Pick one Agent. Done opens an Agent chat."}
+            </p>
+          ) : null}
+          <ChatTargetPicker
+            surface={
+              listKind === "team"
+                ? "team"
+                : listKind === null
+                  ? "both"
+                  : "agent"
+            }
+            teams={teamOptions}
+            agents={agents}
+            value={pick}
+            disabled={creating}
+            onPick={setPick}
+          />
+        </>
       ) : (
         <div className={styles.layout}>
           <aside className={styles.sidebar}>
@@ -3230,22 +3307,7 @@ function AgentChatScope({
                               )}
                             </span>
                           )}
-                          {turn.sources.length ? (
-                            <details>
-                              <summary>
-                                Check RAG · {turn.sources.length}
-                              </summary>
-                              {turn.sources.map((source) => (
-                                <div
-                                  className={styles.source}
-                                  key={source.chunk_id}
-                                >
-                                  <strong>{source.filename}</strong>
-                                  <p>{source.excerpt}</p>
-                                </div>
-                              ))}
-                            </details>
-                          ) : null}
+                          <CheckRag sources={turn.sources ?? []} />
                         </div>
                       </div>
                     </div>
@@ -3385,6 +3447,7 @@ function AgentChatScope({
                                       )}
                                     </DismissibleAlert>
                                   )}
+                                  <CheckRag sources={result.sources ?? []} />
                                   {/* Formal progress hangs under the Summarizer line.
                                   Until that card exists, the executor card or
                                   the fallback below carries it. */}

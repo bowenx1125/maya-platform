@@ -864,12 +864,12 @@ describe("Chatform", () => {
     const teamPage = renderChats();
     await openNewChat();
     const teams = within(screen.getByRole("main"));
+    expect(teams.getByRole("heading", { name: "New Team chat" })).toBeTruthy();
     expect(teams.getByRole("heading", { name: "Teams" })).toBeTruthy();
     expect(teams.queryByRole("heading", { name: "Agents" })).toBeNull();
-    expect(teams.queryByRole("button", { name: /Socrates/ })).toBeNull();
-    expect(
-      teams.getByRole("button", { name: /Reasoning circle/ }),
-    ).toBeTruthy();
+    const circle = teams.getByRole("button", { name: /Reasoning circle/ });
+    expect(circle.textContent).toContain("Leader");
+    expect(circle.textContent).toContain("Socrates");
     expect(
       teams.getByRole("button", { name: /Course Dialogue Team/ }),
     ).toBeTruthy();
@@ -883,6 +883,9 @@ describe("Chatform", () => {
     await openNewChat();
     const agents = within(screen.getByRole("main"));
     const socrates = await agents.findByRole("button", { name: /Socrates/ });
+    expect(
+      agents.getByRole("heading", { name: "New Agent chat" }),
+    ).toBeTruthy();
     expect(agents.getByRole("heading", { name: "Agents" })).toBeTruthy();
     expect(agents.getByRole("button", { name: /Mencius/ })).toBeTruthy();
     expect(agents.queryByRole("heading", { name: "Teams" })).toBeNull();
@@ -959,6 +962,56 @@ describe("Chatform", () => {
       screen.queryByRole("button", { name: "A team question" }),
     ).toBeNull();
     expect(state.api.conversationSessions).toHaveBeenCalledWith("agent");
+  });
+
+  it("shows a Team member's sources in Check RAG", async () => {
+    const history = {
+      ...teamSession,
+      turns: [
+        {
+          id: "team-turn-src",
+          user_text: "Where is that from?",
+          state: "ready",
+          routing: { mode: "auto", participant_ids: [] },
+          member_results: [
+            {
+              id: "result-src",
+              participant_id: "participant-1",
+              speaker_name: "Bowen",
+              ordinal: 0,
+              state: "ready",
+              assistant_text: "From the reading.",
+              sources: [
+                {
+                  chunk_id: "chunk-1",
+                  filename: "ethics-week-3.pdf",
+                  excerpt: "Courage is a habit.",
+                },
+              ],
+              safe_error_code: null,
+            },
+          ],
+        },
+      ],
+    };
+    state.api.conversationSessions.mockResolvedValue([history]);
+    state.api.conversationSession.mockResolvedValue(history);
+    renderChats();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Where is that from?" }),
+    );
+    const summary = await screen.findByText("Check RAG");
+    expect(summary.closest("summary")?.textContent).toContain(
+      "ethics-week-3.pdf",
+    );
+    expect(
+      screen.getByText("Courage is a habit.").closest("details"),
+    ).toHaveProperty("open", false);
+    fireEvent.click(summary);
+    fireEvent.click(screen.getAllByText("ethics-week-3.pdf").at(-1)!);
+    expect(
+      screen.getByText("Courage is a habit.").closest("details"),
+    ).toHaveProperty("open", true);
   });
 
   // TODO(ui-release): ChatTargetPicker cards repeat the Agent/Team label; text query is ambiguous
