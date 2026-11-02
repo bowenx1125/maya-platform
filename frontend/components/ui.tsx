@@ -15,6 +15,7 @@ import { localizeError, statusLabel, type MessageKey } from "../lib/i18n";
 import type { UiGuideKey } from "../lib/ui-guide-copy";
 import { useT } from "../lib/i18n";
 import { cn } from "../lib/utils";
+import { MascotFigure, type MascotId } from "./academy/mascots";
 import { IconClose, IconEdit } from "./quiet-icons";
 import { buttonVariants } from "./ui/button";
 import { NOTICE_TAIL_CLASS, noticeTray, useNoticeTray } from "./notice-tray";
@@ -40,48 +41,91 @@ export {
 
 export { NOTICE_TAIL_CLASS, useNoticeTray };
 
-/** The whole-page wait: the shell column holding one LoadingCard. */
+/** The whole-page wait: one LoadingCard, centred in the shell column. */
 export function LoadingPage() {
   return (
-    <main className="shell">
+    <main className="shell grid min-h-[70vh] place-items-center">
       <LoadingCard />
     </main>
   );
 }
 
+const LOADING_CAST: { id: MascotId }[] = [
+  { id: "scroll" },
+  { id: "wreath" },
+  { id: "tablet" },
+  { id: "wave" },
+];
+
+function LoadingStar({ className, fill }: { className: string; fill: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={cn("absolute", className)}
+      aria-hidden="true"
+    >
+      <path
+        d="M12 1l3 7.5 8 .8-6 5.4 1.8 8L12 18.6 5.2 22.7 7 14.7 1 9.3l8-.8z"
+        fill={fill}
+        stroke="#111"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/**
+ * The one loading look, sign-in stage style: the four scholars hop in turn on
+ * a lime stage under a sunburst, and a candy stripe rolls beside the label.
+ * Reduced motion keeps them still.
+ */
 export function LoadingCard({ label }: { label?: string }) {
   const t = useT();
   return (
     <div
-      className="loading-card flex w-full flex-col gap-3 rounded-[18px] border-[3px] border-[#111] bg-white px-5 py-4 text-[#111] shadow-[4px_5px_0_#111]"
+      className="loading-card @container relative mx-auto w-full max-w-[520px] overflow-hidden rounded-[20px] border-[3px] border-[#111] bg-white text-[#111] shadow-[6px_7px_0_#111]"
       role="status"
     >
-      {/* B-v2 LoadingCard: thick-border card + skeleton avatar/bars. */}
-      <div className="flex flex-col gap-3" aria-hidden="true">
-        <LoadingSkeletonRow barClass="w-[70%]" subClass="w-[46%]" />
-        <LoadingSkeletonRow barClass="w-[64%]" subClass="w-[32%]" />
+      <div
+        aria-hidden="true"
+        className="relative h-[150px] overflow-hidden border-b-[3px] border-[#111] bg-[#FFF7CC] [background-image:repeating-conic-gradient(from_0deg_at_50%_105%,#FFE14D_0_8deg,transparent_8deg_16deg)] @max-[440px]:h-[124px]"
+      >
+        <LoadingStar
+          className="top-4 left-[9%] size-8 rotate-12"
+          fill="#FFE14D"
+        />
+        <LoadingStar
+          className="top-6 right-[10%] size-6 -rotate-12"
+          fill="#67E8F9"
+        />
+        <LoadingStar className="top-14 right-[24%] size-4" fill="#A3E635" />
+        <LoadingStar className="top-16 left-[22%] size-4" fill="#FF4D8D" />
+        <span className="absolute inset-x-0 bottom-0 h-6 border-t-[3px] border-[#111] bg-[#A3E635] bg-[repeating-linear-gradient(90deg,#0000_0_24px,#0001_24px_48px)]" />
+        <span className="absolute inset-x-0 bottom-[14px] flex items-end justify-center gap-1 @max-[440px]:-space-x-3">
+          {LOADING_CAST.map((cast, index) => (
+            <span
+              key={cast.id}
+              className="relative origin-bottom animate-loading-hop motion-reduce:animate-none"
+              style={{ animationDelay: `${index * 140}ms` }}
+            >
+              <MascotFigure
+                id={cast.id}
+                className="h-[96px] w-auto drop-shadow-[3px_3px_0_#1112] @max-[440px]:h-[72px]"
+              />
+            </span>
+          ))}
+        </span>
       </div>
-      <span className="font-body text-sm font-bold leading-none">
-        {label ?? t("loading")}
-      </span>
-    </div>
-  );
-}
-
-function LoadingSkeletonRow({
-  barClass,
-  subClass,
-}: {
-  barClass: string;
-  subClass: string;
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="size-10 shrink-0 rounded-[8px] bg-[#D9D9D9]" />
-      <span className="flex min-w-0 flex-1 flex-col gap-2">
-        <span className={cn("h-3 rounded-full bg-[#D9D9D9]", barClass)} />
-        <span className={cn("h-3 rounded-full bg-[#D9D9D9]", subClass)} />
-      </span>
+      <div className="flex items-center gap-3 px-4 py-3.5">
+        <span className="-rotate-2 rounded-[8px] border-[3px] border-[#111] bg-[#FFE14D] px-2.5 py-1 font-body text-sm leading-none font-extrabold shadow-[2px_2px_0_#111]">
+          {label ?? t("loading")}
+        </span>
+        <span
+          aria-hidden="true"
+          className="h-4 min-w-10 flex-1 animate-loading-stripes rounded-full border-[3px] border-[#111] bg-[repeating-linear-gradient(-45deg,#FF4D8D_0_8px,#FFE14D_8px_16px)] bg-size-[22.6px_22.6px] motion-reduce:animate-none"
+        />
+      </div>
     </div>
   );
 }

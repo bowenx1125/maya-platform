@@ -14,7 +14,7 @@ import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import { ScholarScene } from "./stage3d/scholar-scene";
 import type { StageCharacter } from "./stage3d/scholar-stage";
-import { ErrorNotice, PageIntro } from "./ui";
+import { ErrorNotice, LoadingCard, PageIntro } from "./ui";
 import { cn } from "../lib/utils";
 
 /** Speaker tones, by participant order (Arcade category colours + main). */
@@ -38,14 +38,6 @@ const SCAN =
   "pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(#ffffff08_0_2px,transparent_2px_5px)]";
 const LED_ON =
   "size-3 animate-live-blink rounded-full bg-[#FF4D8D] shadow-[0_0_8px_#FF4D8D] even:bg-[#FFE14D] even:shadow-[0_0_8px_#FFE14D] even:[animation-delay:.6s]";
-const LOADING_BLOCK =
-  "size-4 animate-live-hop rounded-[4px] border-2 border-[#111]";
-const LOADING_BLOCKS = [
-  "bg-[#A3E635]",
-  "bg-[#67E8F9] [animation-delay:.15s]",
-  "bg-[#FDBA74] [animation-delay:.3s]",
-  "bg-[#FF4D8D] [animation-delay:.45s]",
-];
 const EYE =
   "absolute top-[38%] h-[34px] w-[70px] rounded-b-[40px] border-b-8 border-[#67E8F9] drop-shadow-[0_0_6px_#67E8F9]";
 const BUBBLE =
@@ -388,18 +380,13 @@ function ClassroomLiveSession({
       <PageIntro title="Live" />
       {error ? <ErrorNotice kind="bell" transient error={error} /> : null}
       {loading ? (
-        <section className={cn(CABINET, "mt-2")} role="status">
+        <section className={cn(CABINET, "mt-2")}>
           <Leds count={12} />
           <div className={SCREEN}>
             <div className={SCAN} aria-hidden="true" />
-            <div className="grid justify-items-center gap-4">
-              {/* The sign-in's four scholar blocks, still waiting their turn. */}
-              <span className="inline-flex items-end gap-2" aria-hidden="true">
-                {LOADING_BLOCKS.map((block) => (
-                  <i key={block} className={cn(LOADING_BLOCK, block)} />
-                ))}
-              </span>
-              <b className="text-lg text-white">{t("loading")}</b>
+            {/* The site-wide loading card, on the cabinet's screen. */}
+            <div className="relative w-[min(380px,86%)]">
+              <LoadingCard />
             </div>
           </div>
           <Knobs tones={["bg-[#FF4D8D]", "bg-[#67E8F9]", "bg-[#A3E635]"]} />
