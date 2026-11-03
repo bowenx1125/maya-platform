@@ -5,11 +5,18 @@ import { useEffect, useSyncExternalStore } from "react";
 /**
  * Background music (2026-11-03): two channels that never play together.
  *
- * - workspace: the music key beside Mayaform. Off by default; nothing plays
- *   until it is pressed. It keeps playing across pages and stops at logout.
+ * - workspace: the music key beside Mayaform. On by default (2026-11-03):
+ *   it starts when the site loads. It keeps playing across pages and stops
+ *   at logout.
  * - stage: the 3D Debate stage's own music key. Entering the stage starts it
  *   (and hands the workspace music off); pressing its key pauses it. Leaving
  *   the stage stops it and gives the workspace music back if its key is on.
+ *
+ * Browsers refuse sound before the person has touched the page. Then the key
+ * stays on and the music starts (fading in) on their first click, tap or key
+ * press anywhere on the site. A key the person turns off is remembered per
+ * channel (localStorage) and does not start by itself next time; turning it
+ * back on forgets that.
  *
  * Every hand-off fades: the leaving channel fades out, the arriving one fades
  * in. Each channel loops its list (after the last track the first plays).
@@ -44,6 +51,37 @@ const CHANNEL_VOLUME: Record<MusicChannelName, number> = {
   stage: 0.35,
 };
 
+const OFF_KEY: Record<MusicChannelName, string> = {
+  workspace: "maya.bgm.off.workspace",
+  stage: "maya.bgm.off.stage",
+};
+
+/** The person turned this key off themselves. */
+function turnedOff(name: MusicChannelName): boolean {
+  try {
+    return window.localStorage.getItem(OFF_KEY[name]) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function rememberOff(name: MusicChannelName, off: boolean): void {
+  try {
+    if (off) window.localStorage.setItem(OFF_KEY[name], "1");
+    else window.localStorage.removeItem(OFF_KEY[name]);
+  } catch {
+    // Private mode or no storage: the choice lasts this visit only.
+  }
+}
+
+function isAutoplayRefusal(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { name?: unknown }).name === "NotAllowedError"
+  );
+}
+
 type Listener = () => void;
 const listeners = new Set<Listener>();
 
@@ -58,6 +96,8 @@ class Channel {
   wanted = false;
   /** Sound is coming out (or fading in). */
   audible = false;
+  /** On, but the browser wants a gesture before it makes sound. */
+  waiting = false;
   tracks: readonly string[];
   private fade: ReturnType<typeof setInterval> | null = null;
 
@@ -71,11 +111,12 @@ class Channel {
   private player(): HTMLAudioElement {
     if (this.audio) return this.audio;
     const created = new Audio();
-    created.preload = "none";
+    // Buffer ahead so a press gives sound quickly; the file streams.
+    created.preload = "auto";
     const next = () => {
       this.trackIndex = (this.trackIndex + 1) % this.tracks.length;
       created.src = this.tracks[this.trackIndex];
-      void created.play().catch(() => this.refused());
+      void created.play().catch((error: unknown) => this.playFailed(error));
     };
     created.addEventListener("ended", next);
     // A file that fails to load skips to the next one, once round the list
@@ -97,11 +138,25 @@ class Channel {
     return created;
   }
 
-  /** The browser refused to play (no gesture yet) or nothing loads. */
+  /** Nothing loads: the key turns off. */
   private refused(): void {
     this.stopFade();
     this.audible = false;
+    this.waiting = false;
     this.wanted = false;
+    emit();
+  }
+
+  /** play() failed: no gesture yet keeps the key on and waits for one. */
+  private playFailed(error: unknown): void {
+    if (!isAutoplayRefusal(error)) {
+      this.refused();
+      return;
+    }
+    this.stopFade();
+    this.audible = false;
+    this.waiting = true;
+    armFirstGesture();
     emit();
   }
 
@@ -138,16 +193,18 @@ class Channel {
     if (!element.src) element.src = this.tracks[this.trackIndex];
     if (!this.audible) element.volume = 0;
     this.audible = true;
+    this.waiting = false;
     emit();
     void element
       .play()
       .then(() => {
         if (this.audible) this.rampTo(CHANNEL_VOLUME[this.name]);
       })
-      .catch(() => this.refused());
+      .catch((error: unknown) => this.playFailed(error));
   }
 
   fadeOut(): void {
+    this.waiting = false;
     if (!this.audible) return;
     this.audible = false;
     emit();
@@ -162,6 +219,7 @@ class Channel {
     this.stopFade();
     this.audio?.pause();
     this.audible = false;
+    this.waiting = false;
     this.wanted = false;
     emit();
   }
@@ -180,6 +238,35 @@ const channels: Record<MusicChannelName, Channel> = {
 };
 let onStage = false;
 
+const GESTURES = ["pointerdown", "pointerup", "keydown"] as const;
+let gestureArmed = false;
+
+function onFirstGesture(event: Event): void {
+  // A press on a music key is handled by the key itself (toggleMusic).
+  const target = event.target as Element | null;
+  if (target?.closest?.("[data-music-key]")) return;
+  disarmFirstGesture();
+  const channel = current();
+  if (channel.wanted && channel.waiting) channel.fadeIn();
+}
+
+/** Start the waiting music on the first click, tap or key press, once. */
+function armFirstGesture(): void {
+  if (gestureArmed || typeof document === "undefined") return;
+  gestureArmed = true;
+  for (const name of GESTURES) {
+    document.addEventListener(name, onFirstGesture, true);
+  }
+}
+
+function disarmFirstGesture(): void {
+  if (!gestureArmed) return;
+  gestureArmed = false;
+  for (const name of GESTURES) {
+    document.removeEventListener(name, onFirstGesture, true);
+  }
+}
+
 /** The channel that owns the speakers now. */
 function current(): Channel {
   return onStage ? channels.stage : channels.workspace;
@@ -188,13 +275,20 @@ function current(): Channel {
 /** Press a music key. Only the channel that owns the speakers can play. */
 export function toggleMusic(name: MusicChannelName): void {
   const channel = channels[name];
+  // On but waiting for a gesture: this press is the gesture, so it plays.
+  if (channel.wanted && channel.waiting && channel === current()) {
+    channel.fadeIn();
+    return;
+  }
   if (channel.wanted) {
     channel.wanted = false;
+    rememberOff(name, true);
     channel.fadeOut();
     emit();
     return;
   }
   channel.wanted = true;
+  rememberOff(name, false);
   if (channel === current()) channel.fadeIn();
   else emit();
 }
@@ -204,8 +298,23 @@ export function enterStageMusic(): void {
   if (onStage) return;
   onStage = true;
   channels.workspace.fadeOut();
+  if (turnedOff("stage")) {
+    channels.stage.wanted = false;
+    emit();
+    return;
+  }
   channels.stage.wanted = true;
   channels.stage.fadeIn();
+}
+
+/** The signed-in site loaded (AppShell mounted): workspace music is on by default. */
+export function startDefaultMusic(): void {
+  const channel = channels.workspace;
+  if (channel.wanted || channel.tracks.length === 0) return;
+  if (turnedOff("workspace")) return;
+  channel.wanted = true;
+  if (channel === current()) channel.fadeIn();
+  else emit();
 }
 
 /** The 3D stage closed: its music fades out, the workspace's comes back. */
@@ -221,6 +330,7 @@ export function leaveStageMusic(): void {
 /** Logout: everything stops at once. */
 export function stopBackgroundMusic(): void {
   onStage = false;
+  disarmFirstGesture();
   channels.stage.stop();
   channels.workspace.stop();
 }
@@ -256,6 +366,7 @@ export function resetBackgroundMusicForTests(
   tracks: { workspace?: readonly string[]; stage?: readonly string[] } = {},
 ): void {
   onStage = false;
+  disarmFirstGesture();
   channels.workspace.reset(tracks.workspace ?? BACKGROUND_TRACKS);
   channels.stage.reset(tracks.stage ?? STAGE_TRACKS);
   emit();
@@ -267,6 +378,7 @@ export function musicStateForTests(name: MusicChannelName) {
   return {
     wanted: channel.wanted,
     audible: channel.audible,
+    waiting: channel.waiting,
     audio: channel.audio,
   };
 }

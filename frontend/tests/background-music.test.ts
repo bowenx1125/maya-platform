@@ -7,14 +7,17 @@ import {
   musicStateForTests,
   parseTracks,
   resetBackgroundMusicForTests,
+  startDefaultMusic,
   stopBackgroundMusic,
   toggleMusic,
 } from "../lib/background-music";
 
-// 2026-11-03: a music key beside Mayaform (workspace music, off by default)
+// 2026-11-03: a music key beside Mayaform (workspace music, on by default)
 // and one on the 3D stage (its own music, on while the stage is open). Every
-// hand-off fades; each list loops.
-let refuse = false;
+// hand-off fades; each list loops. A browser that refuses sound before a
+// gesture keeps the key on and starts on the first gesture; a key turned off
+// by hand is remembered per channel.
+let refuse: false | "autoplay" | "broken" = false;
 
 class FakeAudio {
   static made: FakeAudio[] = [];
@@ -24,7 +27,16 @@ class FakeAudio {
   paused = true;
   handlers = new Map<string, Array<() => void>>();
   play = vi.fn(() => {
-    if (refuse) return Promise.reject(new Error("NotAllowedError"));
+    if (refuse === "autoplay") {
+      return Promise.reject(
+        Object.assign(new Error("no gesture"), { name: "NotAllowedError" }),
+      );
+    }
+    if (refuse === "broken") {
+      return Promise.reject(
+        Object.assign(new Error("bad file"), { name: "NotSupportedError" }),
+      );
+    }
     this.paused = false;
     return Promise.resolve();
   });
@@ -57,6 +69,7 @@ describe("background music", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     refuse = false;
+    window.localStorage.clear();
     FakeAudio.made = [];
     vi.stubGlobal("Audio", FakeAudio);
     resetBackgroundMusicForTests({ workspace: WORKSPACE, stage: STAGE });
@@ -67,9 +80,77 @@ describe("background music", () => {
     vi.useRealTimers();
   });
 
-  it("makes no player until a key is pressed", () => {
+  it("makes no player before the site loads", () => {
     expect(FakeAudio.made).toHaveLength(0);
     expect(musicStateForTests("workspace").wanted).toBe(false);
+  });
+
+  it("starts the workspace music by default and buffers ahead", async () => {
+    startDefaultMusic();
+    const audio = player("workspace");
+    expect(audio.preload).toBe("auto");
+    expect(musicStateForTests("workspace").wanted).toBe(true);
+    await settle();
+    expect(audio.paused).toBe(false);
+    expect(audio.volume).toBeCloseTo(0.6);
+  });
+
+  it("keeps the key on when autoplay is refused and plays on the first gesture", async () => {
+    refuse = "autoplay";
+    startDefaultMusic();
+    await settle();
+    expect(musicStateForTests("workspace")).toMatchObject({
+      wanted: true,
+      audible: false,
+      waiting: true,
+    });
+    refuse = false;
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    await settle();
+    expect(player("workspace").paused).toBe(false);
+    expect(player("workspace").volume).toBeCloseTo(0.6);
+    // The listener is gone after the first gesture.
+    const plays = player("workspace").play.mock.calls.length;
+    document.body.dispatchEvent(new Event("keydown", { bubbles: true }));
+    expect(player("workspace").play.mock.calls.length).toBe(plays);
+  });
+
+  it("treats a press on the waiting key as the gesture, not as off", async () => {
+    refuse = "autoplay";
+    startDefaultMusic();
+    await settle();
+    refuse = false;
+    toggleMusic("workspace");
+    await settle();
+    expect(musicStateForTests("workspace").wanted).toBe(true);
+    expect(player("workspace").paused).toBe(false);
+  });
+
+  it("remembers a key turned off by hand, per channel", async () => {
+    startDefaultMusic();
+    await settle();
+    toggleMusic("workspace");
+    resetBackgroundMusicForTests({ workspace: WORKSPACE, stage: STAGE });
+    startDefaultMusic();
+    expect(musicStateForTests("workspace").wanted).toBe(false);
+    // The stage still starts by itself.
+    enterStageMusic();
+    expect(musicStateForTests("stage").wanted).toBe(true);
+    // Turning it back on forgets the choice.
+    leaveStageMusic();
+    toggleMusic("workspace");
+    resetBackgroundMusicForTests({ workspace: WORKSPACE, stage: STAGE });
+    startDefaultMusic();
+    expect(musicStateForTests("workspace").wanted).toBe(true);
+  });
+
+  it("does not start the stage by itself after its key was turned off", async () => {
+    enterStageMusic();
+    await settle();
+    toggleMusic("stage");
+    leaveStageMusic();
+    enterStageMusic();
+    expect(musicStateForTests("stage").wanted).toBe(false);
   });
 
   it("fades the workspace music in and loops its list", async () => {
@@ -141,8 +222,22 @@ describe("background music", () => {
     expect(player("workspace").paused).toBe(true);
   });
 
-  it("gives up quietly when the browser refuses to play", async () => {
-    refuse = true;
+  it("keeps the stage key on when autoplay is refused", async () => {
+    refuse = "autoplay";
+    enterStageMusic();
+    await settle();
+    expect(musicStateForTests("stage")).toMatchObject({
+      wanted: true,
+      waiting: true,
+    });
+    refuse = false;
+    document.body.dispatchEvent(new Event("keydown", { bubbles: true }));
+    await settle();
+    expect(player("stage").paused).toBe(false);
+  });
+
+  it("turns the key off when the music cannot load", async () => {
+    refuse = "broken";
     enterStageMusic();
     await settle();
     expect(musicStateForTests("stage").wanted).toBe(false);
