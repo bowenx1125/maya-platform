@@ -58,6 +58,23 @@ describe("LoadingCard", () => {
     expect(main?.querySelector(".loading-card")).toBeTruthy();
   });
 
+  it("can draw three staggered ghosts for Voices", () => {
+    const { container } = render(<LoadingCard size="lg" count={3} />);
+    const agents = container.querySelectorAll(".ag.a2.lg.multi .agent");
+    expect(agents).toHaveLength(3);
+    expect(screen.getByRole("status").dataset.count).toBe("3");
+    expect(
+      parseFloat((agents[0] as HTMLElement).style.animationDelay || "0"),
+    ).toBe(0);
+    expect(parseFloat((agents[1] as HTMLElement).style.animationDelay)).toBe(
+      0.22,
+    );
+    expect(parseFloat((agents[2] as HTMLElement).style.animationDelay)).toBe(
+      0.44,
+    );
+    expect(container.querySelectorAll(".ag .bar i")).toHaveLength(10);
+  });
+
   it("accepts an explicit label override", () => {
     render(<LoadingCard label="Please wait" />);
     expect(screen.getByRole("status").textContent).toContain("Please wait");

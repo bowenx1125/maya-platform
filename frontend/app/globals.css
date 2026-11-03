@@ -426,6 +426,31 @@ textarea {
   margin-top: 2px;
   font-size: 15px;
 }
+/* Voices large: three bigger ghosts side by side, hops staggered. */
+.ag.multi {
+  --a: 112px;
+  --w: 360px;
+  --h: 18px;
+  gap: 14px;
+}
+.ag.multi .track {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: calc(var(--a) * 0.28);
+  width: auto;
+  min-width: var(--w);
+  height: calc(var(--a) * 1.28);
+}
+.ag.multi .agent {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  flex: none;
+}
+.ag.multi .lbl {
+  font-size: 24px;
+}
 @keyframes ag-seg {
   0% {
     background: #e5e7eb;

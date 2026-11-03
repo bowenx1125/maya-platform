@@ -65,6 +65,7 @@ export function LoadingCard({
   bare = false,
   size = "lg",
   tone = "light",
+  count = 1,
 }: {
   label?: string;
   /** No frame of its own (LoadingPage already paints the stripes). */
@@ -72,21 +73,29 @@ export function LoadingCard({
   size?: LoaderSize;
   /** "dark" for a dark screen (the audience terminal): light label. */
   tone?: "light" | "dark";
+  /** Ghost count. Voices large uses 3; everywhere else stays 1. */
+  count?: number;
 }) {
   const t = useT();
   const text = label ?? t("loading");
+  const multi = count > 1;
   return (
     <div
       className={cn(
         "loading-card w-full",
-        size === "lg" ? "loading-card--lg" : "loading-card--sm",
+        size === "lg" || multi ? "loading-card--lg" : "loading-card--sm",
         bare && "loading-card--bare",
         tone === "dark" && "loading-card--dark",
       )}
       role="status"
       data-size={size}
+      data-count={multi ? String(count) : undefined}
     >
-      <AgentLoader size={size} label={size === "xs" ? undefined : text} />
+      <AgentLoader
+        size={size}
+        count={count}
+        label={size === "xs" ? undefined : text}
+      />
       {size === "xs" ? <span className="sr-only">{text}</span> : null}
     </div>
   );

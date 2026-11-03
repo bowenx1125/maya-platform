@@ -8,19 +8,39 @@ export type LoaderSize = "lg" | "sm" | "xs";
  * The one loading look (loading-v3 agent-2, chosen 2026-11-04): the ghost
  * agent bobs in place above a pixel bar whose segments light in turn.
  * Decorative only; the caller owns role/aria and the label text.
+ *
+ * Voices uses count=3: three larger ghosts side by side with staggered
+ * hops so they do not bob in sync. Every other page stays count=1.
  */
 export function AgentLoader({
   size = "lg",
   label,
+  count = 1,
 }: {
   size?: LoaderSize;
   label?: string;
+  /** Number of ghost agents (Voices large uses 3). */
+  count?: number;
 }) {
-  const segments = size === "lg" ? 10 : 6;
+  const agents = Math.max(1, Math.min(6, Math.floor(count)));
+  const multi = agents > 1;
+  const segments = size === "lg" || multi ? 10 : 6;
+  // Stagger so neighbors never land on the same frame of the 0.8s hop.
+  const stagger = 0.22;
   return (
-    <span className={`ag a2 ${size}`}>
+    <span className={`ag a2 ${size}${multi ? " multi" : ""}`}>
       <span className="track" aria-hidden="true">
-        <span className="agent" />
+        {Array.from({ length: agents }, (_, index) => (
+          <span
+            key={index}
+            className="agent"
+            style={
+              multi
+                ? { animationDelay: `${(index * stagger).toFixed(2)}s` }
+                : undefined
+            }
+          />
+        ))}
       </span>
       <span className="bar" aria-hidden="true">
         {Array.from({ length: segments }, (_, index) => (

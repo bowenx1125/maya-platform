@@ -1100,7 +1100,7 @@ export function VoiceLibrary({
           }
         />
       ) : null}
-      {loading ? <LoadingCard size="sm" /> : null}
+      {loading ? <LoadingCard size="lg" count={3} /> : null}
       {list}
     </>
   ) : undefined;
@@ -1245,7 +1245,7 @@ export function VoiceLibrary({
               }
             />
           ) : null}
-          {loading ? <LoadingCard size="sm" /> : null}
+          {loading ? <LoadingCard size="lg" count={3} /> : null}
           {list ??
             (loading ? null : (
               <ul className={voiceAlbum.grid}>
