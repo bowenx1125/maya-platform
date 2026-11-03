@@ -12,7 +12,7 @@ from typing import Any
 import anyio
 import pytest
 import yaml
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.db import Database
 from app.main import create_app
 from fastapi import FastAPI
@@ -23,6 +23,13 @@ from starlette.testclient import WebSocketTestSession
 from tests import n_plus_one_report, postgres_db
 
 n_plus_one_report.install()
+
+# Capacity defaults scale with the host's CPUs (app/core/capacity.py). Tests
+# assert the measured 2-vCPU numbers, so the machine running them must not
+# change them.
+os.environ.setdefault("CAPACITY_SCALE", "1")
+# app.main read (and cached) the settings while being imported above.
+get_settings.cache_clear()
 
 WS_RECEIVE_TIMEOUT_SECONDS = 30.0
 

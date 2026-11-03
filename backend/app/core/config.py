@@ -19,7 +19,7 @@ from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Dated snapshot, not the floating qwen3.8-max alias. LLM_MODEL overrides it.
@@ -248,6 +248,15 @@ class Settings(BaseSettings):
         ge=0,
         le=1_000_000,
         validation_alias="MEMORY_GUARD_RESUME_AVAILABLE_MB",
+    )
+    # Server size (app/core/capacity.py): the CPU-bound loads and caps below
+    # were measured on a 2-vCPU host and grow by cores / this baseline on a
+    # bigger one, never below 1x. CAPACITY_SCALE pins the multiplier.
+    capacity_baseline_cpus: int = Field(
+        default=2, ge=1, le=1024, validation_alias="CAPACITY_BASELINE_CPUS"
+    )
+    capacity_scale: float | None = Field(
+        default=None, gt=0, le=64, validation_alias="CAPACITY_SCALE"
     )
     host_load_reject_threshold: float = Field(
         default=6.0, ge=0, le=10_000, validation_alias="HOST_LOAD_REJECT_THRESHOLD"
@@ -736,6 +745,26 @@ class Settings(BaseSettings):
             self.node_env.strip().lower() == "production"
             or self.maya_env.strip().lower() == "production"
         )
+
+    @field_validator("capacity_scale", mode="before")
+    @classmethod
+    def capacity_scale_blank_is_unset(cls, value: object) -> object:
+        # docker-compose forwards CAPACITY_SCALE as "" when it is not set.
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @model_validator(mode="after")
+    def scale_capacity_with_host(self) -> Settings:
+        from app.core.capacity import SCALED_CAPS, SCALED_LOADS, capacity_scale, scaled_values
+
+        scale = capacity_scale(
+            baseline_cpus=self.capacity_baseline_cpus, override=self.capacity_scale
+        )
+        # Validators run once per construction; copies (model_copy) keep the
+        # already scaled values, so nothing is multiplied twice.
+        names = SCALED_LOADS + SCALED_CAPS
+        for name, value in scaled_values({n: getattr(self, n) for n in names}, scale).items():
+            object.__setattr__(self, name, value)
+        return self
 
     def validate_runtime(self) -> None:
         """Reject insecure production configuration at application startup."""
