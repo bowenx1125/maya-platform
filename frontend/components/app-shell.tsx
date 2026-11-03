@@ -24,6 +24,7 @@ import {
   type WorkspaceActions,
 } from "./workspace-actions";
 
+import { stopBackgroundMusic } from "../lib/background-music";
 import { useT } from "../lib/i18n";
 import {
   endTeacherEnter,
@@ -50,6 +51,7 @@ import {
   PRESS_MOTION,
 } from "./ui/button";
 import { NoticeTraySlot } from "./ui/error-kit";
+import { MusicKey } from "./music-key";
 
 type ActionRegistration = {
   owner: string;
@@ -1128,23 +1130,34 @@ export function AppShell({
                 aria-label={`${teacherSurface ? t("teacher") : t("student")} ${t("navigation")}`}
                 className={`nav-links grid content-start ${collapsed ? "justify-items-center gap-3" : "gap-4"}`}
               >
-                <Link
-                  href={home}
-                  aria-current={mayaformHere ? "page" : undefined}
-                  aria-busy={pendingKey === "home" || undefined}
-                  onClick={startNav("home", home)}
-                  aria-label={collapsed ? t("appName") : undefined}
-                  data-tour="home"
-                  data-lit={mayaformLit || undefined}
-                  className={`isolate ${collapsed ? `${ICON_ITEM} ${mayaformLit ? ICON_ITEM_ACTIVE : ICON_ITEM_IDLE}` : mobile ? `${ITEM} w-fit justify-self-start border-transparent font-display text-lg font-extrabold` : `${ITEM} w-fit justify-self-start font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " is-active" : ""}`}
+                <div
+                  className={
+                    collapsed || mobile
+                      ? "contents"
+                      : "flex items-center justify-between gap-2"
+                  }
                 >
-                  {mayaformLit && !collapsed && !mobile ? pill : null}
-                  <span
-                    className={`brand-dot size-4 shrink-0 rounded-full border-2 border-border ${(collapsed || mayaformLit) && !mobile ? "bg-[linear-gradient(90deg,#111_50%,var(--color-surface)_50%)]" : "bg-[linear-gradient(90deg,#111_50%,var(--color-main)_50%)]"}`}
-                    aria-hidden="true"
-                  />
-                  {collapsed ? null : <span>{t("appName")}</span>}
-                </Link>
+                  <Link
+                    href={home}
+                    aria-current={mayaformHere ? "page" : undefined}
+                    aria-busy={pendingKey === "home" || undefined}
+                    onClick={startNav("home", home)}
+                    aria-label={collapsed ? t("appName") : undefined}
+                    data-tour="home"
+                    data-lit={mayaformLit || undefined}
+                    className={`isolate ${collapsed ? `${ICON_ITEM} ${mayaformLit ? ICON_ITEM_ACTIVE : ICON_ITEM_IDLE}` : mobile ? `${ITEM} w-fit justify-self-start border-transparent font-display text-lg font-extrabold` : `${ITEM} w-fit justify-self-start font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " is-active" : ""}`}
+                  >
+                    {mayaformLit && !collapsed && !mobile ? pill : null}
+                    <span
+                      className={`brand-dot size-4 shrink-0 rounded-full border-2 border-border ${(collapsed || mayaformLit) && !mobile ? "bg-[linear-gradient(90deg,#111_50%,var(--color-surface)_50%)]" : "bg-[linear-gradient(90deg,#111_50%,var(--color-main)_50%)]"}`}
+                      aria-hidden="true"
+                    />
+                    {collapsed ? null : <span>{t("appName")}</span>}
+                  </Link>
+                  {collapsed || mobile ? null : (
+                    <MusicKey channel="workspace" />
+                  )}
+                </div>
                 {groups.map((group) => {
                   const headingId = `sidebar-group-${group.key}`;
 
@@ -1217,9 +1230,10 @@ export function AppShell({
                   type="button"
                   disabled={busy}
                   data-ui-guide={visitingGroup ? undefined : "workspace.logout"}
-                  onClick={() =>
-                    void (visitingGroup ? leaveVisit() : signOut())
-                  }
+                  onClick={() => {
+                    if (!visitingGroup) stopBackgroundMusic();
+                    void (visitingGroup ? leaveVisit() : signOut());
+                  }}
                 >
                   <WorkspaceIcon
                     name={visitingGroup ? "back" : "logout"}

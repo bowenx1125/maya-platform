@@ -9,6 +9,7 @@ services:
       ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL for certificate notices}
     volumes: !override
       - ./infra/Caddyfile.production:/etc/caddy/Caddyfile:ro
+      - ${MAYA_MUSIC_DIR:-./data/music}:/srv/music:ro
       - maya_caddy_data:/data
       - maya_caddy_config:/config
     networks: !override

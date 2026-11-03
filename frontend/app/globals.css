@@ -352,6 +352,17 @@ textarea {
   }
 }
 
+/* Sidebar music key: the pixel note bobs while music plays. */
+@keyframes music-bob {
+  0%,
+  100% {
+    translate: 0 1px;
+  }
+  50% {
+    translate: 0 -2px;
+  }
+}
+
 .empty-card {
   align-items: flex-start;
   flex-direction: column;
