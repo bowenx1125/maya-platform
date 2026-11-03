@@ -66,6 +66,26 @@ class LLMHTTPRejected(LLMTransportError):
         super().__init__()
 
 
+# A provider that is overloaded answers 429 (too many requests for this key)
+# or 502/503/504/529 (busy or briefly down). Those are named for the person
+# who sent the message, so they wait and send again; the call is still never
+# retried by the server.
+PROVIDER_RATE_LIMITED_STATUSES = frozenset({429})
+PROVIDER_BUSY_STATUSES = frozenset({502, 503, 504, 529})
+
+
+def rejected_status_code(status: object, fallback: str) -> str:
+    """The safe error code for a non-200 provider answer."""
+
+    if status in {401, 403}:
+        return "provider_auth_failed"
+    if status in PROVIDER_RATE_LIMITED_STATUSES:
+        return "provider_rate_limited"
+    if status in PROVIDER_BUSY_STATUSES:
+        return "provider_busy"
+    return fallback
+
+
 # Descriptive aliases used by callers that name the classification first.
 LLMTransportAcceptanceUnknown = LLMAcceptanceUnknown
 LLMAcceptanceUnknownError = LLMAcceptanceUnknown

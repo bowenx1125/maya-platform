@@ -601,6 +601,10 @@ const enMessages = {
   errorTranslationNotConfigured:
     "The test translation service is not configured.",
   errorProviderUnavailable: "A platform capability is temporarily unavailable.",
+  errorProviderRateLimited:
+    "The AI service is limiting requests right now. Wait a minute, then send again.",
+  errorProviderBusy:
+    "The AI service is busy right now. Wait a moment, then send again.",
   errorRagIndexFailed:
     "This file could not be indexed, so it was not saved. Upload it again in a minute.",
   debateAgentsNotReady: "Fix these Agents before the Debate can be created:",
@@ -1199,6 +1203,8 @@ const errorCodeKeys: Record<string, MessageKey> = {
   report_failed: "errorReportFailed",
   translation_not_configured: "errorTranslationNotConfigured",
   provider_unavailable: "errorProviderUnavailable",
+  provider_rate_limited: "errorProviderRateLimited",
+  provider_busy: "errorProviderBusy",
   rag_upload_index_failed: "errorRagIndexFailed",
   debate_agents_not_ready: "debateAgentsNotReady",
   chat_failed: "errorChatFailed",
