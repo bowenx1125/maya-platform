@@ -1997,26 +1997,28 @@ export function AgentWorkbench({
                     !queuedCreateRag ? (
                       <p className="muted-copy">{t("noGroupMarkdown")}</p>
                     ) : (
-                      <div className="document-list">
+                      <div className={RAG_STICKERS}>
                         {queuedCreateRag ? (
-                          <div className="document-row">
-                            <label className="document-select">
+                          <div className={RAG_STICKER}>
+                            <label className={RAG_STICKER_SELECT}>
                               <input
+                                className="peer sr-only"
                                 type="checkbox"
                                 checked
                                 disabled={editingLocked}
                                 onChange={() => setPendingKnowledgeUpload(null)}
                               />
-                              <span className="document-main">
-                                <strong>{queuedCreateRag.file.name}</strong>
-                              </span>
+                              <RagStickerFace
+                                filename={queuedCreateRag.file.name}
+                              />
                             </label>
                           </div>
                         ) : null}
                         {stagedRag.map((item) => (
-                          <div className="document-row" key={item.signature}>
-                            <label className="document-select">
+                          <div className={RAG_STICKER} key={item.signature}>
+                            <label className={RAG_STICKER_SELECT}>
                               <input
+                                className="peer sr-only"
                                 type="checkbox"
                                 checked
                                 disabled={editingLocked}
@@ -2029,19 +2031,22 @@ export function AgentWorkbench({
                                   )
                                 }
                               />
-                              <span className="document-main">
-                                <strong>{item.file.name}</strong>
-                              </span>
+                              <RagStickerFace filename={item.file.name} />
                             </label>
                           </div>
                         ))}
                         {documents.map((document) => (
                           <div
-                            className={`document-row ${document.workspace_state === "hidden" ? "is-hidden" : ""}`}
+                            className={cn(
+                              RAG_STICKER,
+                              document.workspace_state === "hidden" &&
+                                "opacity-55",
+                            )}
                             key={document.id}
                           >
-                            <label className="document-select">
+                            <label className={RAG_STICKER_SELECT}>
                               <input
+                                className="peer sr-only"
                                 type="checkbox"
                                 aria-label={document.source_filename}
                                 aria-describedby={`rag-origin-${document.id}`}
@@ -2060,12 +2065,13 @@ export function AgentWorkbench({
                                   )
                                 }
                               />
-                              <span className="document-main">
-                                <strong>{document.source_filename}</strong>
+                              <RagStickerFace
+                                filename={document.source_filename}
+                              >
                                 <RagPickerOrigin document={document} />
-                              </span>
+                              </RagStickerFace>
                             </label>
-                            <div className="row-actions">
+                            <div className="relative z-[1] flex flex-wrap items-center gap-1.5">
                               {document.index_status === "ready" ? null : (
                                 <StatusBadge
                                   status={document.index_status}
@@ -2399,5 +2405,65 @@ function RagPickerOrigin({ document }: { document: KnowledgeDocument }) {
     <small id={`rag-origin-${document.id}`} data-testid="rag-picker-origin">
       {parts.join(" · ")}
     </small>
+  );
+}
+
+/*
+ * Option A (2026-11-03), the Agent page's RAG picker: two columns of sticker
+ * cards. The checkbox stays (visually hidden) inside the card's label, so the
+ * whole card toggles it; a checked card turns lime, lifts and gets a pink
+ * check stamp.
+ */
+const RAG_STICKERS =
+  "grid grid-cols-[repeat(2,minmax(0,1fr))] gap-3 max-[560px]:grid-cols-[minmax(0,1fr)]";
+const RAG_STICKER =
+  "group/sticker relative grid content-start gap-2 rounded-[12px] border-[2.5px] border-[#111] bg-white p-2.5 shadow-[0_4px_0_#111] transition-[transform,box-shadow,background-color] duration-150 has-[input:checked]:-translate-y-[3px] has-[input:checked]:-rotate-1 has-[input:checked]:bg-[#A3E635] has-[input:checked]:shadow-[0_7px_0_#111] has-[input:focus-visible]:outline has-[input:focus-visible]:outline-[3px] has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-main motion-reduce:transition-none motion-reduce:has-[input:checked]:translate-y-0 motion-reduce:has-[input:checked]:rotate-0";
+const RAG_STICKER_SELECT =
+  "grid min-w-0 cursor-pointer gap-1.5 text-left has-[input:disabled]:cursor-not-allowed";
+
+function RagStickerFace({
+  filename,
+  children,
+}: {
+  filename: string;
+  children?: ReactNode;
+}) {
+  const extension = filename.includes(".")
+    ? filename.split(".").pop()!.slice(0, 4).toUpperCase()
+    : "FILE";
+  return (
+    <>
+      <span
+        aria-hidden="true"
+        className="absolute -top-2.5 -right-2 hidden size-[30px] rotate-12 place-items-center rounded-full border-[2.5px] border-[#111] bg-[#FF4D8D] text-white shadow-[2px_2px_0_#111] peer-checked:grid"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="m5 12 4 4L19 6" />
+        </svg>
+      </span>
+      <span
+        aria-hidden="true"
+        className="justify-self-start rounded-[5px] border-2 border-[#111] bg-[#FFE14D] px-1.5 text-[11px] leading-[1.4] font-extrabold"
+      >
+        {extension}
+      </span>
+      <strong className="text-sm leading-[1.3] font-extrabold wrap-anywhere text-ink">
+        {filename}
+      </strong>
+      {children ? (
+        <span className="text-xs leading-[1.35] font-semibold text-[#333] [&_small]:text-inherit">
+          {children}
+        </span>
+      ) : null}
+    </>
   );
 }
