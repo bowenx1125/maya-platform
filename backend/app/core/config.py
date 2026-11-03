@@ -460,6 +460,17 @@ class Settings(BaseSettings):
     adaptive_admission_brake_cpu_samples: int = Field(
         default=3, ge=1, le=600, validation_alias="ADAPTIVE_ADMISSION_BRAKE_CPU_SAMPLES"
     )
+    # Load average counts tasks waiting on disk and work from other
+    # containers on the host, and lags a minute behind. A high load trips the
+    # danger latch, shrinks or holds the budget only while host CPU busy
+    # (smoothed over ~5 s) is at least this ratio; with the CPU cool the latch
+    # releases. 0 = load alone, as before. An unreadable CPU falls back to load.
+    adaptive_admission_load_cpu_confirm_ratio: float = Field(
+        default=0.8,
+        ge=0,
+        le=1,
+        validation_alias="ADAPTIVE_ADMISSION_LOAD_CPU_CONFIRM_RATIO",
+    )
     adaptive_admission_brake_cooldown_seconds: float = Field(
         default=5.0, ge=0, le=600, validation_alias="ADAPTIVE_ADMISSION_BRAKE_COOLDOWN_SECONDS"
     )

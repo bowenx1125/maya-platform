@@ -43,6 +43,13 @@ this single queue as backstops (the login queue is folded into it):
 * Retryable ``adaptive_admission_busy`` 503 is raised only when the queue
   (max 200) is full or the single 180 s wait budget runs out.
 
+* CPU-confirmed load (2026-11-03): load average also counts tasks waiting on
+  disk and other containers' work, and lags a minute. A high load trips the
+  latch, shrinks or holds only while smoothed host CPU busy is at least
+  ``ADAPTIVE_ADMISSION_LOAD_CPU_CONFIRM_RATIO`` (0.8); the latch also releases
+  once the CPU is cool (under 0.75 of that). Model calls wait on the network
+  and add neither load nor CPU, so they never trip it by themselves.
+
 ``/proc/loadavg`` and ``/proc/meminfo`` are host-wide (not cgroup-scoped)
 inside the production containers, so both backend replicas see the same
 pressure and shrink together without extra shared state. Unreadable signals
@@ -370,6 +377,8 @@ class _State:
     mem: float | None = None
     threadpool: float | None = None
     cpu: float | None = None
+    # Host CPU busy smoothed over a few samples; confirms a high load average.
+    cpu_avg: float | None = None
     cpu_hot_samples: int = 0
     last_brake: float = float("-inf")
     last_brake_reason: str | None = None
@@ -443,13 +452,17 @@ def _refresh_locked(settings: Settings) -> None:
     s.last_sample = now
     s.load = _read_load()
     s.mem = _read_mem()
+    s.cpu = _read_cpu()
+    if s.cpu is not None:
+        s.cpu_avg = s.cpu if s.cpu_avg is None else s.cpu_avg + CPU_AVG_ALPHA * (s.cpu - s.cpu_avg)
+    load_counts = _load_counts(settings)
 
     # Danger line reuses host_load_guard / memory_guard thresholds + hysteresis.
     load_reject = float(settings.host_load_reject_threshold)
     load_resume = min(float(settings.host_load_resume_threshold), load_reject)
     mem_floor = float(settings.memory_guard_min_available_mb)
     mem_resume = max(float(settings.memory_guard_resume_available_mb), mem_floor)
-    load_bad = load_reject > 0 and s.load is not None and s.load >= load_reject
+    load_bad = load_counts and load_reject > 0 and s.load is not None and s.load >= load_reject
     mem_bad = mem_floor > 0 and s.mem is not None and s.mem < mem_floor
     # The reserve stops whenever memory is short of the resume floor.
     s.mem_bad = mem_floor > 0 and s.mem is not None and s.mem < mem_resume
@@ -457,7 +470,7 @@ def _refresh_locked(settings: Settings) -> None:
         if load_bad or mem_bad:
             _enter_danger_locked(now, load_bad=load_bad, mem_bad=mem_bad)
     else:
-        load_ok = load_reject <= 0 or s.load is None or s.load <= load_resume
+        load_ok = load_reject <= 0 or s.load is None or s.load <= load_resume or _cpu_cool(settings)
         mem_ok = mem_floor <= 0 or s.mem is None or s.mem >= mem_resume
         max_hold = float(settings.adaptive_admission_danger_max_hold_seconds)
         held_too_long = (
@@ -479,7 +492,6 @@ def _refresh_locked(settings: Settings) -> None:
 
     if s.in_flight_units > 0 or _waiting_total() > 0 or s.last_busy == float("-inf"):
         s.last_busy = now
-    s.cpu = _read_cpu()
     if not settings.adaptive_admission_enabled:
         s.budget = max_units  # AIMD off: budget frozen at max, danger latch still applies
         return
@@ -521,6 +533,28 @@ def _refresh_locked(settings: Settings) -> None:
             s.in_flight_units,
             _waiting_total(),
         )
+
+
+# ~5 s of 1 s samples: long enough to ignore one busy tick, far shorter than
+# the one-minute load average it confirms.
+CPU_AVG_ALPHA = 0.2
+# The CPU counts as cool well under the confirm line, so the latch does not
+# flap at the boundary.
+CPU_COOL_FRACTION = 0.75
+
+
+def _load_counts(settings: Settings) -> bool:
+    """A high load average means overload only while the CPU is busy too."""
+
+    confirm = float(settings.adaptive_admission_load_cpu_confirm_ratio)
+    cpu = _state.cpu_avg
+    return confirm <= 0 or cpu is None or cpu >= confirm
+
+
+def _cpu_cool(settings: Settings) -> bool:
+    confirm = float(settings.adaptive_admission_load_cpu_confirm_ratio)
+    cpu = _state.cpu_avg
+    return confirm > 0 and cpu is not None and cpu < confirm * CPU_COOL_FRACTION
 
 
 def _brake_reason(settings: Settings) -> str | None:
@@ -661,7 +695,7 @@ def _shrink_reason(settings: Settings) -> str | None:
     pool_p95 = _POOL_WAIT.p95()
     if s.danger:
         return "danger"
-    if soft_load > 0 and s.load is not None and s.load >= soft_load:
+    if soft_load > 0 and s.load is not None and s.load >= soft_load and _load_counts(settings):
         return "load"
     if soft_mem > 0 and s.mem is not None and s.mem < soft_mem:
         return "mem"
@@ -680,7 +714,7 @@ def _hold(settings: Settings) -> bool:
     hold_mem = float(settings.adaptive_admission_hold_mem_mb)
     hold_pool = float(settings.adaptive_admission_hold_threadpool_ratio)
     return (
-        (hold_load > 0 and s.load is not None and s.load >= hold_load)
+        (hold_load > 0 and s.load is not None and s.load >= hold_load and _load_counts(settings))
         or (hold_mem > 0 and s.mem is not None and s.mem < hold_mem)
         or (hold_pool > 0 and s.threadpool is not None and s.threadpool >= hold_pool)
     )
@@ -1036,6 +1070,7 @@ def adaptive_admission_snapshot(settings: Settings | None = None) -> dict[str, A
                 "pool_wait_p95_10s_ms": _POOL_WAIT_FAST.p95(),
                 "writes_in_flight": db_writes_in_flight(),
                 "cpu_busy": s.cpu,
+                "cpu_busy_avg": s.cpu_avg,
             },
             # Observed only: it includes queue time, so it never drives AIMD.
             "request_p95_ms": _REQUEST.p95(),

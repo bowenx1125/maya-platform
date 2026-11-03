@@ -126,10 +126,12 @@ def test_waiter_proceeds_when_slot_frees() -> None:
 def test_host_load_pressure_suspends_instead_of_rejecting() -> None:
     # #96 no longer rejects directly: the unified queue holds the create and
     # only its wait budget expiring yields a retryable 503.
-    from app.core.adaptive_admission import reset_adaptive_admission_state
+    from app.core.adaptive_admission import reset_adaptive_admission_state, set_cpu_reader
 
     reset_adaptive_admission_state()
     set_load_avg_reader(lambda: 9.0)
+    # A busy CPU confirms the load (a cool one releases the latch).
+    set_cpu_reader(lambda: 1.0)
     try:
         with pytest.raises(PlatformError) as raised:
             with create_admission_slot(
@@ -145,6 +147,7 @@ def test_host_load_pressure_suspends_instead_of_rejecting() -> None:
                 pass
     finally:
         set_load_avg_reader(None)
+        set_cpu_reader(None)
         reset_adaptive_admission_state()
     assert raised.value.code == "adaptive_admission_busy"
     assert raised.value.status_code == 503
