@@ -11,19 +11,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.orm import Session
+
+from app.core.locks import xact_lock
 
 
 def begin_immediate(session: Session, *, lock_key: str | None = None) -> None:
     """Share one named transaction lock across replicas when a key is given."""
 
     if lock_key:
-        session.execute(
-            text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
-            {"lock_key": lock_key},
-        )
+        xact_lock(session, lock_key)
 
 
 def dialect_insert(session: Session, table: Any) -> Any:

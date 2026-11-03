@@ -10,7 +10,7 @@ from unicodedata import normalize
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
-from sqlalchemy import and_, exists, or_, select, text, update
+from sqlalchemy import and_, exists, or_, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError
 
@@ -27,6 +27,7 @@ from app.core.errors import (
     validation_failure,
     version_immutable,
 )
+from app.core.locks import xact_lock
 from app.core.models import (
     Agent,
     AgentEditAudit,
@@ -263,15 +264,13 @@ def _lock_agent_name_namespace(
     course_id: str | None,
     visibility: str | None,
 ) -> None:
-    """Serialize name resolution per namespace on Postgres.
+    """Serialize name resolution per namespace across backends.
 
     The plain ``_begin_immediate`` takes no lock, so two creates could both
-    see a name as free. A transaction advisory lock on the namespace makes
-    the check-then-write atomic; it is released at commit/rollback.
+    see a name as free. A transaction lock on the namespace makes the
+    check-then-write atomic; it is released at commit/rollback.
     """
 
-    if db.get_bind().dialect.name != "postgresql":
-        return
     if group_id is not None:
         scope = (
             f"group:{group_id}:public"
@@ -280,10 +279,7 @@ def _lock_agent_name_namespace(
         )
     else:
         scope = f"personal:{course_id}:{owner_user_id}"
-    db.execute(
-        text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
-        {"lock_key": f"agent-name:{scope}"},
-    )
+    xact_lock(db, f"agent-name:{scope}")
 
 
 def _reclaim_abandoned_agent_name(

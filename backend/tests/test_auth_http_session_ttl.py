@@ -8,6 +8,7 @@ from typing import Any
 from app.modules.auth.dependencies import get_auth_clock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
 from tests.conftest import login
 
 T0 = datetime(2026, 10, 21, 8, 0, 0, tzinfo=UTC)

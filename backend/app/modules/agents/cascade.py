@@ -23,12 +23,13 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import PlatformError
+from app.core.locks import held_lock
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -159,32 +160,9 @@ def _owner_context(db: Session, agent: Agent) -> Any:
 def _cascade_lock(db: Session, settings: Settings, agent_id: str) -> Iterator[bool]:
     # Publish commits in several transactions. A transaction lock cannot keep
     # a second replica or the recovery sweep out for the whole operation.
-    if db.get_bind().dialect.name == "postgresql":
-        with Session(bind=db.get_bind()) as lock_db:
-            key = {"key": f"agent-cascade:{agent_id}"}
-            acquired = bool(
-                lock_db.scalar(text("SELECT pg_try_advisory_lock(hashtext(:key))"), key)
-            )
-            try:
-                yield acquired
-            finally:
-                if acquired:
-                    lock_db.execute(text("SELECT pg_advisory_unlock(hashtext(:key))"), key)
-        return
-    from app.modules.voices.lease_lock import lock_exclusive, unlock
-
-    folder = settings.resolved_data_root / "agent-cascade-locks"
-    folder.mkdir(parents=True, exist_ok=True)
-    with (folder / f"{UUID(agent_id)}.lock").open("a+b") as handle:
-        try:
-            lock_exclusive(handle)
-        except OSError:
-            yield False
-            return
-        try:
-            yield True
-        finally:
-            unlock(handle)
+    del settings
+    with held_lock(db.get_bind(), f"agent-cascade:{agent_id}") as acquired:
+        yield acquired
 
 
 def _finish_cascade(db: Session, operation_id: str) -> None:
@@ -551,7 +529,7 @@ def cascade_removed_sources(
     return published
 
 
-_SWEEP_LOCK_KEY = 0x4D415941_0228  # "MAYA" + PR number; one sweeper across backends
+_SWEEP_LOCK_NAME = "agent-auto-bump-sweep"  # one sweeper across backends
 
 
 def stale_agents(db: Session) -> list[tuple[str, list[str], list[str], list[str]]]:
@@ -614,61 +592,46 @@ def stale_agents(db: Session) -> list[tuple[str, list[str], list[str], list[str]
 
 
 def sweep_stale_agents(database: Database, settings: Settings) -> int:
-    """Re-run lost auto-publishes. Idempotent; one sweeper at a time on Postgres."""
+    """Re-run lost auto-publishes. Idempotent; one sweeper at a time across backends."""
 
-    from sqlalchemy import text
-
-    lock_session = database.session_factory()
-    try:
-        postgres = lock_session.get_bind().dialect.name == "postgresql"
-        if (
-            postgres
-            and not lock_session.execute(
-                text("SELECT pg_try_advisory_lock(:k)"), {"k": _SWEEP_LOCK_KEY}
-            ).scalar()
-        ):
+    with held_lock(database.engine, _SWEEP_LOCK_NAME) as acquired:
+        if not acquired:
             return 0
+        scan = database.session_factory()
         try:
-            scan = database.session_factory()
-            try:
-                _recover_cascades(scan, settings)
-                work = stale_agents(scan)
-            finally:
-                scan.close()
-            published = 0
-            for agent_id, docs, voices, refresh in work:
-                session = database.session_factory()
-                session.info["maya_settings"] = settings
-                try:
-                    if bump_agent(
-                        session,
-                        settings,
-                        agent_id,
-                        drop_document_ids=docs,
-                        drop_voice_profile_ids=voices,
-                        refresh_document_ids=refresh,
-                    ):
-                        published += 1
-                except Exception:  # noqa: BLE001
-                    session.rollback()
-                    LOGGER.exception("Agent auto-bump sweep failed agent_id=%s", agent_id)
-                finally:
-                    session.close()
-            retarget_session = database.session_factory()
-            try:
-                for agent_id in _agents_with_stale_chats(retarget_session):
-                    retarget_agent_chats(retarget_session, agent_id)
-            finally:
-                retarget_session.close()
-            _sweep_team_chats_and_junk(database, settings)
-            if work:
-                LOGGER.info("Agent auto-bump sweep stale=%d published=%d", len(work), published)
-            return published
+            _recover_cascades(scan, settings)
+            work = stale_agents(scan)
         finally:
-            if postgres:
-                lock_session.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _SWEEP_LOCK_KEY})
-    finally:
-        lock_session.close()
+            scan.close()
+        published = 0
+        for agent_id, docs, voices, refresh in work:
+            session = database.session_factory()
+            session.info["maya_settings"] = settings
+            try:
+                if bump_agent(
+                    session,
+                    settings,
+                    agent_id,
+                    drop_document_ids=docs,
+                    drop_voice_profile_ids=voices,
+                    refresh_document_ids=refresh,
+                ):
+                    published += 1
+            except Exception:  # noqa: BLE001
+                session.rollback()
+                LOGGER.exception("Agent auto-bump sweep failed agent_id=%s", agent_id)
+            finally:
+                session.close()
+        retarget_session = database.session_factory()
+        try:
+            for agent_id in _agents_with_stale_chats(retarget_session):
+                retarget_agent_chats(retarget_session, agent_id)
+        finally:
+            retarget_session.close()
+        _sweep_team_chats_and_junk(database, settings)
+        if work:
+            LOGGER.info("Agent auto-bump sweep stale=%d published=%d", len(work), published)
+        return published
 
 
 def _sweep_team_chats_and_junk(database: Database, settings: Settings) -> None:

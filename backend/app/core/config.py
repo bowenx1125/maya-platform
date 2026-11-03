@@ -538,8 +538,7 @@ class Settings(BaseSettings):
     def database_is_postgresql(cls, value: str) -> str:
         if not value.startswith("postgresql"):
             raise ValueError(
-                "DATABASE_URL must be a PostgreSQL URL; SQLite is no longer supported "
-                "(copy an old file with scripts/migrate_sqlite_to_postgres.py)."
+                "DATABASE_URL must be a PostgreSQL URL; SQLite is no longer supported."
             )
         return value
 

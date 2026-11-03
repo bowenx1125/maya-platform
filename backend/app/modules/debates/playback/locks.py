@@ -42,8 +42,8 @@ class DebateLocks:
     def __init__(self, engine: Engine | None = None) -> None:
         self._entries: dict[str, _Entry] = {}
         self._guard = threading.Lock()
-        postgres = engine is not None and engine.dialect.name == "postgresql"
-        self._source = engine if postgres else None
+        # Without an engine (unit tests) the lock holds within this process only.
+        self._source = engine
         self._engine: Engine | None = None
 
     @classmethod
@@ -53,7 +53,7 @@ class DebateLocks:
 
     @property
     def shared(self) -> bool:
-        """Whether the lock also holds across replicas (PostgreSQL)."""
+        """Whether the lock also holds across replicas (it has a database)."""
 
         return self._source is not None
 
