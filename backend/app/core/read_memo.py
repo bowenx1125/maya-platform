@@ -99,6 +99,26 @@ def memoized[T](
     return value
 
 
+def request_memoized_hit[T](key: tuple[Hashable, ...], compute: Callable[[], T | None]) -> T | None:
+    """``compute()`` once per request phase when it finds something.
+
+    For insert-only rows read without an ORM Session (a Provider policy
+    snapshot by its hash). A miss is never stored, so a row saved later in the
+    request is found.
+    """
+
+    store = _REQUEST.get()
+    if store is None:
+        return compute()
+    hit = store.get(key, _MISS)
+    if hit is not _MISS:
+        return cast(T, hit)
+    value = compute()
+    if value is not None:
+        store[key] = value
+    return value
+
+
 def transaction_memoized[T](db: Session, key: tuple[Hashable, ...], compute: Callable[[], T]) -> T:
     """``compute()`` once until ``db``'s transaction ends or first writes.
 

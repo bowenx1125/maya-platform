@@ -193,20 +193,10 @@ uploaded Voices ready at once (0073);▷ listens only;Team model call12 rows (wa
 
 ## Oct20–23 releases
 
-Oct20 base5dd9690b +#225 f2646b28,#229 566a798f,#227 bfe8187e,#230 a0f2954c,#232
-69d3218d: answer guard/edits,public Agent editors/audit,Chat-independent Record;0076.
-Reviewed #228 4560e3cf,#231 c41062b2: cascade durable recovery,no auto-retry,Persona
-confirm. #215 superseded;#226,#38–41,#97 excluded. Oct21 +#234 7f4c8fff,#235 a04c2ea4:
-Compose TTL30,hash cap2/process,login race fences,NUL/surrogate refusal before save.
-Release9c68d42b ready/schema0076/public200 (receipts PROJECT@6c09c024).
-
-Oct22 shared editing: Public Agent editors=creator/groupmates/course teachers;Done
-sends expected_base_version_id,409 stale_base_version keeps edits;per-user drafts.
-Performance: hash waits free DB connections;Chat history SELECTs constant (5);
-Brainform coalesces/fences/aborts reads. #237 82d68ffa released;charged14331 unchanged.
-
-Oct23 50-user Mock passed (logins 100/100, p95≤7.85s); PG poll race: REPEATABLE READ.
-Release #239 aa6d6ffd; voice enrollment off the event loop. 0 real Provider calls in Oct.
+Oct20–21 (#225–#235, 0076): answer guard, public Agent editors/audit, Chat-independent
+Record, cascade recovery without auto-retry, login race fences. Oct22: shared editing
+with stale_base_version; constant Chat history SELECTs. Oct23: 50-user Mock passed
+(p95≤7.85s), PG poll REPEATABLE READ, #239 released. Details: git history.
 
 ## Oct24 Team chats and junk (#241)
 
@@ -311,6 +301,10 @@ who missed earlier speeches; a copy mid-paragraph is rewritten, not cut out.
 
 ## Nov3 cleanup and capacity
 
-Visits hide Knowledge; Debate param "?" shows its Chinese help on hover. core/locks.py
-holds every cross-process lock; SQLite leftovers gone. core/capacity.py: CPU-bound caps
-scale by cores/2. Idle polls 30s (+focus); Agent lists carry card label/theme.
+Visits hide Knowledge, renew every 20 min and end with a notice back to Accounts; Debate
+"?" shows Chinese help on hover. core/locks.py holds every cross-process lock; SQLite gone.
+core/capacity.py scales CPU caps by cores/2; a high load counts only with CPU busy ≥0.8.
+Idle polls 30s; Agent lists carry card label/theme. Debate Rulesets state goals, not bans.
+Accounts: filter; Delete is real (DELETE /courses/{id}/members/{user}). Chat 429 →
+provider_rate_limited, 502/503/504/529 → provider_busy (one call). Ordinary Team members
+answer together (≤3; assessment Teams one at a time); history is one read. 390px Brainform fits.

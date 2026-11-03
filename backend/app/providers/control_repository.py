@@ -41,6 +41,7 @@ from app.core.models import (
     ProviderReservation,
     ProviderScopeBudget,
 )
+from app.core.read_memo import request_memoized_hit
 from app.modules.knowledge_sets.models import (
     KnowledgeGenerationAcceptedStage,
     KnowledgeGenerationRun,
@@ -288,12 +289,18 @@ class ProviderRepository:
 
     def get_policy_snapshot(self, policy_hash_or_id: str) -> ProviderPolicySnapshotV1 | None:
         table = _POLICY_TABLE
-        row = self._read_one(
-            select(table).where(
-                (table.c.id == policy_hash_or_id) | (table.c.policy_hash == policy_hash_or_id)
+
+        def read() -> ProviderPolicySnapshotV1 | None:
+            row = self._read_one(
+                select(table).where(
+                    (table.c.id == policy_hash_or_id) | (table.c.policy_hash == policy_hash_or_id)
+                )
             )
-        )
-        return _policy_from_row(row) if row is not None else None
+            return _policy_from_row(row) if row is not None else None
+
+        # Snapshots are insert-only; a Team turn read the same one ~9 times
+        # per model call.
+        return request_memoized_hit(("provider_policy_snapshot", policy_hash_or_id), read)
 
     def save_export_manifest(
         self,

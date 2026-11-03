@@ -63,7 +63,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
@@ -951,6 +951,34 @@ def adopt_reservation(reservation: Reservation) -> Iterator[None]:
         reservation.release()
 
 
+def carry_admission() -> Callable[[], AbstractContextManager[None]]:
+    """Let a helper thread run inside this thread's admitted operation.
+
+    A Team turn runs its members on helper threads. Their model calls are
+    part of the turn this thread was admitted for, so they are charged as
+    nested calls, as they are when the members run one after another here,
+    instead of queueing behind the turn that waits for them (under memory
+    danger that queue never moves while the turn runs).
+    """
+
+    depth = int(getattr(_held, "depth", 0))
+    deadline = getattr(_held, "deadline", None)
+
+    @contextmanager
+    def enter() -> Iterator[None]:
+        previous_depth = int(getattr(_held, "depth", 0))
+        previous_deadline = getattr(_held, "deadline", None)
+        _held.depth = previous_depth + depth
+        _held.deadline = deadline
+        try:
+            yield
+        finally:
+            _held.depth = previous_depth
+            _held.deadline = previous_deadline
+
+    return enter
+
+
 @contextmanager
 def adaptive_slot(cls: str, settings: Settings | None = None) -> Iterator[None]:
     """Hold weighted budget for one ``cls`` operation; reads bypass entirely."""
@@ -1108,6 +1136,7 @@ __all__ = [
     "debate_audience_cap",
     "admission_waiting",
     "record_db_write_ms",
+    "carry_admission",
     "set_cpu_reader",
     "record_pool_wait_ms",
     "record_request_ms",
