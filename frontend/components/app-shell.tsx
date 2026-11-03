@@ -27,9 +27,14 @@ import {
 import { useT } from "../lib/i18n";
 import {
   endTeacherEnter,
+  forgetVisitRenewal,
+  noteVisitRenewed,
   teacherEnterInProgress,
   trackTeacherLeave,
+  visitRenewalDue,
 } from "../lib/teacher-visit";
+import { PlatformApiError } from "../lib/api/platform";
+import { Notice } from "./ui";
 import { useSession } from "./session-provider";
 import { OnboardingTour } from "./onboarding-tour";
 import {
@@ -540,6 +545,51 @@ export function AppShell({
       -1,
     );
   }, [actionRegistry, visitingGroup]);
+  // A visit lasts 2 hours on the server; a teacher still inside renews it
+  // (every 20 min, and on coming back to the tab after a sleep), so a long
+  // lesson is never cut off. Only a refused renewal ends the visit, and then
+  // the teacher is told so and offered the way back to Accounts.
+  const [visitEnded, setVisitEnded] = useState<string | null>(null);
+  useEffect(() => {
+    if (
+      !visitingGroup ||
+      !visitGroupId ||
+      typeof api?.joinGroupAsTeacher !== "function"
+    )
+      return;
+    let active = true;
+    const renew = async () => {
+      if (!visitRenewalDue(visitGroupId)) return;
+      noteVisitRenewed(visitGroupId);
+      try {
+        await api.joinGroupAsTeacher(visitGroupId);
+        if (active) setVisitEnded(null);
+      } catch (cause) {
+        if (
+          cause instanceof PlatformApiError &&
+          (cause.status === 403 || cause.status === 404)
+        ) {
+          if (active) setVisitEnded(visitGroupId);
+        } else {
+          // Offline or busy: try again on the next check.
+          forgetVisitRenewal(visitGroupId);
+        }
+      }
+    };
+    const renewWhenVisible = () => {
+      if (document.visibilityState === "visible") void renew();
+    };
+    void renew();
+    const timer = window.setInterval(() => void renew(), 60_000);
+    window.addEventListener("focus", renewWhenVisible);
+    document.addEventListener("visibilitychange", renewWhenVisible);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", renewWhenVisible);
+      document.removeEventListener("visibilitychange", renewWhenVisible);
+    };
+  }, [api, visitGroupId, visitingGroup]);
   const visit =
     visitingGroup && visitGroupId
       ? encodeURIComponent(visitGroupId)
@@ -1258,6 +1308,19 @@ export function AppShell({
             </div>
           ) : null}
           <ViewTransition>{children}</ViewTransition>
+          {visitEnded && visitEnded === visitGroupId ? (
+            <Notice
+              tone="warning"
+              title={t("visitEndedTitle")}
+              action={
+                <Link href="/teacher/roster" className="font-bold underline">
+                  {t("visitEndedAction")}
+                </Link>
+              }
+            >
+              {t("visitEndedBody")}
+            </Notice>
+          ) : null}
           <NoticeTraySlot />
         </main>
         <SecretDoor />

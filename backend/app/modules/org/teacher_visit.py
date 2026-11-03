@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Collection
 from datetime import UTC, datetime
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, delete, select
 from sqlalchemy.orm import Session
 
 from app.core.models import (
@@ -35,12 +35,13 @@ def purge_expired_teacher_visits(db: Session, *, now: datetime | None = None) ->
     """Delete visits whose window has closed. Returns how many rows went."""
 
     moment = now or datetime.now(UTC)
-    expired = db.scalars(
-        select(TeacherGroupAccess).where(TeacherGroupAccess.expires_at <= moment)
-    ).all()
-    for row in expired:
-        db.delete(row)
-    return len(expired)
+    # A statement, not ORM deletes: those wait for the commit flush, which
+    # runs after grant_teacher_visit's upsert has already renewed the same
+    # row, and so deleted the visit a re-entering teacher had just been given.
+    result = db.execute(
+        delete(TeacherGroupAccess).where(TeacherGroupAccess.expires_at <= moment)
+    )
+    return int(getattr(result, "rowcount", 0) or 0)
 
 
 def grant_teacher_visit(

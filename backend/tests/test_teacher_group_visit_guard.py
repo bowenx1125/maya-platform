@@ -139,6 +139,27 @@ def test_entering_twice_refreshes_one_row_and_leaving_deletes_it(
     assert client.delete(_membership(), headers=headers).status_code == 204
 
 
+def test_entering_again_after_the_visit_expired_renews_it(
+    client: TestClient, database: Any
+) -> None:
+    """Re-entering used to delete the visit it had just renewed (2026-11-03):
+    the expired-row purge was an ORM delete flushed after the upsert."""
+
+    _, csrf = login(client, "maya")
+    headers = {**ORIGIN, "X-CSRF-Token": csrf}
+    assert client.post(_membership(), headers=headers).status_code == 200
+    with database.session() as db:
+        row = db.get(TeacherGroupAccess, {"group_id": DEMO_GROUP_ID, "user_id": MAYA_ID})
+        assert row is not None
+        row.expires_at = datetime.now(UTC) - timedelta(minutes=5)
+        db.commit()
+    assert client.post(_membership(), headers=headers).status_code == 200
+    with database.session() as db:
+        row = db.get(TeacherGroupAccess, {"group_id": DEMO_GROUP_ID, "user_id": MAYA_ID})
+        assert row is not None
+        assert row.expires_at > datetime.now(UTC) + timedelta(hours=1)
+
+
 def test_students_do_not_see_the_temporary_member(client: TestClient, database: Any) -> None:
     with database.session() as db:
         before = db.scalar(

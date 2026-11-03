@@ -12,6 +12,7 @@ import {
 import {
   beginTeacherEnter,
   endTeacherEnter,
+  noteVisitRenewed,
   teacherLeavesSettled,
 } from "../lib/teacher-visit";
 import { useT } from "../lib/i18n";
@@ -144,6 +145,7 @@ export function RosterWorkspace() {
       try {
         await teacherLeavesSettled();
         await api.joinGroupAsTeacher(group.id);
+        noteVisitRenewed(group.id);
         await refresh?.();
         router.push(`/student/agents?group_id=${encodeURIComponent(group.id)}`);
       } catch (cause) {

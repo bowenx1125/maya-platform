@@ -31,3 +31,22 @@ export function endTeacherEnter(): void {
 export function teacherEnterInProgress(): boolean {
   return entering;
 }
+
+// A visit lasts 2 hours on the server (TEACHER_GROUP_VISIT_TTL) and entering
+// again renews it. A teacher still inside renews well before that, so a
+// lesson longer than 2 hours does not end the visit under them.
+export const VISIT_RENEW_MS = 20 * 60_000;
+const renewedAt = new Map<string, number>();
+
+export function noteVisitRenewed(groupId: string, at = Date.now()): void {
+  renewedAt.set(groupId, at);
+}
+
+export function visitRenewalDue(groupId: string, now = Date.now()): boolean {
+  const last = renewedAt.get(groupId);
+  return last === undefined || now - last >= VISIT_RENEW_MS;
+}
+
+export function forgetVisitRenewal(groupId: string): void {
+  renewedAt.delete(groupId);
+}

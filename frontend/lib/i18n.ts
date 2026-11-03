@@ -64,6 +64,10 @@ const enMessages = {
   student: "Student view",
   logout: "Logout",
   backout: "Backout",
+  visitEndedTitle: "Your visit to this group has ended",
+  visitEndedBody:
+    "This group is no longer open to you here. Go back to Accounts and enter it again.",
+  visitEndedAction: "Back to Accounts",
   signIn: "Sign in",
   username: "Username",
   password: "Password",
