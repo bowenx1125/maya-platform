@@ -30,6 +30,9 @@ account stays below it, the list scrolls past five rows); the cast gets an
 accurate label (`signInCastLabel`), since the cards flip rather than follow the
 cursor.
 
+> The v1 and v2 mockup images were removed on 2026-11-03 (superseded by v3);
+> they are in git history.
+
 ## v2: bold, game-like, mascots react to the form
 
 User feedback on v1: wanted more game feel, more youth and energy, bigger mascots

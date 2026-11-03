@@ -257,9 +257,8 @@ adds prefetch/audio_serve. Browser samples 25% to POST /client-metrics (logged o
 
 ## Oct24 PostgreSQL only (PR B)
 
-SQLite DATABASE_URL is refused. scripts/migrate_sqlite_to_postgres.py copies an old file
-(dry-run default, --apply --confirm-production, one transaction, never deletes it). Tests
-need MAYA_TEST_POSTGRES_URL. Fixed races: budget, Agent/document, attempt vs knowledge.
+SQLite DATABASE_URL is refused; the one-off copy script was retired 2026-11-03 (git
+history). Tests need MAYA_TEST_POSTGRES_URL. Fixed races: budget, Agent/document, attempt.
 
 ## Oct24 Immerse audio predownload (PR A2)
 
