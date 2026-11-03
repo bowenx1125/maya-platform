@@ -5,18 +5,21 @@ import { useEffect, useSyncExternalStore } from "react";
 /**
  * Background music (2026-11-03): two channels that never play together.
  *
- * - workspace: the music key beside Mayaform. On by default (2026-11-03):
- *   it starts when the site loads. It keeps playing across pages and stops
- *   at logout.
- * - stage: the 3D Debate stage's own music key. Entering the stage starts it
- *   (and hands the workspace music off); pressing its key pauses it. Leaving
- *   the stage stops it and gives the workspace music back if its key is on.
+ * - workspace: the music key beside Mayaform. On by default when that
+ *   account has not turned it off: it starts when the signed-in site loads.
+ *   It keeps playing across pages and stops at logout. The on/off choice is
+ *   remembered per signed-in account (localStorage) and only for workspace;
+ *   the next visit for that account follows the last choice. Logout stops
+ *   sound but keeps the saved preference.
+ * - stage: the 3D Debate stage's own music key. Entering the stage always
+ *   starts it from the beginning of the track (and hands the workspace music
+ *   off); pressing its key pauses it for this visit only. Leaving the stage
+ *   stops it and gives the workspace music back if its key is on. Stage off
+ *   is never remembered across visits.
  *
  * Browsers refuse sound before the person has touched the page. Then the key
  * stays on and the music starts (fading in) on their first click, tap or key
- * press anywhere on the site. A key the person turns off is remembered per
- * channel (localStorage) and does not start by itself next time; turning it
- * back on forgets that.
+ * press anywhere on the site.
  *
  * Every hand-off fades: the leaving channel fades out, the arriving one fades
  * in. Each channel loops its list (after the last track the first plays).
@@ -51,26 +54,50 @@ const CHANNEL_VOLUME: Record<MusicChannelName, number> = {
   stage: 0.35,
 };
 
-const OFF_KEY: Record<MusicChannelName, string> = {
-  workspace: "maya.bgm.off.workspace",
-  stage: "maya.bgm.off.stage",
-};
+const WORKSPACE_OFF_PREFIX = "maya.bgm.off.workspace.";
+/** Pre-account key from #329; ignored so accounts do not share one choice. */
+const LEGACY_WORKSPACE_OFF = "maya.bgm.off.workspace";
 
-/** The person turned this key off themselves. */
-function turnedOff(name: MusicChannelName): boolean {
+/** Signed-in account whose workspace preference we read and write. */
+let musicAccountId: string | null = null;
+
+function workspaceOffKey(accountId: string): string {
+  return `${WORKSPACE_OFF_PREFIX}${accountId}`;
+}
+
+/** The person turned the workspace key off for this account. */
+function workspaceTurnedOff(): boolean {
+  if (!musicAccountId || typeof window === "undefined") return false;
   try {
-    return window.localStorage.getItem(OFF_KEY[name]) === "1";
+    return window.localStorage.getItem(workspaceOffKey(musicAccountId)) === "1";
   } catch {
     return false;
   }
 }
 
-function rememberOff(name: MusicChannelName, off: boolean): void {
+function rememberWorkspaceOff(off: boolean): void {
+  if (!musicAccountId) return;
   try {
-    if (off) window.localStorage.setItem(OFF_KEY[name], "1");
-    else window.localStorage.removeItem(OFF_KEY[name]);
+    const key = workspaceOffKey(musicAccountId);
+    if (off) window.localStorage.setItem(key, "1");
+    else window.localStorage.removeItem(key);
   } catch {
     // Private mode or no storage: the choice lasts this visit only.
+  }
+}
+
+/**
+ * Bind workspace remember-off to the signed-in account. Pass null on logout
+ * (in-memory only; saved preferences stay). Drop the legacy unscoped key so
+ * old visits do not look like a shared preference.
+ */
+export function setMusicAccountId(accountId: string | null): void {
+  musicAccountId = accountId;
+  if (!accountId || typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(LEGACY_WORKSPACE_OFF);
+  } catch {
+    // ignore
   }
 }
 
@@ -222,6 +249,27 @@ class Channel {
     });
   }
 
+  /**
+   * Next fadeIn starts at the beginning of the first track (stage re-enter).
+   * Does not change wanted; does not emit by itself.
+   */
+  prepareRestart(): void {
+    this.stopFade();
+    this.audible = false;
+    this.playing = false;
+    this.waiting = false;
+    this.trackIndex = 0;
+    if (this.audio) {
+      this.audio.pause();
+      if (this.tracks.length > 0) this.audio.src = this.tracks[this.trackIndex];
+      try {
+        this.audio.currentTime = 0;
+      } catch {
+        // Some browsers throw before metadata loads; src reset covers it.
+      }
+    }
+  }
+
   /** Stop at once (logout). */
   stop(): void {
     this.stopFade();
@@ -291,13 +339,13 @@ export function toggleMusic(name: MusicChannelName): void {
   }
   if (channel.wanted) {
     channel.wanted = false;
-    rememberOff(name, true);
+    if (name === "workspace") rememberWorkspaceOff(true);
     channel.fadeOut();
     emit();
     return;
   }
   channel.wanted = true;
-  rememberOff(name, false);
+  if (name === "workspace") rememberWorkspaceOff(false);
   if (channel === current()) channel.fadeIn();
   else emit();
 }
@@ -307,20 +355,17 @@ export function enterStageMusic(): void {
   if (onStage) return;
   onStage = true;
   channels.workspace.fadeOut();
-  if (turnedOff("stage")) {
-    channels.stage.wanted = false;
-    emit();
-    return;
-  }
+  // Stage always tries to start from the beginning; off is only for this visit.
   channels.stage.wanted = true;
+  channels.stage.prepareRestart();
   channels.stage.fadeIn();
 }
 
-/** The signed-in site loaded (AppShell mounted): workspace music is on by default. */
+/** The signed-in site loaded (AppShell mounted): workspace music follows this account. */
 export function startDefaultMusic(): void {
   const channel = channels.workspace;
   if (channel.wanted || channel.tracks.length === 0) return;
-  if (turnedOff("workspace")) return;
+  if (workspaceTurnedOff()) return;
   channel.wanted = true;
   if (channel === current()) channel.fadeIn();
   else emit();
@@ -336,12 +381,13 @@ export function leaveStageMusic(): void {
   else emit();
 }
 
-/** Logout: everything stops at once. */
+/** Logout: everything stops at once. Clears the in-memory account id only. */
 export function stopBackgroundMusic(): void {
   onStage = false;
   disarmFirstGesture();
   channels.stage.stop();
   channels.workspace.stop();
+  musicAccountId = null;
 }
 
 function subscribe(listener: Listener): () => void {
@@ -387,6 +433,7 @@ export function resetBackgroundMusicForTests(
   tracks: { workspace?: readonly string[]; stage?: readonly string[] } = {},
 ): void {
   onStage = false;
+  musicAccountId = null;
   disarmFirstGesture();
   channels.workspace.reset(tracks.workspace ?? BACKGROUND_TRACKS);
   channels.stage.reset(tracks.stage ?? STAGE_TRACKS);

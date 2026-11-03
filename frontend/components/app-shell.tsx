@@ -26,6 +26,7 @@ import {
 } from "./workspace-actions";
 
 import {
+  setMusicAccountId,
   startDefaultMusic,
   stopBackgroundMusic,
   useMusicPlaying,
@@ -306,10 +307,12 @@ export function AppShell({
         ? membershipGroupIds[0]
         : undefined);
 
-  // Background music is on by default once the signed-in site loads.
+  // Workspace music follows this account's last on/off choice.
   useEffect(() => {
+    if (!user?.id) return;
+    setMusicAccountId(user.id);
     startDefaultMusic();
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     const syncLocation = () => {

@@ -8,17 +8,18 @@ import {
   musicStateForTests,
   parseTracks,
   resetBackgroundMusicForTests,
+  setMusicAccountId,
   startDefaultMusic,
   stopBackgroundMusic,
   toggleMusic,
   useMusicPlaying,
 } from "../lib/background-music";
 
-// 2026-11-03: a music key beside Mayaform (workspace music, on by default)
-// and one on the 3D stage (its own music, on while the stage is open). Every
-// hand-off fades; each list loops. A browser that refuses sound before a
-// gesture keeps the key on and starts on the first gesture; a key turned off
-// by hand is remembered per channel.
+// 2026-11-03: a music key beside Mayaform (workspace music, on by default
+// per account) and one on the 3D stage (its own music, on while the stage
+// is open). Every hand-off fades; each list loops. A browser that refuses
+// sound before a gesture keeps the key on and starts on the first gesture;
+// a workspace key turned off by hand is remembered per account.
 let refuse: false | "autoplay" | "broken" = false;
 
 class FakeAudio {
@@ -26,6 +27,7 @@ class FakeAudio {
   src = "";
   preload = "";
   volume = 1;
+  currentTime = 0;
   paused = true;
   handlers = new Map<string, Array<() => void>>();
   play = vi.fn(() => {
@@ -75,6 +77,7 @@ describe("background music", () => {
     FakeAudio.made = [];
     vi.stubGlobal("Audio", FakeAudio);
     resetBackgroundMusicForTests({ workspace: WORKSPACE, stage: STAGE });
+    setMusicAccountId("u1");
   });
   afterEach(() => {
     resetBackgroundMusicForTests();
@@ -128,31 +131,72 @@ describe("background music", () => {
     expect(player("workspace").paused).toBe(false);
   });
 
-  it("remembers a key turned off by hand, per channel", async () => {
+  it("remembers workspace off per account, not across accounts", async () => {
     startDefaultMusic();
     await settle();
     toggleMusic("workspace");
+    expect(window.localStorage.getItem("maya.bgm.off.workspace.u1")).toBe("1");
     resetBackgroundMusicForTests({ workspace: WORKSPACE, stage: STAGE });
+    setMusicAccountId("u1");
     startDefaultMusic();
     expect(musicStateForTests("workspace").wanted).toBe(false);
-    // The stage still starts by itself.
-    enterStageMusic();
-    expect(musicStateForTests("stage").wanted).toBe(true);
-    // Turning it back on forgets the choice.
-    leaveStageMusic();
+    // Another account on the same browser still auto-starts.
+    resetBackgroundMusicForTests({ workspace: WORKSPACE, stage: STAGE });
+    setMusicAccountId("u2");
+    startDefaultMusic();
+    expect(musicStateForTests("workspace").wanted).toBe(true);
+    // Turning it back on forgets the choice for that account.
+    resetBackgroundMusicForTests({ workspace: WORKSPACE, stage: STAGE });
+    setMusicAccountId("u1");
     toggleMusic("workspace");
     resetBackgroundMusicForTests({ workspace: WORKSPACE, stage: STAGE });
+    setMusicAccountId("u1");
     startDefaultMusic();
     expect(musicStateForTests("workspace").wanted).toBe(true);
   });
 
-  it("does not start the stage by itself after its key was turned off", async () => {
+  it("always starts the stage on enter; stage off is not remembered", async () => {
     enterStageMusic();
     await settle();
     toggleMusic("stage");
     leaveStageMusic();
     enterStageMusic();
-    expect(musicStateForTests("stage").wanted).toBe(false);
+    expect(musicStateForTests("stage").wanted).toBe(true);
+    expect(window.localStorage.getItem("maya.bgm.off.stage")).toBeNull();
+  });
+
+  it("restarts stage music from the beginning on every enter", async () => {
+    enterStageMusic();
+    await settle();
+    const audio = player("stage");
+    audio.currentTime = 42;
+    leaveStageMusic();
+    await settle();
+    enterStageMusic();
+    await settle();
+    expect(player("stage").currentTime).toBe(0);
+    expect(player("stage").src).toBe("/music/stage.mp3");
+    expect(player("stage").paused).toBe(false);
+  });
+
+  it("keeps the workspace preference across logout", async () => {
+    startDefaultMusic();
+    await settle();
+    toggleMusic("workspace");
+    stopBackgroundMusic();
+    expect(window.localStorage.getItem("maya.bgm.off.workspace.u1")).toBe("1");
+    resetBackgroundMusicForTests({ workspace: WORKSPACE, stage: STAGE });
+    setMusicAccountId("u1");
+    startDefaultMusic();
+    expect(musicStateForTests("workspace").wanted).toBe(false);
+  });
+
+  it("ignores the legacy unscoped workspace off key", async () => {
+    window.localStorage.setItem("maya.bgm.off.workspace", "1");
+    setMusicAccountId("u1");
+    startDefaultMusic();
+    expect(musicStateForTests("workspace").wanted).toBe(true);
+    expect(window.localStorage.getItem("maya.bgm.off.workspace")).toBeNull();
   });
 
   it("fades the workspace music in and loops its list", async () => {
