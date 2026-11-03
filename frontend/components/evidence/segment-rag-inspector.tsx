@@ -88,8 +88,9 @@ export function SegmentRagInspector({
 }
 
 /**
- * One source, folded (2026-11-03): Check RAG opens to the documents, and a
- * document opens to its query and text, the same two clicks as chat.
+ * One source, folded (2026-11-03): Check RAG opens to the documents (just
+ * the file name), and a document opens to its version, query and text, the
+ * same two clicks as chat.
  */
 function SourceReceipt({ source }: { source: SegmentRagSource }) {
   return (
@@ -100,12 +101,15 @@ function SourceReceipt({ source }: { source: SegmentRagSource }) {
       <summary className="min-w-0 [overflow-wrap:anywhere]">
         <span className="text-[0.74rem] font-[750] text-(--ink)">
           {source.source_filename}
-        </span>{" "}
-        <span className="text-[0.72rem] font-normal text-(--muted)">
-          {source.version_label}
         </span>
       </summary>
       <dl className="mt-2 mb-0 grid min-w-0 gap-[5px]">
+        <div className="grid min-w-0 grid-cols-[4.7rem_minmax(0,1fr)] gap-2 max-[620px]:grid-cols-1 max-[620px]:gap-0.5">
+          <dt className="text-[0.74rem] font-[650] text-(--muted)">Version</dt>
+          <dd className="m-0 min-w-0 text-[0.76rem] leading-[1.45] text-(--ink)">
+            {source.version_label}
+          </dd>
+        </div>
         <div className="grid min-w-0 grid-cols-[4.7rem_minmax(0,1fr)] gap-2 max-[620px]:grid-cols-1 max-[620px]:gap-0.5">
           <dt className="text-[0.74rem] font-[650] text-(--muted)">Query</dt>
           <dd className="m-0 min-w-0 text-[0.76rem] leading-[1.45] text-(--ink) [overflow-wrap:anywhere]">
