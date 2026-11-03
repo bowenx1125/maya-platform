@@ -1213,7 +1213,7 @@ export function AppShell({
                       data-sidebar-group={group.key}
                       className={
                         collapsed
-                          ? `grid gap-1.5 rounded-arc-s border-[3px] border-border p-1.5 shadow-arc-s ${group.tile}`
+                          ? `grid w-12 gap-1.5 rounded-arc-s border-[3px] border-border p-[3px] shadow-arc-s ${group.tile} [&_li>*]:size-9`
                           : "grid gap-2"
                       }
                     >
