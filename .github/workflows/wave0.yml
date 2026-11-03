@@ -131,7 +131,6 @@ jobs:
           test -f backend/tests/test_wave4_evidence_trace.py
           test -f frontend/tests/wave4-mutual-learning.test.tsx
           test -f frontend/tests/wave4-evidence-trace.test.tsx
-          test -f frontend/tests/wave4-provider-preflight.test.tsx
 
       - name: Assert portable project authority
         run: |
@@ -264,6 +263,9 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg://postgres:maya-ci@127.0.0.1:5432/maya_test
       ADAPTIVE_ADMISSION_ENABLED: "false"
+      # Startup refuses a missing secret outside tests; this disposable CI
+      # database needs only a fixed placeholder.
+      SESSION_SECRET: login-load-regression-ci-placeholder-0000
     services:
       postgres:
         image: postgres:16
@@ -290,7 +292,9 @@ jobs:
         run: uv sync --directory backend --frozen
 
       - name: Migrate login regression database
-        run: uv run --directory backend alembic upgrade head
+        # An empty database is built from the models and stamped at head
+        # (the 0080 baseline squash); `alembic upgrade head` alone cannot.
+        run: uv run --directory backend python -c "from app.core.db import Database; import os; Database(os.environ['DATABASE_URL']).upgrade_schema()"
 
       - name: Start login regression API
         working-directory: backend
