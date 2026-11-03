@@ -2536,7 +2536,7 @@ function BrainformWorkspaceBody({
       {!courseId ? (
         <p className={styles.empty}>{t("brainformUnavailable")}</p>
       ) : null}
-      {loading && courseId && !embedded ? <LoadingCard /> : null}
+      {loading && courseId && !embedded ? <LoadingCard size="sm" /> : null}
 
       {/* Embedded in Studyform each card paints on its own: RAG shows a
           loading line while its list arrives, Record never waits for it. */}
@@ -3018,7 +3018,7 @@ function BrainformWorkspaceBody({
               )}
             </div>
             {loading && !ragDocuments.length ? (
-              <LoadingCard />
+              <LoadingCard size="sm" />
             ) : ragDocuments.length ? (
               <ul className={styles.list}>
                 {ragDocuments.map((document) => {
@@ -3618,7 +3618,7 @@ function BrainformWorkspaceBody({
                 </div>
               </div>
             ) : (
-              <LoadingCard />
+              <LoadingCard size="sm" />
             )}
           </div>
         </>
@@ -3820,7 +3820,7 @@ function BrainformWorkspaceBody({
               </section>
             </div>
           ) : (
-            <LoadingCard />
+            <LoadingCard size="sm" />
           )}
         </>
       ) : null}

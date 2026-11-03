@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { DismissibleAlert } from "../dismissible-alert";
+import { LoadingCard } from "../ui";
 import { KindSticker, NoticeTraySlot } from "../ui/error-kit";
 import { apiErrorMessage, PlatformApiError } from "../../lib/api";
 import { cn } from "../../lib/utils";
@@ -338,23 +339,7 @@ export function AudienceInteractionForm({
           <div className={PAD}>
             <Leds mode="chase" />
             <div className={SCREEN}>
-              <p
-                role="status"
-                className="m-0 text-[15px] font-bold text-[#E8FFE0] after:ml-1.5 after:inline-block after:h-4 after:w-[9px] after:animate-aud-blink-cursor after:bg-[#E8FFE0] after:align-[-2px] after:content-['']"
-              >
-                {t("audienceLoading")}
-              </p>
-              <div aria-hidden="true" className="mt-3.5 grid gap-2.5">
-                {["", "w-[70%]", "w-[45%]"].map((width) => (
-                  <i
-                    key={width}
-                    className={cn(
-                      "h-3.5 animate-aud-blink rounded-md border-2 border-black bg-[#2f2f2f]",
-                      width,
-                    )}
-                  />
-                ))}
-              </div>
+              <LoadingCard size="sm" tone="dark" label={t("audienceLoading")} />
             </div>
           </div>
         </div>

@@ -1100,7 +1100,7 @@ export function VoiceLibrary({
           }
         />
       ) : null}
-      {loading ? <LoadingCard /> : null}
+      {loading ? <LoadingCard size="sm" /> : null}
       {list}
     </>
   ) : undefined;
@@ -1245,27 +1245,28 @@ export function VoiceLibrary({
               }
             />
           ) : null}
-          {loading ? <LoadingCard /> : null}
-          {list ?? (
-            <ul className={voiceAlbum.grid}>
-              {!loading && !failure ? (
-                <li className={voiceAlbum.ghostFirst}>
-                  <AlbumMic />
-                  <p>{t("voiceNone")}</p>
-                </li>
-              ) : (
-                <li className={voiceAlbum.skel} aria-hidden="true" />
-              )}
-              <li
-                className={failure ? voiceAlbum.skel : voiceAlbum.ghost}
-                aria-hidden="true"
-              />
-              <li
-                className={failure ? voiceAlbum.skel : voiceAlbum.ghost}
-                aria-hidden="true"
-              />
-            </ul>
-          )}
+          {loading ? <LoadingCard size="sm" /> : null}
+          {list ??
+            (loading ? null : (
+              <ul className={voiceAlbum.grid}>
+                {!loading && !failure ? (
+                  <li className={voiceAlbum.ghostFirst}>
+                    <AlbumMic />
+                    <p>{t("voiceNone")}</p>
+                  </li>
+                ) : (
+                  <li className={voiceAlbum.skel} aria-hidden="true" />
+                )}
+                <li
+                  className={failure ? voiceAlbum.skel : voiceAlbum.ghost}
+                  aria-hidden="true"
+                />
+                <li
+                  className={failure ? voiceAlbum.skel : voiceAlbum.ghost}
+                  aria-hidden="true"
+                />
+              </ul>
+            ))}
           {failure ? <AlbumTrayAnchor /> : null}
         </section>
       </div>

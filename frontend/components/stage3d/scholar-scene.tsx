@@ -15,6 +15,7 @@ import type {
   StageCameraCommand,
   StageCharacter,
 } from "./scholar-stage";
+import { StageCurtain } from "../loading/agent-loader";
 import styles from "./stage3d.module.css";
 import { requestedStageScenePack, STAGE_SCENE_PACKS } from "./scene-packs";
 
@@ -319,8 +320,8 @@ export function ScholarScene({
           hidden={status === "failed"}
         />
 
-        {status === "loading" ? (
-          <p className={styles.sceneNotice}>{loadingLabel}</p>
+        {status !== "failed" ? (
+          <StageCurtain loading={status === "loading"} label={loadingLabel} />
         ) : null}
 
         {status === "failed" ? (

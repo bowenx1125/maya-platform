@@ -323,11 +323,256 @@ textarea {
   background: rgba(255, 255, 255, 0.78);
 }
 
-/* LoadingCard draws itself with Tailwind; this only keeps its root full width
-   and clear of any padding a page scope gives plain cards. */
+/* LoadingCard (loading-v3 agent-2): the ghost agent bobs above a pixel bar. */
 .loading-card {
+  display: grid;
   width: 100%;
   padding: 0;
+  place-items: center;
+}
+.loading-card--lg {
+  min-height: min(60vh, 520px);
+}
+.loading-card--bare.loading-card--lg {
+  min-height: 0;
+}
+.loading-card--sm {
+  min-height: 140px;
+  padding: 28px 16px;
+}
+.loading-card--dark .ag .lbl {
+  color: #e8ffe0;
+}
+.loading-card[data-size="xs"] {
+  min-height: 0;
+  padding: 0;
+}
+.ag {
+  --a: 88px;
+  --w: 300px;
+  --h: 16px;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  color: #111;
+  font-family: var(--font-display), system-ui;
+}
+.ag.sm {
+  --a: 58px;
+  --w: 156px;
+  --h: 11px;
+  gap: 6px;
+}
+.ag.xs {
+  --a: 34px;
+  --w: 112px;
+  --h: 8px;
+  gap: 2px;
+}
+.ag .track {
+  display: block;
+  position: relative;
+  width: var(--w);
+  max-width: 100%;
+  height: calc(var(--a) * 1.25);
+}
+.ag.xs .track {
+  height: calc(var(--a) * 1.15);
+}
+.ag .agent {
+  position: absolute;
+  bottom: 0;
+  left: calc(50% - var(--a) / 2);
+  width: var(--a);
+  height: var(--a);
+  background: url(/agents/ghost-m1.webp) center / contain no-repeat;
+  transform-origin: 50% 92%;
+  animation: ag-hop 0.8s cubic-bezier(0.3, 0, 0.5, 1) infinite;
+}
+.ag .bar {
+  display: flex;
+  box-sizing: border-box;
+  width: var(--w);
+  max-width: 100%;
+  gap: 3px;
+  padding: 3px;
+  border: 3px solid #111;
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 3px 3px 0 #111;
+}
+.ag.sm .bar,
+.ag.xs .bar {
+  gap: 2px;
+  padding: 2px;
+  border-width: 2px;
+  border-radius: 5px;
+  box-shadow: 2px 2px 0 #111;
+}
+.ag .bar i {
+  flex: 1;
+  height: var(--h);
+  border-radius: 2px;
+  background: #e5e7eb;
+  animation: ag-seg 2.4s steps(1, end) infinite;
+}
+.ag .lbl {
+  margin-top: 4px;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+.ag.sm .lbl {
+  margin-top: 2px;
+  font-size: 15px;
+}
+@keyframes ag-seg {
+  0% {
+    background: #e5e7eb;
+  }
+  8%,
+  88% {
+    background: #ffe14d;
+    box-shadow: inset 0 -3px 0 #e0b800;
+  }
+  100% {
+    background: #e5e7eb;
+  }
+}
+@keyframes ag-hop {
+  0%,
+  100% {
+    transform: translateY(0) scale(1.08, 0.92);
+  }
+  15% {
+    transform: translateY(0) scale(1);
+  }
+  55% {
+    transform: translateY(calc(var(--a) * -0.22)) scale(0.97, 1.03);
+  }
+  85% {
+    transform: translateY(0) scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ag .agent,
+  .ag .bar i {
+    animation: none !important;
+  }
+  .ag .bar i:nth-child(-n + 4) {
+    background: #ffe14d;
+  }
+}
+
+/* Stage loading (loading-v3 stage-B): curtains that open when the scene is ready. */
+.stage-curtain {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow: hidden;
+  pointer-events: none;
+}
+.stage-curtain .cur {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 51%;
+  border: 4px solid #111;
+  background: repeating-linear-gradient(
+    90deg,
+    #ff7aa8 0 34px,
+    #ff4d8d 34px 40px,
+    #ff7aa8 40px 70px
+  );
+  animation: curtain-sway 2.4s ease-in-out infinite alternate;
+}
+.stage-curtain .l {
+  left: 0;
+  border-left: 0;
+  transform-origin: left;
+}
+.stage-curtain .r {
+  right: 0;
+  border-right: 0;
+  transform-origin: right;
+}
+.stage-curtain .val {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 54px;
+  border-bottom: 4px solid #111;
+  background: #ffe14d;
+  -webkit-mask: radial-gradient(circle 22px at 50% 100%, #0000 21px, #000 22px)
+    0 0 / 60px 100%;
+  mask: radial-gradient(circle 22px at 50% 100%, #0000 21px, #000 22px) 0 0 /
+    60px 100%;
+}
+.stage-curtain .val2 {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 3;
+  height: 36px;
+  border-bottom: 4px solid #111;
+  background: #ffe14d;
+}
+.stage-curtain .lbl {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 4;
+  margin: 0;
+  padding: 8px 16px;
+  transform: translate(-50%, -50%) rotate(-2deg);
+  border: 4px solid #111;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 5px 5px 0 #111;
+  color: #111;
+  font:
+    800 22px/1 var(--font-display),
+    system-ui;
+  white-space: nowrap;
+}
+.stage-curtain.open .l {
+  animation: curtain-open-l 0.6s cubic-bezier(0.7, 0, 0.3, 1) forwards;
+}
+.stage-curtain.open .r {
+  animation: curtain-open-r 0.6s cubic-bezier(0.7, 0, 0.3, 1) forwards;
+}
+.stage-curtain.open .lbl {
+  opacity: 0;
+  transition: opacity 0.16s;
+}
+@keyframes curtain-sway {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0.985);
+  }
+}
+@keyframes curtain-open-l {
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes curtain-open-r {
+  to {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stage-curtain .cur {
+    animation: none !important;
+  }
+  .stage-curtain.open {
+    display: none;
+  }
 }
 
 .spinner {

@@ -387,7 +387,7 @@ function ClassroomLiveSession({
             {/* The site-wide loading cards, on the cabinet's screen (bare:
                 the screen is their frame). */}
             <div className="relative w-[min(720px,100%)]">
-              <LoadingCard bare />
+              <LoadingCard bare size="sm" />
             </div>
           </div>
           <Knobs tones={["bg-[#FF4D8D]", "bg-[#67E8F9]", "bg-[#A3E635]"]} />

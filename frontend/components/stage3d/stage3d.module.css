@@ -148,21 +148,6 @@
   grid-area: turn-right;
 }
 
-.sceneNotice {
-  position: absolute;
-  z-index: 4;
-  top: 50%;
-  left: 50%;
-  margin: 0;
-  padding: 10px 16px;
-  transform: translate(-50%, -50%);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.78);
-  color: var(--ink, #1d1d1f);
-  font-size: 0.88rem;
-  letter-spacing: 0.05em;
-}
-
 /* A bench that cannot render still has to say who is on it. */
 .sceneFallback {
   position: absolute;
