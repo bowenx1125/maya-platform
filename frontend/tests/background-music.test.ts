@@ -27,6 +27,7 @@ class FakeAudio {
   src = "";
   preload = "";
   volume = 1;
+  currentTime = 0;
   paused = true;
   handlers = new Map<string, Array<() => void>>();
   play = vi.fn(() => {
@@ -162,6 +163,20 @@ describe("background music", () => {
     enterStageMusic();
     expect(musicStateForTests("stage").wanted).toBe(true);
     expect(window.localStorage.getItem("maya.bgm.off.stage")).toBeNull();
+  });
+
+  it("restarts stage music from the beginning on every enter", async () => {
+    enterStageMusic();
+    await settle();
+    const audio = player("stage");
+    audio.currentTime = 42;
+    leaveStageMusic();
+    await settle();
+    enterStageMusic();
+    await settle();
+    expect(player("stage").currentTime).toBe(0);
+    expect(player("stage").src).toBe("/music/stage.mp3");
+    expect(player("stage").paused).toBe(false);
   });
 
   it("keeps the workspace preference across logout", async () => {

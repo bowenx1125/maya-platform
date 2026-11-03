@@ -12,9 +12,10 @@ import { useEffect, useSyncExternalStore } from "react";
  *   the next visit for that account follows the last choice. Logout stops
  *   sound but keeps the saved preference.
  * - stage: the 3D Debate stage's own music key. Entering the stage always
- *   starts it (and hands the workspace music off); pressing its key pauses
- *   it for this visit only. Leaving the stage stops it and gives the
- *   workspace music back if its key is on. Stage off is never remembered.
+ *   starts it from the beginning of the track (and hands the workspace music
+ *   off); pressing its key pauses it for this visit only. Leaving the stage
+ *   stops it and gives the workspace music back if its key is on. Stage off
+ *   is never remembered across visits.
  *
  * Browsers refuse sound before the person has touched the page. Then the key
  * stays on and the music starts (fading in) on their first click, tap or key
@@ -248,6 +249,27 @@ class Channel {
     });
   }
 
+  /**
+   * Next fadeIn starts at the beginning of the first track (stage re-enter).
+   * Does not change wanted; does not emit by itself.
+   */
+  prepareRestart(): void {
+    this.stopFade();
+    this.audible = false;
+    this.playing = false;
+    this.waiting = false;
+    this.trackIndex = 0;
+    if (this.audio) {
+      this.audio.pause();
+      if (this.tracks.length > 0) this.audio.src = this.tracks[this.trackIndex];
+      try {
+        this.audio.currentTime = 0;
+      } catch {
+        // Some browsers throw before metadata loads; src reset covers it.
+      }
+    }
+  }
+
   /** Stop at once (logout). */
   stop(): void {
     this.stopFade();
@@ -333,8 +355,9 @@ export function enterStageMusic(): void {
   if (onStage) return;
   onStage = true;
   channels.workspace.fadeOut();
-  // Stage always tries to start; off is only for this visit.
+  // Stage always tries to start from the beginning; off is only for this visit.
   channels.stage.wanted = true;
+  channels.stage.prepareRestart();
   channels.stage.fadeIn();
 }
 
