@@ -101,6 +101,7 @@ import {
   useNoticeTrayAbove,
 } from "./ui";
 import { WorkspaceAction } from "./workspace-actions";
+import { AgentLoader } from "./loading/agent-loader";
 import styles from "./agent-chat.module.css";
 
 type MemoryRoute = {
@@ -3846,18 +3847,14 @@ function AgentChatScope({
 }
 
 /**
- * Waiting for a reply: three dots in the current palette (pink, cyan,
- * lime) bounce in turn, the way a chat shows someone typing. The word is
- * for screen readers; the dots say it on screen (2026-11-03: the old
- * spinner used the retired gold accent).
+ * Waiting for a reply: the site loader (loading-v3 agent-2, xs). The word
+ * is for screen readers; the agent says it on screen.
  */
 function WaitDots({ label }: { label: string }) {
   return (
     <>
-      <span className={styles.waitDots} aria-hidden="true">
-        <i />
-        <i />
-        <i />
+      <span aria-hidden="true">
+        <AgentLoader size="xs" />
       </span>
       <span className="sr-only">{label}</span>
     </>

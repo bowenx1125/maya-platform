@@ -593,45 +593,6 @@
     color: var(--muted);
     font-size: 18px;
   }
-  .waitDots {
-    display: inline-flex;
-    align-items: flex-end;
-    gap: 6px;
-    height: 22px;
-    padding: 0 2px;
-  }
-  .waitDots i {
-    display: block;
-    width: 11px;
-    height: 11px;
-    border: 2px solid #111;
-    border-radius: 50%;
-    background: #ff4d8d;
-    animation: chat-wait 0.9s ease-in-out infinite;
-  }
-  .waitDots i:nth-child(2) {
-    background: #67e8f9;
-    animation-delay: 0.15s;
-  }
-  .waitDots i:nth-child(3) {
-    background: #a3e635;
-    animation-delay: 0.3s;
-  }
-  @keyframes chat-wait {
-    0%,
-    60%,
-    100% {
-      transform: translateY(0);
-    }
-    30% {
-      transform: translateY(-7px);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .waitDots i {
-      animation: none;
-    }
-  }
   /* Floating rounded shell: text row above, send on the control row, with
    clear air under the shell — not a flush bar or sharp block. */
   .composer {

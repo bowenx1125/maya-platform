@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useT } from "../../lib/i18n";
+import { LoadingCard } from "../ui";
 import type { AvatarConfig, AvatarState } from "./types";
 import { avatarAssetUrlForTemplate } from "./types";
 
@@ -185,8 +186,8 @@ export function AvatarCanvas({
         hidden={!resolvedAssetUrl || status !== "ready"}
       />
       {resolvedAssetUrl && status === "loading" ? (
-        <span className="absolute inset-0 grid place-items-center text-[0.86rem] text-(--muted,#62626a)">
-          {t("avatarPreviewLoading")}
+        <span className="absolute inset-0 grid place-items-center">
+          <LoadingCard size="sm" label={t("avatarPreviewLoading")} />
         </span>
       ) : null}
       <div
