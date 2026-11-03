@@ -396,7 +396,10 @@ describe("click feedback", () => {
     fireEvent.click(rag, { button: 0 });
     expect(rag.getAttribute("data-lit")).toBe("true");
     expect(rag.getAttribute("aria-busy")).toBe("true");
-    expect(rag.querySelector(".spinner")).toBeTruthy();
+    // The common button loading (Done's pink fill), not a spinner of its own
+    // (2026-11-03).
+    expect(rag.querySelector(".spinner")).toBeNull();
+    expect(rag.className).toContain("aria-busy:animate-debate-fill");
     // The current page stays the current page until the router commits.
     expect(rag.getAttribute("aria-current")).toBeNull();
     expect(

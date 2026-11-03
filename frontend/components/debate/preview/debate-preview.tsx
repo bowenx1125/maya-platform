@@ -454,19 +454,23 @@ function RagCheck({
                 segment.source_ids.map((sourceId) => {
                   const source = sourceById.get(sourceId);
                   return source ? (
-                    <div
+                    // Folded (2026-11-03): the document first, its query
+                    // and text on a second click, as in chat.
+                    <details
                       className="grid min-w-0 gap-0.5 rounded-[12px] border-2 border-[#111] bg-[#F1F7FF] p-2.5 [&>*]:[overflow-wrap:anywhere]"
                       key={sourceId}
                     >
-                      <strong>{source.source_filename}</strong>
-                      <span className="text-[13px] text-[#6B7280]">
+                      <summary className="cursor-pointer">
+                        <strong>{source.source_filename}</strong>
+                      </summary>
+                      <span className="mt-1 block text-[13px] text-[#6B7280]">
                         {source.version_label} · query:{" "}
                         {source.query_text ?? "none recorded"}
                       </span>
-                      <small className="text-[13px] leading-[1.45] whitespace-pre-wrap text-[#6B7280]">
+                      <small className="block text-[13px] leading-[1.45] whitespace-pre-wrap text-[#6B7280]">
                         {source.excerpt}
                       </small>
-                    </div>
+                    </details>
                   ) : (
                     <span className="text-[13px] text-[#6B7280]" key={sourceId}>
                       Source unavailable

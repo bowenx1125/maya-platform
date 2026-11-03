@@ -141,17 +141,25 @@ function previewIsCurrent(expiresAt: string): boolean {
   return Number.isFinite(expires) && expires > Date.now();
 }
 
-function VoiceEqualizer() {
+/**
+ * Option A (2026-11-03), the Agent page's voice picker: each voice is a
+ * record. It sits right after the visually hidden radio, so the radio's
+ * checked state spins it, rings it lime and lights its centre.
+ */
+function VoiceDisc({ none = false }: { none?: boolean }) {
   return (
     <span
-      className="ml-1 inline-flex h-[18px] w-[26px] shrink-0 items-end gap-[3px]"
       aria-hidden="true"
-    >
-      <i className="inline-block w-1 bg-ink" style={{ height: "45%" }} />
-      <i className="inline-block w-1 bg-ink" style={{ height: "100%" }} />
-      <i className="inline-block w-1 bg-ink" style={{ height: "65%" }} />
-      <i className="inline-block w-1 bg-ink" style={{ height: "85%" }} />
-    </span>
+      className={cn(
+        "relative grid size-16 place-items-center rounded-full border-[3px] border-[#111] shadow-[0_4px_0_#111]",
+        none
+          ? "bg-white text-[18px] leading-none font-black after:content-['∅']"
+          : "bg-[repeating-radial-gradient(#222_0_2px,#333_2px_4px)] after:size-5 after:rounded-full after:border-2 after:border-[#111] after:bg-[#FFE14D] after:content-[''] peer-checked:after:bg-[#A3E635]",
+        "peer-checked:animate-[spin_2.4s_linear_infinite] peer-checked:shadow-[0_0_0_4px_#A3E635,0_4px_0_4px_#111] motion-reduce:peer-checked:animate-none",
+        "peer-focus-visible:outline peer-focus-visible:outline-[3px] peer-focus-visible:outline-offset-4 peer-focus-visible:outline-main",
+        "peer-disabled:opacity-50",
+      )}
+    ></span>
   );
 }
 
@@ -679,26 +687,21 @@ export function VoiceLibrary({
 
   // Arcade V2 picker (Create/Edit): white rows, keycap radio, lime + EQ when selected.
   const arcadePicker = Boolean(onSelect);
+  // Option A: a record per voice, its name below, its keys under that.
   function arcadeRow(selected: boolean) {
     return cn(
-      "flex min-h-[60px] min-w-0 flex-wrap items-center gap-3 rounded-[12px] border-[3px] border-[#111] bg-white px-3 py-2 shadow-[4px_4px_0_#111]",
-      profiles.length === 0 && "min-h-[44px] py-1",
-      selected && "bg-[#A3E635]",
+      "grid w-[104px] min-w-0 content-start justify-items-center gap-1.5",
+      selected && "is-selected",
     );
   }
   function arcadeChoice() {
-    return "flex min-h-8 min-w-0 flex-1 items-center gap-2.5 font-body text-ink";
+    return "grid min-w-0 cursor-pointer justify-items-center gap-1.5 font-body text-ink has-[input:disabled]:cursor-not-allowed";
   }
   function arcadeRadio() {
-    return cn(
-      "size-[30px] shrink-0 appearance-none rounded-lg border-[3px] border-border bg-[#67E8F9] shadow-[0_4px_0_#111]",
-      "checked:translate-y-[3px] checked:bg-[#FF4D8D] checked:shadow-[0_1px_0_#111,inset_0_0_0_5px_#FF4D8D,inset_0_0_0_30px_#111]",
-      "focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main",
-      "disabled:opacity-50",
-    );
+    return "peer sr-only";
   }
   function arcadeName() {
-    return "min-w-[6em] wrap-anywhere break-words font-body text-[15px] font-extrabold leading-[1.3] whitespace-normal";
+    return "max-w-full rounded-md border-2 border-[#111] bg-white px-2 py-px text-center font-body text-xs leading-[1.4] font-extrabold wrap-anywhere peer-checked:bg-[#FFE14D]";
   }
   const selectedListed = profiles.some(
     (profile) => profile.id === selectedId && profile.status === "ready",
@@ -737,6 +740,7 @@ export function VoiceLibrary({
               disabled={controlsDisabled}
               onChange={() => onSelect(null)}
             />
+            {arcadePicker ? <VoiceDisc none /> : null}
             <span
               className={
                 arcadePicker
@@ -746,7 +750,6 @@ export function VoiceLibrary({
             >
               {t("voiceNoneOption")}
             </span>
-            {arcadePicker && selectedId === null ? <VoiceEqualizer /> : null}
           </label>
         </li>
         {selectedId && !selectedListed ? (
@@ -778,6 +781,7 @@ export function VoiceLibrary({
                 disabled={controlsDisabled}
                 onChange={() => undefined}
               />
+              {arcadePicker ? <VoiceDisc /> : null}
               <span
                 className={
                   arcadePicker
@@ -787,7 +791,6 @@ export function VoiceLibrary({
               >
                 {t("currentVoiceBinding")}
               </span>
-              {arcadePicker ? <VoiceEqualizer /> : null}
             </label>
           </li>
         ) : null}
@@ -970,7 +973,7 @@ export function VoiceLibrary({
           albumList
             ? voiceAlbum.grid
             : arcadePicker
-              ? "m-0 grid list-none gap-3 p-0"
+              ? "m-0 flex list-none flex-wrap gap-x-4 gap-y-5 p-0"
               : "m-0 grid list-none gap-2 p-0"
         }
         role={onSelect ? "radiogroup" : undefined}
@@ -1039,6 +1042,7 @@ export function VoiceLibrary({
                     disabled={controlsDisabled || profile.status !== "ready"}
                     onChange={() => onSelect(profile.id)}
                   />
+                  {arcadePicker ? <VoiceDisc /> : null}
                   <span
                     className={
                       arcadePicker
@@ -1048,9 +1052,6 @@ export function VoiceLibrary({
                   >
                     {name}
                   </span>
-                  {arcadePicker && selectedId === profile.id ? (
-                    <VoiceEqualizer />
-                  ) : null}
                 </label>
               ) : (
                 nameField(profile, name, editing, manageable, false)
@@ -1058,7 +1059,7 @@ export function VoiceLibrary({
               <div
                 className={
                   arcadePicker
-                    ? "ml-auto flex shrink-0 items-center gap-2.5"
+                    ? "flex shrink-0 items-center gap-1.5"
                     : "flex shrink-0 items-center gap-0.5"
                 }
               >
@@ -1105,19 +1106,24 @@ export function VoiceLibrary({
   ) : undefined;
 
   const createAction = listenOnly ? null : creating ? (
-    // Top-right, where New was: back to the list, nothing is uploaded.
+    // Top-right, where New was: back to the list, nothing is uploaded. Icon
+    // and word, in the same key as New (2026-11-03: it was icon only).
     <button
-      className={cn(
-        buttonVariants({ variant: "neutral", size: "icon" }),
-        "min-h-0 rounded-[10px] p-0",
-      )}
+      className={
+        arcadePicker
+          ? AGENT_NEW_BUTTON
+          : cn(
+              buttonVariants({ variant: "neutral" }),
+              "gap-1.5 font-display text-base font-extrabold",
+            )
+      }
       type="button"
-      aria-label={t("cancel")}
       data-ui-guide="voice.cancelCreate"
       disabled={controlsDisabled}
       onClick={cancelCreate}
     >
-      <WorkspaceIcon name="back" />
+      <WorkspaceIcon name="back" size={16} />
+      <span>{t("back")}</span>
     </button>
   ) : (
     <button

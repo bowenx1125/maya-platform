@@ -17,17 +17,24 @@ const sources = [
 ];
 
 describe("Check RAG", () => {
-  it("names the files while collapsed and folds each excerpt on its own", () => {
+  // 2026-11-03: two clicks. Closed: "Check RAG" and the count only. First
+  // click: the documents. Clicking a document: its text.
+  it("shows only the count closed, then documents, then a document's text", () => {
     render(<CheckRag sources={sources} />);
+    const outer = screen.getByText("Check RAG").closest("details")!;
     const summary = screen.getByText("Check RAG").closest("summary");
-    expect(summary?.textContent).toContain("ethics-week-3.pdf");
-    expect(summary?.textContent).toContain("seminar-notes.md");
+    expect(summary?.textContent).toBe("Check RAG2");
+    expect(outer).toHaveProperty("open", false);
     expect(
       screen.getByText("Courage is a habit.").closest("details"),
     ).toHaveProperty("open", false);
 
     fireEvent.click(screen.getByText("Check RAG"));
-    fireEvent.click(screen.getAllByText("ethics-week-3.pdf").at(-1)!);
+    expect(outer).toHaveProperty("open", true);
+    expect(
+      screen.getByText("Courage is a habit.").closest("details"),
+    ).toHaveProperty("open", false);
+    fireEvent.click(screen.getByText("ethics-week-3.pdf"));
     expect(
       screen.getByText("Courage is a habit.").closest("details"),
     ).toHaveProperty("open", true);

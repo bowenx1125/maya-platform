@@ -87,29 +87,38 @@ export function SegmentRagInspector({
   );
 }
 
+/**
+ * One source, folded (2026-11-03): Check RAG opens to the documents, and a
+ * document opens to its query and text, the same two clicks as chat.
+ */
 function SourceReceipt({ source }: { source: SegmentRagSource }) {
   return (
-    <dl className="m-0 grid min-w-0 gap-[5px] rounded-[10px] border border-(--line,#dedee3) bg-[rgba(255,255,255,0.72)] p-[9px]">
-      <div className="grid min-w-0 grid-cols-[4.7rem_minmax(0,1fr)] gap-2 max-[620px]:grid-cols-1 max-[620px]:gap-0.5 items-baseline">
-        <dt className="text-[0.74rem] font-[750] text-(--ink) [overflow-wrap:anywhere]">
+    <details
+      className="min-w-0 rounded-[10px] border border-(--line,#dedee3) bg-[rgba(255,255,255,0.72)] p-[9px]"
+      data-source-receipt
+    >
+      <summary className="min-w-0 [overflow-wrap:anywhere]">
+        <span className="text-[0.74rem] font-[750] text-(--ink)">
           {source.source_filename}
-        </dt>
-        <dd className="m-0 min-w-0 text-[0.76rem] leading-[1.45] text-(--ink) [overflow-wrap:anywhere]">
+        </span>{" "}
+        <span className="text-[0.72rem] font-normal text-(--muted)">
           {source.version_label}
-        </dd>
-      </div>
-      <div className="grid min-w-0 grid-cols-[4.7rem_minmax(0,1fr)] gap-2 max-[620px]:grid-cols-1 max-[620px]:gap-0.5">
-        <dt className="text-[0.74rem] font-[650] text-(--muted)">Query</dt>
-        <dd className="m-0 min-w-0 text-[0.76rem] leading-[1.45] text-(--ink) [overflow-wrap:anywhere]">
-          {source.query_text ?? "Not recorded"}
-        </dd>
-      </div>
-      <div className="grid min-w-0 grid-cols-[4.7rem_minmax(0,1fr)] gap-2 max-[620px]:grid-cols-1 max-[620px]:gap-0.5">
-        <dt className="text-[0.74rem] font-[650] text-(--muted)">Excerpt</dt>
-        <dd className="m-0 min-w-0 text-[0.76rem] leading-[1.45] whitespace-pre-wrap text-(--ink) [overflow-wrap:anywhere]">
-          {source.excerpt}
-        </dd>
-      </div>
-    </dl>
+        </span>
+      </summary>
+      <dl className="mt-2 mb-0 grid min-w-0 gap-[5px]">
+        <div className="grid min-w-0 grid-cols-[4.7rem_minmax(0,1fr)] gap-2 max-[620px]:grid-cols-1 max-[620px]:gap-0.5">
+          <dt className="text-[0.74rem] font-[650] text-(--muted)">Query</dt>
+          <dd className="m-0 min-w-0 text-[0.76rem] leading-[1.45] text-(--ink) [overflow-wrap:anywhere]">
+            {source.query_text ?? "Not recorded"}
+          </dd>
+        </div>
+        <div className="grid min-w-0 grid-cols-[4.7rem_minmax(0,1fr)] gap-2 max-[620px]:grid-cols-1 max-[620px]:gap-0.5">
+          <dt className="text-[0.74rem] font-[650] text-(--muted)">Excerpt</dt>
+          <dd className="m-0 min-w-0 text-[0.76rem] leading-[1.45] whitespace-pre-wrap text-(--ink) [overflow-wrap:anywhere]">
+            {source.excerpt}
+          </dd>
+        </div>
+      </dl>
+    </details>
   );
 }

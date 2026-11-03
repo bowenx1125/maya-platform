@@ -1000,15 +1000,15 @@ describe("Chatform", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Where is that from?" }),
     );
+    // Two clicks (2026-11-03): closed shows the count, then the documents,
+    // then a document's text.
     const summary = await screen.findByText("Check RAG");
-    expect(summary.closest("summary")?.textContent).toContain(
-      "ethics-week-3.pdf",
-    );
+    expect(summary.closest("summary")?.textContent).toBe("Check RAG1");
     expect(
       screen.getByText("Courage is a habit.").closest("details"),
     ).toHaveProperty("open", false);
     fireEvent.click(summary);
-    fireEvent.click(screen.getAllByText("ethics-week-3.pdf").at(-1)!);
+    fireEvent.click(screen.getByText("ethics-week-3.pdf"));
     expect(
       screen.getByText("Courage is a habit.").closest("details"),
     ).toHaveProperty("open", true);

@@ -417,9 +417,14 @@ describe("M08 voice library", () => {
     expect(confirm.closest("[data-ui-guide]")).toBeNull();
     expect(confirm.disabled).toBe(true);
     expect(screen.queryByRole("checkbox")).toBeNull();
-    // Creating a voice never borrows the sidebar's Back or Done.
+    // Creating a voice never borrows the sidebar's Back or Done: the only
+    // Back is the create panel's own (icon and word, 2026-11-03).
     expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+    expect(
+      screen
+        .getAllByRole("button", { name: "Back" })
+        .map((button) => button.getAttribute("data-ui-guide")),
+    ).toEqual(["voice.cancelCreate"]);
     expect(screen.queryByRole("button", { name: "New" })).toBeNull();
 
     const sampleHint =
@@ -433,8 +438,8 @@ describe("M08 voice library", () => {
     });
     fireEvent.change(input, { target: { files: [file] } });
     await waitFor(() => expect(confirm.disabled).toBe(false));
-    // The top-right back arrow cancels: nothing is uploaded.
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    // The top-right Back (arrow and word) cancels: nothing is uploaded.
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.queryByRole("button", { name: consentCopy })).toBeNull();
     expect(screen.queryByLabelText(sampleHint)).toBeNull();
     expect(await screen.findByRole("button", { name: "New" })).toBeTruthy();
@@ -1045,8 +1050,8 @@ describe("Agent voice picker", () => {
     });
     expect(sidebarButtons()).toEqual(before);
     expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
-    const cancel = screen.getByRole("button", { name: "Cancel" });
-    // The app's back arrow, not a ×.
+    const cancel = screen.getByRole("button", { name: "Back" });
+    // The app's back arrow and the word (2026-11-03), not a ×.
     expect(cancel.querySelector("path")?.getAttribute("d")).toBe(
       "M19 12H5m7-7-7 7 7 7",
     );
