@@ -263,9 +263,6 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg://postgres:maya-ci@127.0.0.1:5432/maya_test
       ADAPTIVE_ADMISSION_ENABLED: "false"
-      # Startup refuses a missing secret outside tests; this disposable CI
-      # database needs only a fixed placeholder.
-      SESSION_SECRET: login-load-regression-ci-placeholder-0000
     services:
       postgres:
         image: postgres:16
@@ -300,6 +297,9 @@ jobs:
         working-directory: backend
         run: |
           mkdir -p artifacts
+          # Startup refuses a short session key outside tests; a random one
+          # per run serves this disposable database.
+          export SESSION_SECRET="$(openssl rand -hex 32)"
           uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/login-load-api.log" 2>&1 &
 
       - name: Wait for login regression API
