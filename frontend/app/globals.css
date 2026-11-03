@@ -352,6 +352,17 @@ textarea {
   }
 }
 
+/* Sidebar BGM key: equalizer bars bounce while music plays. */
+@keyframes music-eq {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
 .empty-card {
   align-items: flex-start;
   flex-direction: column;
