@@ -33,14 +33,26 @@ def _rules(language: str) -> tuple[str, str]:
 def test_english_rules_no_longer_script_labels_or_scores() -> None:
     teaching, contract = _rules("en")
     whole = teaching + contract
-    assert "Say “I feel”" not in whole and 'Say "I feel"' not in whole
-    assert "Use “The RAG evidence confirms”" not in whole
+    for label in ("The RAG evidence confirms", "RAG evidence", "I feel"):
+        assert label not in whole, label
     assert not re.search(r"\(\+\d\)", whole)
-    # The labels appear only in the line that forbids saying them.
-    for label in ("the RAG evidence confirms", "I feel"):
-        lines = [line for line in whole.splitlines() if label in line]
-        assert lines and all(line.startswith("- Never say labels") for line in lines), lines
     assert len(whole.encode()) < 6000
+
+
+# 2026-11-03: a capable model follows stated goals; lists of prohibitions
+# made it withhold correct context. The rules say what to do, and the
+# contract keeps only the formats the server checks.
+DEFENSIVE = {
+    "zh": ("绝不", "不要", "不能", "不用", "不是指令", "不是命令", "不是台词"),
+    "en": ("Never", "never", "Do not", "Don't", "not instructions", "must not", "not commands"),
+}
+
+
+@pytest.mark.parametrize("language", ["zh", "en"])
+def test_default_rules_state_goals_not_prohibitions(language: str) -> None:
+    whole = default_teaching_prompts()[language]
+    found = [word for word in DEFENSIVE[language] if word in whole]
+    assert found == [], found
 
 
 @pytest.mark.parametrize(
