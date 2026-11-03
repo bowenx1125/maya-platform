@@ -1823,6 +1823,18 @@ export class PlatformApi {
     );
   }
 
+  /** Delete a self-registered member's account and their private work. */
+  async deleteCourseMember(courseId: string, userId: string): Promise<void> {
+    await unwrap<void>(
+      await this.client.DELETE("/courses/{course_id}/members/{user_id}", {
+        params: {
+          path: { course_id: courseId, user_id: userId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+      }),
+    );
+  }
+
   async updateCourseMember(
     courseId: string,
     userId: string,

@@ -917,6 +917,14 @@ const enMessages = {
   removeConfirm:
     "Remove this account? The student is signed out at once and cannot sign in. Their work is kept, and you can restore the account under Removed.",
   removedMembers: "Removed",
+  deleteAccount: "Delete",
+  deleteConfirm:
+    "Delete {name}'s account? They are signed out and cannot sign in again, and their private chats, Agents, Teams and RAG are deleted. Work shared with the group, grades and records stay. This cannot be undone.",
+  cleanupRemoved: "Delete all removed",
+  cleanupConfirm:
+    "Delete all {count} removed accounts and their private work? This cannot be undone.",
+  filterMembers: "Filter by name, username or group",
+  noMembersMatch: "No members match.",
   resetPassword: "Reset",
   resetPasswordIssued: "New password for {username}",
   registerTitle: "Create an account",

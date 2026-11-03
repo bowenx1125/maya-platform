@@ -38,9 +38,7 @@ def purge_expired_teacher_visits(db: Session, *, now: datetime | None = None) ->
     # A statement, not ORM deletes: those wait for the commit flush, which
     # runs after grant_teacher_visit's upsert has already renewed the same
     # row, and so deleted the visit a re-entering teacher had just been given.
-    result = db.execute(
-        delete(TeacherGroupAccess).where(TeacherGroupAccess.expires_at <= moment)
-    )
+    result = db.execute(delete(TeacherGroupAccess).where(TeacherGroupAccess.expires_at <= moment))
     return int(getattr(result, "rowcount", 0) or 0)
 
 

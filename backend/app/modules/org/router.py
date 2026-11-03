@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, Header, status
+from fastapi import APIRouter, Body, Depends, Header, Response, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -25,7 +25,7 @@ from app.modules.auth.dependencies import (
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import course_member_role, observes_group
 from app.modules.org.overview import group_overview
-from app.modules.org.roster import RosterRow, course_roster, update_member
+from app.modules.org.roster import RosterRow, course_roster, delete_member, update_member
 from app.modules.org.schemas import Course as CourseDTO
 from app.modules.org.schemas import (
     CourseDetail,
@@ -467,3 +467,39 @@ def update_course_member(
         db.commit()
         finish_withdrawn_voices(db, settings, str(user_id))
     return entry
+
+
+@router.delete(
+    "/courses/{course_id}/members/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="deleteCourseMember",
+    responses={
+        204: {"description": "The account and its private work are deleted."},
+        403: {"model": Error, "description": "CSRF failure or the caller is not the teacher."},
+        404: {"model": Error, "description": "The course or member is not visible."},
+        409: {"model": Error, "description": "The account is read-only or the target is self."},
+    },
+)
+def delete_course_member(
+    course_id: UUID,
+    user_id: UUID,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    """Delete a self-registered member (see ``roster.delete_member``)."""
+
+    _teaching_scope(db, context, str(course_id))
+    delete_member(
+        db,
+        course_id=str(course_id),
+        actor=context.user,
+        user_id=str(user_id),
+        data_root=settings.resolved_data_root,
+    )
+    # The account goes first; the withdrawn voices' supplier delete runs
+    # after the commit, best effort, as for a group move.
+    db.commit()
+    finish_withdrawn_voices(db, settings, str(user_id))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -2515,6 +2515,32 @@
             "$ref": "#/components/responses/Error"
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "deleteCourseMember",
+        "description": "Delete a self-registered member: the account, its sign-in and memberships, and its private chats, Teams, Agents and RAG. Shared work, grades and records stay.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The account and its private work are deleted."
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
       }
     },
     "/api/v1/groups/{group_id}": {

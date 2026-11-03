@@ -31,6 +31,7 @@ const implemented = new Set([
   "getGroupOverview",
   "getCourseRoster",
   "updateCourseMember",
+  "deleteCourseMember",
   "joinGroupAsTeacher",
   "leaveGroupAsTeacher",
   "listGroupAgents",

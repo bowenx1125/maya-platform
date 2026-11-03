@@ -87,6 +87,7 @@ function apiForTeacher() {
       { id: "other-group", course_id: courseId, name: "Team Borealis" },
     ] as Group[]),
     updateCourseMember: vi.fn().mockResolvedValue(entry({})),
+    deleteCourseMember: vi.fn().mockResolvedValue(undefined),
     resetStudentPassword: vi.fn().mockResolvedValue({
       user_id: studentId,
       username: "new-student",
@@ -199,8 +200,9 @@ describe("teacher account management", () => {
       ".account-row",
     ) as HTMLElement;
     expect(within(own).getByRole("button", { name: "Edit" })).toBeTruthy();
-    expect(within(own).queryByRole("button", { name: "Remove" })).toBeNull();
-    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
+    // 2026-11-03: Remove became a real Delete.
+    expect(within(own).queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Delete" })).toHaveLength(1);
   });
 
   it("saves a renamed student", async () => {
@@ -231,18 +233,18 @@ describe("teacher account management", () => {
     expect(options).toEqual(["Team Aurora", "Team Borealis"]);
   });
 
-  it("confirms before removing and sends the new status", async () => {
+  it("confirms before deleting and deletes the account for real", async () => {
     const api = apiForTeacher();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     mount(api);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     expect(confirm).toHaveBeenCalled();
+    expect(String(confirm.mock.calls[0][0])).toContain("cannot be undone");
     await waitFor(() =>
-      expect(api.updateCourseMember).toHaveBeenCalledWith(courseId, studentId, {
-        status: "inactive",
-      }),
+      expect(api.deleteCourseMember).toHaveBeenCalledWith(courseId, studentId),
     );
+    expect(api.updateCourseMember).not.toHaveBeenCalled();
   });
 
   it("keeps the account active when the teacher cancels the confirmation", async () => {
@@ -250,9 +252,54 @@ describe("teacher account management", () => {
     vi.spyOn(window, "confirm").mockReturnValue(false);
     mount(api);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     await waitFor(() => expect(api.courseRoster).toHaveBeenCalled());
     expect(api.updateCourseMember).not.toHaveBeenCalled();
+    expect(api.deleteCourseMember).not.toHaveBeenCalled();
+  });
+
+  it("filters members by name, username or group", async () => {
+    const api = apiForTeacher();
+    mount(api);
+    const box = await screen.findByRole("searchbox", {
+      name: "Filter by name, username or group",
+    });
+    fireEvent.change(box, { target: { value: "new-stud" } });
+    expect(screen.getByText("new-student")).toBeTruthy();
+    expect(screen.queryByText("maya")).toBeNull();
+    fireEvent.change(box, { target: { value: "nobody-like-this" } });
+    expect(screen.getByText("No members match.")).toBeTruthy();
+  });
+
+  it("deletes every removed account at once from the Removed fold", async () => {
+    const api = apiForTeacher();
+    const old = [1, 2].map((index) =>
+      entry({
+        user_id: `removed-${index}`,
+        username: `old-${index}`,
+        display_name: `Old ${index}`,
+        status: "inactive",
+      }),
+    );
+    api.courseRoster.mockResolvedValue({
+      ...roster(),
+      entries: [...(roster().entries ?? []), ...old],
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { container } = mount(api);
+    await screen.findByText("old-1");
+    const fold = container.querySelector(
+      "details.roster-removed",
+    ) as HTMLElement;
+    fireEvent.click(
+      within(fold).getByRole("button", { name: "Delete all removed" }),
+    );
+    await waitFor(() =>
+      expect(api.deleteCourseMember.mock.calls.map((call) => call[1])).toEqual([
+        "removed-1",
+        "removed-2",
+      ]),
+    );
   });
 
   it("folds removed accounts away under Removed, where they can be restored", async () => {
