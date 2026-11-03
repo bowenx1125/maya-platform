@@ -205,6 +205,9 @@
     "resetNotSupported": {
       "en": "This account has no password that can be reset here."
     },
+    "selfDeleteForbidden": {
+      "en": "You can't delete your own account here."
+    },
     "selfStatusForbidden": {
       "en": "You can't change your own account status."
     },
@@ -785,6 +788,7 @@
     "segment_stage_unavailable": "aiStepFailed",
     "segment_structure_invalid": "aiStepFailed",
     "segment_text_invalid": "aiStepFailed",
+    "self_delete_forbidden": "selfDeleteForbidden",
     "self_prerequisite": "conceptSelfPrerequisite",
     "self_status_forbidden": "selfStatusForbidden",
     "session_revoked": "sessionRevoked",
@@ -819,6 +823,7 @@
     "team_messages_invalid": "teamReplyFailed",
     "team_no_progress": "teamReplyFailed",
     "team_provider_not_sent": "teamReplyFailed",
+    "team_provider_rejected": "chatReplyFailed",
     "team_provider_stream_unsupported": "teamReplyFailed",
     "team_request_changed": "teamReplyFailed",
     "team_response_invalid": "teamReplyFailed",

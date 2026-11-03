@@ -66,6 +66,8 @@ CONTROL_UNBOUNDED_COST_CNY = 1.0e18
 LOGGER = logging.getLogger("maya.workspace")
 TEAM_PER_CALL_MAX_TOKENS = LLM_INPUT_TOKEN_CAP + LLM_RESERVED_OUTPUT_TOKEN_CAP
 
+TEAM_REJECTED_FALLBACK_CODE = "team_provider_rejected"
+
 
 @dataclass(frozen=True)
 class TeamProviderDispatch:
@@ -920,8 +922,8 @@ def dispatch_team_model(
 
     status = getattr(response, "status_code", None)
     if status != 200:
-        code = rejected_status_code(status, "team_provider_rejected")
-        stored = "provider_http_rejected" if code == "team_provider_rejected" else code
+        code = rejected_status_code(status, TEAM_REJECTED_FALLBACK_CODE)
+        stored = "provider_http_rejected" if code == TEAM_REJECTED_FALLBACK_CODE else code
         repository.mark_failed(operation.id, safe_error_code=stored)
         raise TeamDispatchError(code)
     try:

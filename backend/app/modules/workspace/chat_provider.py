@@ -72,6 +72,7 @@ from app.providers.standing_consent import standing_consent_enabled
 from .models import Conversation
 from .schemas import ChatSource
 
+REJECTED_FALLBACK_CODE = "chat_provider_rejected"
 _REJECTED_DEFAULT = "The Provider rejected the request."
 _REJECTED_MESSAGES = {
     "provider_auth_failed": "Check the API key and service access.",
@@ -761,11 +762,11 @@ def real_reply(
                     ) from None
             status = getattr(response, "status_code", None)
             if status != 200:
-                code = rejected_status_code(status, "chat_provider_rejected")
+                code = rejected_status_code(status, REJECTED_FALLBACK_CODE)
                 repository.mark_failed(
                     operation.id,
                     safe_error_code=(
-                        "provider_http_rejected" if code == "chat_provider_rejected" else code
+                        "provider_http_rejected" if code == REJECTED_FALLBACK_CODE else code
                     ),
                 )
                 raise PlatformError(code, _REJECTED_MESSAGES.get(code, _REJECTED_DEFAULT), 503)
