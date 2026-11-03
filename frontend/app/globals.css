@@ -382,6 +382,69 @@ textarea {
   }
 }
 
+/* Sidebar motion: labels slide in after an expand (A), and the collapsed
+   Mayaform key lets pixel notes rise while workspace music plays. Reduced
+   motion: no slide, and a single still note sits at the key corner. */
+.nav-label-in {
+  animation: nav-label-in 220ms ease-out both;
+}
+@keyframes nav-label-in {
+  from {
+    opacity: 0;
+    translate: -6px 0;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+.sidebar-music-notes {
+  position: absolute;
+  left: 50%;
+  top: -4px;
+  pointer-events: none;
+}
+.sidebar-music-notes b {
+  position: absolute;
+  font: 900 14px/1 monospace;
+  color: #111;
+  text-shadow: 1px 1px 0 #a3e635;
+  opacity: 0;
+  animation: sidebar-note-rise 1.8s steps(6) infinite;
+}
+.sidebar-music-notes b:nth-child(2) {
+  left: 10px;
+  animation-delay: 0.6s;
+}
+.sidebar-music-notes b:nth-child(3) {
+  left: -14px;
+  animation-delay: 1.2s;
+}
+@keyframes sidebar-note-rise {
+  from {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate(6px, -30px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-label-in {
+    animation: none;
+  }
+  .sidebar-music-notes b {
+    animation: none;
+    opacity: 0;
+  }
+  .sidebar-music-notes b:first-child {
+    opacity: 1;
+    left: 12px;
+    top: -6px;
+  }
+}
+
 @keyframes music-face {
   0% {
     background-color: #a3e635;

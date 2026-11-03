@@ -27,6 +27,7 @@ import {
 import {
   startDefaultMusic,
   stopBackgroundMusic,
+  useMusicPlaying,
 } from "../lib/background-music";
 import { useT } from "../lib/i18n";
 import {
@@ -742,6 +743,28 @@ export function AppShell({
   );
   const mobile = useSyncExternalStore(subscribeMobile, readMobile, () => false);
   const collapsed = collapsedPreference && !mobile;
+  const workspaceMusicOn = useMusicPlaying("workspace");
+  // Sidebar motion (2026-11-03): after an expand the labels and group
+  // headings slide in one after another (120ms + 40ms per row). Skipped on
+  // first paint; CSS skips reduced motion.
+  const sidebarRef = useRef<HTMLElement>(null);
+  const firstCollapsedRender = useRef(true);
+  useEffect(() => {
+    if (firstCollapsedRender.current) {
+      firstCollapsedRender.current = false;
+      return;
+    }
+    if (collapsed) return;
+    const labels = sidebarRef.current?.querySelectorAll<HTMLElement>(
+      "[data-sidebar-pin] > div :is(a, button) > span:not([aria-hidden]), [data-sidebar-group] > [id]",
+    );
+    labels?.forEach((label, index) => {
+      label.classList.remove("nav-label-in");
+      label.style.animationDelay = `${120 + index * 40}ms`;
+      void label.offsetWidth;
+      label.classList.add("nav-label-in");
+    });
+  }, [collapsed]);
   // The drawer belongs to the page it was opened on, so navigating closes it.
   const [drawerPath, setDrawerPath] = useState<string | null>(null);
   const drawerOpen = drawerPath === pathname;
@@ -1078,7 +1101,7 @@ export function AppShell({
   return (
     <WorkspaceActionsContext.Provider value={actionRegistry}>
       <div
-        className={`grid min-h-dvh bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px] max-[900px]:grid-cols-1 max-[900px]:content-start ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[240px_minmax(0,1fr)]"}`}
+        className={`grid min-h-dvh bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px] max-[900px]:grid-cols-1 max-[900px]:content-start $transition-[grid-template-columns] duration-[420ms] ease-[cubic-bezier(.34,1.56,.64,1)] motion-reduce:transition-none ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[240px_minmax(0,1fr)]"}`}
       >
         <div className="sticky top-0 z-30 hidden h-[50px] items-center justify-center border-b-[3px] border-border bg-sidebar px-3 max-[900px]:flex">
           <button
@@ -1108,6 +1131,7 @@ export function AppShell({
         ) : null}
         <header
           id={SIDEBAR_ID}
+          ref={sidebarRef}
           data-collapsed={collapsed || undefined}
           className={`relative z-20 min-h-dvh border-r-[3px] border-border bg-sidebar max-[900px]:fixed max-[900px]:inset-y-0 max-[900px]:left-0 max-[900px]:z-50 max-[900px]:w-[min(300px,85vw)] max-[900px]:transition-transform max-[900px]:duration-150 max-[900px]:motion-reduce:transition-none ${drawerOpen ? "" : "max-[900px]:invisible max-[900px]:-translate-x-full"}`}
         >
@@ -1115,7 +1139,7 @@ export function AppShell({
             <button
               type="button"
               data-sidebar-toggle
-              className={`group/toggle absolute ${mobile ? "top-4 right-3 size-8 rounded-arc-s" : `top-[calc(50%-16px)] ${collapsed ? "-right-[26px]" : "-right-[22px]"} size-8 rounded-full`} z-10 grid place-items-center border-border bg-surface text-ink ${ICON_MOTION}`}
+              className={`group/toggle absolute ${mobile ? `top-4 right-3 size-8 rounded-arc-s ${ICON_MOTION}` : `top-[calc(50%-16px)] ${collapsed ? "-right-[26px]" : "-right-[22px]"} size-8 rounded-[8px] border-[3px] shadow-[0_4px_0_#111] transition-[translate,box-shadow] duration-[80ms] active:translate-y-1 active:shadow-none motion-reduce:transition-none`} z-10 grid place-items-center border-border bg-surface text-ink`}
               aria-label={toggleLabel}
               aria-expanded={mobile ? drawerOpen : !collapsed}
               aria-controls={SIDEBAR_ID}
@@ -1161,6 +1185,17 @@ export function AppShell({
                       aria-hidden="true"
                     />
                     {collapsed ? null : <span>{t("appName")}</span>}
+                    {collapsed && workspaceMusicOn ? (
+                      <span
+                        aria-hidden="true"
+                        data-testid="sidebar-music-notes"
+                        className="sidebar-music-notes"
+                      >
+                        <b>♪</b>
+                        <b>♫</b>
+                        <b>♪</b>
+                      </span>
+                    ) : null}
                   </Link>
                   {collapsed || mobile ? null : (
                     <MusicKey channel="workspace" />
