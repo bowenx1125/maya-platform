@@ -19,7 +19,7 @@ export const BETA_PANEL_ACTIONS = "contents";
 /* The music key keeps the sidebar keycap inside the candy dock (whose button
    rules would make it a white pill) and ends the row. */
 export const BETA_DOCK_MUSIC_KEY =
-  "order-8 mb-[6px] !grid !size-12 !min-h-0 !p-0 !rounded-arc-s !border-[3px] !border-border !bg-surface !shadow-[0_6px_0_#111] hover:!bg-surface hover:![transform:none] active:!shadow-none disabled:!border-border disabled:!bg-surface disabled:!opacity-50 max-[600px]:order-5 max-[600px]:!size-12 max-[600px]:justify-self-center";
+  "order-8 mb-[6px] !grid !size-12 !min-h-0 !p-0 !rounded-arc-s !border-[3px] !border-border !bg-[#1F2937] !shadow-[0_6px_0_#111] hover:!bg-[#1F2937] hover:![transform:none] active:!shadow-none disabled:!border-border disabled:!bg-[#1F2937] disabled:!opacity-50 max-[600px]:order-5 max-[600px]:!size-12 max-[600px]:justify-self-center";
 
 /* V1 票根卷: Check RAG pill, segment stubs, dashed receipts. */
 const RAG_DRESS =

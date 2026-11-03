@@ -15,6 +15,7 @@ import {
   useSession,
 } from "../../../../../components/session-provider";
 import { IconClose } from "../../../../../components/quiet-icons";
+import { WorkspaceIcon } from "../../../../../components/workspace-icon";
 import { ReportPanel } from "../../../../../components/report";
 import { AgentScores } from "../../../../../components/wave3/agent-scores";
 import { ErrorNotice, LoadingCard } from "../../../../../components/ui";
@@ -497,6 +498,7 @@ export default function TeacherDebateControlPage() {
                   data-dock="back"
                   href="/teacher/debates"
                 >
+                  <WorkspaceIcon name="back" size={18} />
                   {t("debateBack")}
                 </Link>
                 {/* A1 dock order via data-dock: Back · Interact|Hide · Next · End · Transcript */}
@@ -510,6 +512,7 @@ export default function TeacherDebateControlPage() {
                     onClick={() => void openInteraction()}
                     type="button"
                   >
+                    <WorkspaceIcon name="interact" size={18} />
                     {interactionBusy && !joinUrl
                       ? betaLabels.interactionOpening
                       : joinUrl && joinCodeVisible
@@ -527,6 +530,7 @@ export default function TeacherDebateControlPage() {
                     onClick={() => void finish()}
                     type="button"
                   >
+                    <WorkspaceIcon name="stop" size={18} />
                     {finishBusy ? "Finishing…" : stageLabels.finish}
                   </button>
                 ) : null}
@@ -539,6 +543,7 @@ export default function TeacherDebateControlPage() {
                     onClick={() => void conclude()}
                     type="button"
                   >
+                    <WorkspaceIcon name="done" size={18} />
                     {interactionBusy ? "Concluding…" : "Conclude"}
                   </button>
                 ) : null}
@@ -552,6 +557,7 @@ export default function TeacherDebateControlPage() {
                     type="button"
                     onClick={() => void conclude()}
                   >
+                    <WorkspaceIcon name="done" size={18} />
                     Conclude
                   </button>
                 ) : null}
