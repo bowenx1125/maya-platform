@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
 import logging
 import re
 from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -18,10 +20,12 @@ from agno.models.response import ModelResponse
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, object_session
 
+from app.core.adaptive_admission import carry_admission
 from app.core.chat_turn_locks import holding_chat_turn
 from app.core.config import Settings
 from app.core.errors import PlatformError, conflict, not_found
 from app.core.links import live_link
+from app.core.locks import xact_lock
 from app.core.message_timing import message_timing, set_outcome
 from app.core.models import Agent, AgentVersion, CourseMember, ProviderOperation, User
 from app.core.read_memo import forget_request_reads, memoized, request_read_memo
@@ -374,9 +378,23 @@ def revoked_assessment_action_target(
     return leader
 
 
+def _lock_chat_events(db: Session, conversation_id: str) -> None:
+    """Serialize event appends and turn finishing for one Chat.
+
+    Members of one turn run at the same time (2026-11-03). Two settles would
+    otherwise take the same max(sequence)+1, or each still see the other
+    running and leave the turn unfinished. The second writer waits here and
+    its next statement sees the first one's commit. Taken after a writer's
+    own row locks, as every caller already does, so lock order never flips.
+    """
+
+    xact_lock(db, f"team-chat-events:{conversation_id}")
+
+
 def _append_event(
     db: Session, turn: ConversationTurn, kind: str, result_id: str | None = None
 ) -> None:
+    _lock_chat_events(db, turn.conversation_id)
     sequence = (
         int(
             db.scalar(
@@ -1561,20 +1579,34 @@ def team_history(
     )
     if first_position is not None:
         statement = statement.where(ConversationTurn.position >= first_position)
-    turns = db.scalars(statement.order_by(ConversationTurn.position, ConversationTurn.id))
-    for turn in turns:
-        if turn.user_text:
-            history.append({"role": "user", "content": turn.user_text})
-        rows = db.execute(
+    turns = list(db.scalars(statement.order_by(ConversationTurn.position, ConversationTurn.id)))
+    # One read for every earlier turn's replies (it was one per turn, for
+    # every member call: a 40-turn chat read 40 times per member).
+    replies: dict[str, list[tuple[TeamTurnResult, ConversationParticipant]]] = {}
+    if turns:
+        for result, member in db.execute(
             select(TeamTurnResult, ConversationParticipant)
             .join(
                 ConversationParticipant,
                 ConversationParticipant.id == TeamTurnResult.participant_id,
             )
-            .where(TeamTurnResult.turn_id == turn.id)
-            .order_by(TeamTurnResult.ordinal)
-        )
-        for result, member in rows:
+            .join(ConversationTurn, ConversationTurn.id == TeamTurnResult.turn_id)
+            .where(
+                ConversationTurn.conversation_id == conversation_id,
+                ConversationTurn.position < before_position,
+                *(
+                    (ConversationTurn.position >= first_position,)
+                    if first_position is not None
+                    else ()
+                ),
+            )
+            .order_by(TeamTurnResult.turn_id, TeamTurnResult.ordinal)
+        ):
+            replies.setdefault(result.turn_id, []).append((result, member))
+    for turn in turns:
+        if turn.user_text:
+            history.append({"role": "user", "content": turn.user_text})
+        for result, member in replies.get(turn.id, ()):
             shown = _single_line_name(member.display_name) or history_speaker_name(
                 member.display_name, member.id
             )
@@ -2352,6 +2384,7 @@ def invoke_mock_team_model(
 
 def _finish_run(db: Session, row: Conversation, turn: ConversationTurn) -> None:
     db.flush()
+    _lock_chat_events(db, row.id)
     states = list(db.scalars(select(TeamTurnResult.state).where(TeamTurnResult.turn_id == turn.id)))
     if not states or any(state in {"pending", "running"} for state in states):
         return
@@ -3657,7 +3690,11 @@ def _execute_team_turn_body(factory: SessionFactory, claim: TeamClaim) -> None:
             execute_coordinate_turn(factory, claim)
             return
         if turn.mode == "real":
-            for result_id in _formal_run_order(factory, claim.turn_id):
+            order = _formal_run_order(factory, claim.turn_id)
+            if len(order) > 1 and _members_run_together(factory, claim.turn_id):
+                _execute_members_together(factory, claim, order)
+                return
+            for result_id in order:
                 with factory() as result_db:
                     result = result_db.get(TeamTurnResult, result_id)
                     should_run = result is not None and result.state in {"pending", "running"}
@@ -3668,6 +3705,64 @@ def _execute_team_turn_body(factory: SessionFactory, claim: TeamClaim) -> None:
         execute_member(
             factory, claim.turn_id, claim.token, result_id, actor_context=claim.actor_context
         )
+
+
+# Members that answer one message at the same time. Each opens its own short
+# sessions; three keeps a busy class well inside the 40-connection pool.
+PARALLEL_MEMBERS = 3
+
+
+def _members_run_together(factory: SessionFactory, turn_id: str) -> bool:
+    """Whether this turn's members can answer at the same time.
+
+    A member never sees a teammate's reply from the same turn (history stops
+    at earlier turns), so in an ordinary Team the order only decides how the
+    replies are shown, and that stays the stored ordinal. A Team that can run
+    a formal assessment keeps one-at-a-time: a member's Tool can start or
+    record an attempt that the next member must read.
+    """
+
+    with factory() as db:
+        turn = db.get(ConversationTurn, turn_id)
+        row = db.get(Conversation, turn.conversation_id) if turn is not None else None
+        if turn is None or row is None or turn.user_text == "":
+            return False
+        try:
+            return not team_assessment_capable(db, row)
+        except PlatformError:
+            return False
+
+
+def _execute_members_together(
+    factory: SessionFactory, claim: TeamClaim, result_ids_in_order: Sequence[str]
+) -> None:
+    with factory() as db:
+        pending = [
+            result_id
+            for result_id in result_ids_in_order
+            if (result := db.get(TeamTurnResult, result_id)) is not None
+            and result.state in {"pending", "running"}
+        ]
+    if not pending:
+        return
+    carried = carry_admission()
+
+    def run(result_id: str) -> None:
+        with carried():
+            execute_real_member(factory, claim, result_id)
+
+    # Each member gets a copy of this thread's context: the turn's timing
+    # collector and read memo stay shared (both are safe across threads; a
+    # memo per member read more, measured 2026-11-03).
+    workers = min(PARALLEL_MEMBERS, len(pending))
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="team-member") as pool:
+        futures = [
+            pool.submit(contextvars.copy_context().run, run, result_id) for result_id in pending
+        ]
+    for future in futures:
+        error = future.exception()
+        if error is not None:
+            raise error
 
 
 def _pending_natural_assessment_resume(

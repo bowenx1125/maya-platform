@@ -296,7 +296,28 @@ describe("Workspace Agent flow", () => {
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByText("Mutable description")).toBeNull();
     expect(api.knowledge).not.toHaveBeenCalled();
-    expect(api.versions).toHaveBeenCalledWith("agent-id");
+    // The card's label and theme come with the Agent list (2026-11-03); the
+    // list page no longer reads every Agent's versions.
+    expect(api.versions).not.toHaveBeenCalled();
+  });
+
+  it("shows each card's version label from the Agent list itself", async () => {
+    api.group.mockResolvedValue({
+      id: "group-id",
+      course_id: "course-id",
+      name: "Group",
+      members: [],
+    });
+    api.agents.mockResolvedValue([
+      agent({ card_version_label: "V2.3", card_material_theme: "cool slate" }),
+    ]);
+    render(
+      <AppShell role="student">
+        <GroupWorkspace groupId="group-id" view="agents" />
+      </AppShell>,
+    );
+    expect(await screen.findByText("V2.3")).toBeTruthy();
+    expect(api.versions).not.toHaveBeenCalled();
   });
 
   // TODO(ui-release): read-only Agent view (Current prompt) deleted (approved step 2)

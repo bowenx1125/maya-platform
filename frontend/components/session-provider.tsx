@@ -38,6 +38,7 @@ import {
 } from "../lib/client-metrics";
 import { localizeError, roleLabel, type MessageKey } from "../lib/i18n";
 import { sanitizeNextPath } from "../lib/navigation";
+import { publicRuntime } from "../lib/runtime";
 import { endTeacherEnter } from "../lib/teacher-visit";
 import { useSetAcademyMood } from "./academy/mood";
 import { useT } from "../lib/i18n";
@@ -581,6 +582,7 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
   }, [error, setMood]);
 
   useEffect(() => {
+    if (!publicRuntime.demoQuickLogin) return;
     let active = true;
     void api
       .demoIdentities()

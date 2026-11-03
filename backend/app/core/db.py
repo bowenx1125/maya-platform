@@ -1,8 +1,8 @@
 """Synchronous SQLAlchemy database boundary.
 
 PostgreSQL is the only database: production, local development and tests.
-SQLite support was removed (PR B, 2026-10-24); a SQLite file is only ever read
-by ``scripts/migrate_sqlite_to_postgres.py``.
+SQLite support was removed (PR B, 2026-10-24) and its one-off copy script
+retired once production had moved (2026-11-03; it is in git history).
 """
 
 from __future__ import annotations
@@ -50,10 +50,7 @@ def build_engine(database_url: str) -> Engine:
 
     backend = make_url(database_url).get_backend_name()
     if backend == "sqlite":
-        raise RuntimeError(
-            "SQLite is no longer supported. Set DATABASE_URL to PostgreSQL; copy an "
-            "old SQLite file with scripts/migrate_sqlite_to_postgres.py."
-        )
+        raise RuntimeError("SQLite is no longer supported. Set DATABASE_URL to PostgreSQL.")
     if backend == "postgresql":
         engine = create_engine(
             database_url,

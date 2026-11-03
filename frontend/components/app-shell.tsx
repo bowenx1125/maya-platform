@@ -27,9 +27,14 @@ import {
 import { useT } from "../lib/i18n";
 import {
   endTeacherEnter,
+  forgetVisitRenewal,
+  noteVisitRenewed,
   teacherEnterInProgress,
   trackTeacherLeave,
+  visitRenewalDue,
 } from "../lib/teacher-visit";
+import { PlatformApiError } from "../lib/api/platform";
+import { Notice } from "./ui";
 import { useSession } from "./session-provider";
 import { OnboardingTour } from "./onboarding-tour";
 import {
@@ -439,8 +444,7 @@ export function AppShell({
   // visit and removes that access.
   const visitPageGroupId =
     teacherSurface &&
-    (pathname === "/teacher/knowledge" ||
-      pathname === "/teacher/rag" ||
+    (pathname === "/teacher/rag" ||
       pathname === "/teacher/voices" ||
       pathname === "/teacher/record" ||
       pathname === "/teacher/chat")
@@ -510,7 +514,6 @@ export function AppShell({
     // arriving at a visited group's Brainform or Chatform must not end that
     // visit.
     const reading =
-      window.location.pathname === "/teacher/knowledge" ||
       window.location.pathname === "/teacher/rag" ||
       window.location.pathname === "/teacher/voices" ||
       window.location.pathname === "/teacher/record" ||
@@ -542,6 +545,51 @@ export function AppShell({
       -1,
     );
   }, [actionRegistry, visitingGroup]);
+  // A visit lasts 2 hours on the server; a teacher still inside renews it
+  // (every 20 min, and on coming back to the tab after a sleep), so a long
+  // lesson is never cut off. Only a refused renewal ends the visit, and then
+  // the teacher is told so and offered the way back to Accounts.
+  const [visitEnded, setVisitEnded] = useState<string | null>(null);
+  useEffect(() => {
+    if (
+      !visitingGroup ||
+      !visitGroupId ||
+      typeof api?.joinGroupAsTeacher !== "function"
+    )
+      return;
+    let active = true;
+    const renew = async () => {
+      if (!visitRenewalDue(visitGroupId)) return;
+      noteVisitRenewed(visitGroupId);
+      try {
+        await api.joinGroupAsTeacher(visitGroupId);
+        if (active) setVisitEnded(null);
+      } catch (cause) {
+        if (
+          cause instanceof PlatformApiError &&
+          (cause.status === 403 || cause.status === 404)
+        ) {
+          if (active) setVisitEnded(visitGroupId);
+        } else {
+          // Offline or busy: try again on the next check.
+          forgetVisitRenewal(visitGroupId);
+        }
+      }
+    };
+    const renewWhenVisible = () => {
+      if (document.visibilityState === "visible") void renew();
+    };
+    void renew();
+    const timer = window.setInterval(() => void renew(), 60_000);
+    window.addEventListener("focus", renewWhenVisible);
+    document.addEventListener("visibilitychange", renewWhenVisible);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", renewWhenVisible);
+      document.removeEventListener("visibilitychange", renewWhenVisible);
+    };
+  }, [api, visitGroupId, visitingGroup]);
   const visit =
     visitingGroup && visitGroupId
       ? encodeURIComponent(visitGroupId)
@@ -590,11 +638,12 @@ export function AppShell({
     { href: home, label: t("appName"), icon: "home" },
     { href: studyformHref, label: t("studyform"), icon: "knowledge" },
     // Split pages own RAG / Knowledge / Record / Voices. A teacher visiting
-    // a group keeps a Brainform entry for that group's library.
+    // a group keeps a Brainform entry for that group's library (its RAG: a
+    // visit sees what the group's members see, and they have no Knowledge).
     ...(visit
       ? [
           {
-            href: `/teacher/knowledge?group_id=${visit}`,
+            href: `/teacher/rag?group_id=${visit}`,
             label: "Brainform",
             icon: "brain" as const,
           },
@@ -724,7 +773,7 @@ export function AppShell({
   // Legacy /student/groups/.../voices redirects here; keep lighting both.
   const studentVoicesHref =
     !teacherSurface && groupId ? `/student/voices` : undefined;
-  const brainHref = visit ? `/teacher/knowledge?group_id=${visit}` : undefined;
+  const brainHref = visit ? `/teacher/rag?group_id=${visit}` : undefined;
   const chatHref = links.find((link) => link.icon === "chat")?.href ?? "";
   // Knowledge is its own split page (not the old combined Studyform grid).
   const brainItemHref =
@@ -792,7 +841,9 @@ export function AppShell({
           label: t("sidebarRecord"),
           icon: "clock",
         },
-        ...(teacherSurface
+        // Knowledge is the teacher's own; inside a student group the sidebar
+        // shows what the group's members see.
+        ...(teacherSurface && !visitingGroup
           ? [
               {
                 key: "knowledge",
@@ -1257,6 +1308,19 @@ export function AppShell({
             </div>
           ) : null}
           <ViewTransition>{children}</ViewTransition>
+          {visitEnded && visitEnded === visitGroupId ? (
+            <Notice
+              tone="warning"
+              title={t("visitEndedTitle")}
+              action={
+                <Link href="/teacher/roster" className="font-bold underline">
+                  {t("visitEndedAction")}
+                </Link>
+              }
+            >
+              {t("visitEndedBody")}
+            </Notice>
+          ) : null}
           <NoticeTraySlot />
         </main>
         <SecretDoor />

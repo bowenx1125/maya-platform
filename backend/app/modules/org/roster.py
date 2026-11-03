@@ -25,14 +25,25 @@ from __future__ import annotations
 import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
+from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError, conflict, not_found, unprocessable
 from app.core.identity import normalize_group_name as canonical_group_name
-from app.core.models import CourseMember, Group, GroupMember, User
-from app.modules.auth.models import DemoAccountBinding
+from app.core.models import (
+    Agent,
+    CourseMember,
+    Group,
+    GroupMember,
+    KnowledgeDocument,
+    SessionRecord,
+    TeacherGroupAccess,
+    User,
+)
+from app.modules.auth.models import DemoAccountBinding, UserCredential
 from app.modules.auth.service import revoke_user_sessions
 from app.modules.org.access import WorkspaceMember
 from app.modules.org.names import resolve_named_group
@@ -246,3 +257,107 @@ def update_member(
 
     db.flush()
     return _roster_row(db, course_id, user_id)
+
+
+def delete_member(
+    db: Session,
+    *,
+    course_id: str,
+    actor: User,
+    user_id: str,
+    data_root: Path | None,
+) -> list[str]:
+    """Delete a self-registered member's account and their private work.
+
+    The person is gone: credentials, sessions and memberships are deleted and
+    the username is freed. Their private chats, Teams, Agents and RAG files
+    go with them, and their voices are withdrawn. Work the group shares
+    (public Agents, Teams and RAG) stays for classmates, and grades, answers
+    and records stay for the teacher under the anonymized row, which only
+    anchors them. Returns the group ids whose voices were withdrawn, for the
+    supplier delete after commit.
+    """
+
+    from app.modules.real_delete import (
+        hard_delete_agent,
+        hard_delete_conversation,
+        hard_delete_document,
+        hard_delete_team,
+    )
+    from app.modules.teams.models import Team
+    from app.modules.voices.withdrawal import withdraw_group_voices
+    from app.modules.workspace.models import Conversation
+
+    row = _roster_row(db, course_id, user_id)
+    if row.user.id == actor.id:
+        raise conflict("self_delete_forbidden", "You cannot delete your own account.")
+    if not row.editable:
+        raise conflict(
+            "account_read_only",
+            "This account is provisioned at startup and cannot be edited here.",
+            {"source": row.source},
+        )
+    user = row.user
+    now = datetime.now(UTC)
+    for conversation in db.scalars(select(Conversation).where(Conversation.user_id == user.id)):
+        hard_delete_conversation(db, conversation, data_root)
+    # Private Teams first: a private Agent can only sit in its owner's Teams.
+    for team in db.scalars(
+        select(Team).where(
+            Team.owner_user_id == user.id,
+            Team.visibility == "private",
+            Team.deleted_at.is_(None),
+        )
+    ):
+        hard_delete_team(db, team)
+    for agent in db.scalars(
+        select(Agent).where(
+            Agent.owner_user_id == user.id,
+            Agent.visibility == "private",
+            Agent.deleted_at.is_(None),
+        )
+    ):
+        hard_delete_agent(db, agent, data_root)
+    for document in db.scalars(
+        select(KnowledgeDocument).where(
+            KnowledgeDocument.owner_user_id == user.id,
+            KnowledgeDocument.visibility == "private",
+        )
+    ):
+        hard_delete_document(db, document, data_root)
+    group_ids = list(
+        db.scalars(
+            select(GroupMember.group_id)
+            .join(Group, Group.id == GroupMember.group_id)
+            .where(Group.course_id == course_id, GroupMember.user_id == user.id)
+        )
+    )
+    withdraw_group_voices(db, user.id, group_ids)
+    revoke_user_sessions(db, user.id, now)
+    db.execute(delete(SessionRecord).where(SessionRecord.user_id == user.id))
+    db.execute(delete(UserCredential).where(UserCredential.user_id == user.id))
+    db.execute(delete(DemoAccountBinding).where(DemoAccountBinding.user_id == user.id))
+    db.execute(delete(TeacherGroupAccess).where(TeacherGroupAccess.user_id == user.id))
+    db.execute(
+        delete(GroupMember).where(
+            GroupMember.user_id == user.id, GroupMember.group_id.in_(group_ids or [""])
+        )
+    )
+    db.execute(
+        delete(CourseMember).where(
+            CourseMember.user_id == user.id, CourseMember.course_id == course_id
+        )
+    )
+    still_enrolled = db.scalar(
+        select(CourseMember.course_id).where(CourseMember.user_id == user.id)
+    )
+    if still_enrolled is None:
+        # Nothing names the person any more; the row only anchors records.
+        placeholder = f"deleted-{uuid4().hex[:16]}"
+        user.username = placeholder
+        user.username_key = placeholder
+        user.display_name = "Deleted account"
+        user.avatar = None
+        user.status = INACTIVE
+    db.flush()
+    return group_ids

@@ -64,6 +64,10 @@ const enMessages = {
   student: "Student view",
   logout: "Logout",
   backout: "Backout",
+  visitEndedTitle: "Your visit to this group has ended",
+  visitEndedBody:
+    "This group is no longer open to you here. Go back to Accounts and enter it again.",
+  visitEndedAction: "Back to Accounts",
   signIn: "Sign in",
   username: "Username",
   password: "Password",
@@ -406,6 +410,7 @@ const enMessages = {
   brainformHideRagNamed: "Delete {name}",
   ragUsedBy: "Used by",
   ragNoAgentsYet: "No Agents yet",
+  ragPickerUsedBy: "Used by {names}",
   ragLastEditedBy: "Last edited by",
   brainformDeleteKnowledgeNamed: "Delete {name}",
   brainformDeleteKnowledgeConfirm:
@@ -596,6 +601,10 @@ const enMessages = {
   errorTranslationNotConfigured:
     "The test translation service is not configured.",
   errorProviderUnavailable: "A platform capability is temporarily unavailable.",
+  errorProviderRateLimited:
+    "The AI service is limiting requests right now. Wait a minute, then send again.",
+  errorProviderBusy:
+    "The AI service is busy right now. Wait a moment, then send again.",
   errorRagIndexFailed:
     "This file could not be indexed, so it was not saved. Upload it again in a minute.",
   debateAgentsNotReady: "Fix these Agents before the Debate can be created:",
@@ -913,6 +922,14 @@ const enMessages = {
   removeConfirm:
     "Remove this account? The student is signed out at once and cannot sign in. Their work is kept, and you can restore the account under Removed.",
   removedMembers: "Removed",
+  deleteAccount: "Delete",
+  deleteConfirm:
+    "Delete {name}'s account? They are signed out and cannot sign in again, and their private chats, Agents, Teams and RAG are deleted. Work shared with the group, grades and records stay. This cannot be undone.",
+  cleanupRemoved: "Delete all removed",
+  cleanupConfirm:
+    "Delete all {count} removed accounts and their private work? This cannot be undone.",
+  filterMembers: "Filter by name, username or group",
+  noMembersMatch: "No members match.",
   resetPassword: "Reset",
   resetPasswordIssued: "New password for {username}",
   registerTitle: "Create an account",
@@ -1186,6 +1203,8 @@ const errorCodeKeys: Record<string, MessageKey> = {
   report_failed: "errorReportFailed",
   translation_not_configured: "errorTranslationNotConfigured",
   provider_unavailable: "errorProviderUnavailable",
+  provider_rate_limited: "errorProviderRateLimited",
+  provider_busy: "errorProviderBusy",
   rag_upload_index_failed: "errorRagIndexFailed",
   debate_agents_not_ready: "debateAgentsNotReady",
   chat_failed: "errorChatFailed",

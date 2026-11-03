@@ -34,6 +34,7 @@ from uuid import uuid4
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from app.core.locks import xact_lock
 from app.core.models import StoredFile, VoiceProfile
 from app.modules.debates.models import Debate, DebateParticipant, DebateVoiceClone
 from app.modules.knowledge.files import contained_path, write_atomic
@@ -66,11 +67,7 @@ def voice_ref_hash(settings: Any, provider_key: str, model: str, voice_id: str) 
 def lock_voice(db: Session, ref_hash: str) -> None:
     """Serialize every reference decision about one supplier voice."""
 
-    if db.get_bind().dialect.name == "postgresql":
-        db.execute(
-            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
-            {"key": f"maya-supplier-voice:{ref_hash}"},
-        )
+    xact_lock(db, f"maya-supplier-voice:{ref_hash}")
 
 
 def profile_voice_id(profile: VoiceProfile, settings: Any) -> str | None:

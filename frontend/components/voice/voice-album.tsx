@@ -14,11 +14,11 @@ import { useNoticeTrayAbove } from "../ui";
  * Tailwind classes only. The create screen keeps its old layout.
  */
 export const voiceAlbum = {
-  alb: "relative box-border w-full max-w-[1120px] mx-auto text-[#111] [font-family:var(--font-lexend,'Lexend'),system-ui,sans-serif] bg-[#fff8e7] [background-image:radial-gradient(#e9dfc4_1.5px,transparent_1.5px)] [background-size:22px_22px] border-4 border-solid border-[#111] rounded-[18px] shadow-[10px_10px_0_#111] pt-[34px] pr-[40px] pb-[44px] pl-[84px] min-h-[760px] max-[960px]:pt-[24px] max-[960px]:pr-[18px] max-[960px]:pb-[28px] max-[960px]:pl-[64px] [&_*]:box-border [&_p]:m-0",
+  alb: "relative box-border w-full max-w-[1120px] mx-auto text-[#111] [font-family:var(--font-lexend,'Lexend'),system-ui,sans-serif] bg-[#fff8e7] [background-image:radial-gradient(#e9dfc4_1.5px,transparent_1.5px)] [background-size:22px_22px] border-4 border-solid border-[#111] rounded-[18px] shadow-[10px_10px_0_#111] pt-[34px] pr-[40px] pb-[44px] pl-[84px] min-h-[760px] max-[960px]:pt-[24px] max-[960px]:pr-[18px] max-[960px]:pb-[28px] max-[960px]:pl-[64px] min-w-0 max-[520px]:pl-[50px] max-[520px]:pr-[12px] max-[520px]:shadow-[6px_6px_0_#111] [&_*]:box-border [&_p]:m-0",
   rings:
-    "absolute left-[22px] top-[30px] bottom-[30px] flex flex-col justify-around [&_i]:block [&_i]:w-[34px] [&_i]:h-[18px] [&_i]:border-4 [&_i]:border-solid [&_i]:border-[#111] [&_i]:rounded-[12px] [&_i]:bg-[#ffe14d]",
-  top: "flex items-center gap-[18px] mb-[30px]",
-  h2: "inline-block m-0 py-[6px] px-[22px] bg-[#c4b5fd] border-[3px] border-solid border-[#111] rounded-[8px] shadow-[5px_5px_0_#111] [transform:rotate(-3deg)] [font:800_44px_var(--font-bricolage,'Bricolage_Grotesque'),system-ui] leading-normal",
+    "absolute left-[22px] top-[30px] bottom-[30px] flex flex-col justify-around [&_i]:block [&_i]:w-[34px] [&_i]:h-[18px] [&_i]:border-4 [&_i]:border-solid [&_i]:border-[#111] [&_i]:rounded-[12px] [&_i]:bg-[#ffe14d] max-[520px]:left-[9px] max-[520px]:[&_i]:w-[28px]",
+  top: "flex flex-wrap items-center gap-[18px] mb-[30px] max-[520px]:gap-[12px] max-[520px]:mb-[22px]",
+  h2: "inline-block m-0 py-[6px] px-[22px] bg-[#c4b5fd] border-[3px] border-solid border-[#111] rounded-[8px] shadow-[5px_5px_0_#111] [transform:rotate(-3deg)] [font:800_44px_var(--font-bricolage,'Bricolage_Grotesque'),system-ui] leading-normal max-[520px]:![font-size:32px] max-[520px]:!px-[14px]",
   tape: "w-[70px] h-[22px] bg-[rgb(103_232_249_/_0.7)] border-2 border-solid border-[#111] [transform:rotate(8deg)]",
   pn: `inline-flex items-center gap-[6px] h-[44px] py-0 px-[18px] bg-[#ff4d8d] text-[#111] border-[3px] border-solid border-[#111] rounded-[10px] [font:800_15px_var(--font-lexend,'Lexend')] cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${PRESS_MOTION} ${BUSY_MOTION_PRIMARY}`,
   grid: "grid grid-cols-[repeat(3,minmax(0,1fr))] gap-y-[34px] gap-x-[30px] m-0 p-0 list-none max-[960px]:grid-cols-[minmax(0,1fr)]",

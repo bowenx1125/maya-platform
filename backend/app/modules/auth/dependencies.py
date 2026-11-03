@@ -52,7 +52,6 @@ def get_db(
         session.close()
 
 
-
 def get_auth_clock() -> datetime | None:
     """Internal auth clock for TTL checks.
 

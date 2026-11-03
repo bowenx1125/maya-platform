@@ -12,6 +12,7 @@ import {
 import {
   beginTeacherEnter,
   endTeacherEnter,
+  noteVisitRenewed,
   teacherLeavesSettled,
 } from "../lib/teacher-visit";
 import { useT } from "../lib/i18n";
@@ -50,6 +51,7 @@ export function RosterWorkspace() {
   });
   const [busy, setBusy] = useState<string | null>(null);
   const [issued, setIssued] = useState<IssuedPassword | null>(null);
+  const [filter, setFilter] = useState("");
 
   const courseId = useMemo(
     () => user?.courses.find((item) => item.role === "teacher")?.course_id,
@@ -112,6 +114,28 @@ export function RosterWorkspace() {
     [api, courseId, load],
   );
 
+  // Deleting is real: the account, its sign-in and its private work go.
+  const deleteAccounts = useCallback(
+    async (targets: RosterEntry[]) => {
+      if (!courseId || !targets.length) return;
+      setBusy(targets.length === 1 ? targets[0].user_id : "cleanup");
+      setError(null);
+      try {
+        for (const entry of targets) {
+          await api.deleteCourseMember(courseId, entry.user_id);
+        }
+        setEditing(null);
+        await load(false);
+      } catch (cause) {
+        setError(cause);
+        await load(false);
+      } finally {
+        setBusy(null);
+      }
+    },
+    [api, courseId, load],
+  );
+
   const resetPassword = useCallback(
     async (entry: RosterEntry) => {
       if (!courseId) return;
@@ -144,6 +168,7 @@ export function RosterWorkspace() {
       try {
         await teacherLeavesSettled();
         await api.joinGroupAsTeacher(group.id);
+        noteVisitRenewed(group.id);
         await refresh?.();
         router.push(`/student/agents?group_id=${encodeURIComponent(group.id)}`);
       } catch (cause) {
@@ -167,10 +192,23 @@ export function RosterWorkspace() {
     return names.length > 0 ? names.join(", ") : t("rosterNoGroup");
   }
 
-  // Removed accounts keep their work and can come back, so they are folded
-  // away under their own heading instead of being deleted.
-  const current = entries.filter((entry) => entry.status !== "inactive");
-  const removed = entries.filter((entry) => entry.status === "inactive");
+  // Accounts removed before deletion was real stay folded under their own
+  // heading, where they can be restored or deleted for good.
+  const query = filter.trim().toLocaleLowerCase();
+  const matches = (entry: RosterEntry) =>
+    !query ||
+    [
+      entry.display_name,
+      entry.username,
+      ...(entry.groups ?? []).map((group) => group.name),
+    ].some((value) => value.toLocaleLowerCase().includes(query));
+  const current = entries.filter(
+    (entry) => entry.status !== "inactive" && matches(entry),
+  );
+  const removed = entries.filter(
+    (entry) => entry.status === "inactive" && matches(entry),
+  );
+  const removedAll = entries.filter((entry) => entry.status === "inactive");
 
   // Members are listed group by group, groups by name and people by name
   // inside each; anyone without a group comes last.
@@ -200,7 +238,7 @@ export function RosterWorkspace() {
     }));
 
   function memberRow(entry: RosterEntry, inSection = false) {
-    const pending = busy === entry.user_id;
+    const pending = busy === entry.user_id || busy === "cleanup";
     if (editing === entry.user_id) {
       return (
         <div
@@ -322,37 +360,36 @@ export function RosterWorkspace() {
               <span>{t("editMember")}</span>
             </button>
             {entry.user_id === user?.id ? null : (
-              <button
-                className={`${styles.sticker} ${
-                  entry.status === "active"
-                    ? styles.stickerRem
-                    : styles.stickerRestore
-                } ${PRESS_MOTION}`}
-                type="button"
-                disabled={pending}
-                onClick={() => {
-                  if (
-                    entry.status === "active" &&
-                    !window.confirm(t("removeConfirm"))
-                  ) {
-                    return;
-                  }
-                  void mutate(entry, {
-                    status: entry.status === "active" ? "inactive" : "active",
-                  });
-                }}
-              >
-                {entry.status === "active" ? (
-                  <IconTrash size={12} />
-                ) : (
-                  <IconRecycle size={12} />
+              <>
+                {entry.status === "active" ? null : (
+                  <button
+                    className={`${styles.sticker} ${styles.stickerRestore} ${PRESS_MOTION}`}
+                    type="button"
+                    disabled={pending}
+                    onClick={() => void mutate(entry, { status: "active" })}
+                  >
+                    <IconRecycle size={12} />
+                    <span>{t("reactivateAccount")}</span>
+                  </button>
                 )}
-                <span>
-                  {entry.status === "active"
-                    ? t("removeAccount")
-                    : t("reactivateAccount")}
-                </span>
-              </button>
+                <button
+                  className={`${styles.sticker} ${styles.stickerRem} ${PRESS_MOTION}`}
+                  type="button"
+                  disabled={pending}
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        t("deleteConfirm", { name: entry.display_name }),
+                      )
+                    )
+                      return;
+                    void deleteAccounts([entry]);
+                  }}
+                >
+                  <IconTrash size={12} />
+                  <span>{t("deleteAccount")}</span>
+                </button>
+              </>
             )}
             <button
               className={`${styles.sticker} ${styles.stickerReset} ${PRESS_MOTION}`}
@@ -392,6 +429,16 @@ export function RosterWorkspace() {
               {current.length}
             </span>
           </div>
+          {entries.length ? (
+            <input
+              className={styles.filter}
+              type="search"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              placeholder={t("filterMembers")}
+              aria-label={t("filterMembers")}
+            />
+          ) : null}
           {current.length || removed.length ? (
             <>
               <div className={`roster-sections ${styles.sections}`}>
@@ -429,11 +476,31 @@ export function RosterWorkspace() {
                   >
                     {removed.map((entry) => memberRow(entry))}
                   </div>
+                  <button
+                    className={`${styles.sticker} ${styles.stickerRem} ${styles.cleanup} ${PRESS_MOTION}`}
+                    type="button"
+                    disabled={busy !== null}
+                    aria-busy={busy === "cleanup" || undefined}
+                    onClick={() => {
+                      if (
+                        !window.confirm(
+                          t("cleanupConfirm", { count: removedAll.length }),
+                        )
+                      )
+                        return;
+                      void deleteAccounts(removedAll);
+                    }}
+                  >
+                    <IconTrash size={12} />
+                    <span>{t("cleanupRemoved")}</span>
+                  </button>
                 </details>
               ) : null}
             </>
           ) : (
-            <p className={styles.empty}>{t("rosterEmpty")}</p>
+            <p className={styles.empty}>
+              {entries.length ? t("noMembersMatch") : t("rosterEmpty")}
+            </p>
           )}
         </section>
 

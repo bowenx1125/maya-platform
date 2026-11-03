@@ -85,7 +85,8 @@ try {
   // the Record attempt lifecycle-action route had no caller and is gone;
   // stopping a Chat turn had no caller and is gone (pause and resume stay).
   // provider data-call/disclosure routes (eight) are gone with the provider API.
-  if (platformOperationCount !== 153 || placeholderCount !== 0) {
+  // A teacher deleting a member's account adds one.
+  if (platformOperationCount !== 154 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

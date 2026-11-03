@@ -407,6 +407,11 @@ describe("W1 teacher personal workspace", () => {
           id: "shared-source",
           visibility: "public",
           source_filename: "shared-notes.md",
+          owner_username: "kaikai",
+          used_by_agents: [
+            { agent_id: "agent-socrates", name: "Socrates" },
+            { agent_id: "agent-plato", name: "Plato" },
+          ],
         },
       ]),
       knowledgeSets: vi
@@ -429,9 +434,17 @@ describe("W1 teacher personal workspace", () => {
       </>,
     );
 
+    const shared = await screen.findByRole("checkbox", {
+      name: "shared-notes.md",
+    });
+    // Two files can share a name (each Agent's own baseline.md); the row
+    // says who uploaded it and which Agents use it.
+    expect(shared.getAttribute("aria-describedby")).toBe(
+      "rag-origin-shared-source",
+    );
     expect(
-      await screen.findByRole("checkbox", { name: "shared-notes.md" }),
-    ).toBeTruthy();
+      document.getElementById("rag-origin-shared-source")?.textContent,
+    ).toBe("@kaikai · Used by Socrates, Plato");
     expect(
       screen.getByRole("checkbox", { name: "Live Knowledge" }),
     ).toBeTruthy();

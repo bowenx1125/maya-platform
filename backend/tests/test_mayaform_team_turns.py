@@ -213,7 +213,9 @@ def test_stream_worker_handoff_rechecks_the_request_session_for_every_member(
                 result.safe_error_code != "provider_confirmation_required" for result in results
             )
             assert [result.state for result in results] == ["acceptance_unknown"] * 4
-            assert selected_members == member_ids
+            # Members run at the same time (2026-11-03); each runs once and the
+            # stored order above is what the chat shows.
+            assert sorted(selected_members) == sorted(member_ids)
         else:
             assert [result.state for result in results] == ["failed"] * 4
             assert [result.safe_error_code for result in results] == ["not_found"] * 4

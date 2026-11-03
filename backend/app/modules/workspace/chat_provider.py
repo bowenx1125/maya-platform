@@ -62,11 +62,22 @@ from app.providers.control_repository import (
 from app.providers.factory import embedding_provider, llm_provider
 from app.providers.llm_adapter import DashScopeLLMAdapter
 from app.providers.llm_price_card import LLM_INPUT_TOKEN_CAP, LLM_RESERVED_OUTPUT_TOKEN_CAP
-from app.providers.llm_transport import HttpxLLMTransport, LLMTransportError
+from app.providers.llm_transport import (
+    HttpxLLMTransport,
+    LLMTransportError,
+    rejected_status_code,
+)
 from app.providers.standing_consent import standing_consent_enabled
 
 from .models import Conversation
 from .schemas import ChatSource
+
+_REJECTED_DEFAULT = "The Provider rejected the request."
+_REJECTED_MESSAGES = {
+    "provider_auth_failed": "Check the API key and service access.",
+    "provider_rate_limited": "The AI service is limiting requests. Wait a minute, then send again.",
+    "provider_busy": "The AI service is busy. Wait a moment, then send again.",
+}
 
 # Chats must not impose its own conversation-turn or request-byte ceiling.
 # The provider-control layer currently requires finite integer/float budget values,
@@ -749,16 +760,15 @@ def real_reply(
                         "chat_acceptance_unknown", "The request outcome is unknown.", 503
                     ) from None
             status = getattr(response, "status_code", None)
-            if status in {401, 403}:
-                repository.mark_failed(operation.id, safe_error_code="provider_auth_failed")
-                raise PlatformError(
-                    "provider_auth_failed", "Check the API key and service access.", 503
-                )
             if status != 200:
-                repository.mark_failed(operation.id, safe_error_code="provider_http_rejected")
-                raise PlatformError(
-                    "chat_provider_rejected", "The Provider rejected the request.", 503
+                code = rejected_status_code(status, "chat_provider_rejected")
+                repository.mark_failed(
+                    operation.id,
+                    safe_error_code=(
+                        "provider_http_rejected" if code == "chat_provider_rejected" else code
+                    ),
                 )
+                raise PlatformError(code, _REJECTED_MESSAGES.get(code, _REJECTED_DEFAULT), 503)
             response_json = _raw_chat_response(response)
             try:
                 model_response = _chat_model_response(response_json)

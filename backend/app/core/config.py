@@ -19,7 +19,7 @@ from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Dated snapshot, not the floating qwen3.8-max alias. LLM_MODEL overrides it.
@@ -249,6 +249,15 @@ class Settings(BaseSettings):
         le=1_000_000,
         validation_alias="MEMORY_GUARD_RESUME_AVAILABLE_MB",
     )
+    # Server size (app/core/capacity.py): the CPU-bound loads and caps below
+    # were measured on a 2-vCPU host and grow by cores / this baseline on a
+    # bigger one, never below 1x. CAPACITY_SCALE pins the multiplier.
+    capacity_baseline_cpus: int = Field(
+        default=2, ge=1, le=1024, validation_alias="CAPACITY_BASELINE_CPUS"
+    )
+    capacity_scale: float | None = Field(
+        default=None, gt=0, le=64, validation_alias="CAPACITY_SCALE"
+    )
     host_load_reject_threshold: float = Field(
         default=6.0, ge=0, le=10_000, validation_alias="HOST_LOAD_REJECT_THRESHOLD"
     )
@@ -451,6 +460,17 @@ class Settings(BaseSettings):
     adaptive_admission_brake_cpu_samples: int = Field(
         default=3, ge=1, le=600, validation_alias="ADAPTIVE_ADMISSION_BRAKE_CPU_SAMPLES"
     )
+    # Load average counts tasks waiting on disk and work from other
+    # containers on the host, and lags a minute behind. A high load trips the
+    # danger latch, shrinks or holds the budget only while host CPU busy
+    # (smoothed over ~5 s) is at least this ratio; with the CPU cool the latch
+    # releases. 0 = load alone, as before. An unreadable CPU falls back to load.
+    adaptive_admission_load_cpu_confirm_ratio: float = Field(
+        default=0.8,
+        ge=0,
+        le=1,
+        validation_alias="ADAPTIVE_ADMISSION_LOAD_CPU_CONFIRM_RATIO",
+    )
     adaptive_admission_brake_cooldown_seconds: float = Field(
         default=5.0, ge=0, le=600, validation_alias="ADAPTIVE_ADMISSION_BRAKE_COOLDOWN_SECONDS"
     )
@@ -538,8 +558,7 @@ class Settings(BaseSettings):
     def database_is_postgresql(cls, value: str) -> str:
         if not value.startswith("postgresql"):
             raise ValueError(
-                "DATABASE_URL must be a PostgreSQL URL; SQLite is no longer supported "
-                "(copy an old file with scripts/migrate_sqlite_to_postgres.py)."
+                "DATABASE_URL must be a PostgreSQL URL; SQLite is no longer supported."
             )
         return value
 
@@ -737,6 +756,26 @@ class Settings(BaseSettings):
             self.node_env.strip().lower() == "production"
             or self.maya_env.strip().lower() == "production"
         )
+
+    @field_validator("capacity_scale", mode="before")
+    @classmethod
+    def capacity_scale_blank_is_unset(cls, value: object) -> object:
+        # docker-compose forwards CAPACITY_SCALE as "" when it is not set.
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @model_validator(mode="after")
+    def scale_capacity_with_host(self) -> Settings:
+        from app.core.capacity import SCALED_CAPS, SCALED_LOADS, capacity_scale, scaled_values
+
+        scale = capacity_scale(
+            baseline_cpus=self.capacity_baseline_cpus, override=self.capacity_scale
+        )
+        # Validators run once per construction; copies (model_copy) keep the
+        # already scaled values, so nothing is multiplied twice.
+        names = SCALED_LOADS + SCALED_CAPS
+        for name, value in scaled_values({n: getattr(self, n) for n in names}, scale).items():
+            object.__setattr__(self, name, value)
+        return self
 
     def validate_runtime(self) -> None:
         """Reject insecure production configuration at application startup."""

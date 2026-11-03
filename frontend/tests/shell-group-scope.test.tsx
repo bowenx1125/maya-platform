@@ -22,6 +22,11 @@ const state = vi.hoisted(() => ({
     agent: vi.fn(),
     version: vi.fn(),
     leaveGroupAsTeacher: undefined as ReturnType<typeof vi.fn> | undefined,
+  } as {
+    agent: ReturnType<typeof vi.fn>;
+    version: ReturnType<typeof vi.fn>;
+    leaveGroupAsTeacher: ReturnType<typeof vi.fn> | undefined;
+    joinGroupAsTeacher?: ReturnType<typeof vi.fn>;
   },
 }));
 
@@ -34,6 +39,8 @@ vi.mock("../components/session-provider", () => ({
 }));
 
 import { AppShell } from "../components/app-shell";
+import { PlatformApiError } from "../lib/api/platform";
+import { forgetVisitRenewal, VISIT_RENEW_MS } from "../lib/teacher-visit";
 
 const content = () => (
   <>
@@ -104,7 +111,12 @@ describe("group navigation scope", () => {
     expect(
       screen.getByRole("link", { name: "Agents" }).getAttribute("href"),
     ).toBe("/student/agents?group_id=group-b");
-    expect(links()).toContain("/teacher/knowledge?group_id=group-b");
+    // The visit shows what the group's members see: their RAG, no Knowledge.
+    expect(links()).toContain("/teacher/rag?group_id=group-b");
+    expect(links().some((href) => href?.startsWith("/teacher/knowledge"))).toBe(
+      false,
+    );
+    expect(screen.queryByRole("link", { name: "Knowledge" })).toBeNull();
     expect(links()).toContain("/teacher/chat?group_id=group-b");
     expect(
       screen.getByRole("link", { name: "Accounts" }).getAttribute("href"),
@@ -123,5 +135,64 @@ describe("group navigation scope", () => {
     await waitFor(() => expect(leave).toHaveBeenCalledWith("group-b"));
     expect(leave).toHaveBeenCalledWith("group-a");
     expect(state.push).toHaveBeenCalledWith("/teacher/roster");
+  });
+});
+
+describe("a teacher's visit to a group", () => {
+  beforeEach(() => {
+    state.pathname = "/student/groups/group-b";
+    state.user.courses = [{ course_id: "course", role: "teacher" }];
+    forgetVisitRenewal("group-b");
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("renews the visit while the teacher stays, so a long lesson is not cut off", async () => {
+    vi.useFakeTimers();
+    const join = vi.fn(async () => ({}));
+    state.api = {
+      agent: vi.fn(),
+      version: vi.fn(),
+      leaveGroupAsTeacher: vi.fn(async () => undefined),
+      joinGroupAsTeacher: join,
+    };
+    render(content());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(join).toHaveBeenCalledTimes(1);
+    expect(join).toHaveBeenCalledWith("group-b");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(VISIT_RENEW_MS - 60_000);
+    });
+    expect(join).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(join).toHaveBeenCalledTimes(2);
+    // 2 h 30 min later the teacher is still inside, renewed all along.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(130 * 60_000);
+    });
+    expect(join.mock.calls.length).toBeGreaterThanOrEqual(8);
+    expect(screen.queryByText("Your visit to this group has ended")).toBeNull();
+  });
+
+  it("says plainly when the visit has ended and offers the way back to Accounts", async () => {
+    state.api = {
+      agent: vi.fn(),
+      version: vi.fn(),
+      leaveGroupAsTeacher: vi.fn(async () => undefined),
+      joinGroupAsTeacher: vi.fn(async () => {
+        throw new PlatformApiError(403, "forbidden", { code: "forbidden" });
+      }),
+    };
+    render(content());
+    expect(
+      await screen.findByText("Your visit to this group has ended"),
+    ).toBeTruthy();
+    const back = screen.getByRole("link", { name: "Back to Accounts" });
+    expect(back.getAttribute("href")).toBe("/teacher/roster");
   });
 });

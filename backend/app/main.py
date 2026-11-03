@@ -789,7 +789,9 @@ def create_app(
             "message_timing": message_timing_snapshot(),
         }
 
-    @app.get("/health/request-timing", tags=["Health"])
+    # Internal port only (Caddy never proxies /health): a diagnostic, not part
+    # of the frozen public contract.
+    @app.get("/health/request-timing", tags=["Health"], include_in_schema=False)
     def health_request_timing() -> dict[str, Any]:
         # Per-route p50/p95/max of this replica's recent API requests (route
         # templates and numbers only). Internal: Caddy never proxies /health.

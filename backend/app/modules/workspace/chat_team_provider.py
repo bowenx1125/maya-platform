@@ -48,7 +48,12 @@ from app.providers.control_repository import (
 from app.providers.factory import llm_provider
 from app.providers.llm_adapter import DashScopeLLMAdapter
 from app.providers.llm_price_card import LLM_INPUT_TOKEN_CAP, LLM_RESERVED_OUTPUT_TOKEN_CAP
-from app.providers.llm_transport import HttpxLLMTransport, LLMTransport, LLMTransportError
+from app.providers.llm_transport import (
+    HttpxLLMTransport,
+    LLMTransport,
+    LLMTransportError,
+    rejected_status_code,
+)
 from app.providers.standing_consent import standing_consent_enabled
 
 from .assessment_protocol import ASSESSMENT_SOURCE_REVOKED_OWNER_ACTIONS_PROTOCOL
@@ -915,15 +920,10 @@ def dispatch_team_model(
 
     status = getattr(response, "status_code", None)
     if status != 200:
-        repository.mark_failed(
-            operation.id,
-            safe_error_code=(
-                "provider_auth_failed" if status in {401, 403} else "provider_http_rejected"
-            ),
-        )
-        raise TeamDispatchError(
-            "provider_auth_failed" if status in {401, 403} else "team_provider_rejected"
-        )
+        code = rejected_status_code(status, "team_provider_rejected")
+        stored = "provider_http_rejected" if code == "team_provider_rejected" else code
+        repository.mark_failed(operation.id, safe_error_code=stored)
+        raise TeamDispatchError(code)
     try:
         response_json = _raw_response_text(response)
     except TeamDispatchError:

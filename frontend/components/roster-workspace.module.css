@@ -451,3 +451,20 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Accounts filter: one line under the Members heading. */
+.filter {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border: 2px solid #111;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+}
+
+.cleanup {
+  margin-top: 10px;
+}

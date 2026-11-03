@@ -25,6 +25,7 @@ from app.core.models import (
     ProviderPolicySnapshot,
     User,
 )
+from app.core.read_memo import request_memoized_hit
 from app.core.sqlutil import dialect_insert
 from app.modules.agents.markdown import markdown_hash
 from app.modules.auth.service import AuthContext
@@ -70,6 +71,7 @@ from app.modules.workspace.team_conversation import frozen_team_selection
 from app.providers.control import (
     ExportFieldV1,
     ExportManifestV1,
+    ProviderPolicySnapshotV1,
     authorized_provider_model,
     canonical_json_bytes,
     confirm_export_manifest,
@@ -148,17 +150,21 @@ def _policy(db: Session, policy_hash: str, operation: str) -> StandingOperation:
         raise not_found()
     bind = db.get_bind()
     if isinstance(bind, Connection):
-        row = (
-            db.connection()
-            .execute(
-                select(ProviderPolicySnapshot.__table__).where(
-                    ProviderPolicySnapshot.policy_hash == policy_hash
+
+        def read() -> ProviderPolicySnapshotV1 | None:
+            row = (
+                db.connection()
+                .execute(
+                    select(ProviderPolicySnapshot.__table__).where(
+                        ProviderPolicySnapshot.policy_hash == policy_hash
+                    )
                 )
+                .mappings()
+                .first()
             )
-            .mappings()
-            .first()
-        )
-        policy = _policy_from_row(cast(Mapping[str, object], row)) if row is not None else None
+            return _policy_from_row(cast(Mapping[str, object], row)) if row is not None else None
+
+        policy = request_memoized_hit(("provider_policy_snapshot", policy_hash), read)
     else:
         policy = ProviderRepository(db).get_policy_snapshot(policy_hash)
     if policy is None or policy.policy_hash != policy_hash:
@@ -242,11 +248,28 @@ def _manifest(
     ):
         raise not_found()
     members: list[dict[str, object]] = []
-    for frozen in selection.members:
-        if frozen.binding_id not in selected_ids:
-            continue
-        member = db.get(TeamVersionMember, frozen.binding_id)
-        version = db.get(AgentVersion, frozen.agent_version_id)
+    wanted = [frozen for frozen in selection.members if frozen.binding_id in selected_ids]
+    # Two reads for every member instead of two per member: this manifest is
+    # rebuilt at each standing check, several times per model call.
+    bindings = {
+        row.id: row
+        for row in db.scalars(
+            select(TeamVersionMember).where(
+                TeamVersionMember.id.in_([frozen.binding_id for frozen in wanted])
+            )
+        )
+    }
+    versions = {
+        row.id: row
+        for row in db.scalars(
+            select(AgentVersion).where(
+                AgentVersion.id.in_([frozen.agent_version_id for frozen in wanted])
+            )
+        )
+    }
+    for frozen in wanted:
+        member = bindings.get(frozen.binding_id)
+        version = versions.get(frozen.agent_version_id)
         if (
             member is None
             or version is None

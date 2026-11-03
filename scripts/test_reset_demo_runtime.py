@@ -25,14 +25,14 @@ def main() -> None:
         (root / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
         runtime = root / "data"
         runtime.mkdir()
-        (runtime / "maya.sqlite3").write_bytes(b"disposable")
+        (runtime / "runtime.bin").write_bytes(b"disposable")
         valid = _run(script, root, runtime)
         if valid.returncode != 0:
             raise AssertionError("the exact product data directory must be quarantined")
         quarantined = [item for item in root.iterdir() if item.name.startswith("data.quarantine-")]
         if len(quarantined) != 1:
             raise AssertionError("exactly one recoverable quarantine copy must exist")
-        if (quarantined[0] / "maya.sqlite3").read_bytes() != b"disposable":
+        if (quarantined[0] / "runtime.bin").read_bytes() != b"disposable":
             raise AssertionError("the quarantine copy must retain the disposable runtime")
         # The runtime path is recreated empty so a host-side policy import does
         # not fail opaquely, and so a stale container bind mount on the renamed

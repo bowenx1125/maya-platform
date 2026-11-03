@@ -524,6 +524,15 @@ function upsertTeamResult(
   );
 }
 
+/**
+ * How often an idle, open Team chat re-reads itself for what the server adds
+ * without the student (a Knowledge-update notice, another tab's turn).
+ * Scoring, summarizing and running turns have their own faster poller, and
+ * returning to the tab refreshes at once; every 5 s here was 12 reads a
+ * minute per idle student, most finding nothing new.
+ */
+const IDLE_TEAM_REFRESH_MS = 30_000;
+
 export function AgentChat() {
   const { api, identityGeneration, user } = useSession();
   const cacheIdentity = requestCacheIdentity(user?.id, identityGeneration);
@@ -1412,7 +1421,7 @@ function AgentChatScope({
       ) {
         return;
       }
-      // Busy server: the 5 s idle refresh waits out its 5-10 s pace.
+      // Busy server: the idle refresh also waits out its 5-10 s busy pace.
       if (
         serverUnderPressure() &&
         Date.now() - lastRefreshAt < nextPollDelay(5000, busyRefreshes)
@@ -1452,7 +1461,7 @@ function AgentChatScope({
     };
     const timer = window.setInterval(
       () => void refreshSelectedConversation(),
-      5000,
+      IDLE_TEAM_REFRESH_MS,
     );
     document.addEventListener("visibilitychange", refreshWhenVisible);
     window.addEventListener("focus", refreshWhenVisible);

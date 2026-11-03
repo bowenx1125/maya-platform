@@ -536,7 +536,8 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /** @description Delete a self-registered member: the account, its sign-in and memberships, and its private chats, Teams, Agents and RAG. Shared work, grades and records stay. */
+        delete: operations["deleteCourseMember"];
         options?: never;
         head?: never;
         /** @description Rename a member, move them between groups or deactivate the account. */
@@ -2880,6 +2881,10 @@ export interface components {
             can_delete?: boolean | null;
             /** Can Edit */
             can_edit: boolean;
+            /** Card Material Theme */
+            card_material_theme?: string | null;
+            /** Card Version Label */
+            card_version_label?: string | null;
             /**
              * Course Id
              * Format: uuid
@@ -2957,6 +2962,10 @@ export interface components {
             can_delete?: boolean | null;
             /** Can Edit */
             can_edit: boolean;
+            /** Card Material Theme */
+            card_material_theme?: string | null;
+            /** Card Version Label */
+            card_version_label?: string | null;
             /**
              * Course Id
              * Format: uuid
@@ -7369,6 +7378,33 @@ export interface operations {
             };
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
+        };
+    };
+    deleteCourseMember: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                course_id: components["parameters"]["CourseId"];
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account and its private work are deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     updateCourseMember: {

@@ -875,11 +875,6 @@ class SqlPlaybackRepository(PlaybackRepository):
         )
 
     @staticmethod
-    def _dialect_name(db: Any) -> str:
-        bind = db.get_bind()
-        return str(getattr(getattr(bind, "dialect", None), "name", ""))
-
-    @staticmethod
     def _has_table(db: Any, table: str) -> bool:
         cache = _schema_cache(db)
         if cache is not None and cache.get(("table", table)):
