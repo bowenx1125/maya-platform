@@ -398,6 +398,14 @@ textarea {
     translate: 0 0;
   }
 }
+[data-labels-fading]
+  :is(
+    [data-sidebar-pin] > div :is(a, button) > span:not([aria-hidden]),
+    [data-sidebar-group] > [id]
+  ) {
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+}
 .sidebar-music-notes {
   position: absolute;
   left: 50%;

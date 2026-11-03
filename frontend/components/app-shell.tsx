@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   useEffect,
   useMemo,
+  useCallback,
   useRef,
   useState,
   useSyncExternalStore,
@@ -744,6 +745,42 @@ export function AppShell({
   const mobile = useSyncExternalStore(subscribeMobile, readMobile, () => false);
   const collapsed = collapsedPreference && !mobile;
   const workspaceMusicOn = useMusicPlaying("workspace");
+  // Collapse fades the labels out (160ms) before the rail narrows. A press
+  // during the fade cancels it, so the rail never sticks half-way. Reduced
+  // motion (or no matchMedia) collapses at once.
+  const [labelsFading, setLabelsFading] = useState(false);
+  const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toggleCollapsed = useCallback(() => {
+    if (fadeTimer.current !== null) {
+      clearTimeout(fadeTimer.current);
+      fadeTimer.current = null;
+      setLabelsFading(false);
+      return;
+    }
+    if (readCollapsed()) {
+      writeCollapsed(false);
+      return;
+    }
+    const animate =
+      typeof window.matchMedia === "function" &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!animate) {
+      writeCollapsed(true);
+      return;
+    }
+    setLabelsFading(true);
+    fadeTimer.current = setTimeout(() => {
+      fadeTimer.current = null;
+      setLabelsFading(false);
+      writeCollapsed(true);
+    }, 160);
+  }, []);
+  useEffect(
+    () => () => {
+      if (fadeTimer.current !== null) clearTimeout(fadeTimer.current);
+    },
+    [],
+  );
   // Sidebar motion (2026-11-03): after an expand the labels and group
   // headings slide in one after another (120ms + 40ms per row). Skipped on
   // first paint; CSS skips reduced motion.
@@ -788,11 +825,11 @@ export function AppShell({
         setDrawerPath((open) =>
           open === window.location.pathname ? null : window.location.pathname,
         );
-      else writeCollapsed(!readCollapsed());
+      else toggleCollapsed();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [toggleCollapsed]);
   useEffect(() => {
     // The tour opens the drawer for a step that points into it.
     const onReveal = (event: Event) => {
@@ -1133,6 +1170,7 @@ export function AppShell({
           id={SIDEBAR_ID}
           ref={sidebarRef}
           data-collapsed={collapsed || undefined}
+          data-labels-fading={labelsFading || undefined}
           className={`relative z-20 min-h-dvh border-r-[3px] border-border bg-sidebar max-[900px]:fixed max-[900px]:inset-y-0 max-[900px]:left-0 max-[900px]:z-50 max-[900px]:w-[min(300px,85vw)] max-[900px]:transition-transform max-[900px]:duration-150 max-[900px]:motion-reduce:transition-none ${drawerOpen ? "" : "max-[900px]:invisible max-[900px]:-translate-x-full"}`}
         >
           <div data-sidebar-pin className="sticky top-0 h-dvh">
@@ -1144,9 +1182,7 @@ export function AppShell({
               aria-expanded={mobile ? drawerOpen : !collapsed}
               aria-controls={SIDEBAR_ID}
               aria-keyshortcuts="Control+B Meta+B"
-              onClick={() =>
-                mobile ? setDrawerPath(null) : writeCollapsed(!collapsed)
-              }
+              onClick={() => (mobile ? setDrawerPath(null) : toggleCollapsed())}
             >
               <WorkspaceIcon
                 name={

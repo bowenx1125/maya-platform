@@ -237,6 +237,47 @@ describe("collapse", () => {
   });
 });
 
+describe("collapse fade", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "matchMedia",
+      (query: string) =>
+        ({
+          matches: false,
+          media: query,
+          addEventListener() {},
+          removeEventListener() {},
+          addListener() {},
+          removeListener() {},
+        }) as unknown as MediaQueryList,
+    );
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("fades the labels for 160ms before collapsing, and a second press cancels", () => {
+    renderShell("student", "/student");
+    const header = () =>
+      document.getElementById(toggle().getAttribute("aria-controls")!)!;
+    fireEvent.click(toggle());
+    expect(header().hasAttribute("data-labels-fading")).toBe(true);
+    expect(toggle().getAttribute("aria-label")).toBe("Collapse sidebar");
+    fireEvent.click(toggle());
+    expect(header().hasAttribute("data-labels-fading")).toBe(false);
+    act(() => vi.advanceTimersByTime(300));
+    expect(toggle().getAttribute("aria-label")).toBe("Collapse sidebar");
+    fireEvent.click(toggle());
+    act(() => vi.advanceTimersByTime(160));
+    expect(header().hasAttribute("data-labels-fading")).toBe(false);
+    expect(toggle().getAttribute("aria-label")).toBe("Expand sidebar");
+    fireEvent.click(toggle());
+    expect(toggle().getAttribute("aria-label")).toBe("Collapse sidebar");
+  });
+});
+
 describe("Live", () => {
   it("is a disabled row with a dim lamp while no class is live", async () => {
     renderShell("student", "/student");
