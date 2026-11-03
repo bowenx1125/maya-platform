@@ -31,6 +31,11 @@ function isPressableGuide(target: HTMLElement): boolean {
   return target.matches(PRESSABLE_GUIDE);
 }
 
+/** A "?" that exists to explain: it opts back in to hover and tap tips. */
+function isHelpGuide(target: HTMLElement): boolean {
+  return target.dataset.uiGuideHover === "true";
+}
+
 export function UiGuideTooltip() {
   const pathname = usePathname();
   const [active, setActive] = useState<ActiveGuide | null>(null);
@@ -126,7 +131,7 @@ export function UiGuideTooltip() {
         return;
       }
       // Pressables keep focus tips only — no pointer hover tip text.
-      if (isPressableGuide(target)) {
+      if (isPressableGuide(target) && !isHelpGuide(target)) {
         if (hovered && !focused && !touchPinned) hide();
         else hovered = null;
         return;
@@ -159,11 +164,10 @@ export function UiGuideTooltip() {
     const onPointerDown = (event: PointerEvent) => {
       pointerInput = true;
       focused = null;
-      if (
-        event.pointerType !== "touch" ||
-        guideTarget(event.target) !== described
-      )
-        hide();
+      const target = guideTarget(event.target);
+      // Pressing a help "?" keeps its own tip open instead of closing it.
+      if (target && target === described && isHelpGuide(target)) return;
+      if (event.pointerType !== "touch" || target !== described) hide();
     };
 
     const onPointerUp = (event: PointerEvent) => {
@@ -171,7 +175,11 @@ export function UiGuideTooltip() {
       const target = guideTarget(event.target);
       if (!target) return;
       // Pressables need an explicit data-ui-guide-touch opt-in for touch tips.
-      if (isPressableGuide(target) && target.dataset.uiGuideTouch !== "true")
+      if (
+        isPressableGuide(target) &&
+        target.dataset.uiGuideTouch !== "true" &&
+        !isHelpGuide(target)
+      )
         return;
       if (touchPinned && described === target) {
         hide();
@@ -210,7 +218,9 @@ export function UiGuideTooltip() {
       if (event.key === "Escape" && described) hide();
     };
 
-    const onClick = () => {
+    const onClick = (event: MouseEvent) => {
+      const target = guideTarget(event.target);
+      if (target && target === described && isHelpGuide(target)) return;
       if (!touchPinned) hide();
     };
     const onVisibilityChange = () => {

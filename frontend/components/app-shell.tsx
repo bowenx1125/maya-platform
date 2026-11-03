@@ -439,8 +439,7 @@ export function AppShell({
   // visit and removes that access.
   const visitPageGroupId =
     teacherSurface &&
-    (pathname === "/teacher/knowledge" ||
-      pathname === "/teacher/rag" ||
+    (pathname === "/teacher/rag" ||
       pathname === "/teacher/voices" ||
       pathname === "/teacher/record" ||
       pathname === "/teacher/chat")
@@ -510,7 +509,6 @@ export function AppShell({
     // arriving at a visited group's Brainform or Chatform must not end that
     // visit.
     const reading =
-      window.location.pathname === "/teacher/knowledge" ||
       window.location.pathname === "/teacher/rag" ||
       window.location.pathname === "/teacher/voices" ||
       window.location.pathname === "/teacher/record" ||
@@ -590,11 +588,12 @@ export function AppShell({
     { href: home, label: t("appName"), icon: "home" },
     { href: studyformHref, label: t("studyform"), icon: "knowledge" },
     // Split pages own RAG / Knowledge / Record / Voices. A teacher visiting
-    // a group keeps a Brainform entry for that group's library.
+    // a group keeps a Brainform entry for that group's library (its RAG: a
+    // visit sees what the group's members see, and they have no Knowledge).
     ...(visit
       ? [
           {
-            href: `/teacher/knowledge?group_id=${visit}`,
+            href: `/teacher/rag?group_id=${visit}`,
             label: "Brainform",
             icon: "brain" as const,
           },
@@ -724,7 +723,7 @@ export function AppShell({
   // Legacy /student/groups/.../voices redirects here; keep lighting both.
   const studentVoicesHref =
     !teacherSurface && groupId ? `/student/voices` : undefined;
-  const brainHref = visit ? `/teacher/knowledge?group_id=${visit}` : undefined;
+  const brainHref = visit ? `/teacher/rag?group_id=${visit}` : undefined;
   const chatHref = links.find((link) => link.icon === "chat")?.href ?? "";
   // Knowledge is its own split page (not the old combined Studyform grid).
   const brainItemHref =
@@ -792,7 +791,9 @@ export function AppShell({
           label: t("sidebarRecord"),
           icon: "clock",
         },
-        ...(teacherSurface
+        // Knowledge is the teacher's own; inside a student group the sidebar
+        // shows what the group's members see.
+        ...(teacherSurface && !visitingGroup
           ? [
               {
                 key: "knowledge",

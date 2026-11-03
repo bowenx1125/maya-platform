@@ -104,7 +104,12 @@ describe("group navigation scope", () => {
     expect(
       screen.getByRole("link", { name: "Agents" }).getAttribute("href"),
     ).toBe("/student/agents?group_id=group-b");
-    expect(links()).toContain("/teacher/knowledge?group_id=group-b");
+    // The visit shows what the group's members see: their RAG, no Knowledge.
+    expect(links()).toContain("/teacher/rag?group_id=group-b");
+    expect(links().some((href) => href?.startsWith("/teacher/knowledge"))).toBe(
+      false,
+    );
+    expect(screen.queryByRole("link", { name: "Knowledge" })).toBeNull();
     expect(links()).toContain("/teacher/chat?group_id=group-b");
     expect(
       screen.getByRole("link", { name: "Accounts" }).getAttribute("href"),

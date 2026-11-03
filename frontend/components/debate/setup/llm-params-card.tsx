@@ -200,6 +200,7 @@ function HelpButton({
       aria-label={`${name}: ${help}`}
       data-ui-guide="debate.llmParam"
       data-ui-guide-text={text}
+      data-ui-guide-hover="true"
     >
       ?
     </button>

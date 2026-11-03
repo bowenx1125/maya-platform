@@ -491,6 +491,42 @@ describe("workspace UI guide tooltip", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
+  it("shows a help ? button's own text on hover, keeps it on click, and on tap", () => {
+    render(
+      <>
+        <UiGuideTooltip />
+        <button
+          type="button"
+          aria-label="temperature: 随机性"
+          data-ui-guide="debate.llmParam"
+          data-ui-guide-text={"随机性：越高越活越随意。\n建议：0.6–0.8。"}
+          data-ui-guide-hover="true"
+        >
+          ?
+        </button>
+      </>,
+    );
+    const help = screen.getByRole("button", { name: /temperature/ });
+
+    fireEvent.pointerOver(help, {
+      pointerType: "mouse",
+      clientX: 10,
+      clientY: 10,
+    });
+    expect(screen.getByRole("tooltip").textContent).toContain("随机性");
+    expect(screen.getByRole("tooltip").textContent).toContain("建议：0.6–0.8");
+
+    fireEvent.pointerDown(help, { pointerType: "mouse" });
+    fireEvent.click(help);
+    expect(screen.getByRole("tooltip").textContent).toContain("随机性");
+
+    fireEvent.pointerOut(help, { relatedTarget: document.body });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    fireEvent.pointerUp(help, { pointerType: "touch" });
+    expect(screen.getByRole("tooltip").textContent).toContain("随机性");
+  });
+
   it("does not show touch help on pressables without data-ui-guide-touch", () => {
     renderGuide();
     const button = screen.getByRole("button", { name: "Edit" });
