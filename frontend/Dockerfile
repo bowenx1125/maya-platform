@@ -21,9 +21,12 @@ ENV NEXT_PUBLIC_RUNTIME_MODE=${NEXT_PUBLIC_RUNTIME_MODE}
 ENV NEXT_PUBLIC_BUILD_SHA=${NEXT_PUBLIC_BUILD_SHA}
 ARG NEXT_PUBLIC_DEMO_QUICK_LOGIN=true
 ENV NEXT_PUBLIC_DEMO_QUICK_LOGIN=${NEXT_PUBLIC_DEMO_QUICK_LOGIN}
-# Background music the operator may play to students (comma-separated URLs).
+# Background music the operator may play to students (comma-separated site
+# paths): the workspace list, and the 3D stage list.
 ARG NEXT_PUBLIC_BGM_TRACKS=
 ENV NEXT_PUBLIC_BGM_TRACKS=${NEXT_PUBLIC_BGM_TRACKS}
+ARG NEXT_PUBLIC_BGM_STAGE_TRACKS=
+ENV NEXT_PUBLIC_BGM_STAGE_TRACKS=${NEXT_PUBLIC_BGM_STAGE_TRACKS}
 
 COPY frontend frontend
 RUN pnpm --filter @maya/frontend build

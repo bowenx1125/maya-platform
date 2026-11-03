@@ -1,21 +1,30 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  MUSIC_FADE_MS,
+  enterStageMusic,
+  leaveStageMusic,
+  musicStateForTests,
+  parseTracks,
   resetBackgroundMusicForTests,
-  startBackgroundMusic,
   stopBackgroundMusic,
-  toggleBackgroundMusic,
+  toggleMusic,
 } from "../lib/background-music";
 
-// 2026-11-03: a music key beside Mayaform in the open sidebar. Off by
-// default, never started by the page, loops the list.
+// 2026-11-03: a music key beside Mayaform (workspace music, off by default)
+// and one on the 3D stage (its own music, on while the stage is open). Every
+// hand-off fades; each list loops.
+let refuse = false;
+
 class FakeAudio {
   static made: FakeAudio[] = [];
   src = "";
   preload = "";
+  volume = 1;
   paused = true;
   handlers = new Map<string, Array<() => void>>();
   play = vi.fn(() => {
+    if (refuse) return Promise.reject(new Error("NotAllowedError"));
     this.paused = false;
     return Promise.resolve();
   });
@@ -33,61 +42,126 @@ class FakeAudio {
   }
 }
 
-const TRACKS = ["/music/a.mp3", "/music/b.mp3"];
+const WORKSPACE = ["/music/a.mp3", "/music/b.mp3"];
+const STAGE = ["/music/stage.mp3"];
+
+async function settle() {
+  await vi.advanceTimersByTimeAsync(MUSIC_FADE_MS + 100);
+}
+
+function player(name: "workspace" | "stage") {
+  return musicStateForTests(name).audio as unknown as FakeAudio;
+}
 
 describe("background music", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    refuse = false;
     FakeAudio.made = [];
     vi.stubGlobal("Audio", FakeAudio);
-    resetBackgroundMusicForTests();
+    resetBackgroundMusicForTests({ workspace: WORKSPACE, stage: STAGE });
   });
   afterEach(() => {
     resetBackgroundMusicForTests();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
-  it("makes no player until it is started", () => {
+  it("makes no player until a key is pressed", () => {
     expect(FakeAudio.made).toHaveLength(0);
+    expect(musicStateForTests("workspace").wanted).toBe(false);
   });
 
-  it("plays the list in order and starts again after the last track", () => {
-    startBackgroundMusic(TRACKS);
-    const [player] = FakeAudio.made;
-    expect(player.src).toBe("/music/a.mp3");
-    expect(player.play).toHaveBeenCalledTimes(1);
-    player.fire("ended");
-    expect(player.src).toBe("/music/b.mp3");
-    player.fire("ended");
-    expect(player.src).toBe("/music/a.mp3");
-    expect(player.play).toHaveBeenCalledTimes(3);
+  it("fades the workspace music in and loops its list", async () => {
+    toggleMusic("workspace");
+    const audio = player("workspace");
+    expect(audio.src).toBe("/music/a.mp3");
+    expect(audio.volume).toBe(0);
+    await settle();
+    expect(audio.volume).toBeCloseTo(0.6);
+    audio.fire("ended");
+    expect(audio.src).toBe("/music/b.mp3");
+    audio.fire("ended");
+    expect(audio.src).toBe("/music/a.mp3");
   });
 
-  it("toggles with one player and resumes where it paused", () => {
-    toggleBackgroundMusic(TRACKS);
-    FakeAudio.made[0].fire("ended");
-    toggleBackgroundMusic(TRACKS);
-    expect(FakeAudio.made[0].pause).toHaveBeenCalled();
-    toggleBackgroundMusic(TRACKS);
-    expect(FakeAudio.made).toHaveLength(1);
-    expect(FakeAudio.made[0].src).toBe("/music/b.mp3");
+  it("fades out and pauses when its key is pressed again", async () => {
+    toggleMusic("workspace");
+    await settle();
+    toggleMusic("workspace");
+    expect(musicStateForTests("workspace").wanted).toBe(false);
+    await settle();
+    expect(player("workspace").volume).toBe(0);
+    expect(player("workspace").paused).toBe(true);
   });
 
-  it("does nothing without tracks", () => {
-    startBackgroundMusic([]);
-    expect(FakeAudio.made).toHaveLength(0);
+  it("hands the speakers to the stage and back with fades", async () => {
+    toggleMusic("workspace");
+    await settle();
+    enterStageMusic();
+    // The stage starts by itself, at its own quieter level.
+    expect(musicStateForTests("stage").wanted).toBe(true);
+    await settle();
+    expect(player("workspace").paused).toBe(true);
+    expect(player("stage").paused).toBe(false);
+    expect(player("stage").volume).toBeCloseTo(0.35);
+    // The workspace key stays on while the stage plays.
+    expect(musicStateForTests("workspace").wanted).toBe(true);
+
+    leaveStageMusic();
+    expect(musicStateForTests("stage").wanted).toBe(false);
+    await settle();
+    expect(player("stage").paused).toBe(true);
+    expect(player("workspace").paused).toBe(false);
+    expect(player("workspace").volume).toBeCloseTo(0.6);
   });
 
-  it("stops at logout", () => {
-    startBackgroundMusic(TRACKS);
+  it("leaves the workspace silent after the stage when its key was off", async () => {
+    enterStageMusic();
+    await settle();
+    leaveStageMusic();
+    await settle();
+    expect(musicStateForTests("workspace").audio).toBeNull();
+    expect(player("stage").paused).toBe(true);
+  });
+
+  it("pauses the stage music from its key without waking the workspace", async () => {
+    toggleMusic("workspace");
+    await settle();
+    enterStageMusic();
+    await settle();
+    toggleMusic("stage");
+    await settle();
+    expect(player("stage").paused).toBe(true);
+    expect(player("workspace").paused).toBe(true);
+    // Turning the workspace key off on the stage changes what comes back.
+    toggleMusic("workspace");
+    leaveStageMusic();
+    await settle();
+    expect(player("workspace").paused).toBe(true);
+  });
+
+  it("gives up quietly when the browser refuses to play", async () => {
+    refuse = true;
+    enterStageMusic();
+    await settle();
+    expect(musicStateForTests("stage").wanted).toBe(false);
+  });
+
+  it("stops everything at logout", async () => {
+    toggleMusic("workspace");
+    await settle();
+    enterStageMusic();
     stopBackgroundMusic();
-    expect(FakeAudio.made[0].paused).toBe(true);
+    expect(player("workspace").paused).toBe(true);
+    expect(player("stage").paused).toBe(true);
+    expect(musicStateForTests("workspace").wanted).toBe(false);
   });
 });
 
 describe("track list from the deployment", () => {
   // Site paths only: the production CSP allows media from the site alone.
-  it("keeps site paths in order, drops anything else", async () => {
-    const { parseTracks } = await import("../lib/background-music");
+  it("keeps site paths in order, drops anything else", () => {
     expect(
       parseTracks(
         " /music/a.mp3, https://cdn.example.org/b.m4a ,javascript:alert(1),//evil.example/c.mp3,http://x/d.mp3,,",

@@ -286,9 +286,17 @@ describe("terminal segments replay controller", () => {
     const panel = next.closest('[role="group"]')!;
     expect(
       Array.from(panel.querySelectorAll("button,a")).map(
-        (node) => node.textContent,
+        (node) => node.textContent || node.getAttribute("aria-label"),
       ),
-    ).toEqual(["Next", "Back", "Replay", "Conclude", "Transcript"]);
+      // The stage's music key (2026-11-03) ends the dock; it has no text.
+    ).toEqual([
+      "Next",
+      "Back",
+      "Replay",
+      "Conclude",
+      "Transcript",
+      "No music yet",
+    ]);
     expect(
       screen.queryByRole("button", { name: "Replay whole debate" }),
     ).toBeNull();

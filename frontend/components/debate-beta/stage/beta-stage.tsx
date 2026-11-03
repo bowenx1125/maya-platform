@@ -40,9 +40,12 @@ import { ScholarScene } from "../../stage3d/scholar-scene";
 import { bubbleProgressFrom } from "./bubble-progress";
 import type { StageCharacter } from "../../stage3d/scholar-stage";
 import { cn } from "../../../lib/utils";
+import { useStageMusic } from "../../../lib/background-music";
+import { MusicKey } from "../../music-key";
 import {
   BETA_CONNECTION_OVERLAY,
   BETA_DOCK,
+  BETA_DOCK_MUSIC_KEY,
   BETA_END_PROMPT,
   BETA_END_PROMPT_ACTIONS,
   BETA_FAILURE_CARD,
@@ -590,6 +593,9 @@ export function BetaDebateStage({
   interactionBarrages,
   betaLabels,
 }: BetaStageProps) {
+  // The stage's own music: on while the stage is open (the key pauses it);
+  // the workspace music fades out on the way in and back on the way out.
+  useStageMusic();
   const labels = useMemo(
     () =>
       resolvePlaybackStageLabels({
@@ -3811,6 +3817,7 @@ export function BetaDebateStage({
         >
           {beta.transcriptToggle}
         </button>
+        <MusicKey channel="stage" className={BETA_DOCK_MUSIC_KEY} />
         <audio
           ref={audioRef}
           aria-label={labels.audioLabel}

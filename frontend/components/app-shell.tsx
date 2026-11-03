@@ -24,12 +24,7 @@ import {
   type WorkspaceActions,
 } from "./workspace-actions";
 
-import {
-  BACKGROUND_TRACKS,
-  stopBackgroundMusic,
-  toggleBackgroundMusic,
-  useBackgroundMusicPlaying,
-} from "../lib/background-music";
+import { stopBackgroundMusic } from "../lib/background-music";
 import { useT } from "../lib/i18n";
 import {
   endTeacherEnter,
@@ -56,6 +51,7 @@ import {
   PRESS_MOTION,
 } from "./ui/button";
 import { NoticeTraySlot } from "./ui/error-kit";
+import { MusicKey } from "./music-key";
 
 type ActionRegistration = {
   owner: string;
@@ -1158,7 +1154,9 @@ export function AppShell({
                     />
                     {collapsed ? null : <span>{t("appName")}</span>}
                   </Link>
-                  {collapsed || mobile ? null : <MusicKey />}
+                  {collapsed || mobile ? null : (
+                    <MusicKey channel="workspace" />
+                  )}
                 </div>
                 {groups.map((group) => {
                   const headingId = `sidebar-group-${group.key}`;
@@ -1410,70 +1408,4 @@ export function litSidebarKey(
       best = { id: row.id, length: path.length };
   }
   return best?.id;
-}
-
-// An 8-bit music note on a 7x8 grid, drawn as pixels.
-const PIXEL_NOTE: ReadonlyArray<readonly [number, number, number, number]> = [
-  [3, 0, 4, 1], // flag
-  [3, 1, 1, 5], // stem
-  [6, 1, 1, 1],
-  [1, 5, 2, 2], // head
-  [0, 6, 1, 1],
-  [3, 6, 1, 1],
-  [1, 7, 2, 1],
-];
-
-/**
- * Background music key beside Mayaform in the open sidebar: the sidebar's
- * keycap and press motion, dressed as a handheld console. A small screen
- * shows a pixel note, dim when off; while music plays it lights up and bobs
- * and the corner LED glows green. Nothing plays until it is pressed.
- */
-function MusicKey() {
-  const t = useT();
-  const playing = useBackgroundMusicPlaying();
-  const available = BACKGROUND_TRACKS.length > 0;
-  const label = !available
-    ? t("musicUnavailable")
-    : playing
-      ? t("musicPause")
-      : t("musicPlay");
-  return (
-    <button
-      type="button"
-      data-music-key
-      data-playing={playing || undefined}
-      className={`${ICON_ITEM} ${ICON_ITEM_KEY} shrink-0 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50`}
-      aria-label={label}
-      title={label}
-      aria-pressed={playing}
-      disabled={!available}
-      onClick={() => toggleBackgroundMusic()}
-    >
-      <span
-        aria-hidden="true"
-        className={`absolute top-[3px] right-[3px] size-[6px] rounded-full border border-border ${playing ? "bg-[#4ADE80] shadow-[0_0_6px_#4ADE80]" : "bg-[#9CA3AF]"}`}
-      />
-      <span
-        aria-hidden="true"
-        className="grid h-[26px] w-[30px] place-items-center rounded-[5px] border-2 border-border bg-[#1F2937] shadow-[inset_0_2px_0_#0B0F19]"
-      >
-        <svg
-          width="14"
-          height="16"
-          viewBox="0 0 7 8"
-          shapeRendering="crispEdges"
-          className={
-            playing
-              ? "animate-[music-bob_0.9s_ease-in-out_infinite] fill-[#A3E635] drop-shadow-[0_0_3px_#A3E635] motion-reduce:animate-none"
-              : "fill-[#A3E635]/60"
-          }
-        >
-          {PIXEL_NOTE.map(([x, y, w, h]) => (
-            <rect key={`${x}-${y}`} x={x} y={y} width={w} height={h} />
-          ))}
-        </svg>
-      </span>
-    </button>
-  );
 }
