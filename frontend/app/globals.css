@@ -352,14 +352,45 @@ textarea {
   }
 }
 
-/* Sidebar music key: the pixel note bobs while music plays. */
-@keyframes music-bob {
+/* Sidebar / stage music key (option C, pixel note buddy). While music plays
+   the note hops, little notes pop out and the key face flashes lime, cyan
+   and yellow. Reduced motion stops all three (see the key's classes). */
+@keyframes music-hop {
   0%,
   100% {
-    translate: 0 1px;
+    transform: translateY(0) scale(1, 1);
   }
-  50% {
-    translate: 0 -2px;
+  40% {
+    transform: translateY(-3px) scale(0.95, 1.05);
+  }
+  70% {
+    transform: translateY(0) scale(1.06, 0.94);
+  }
+}
+
+@keyframes music-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.7);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-14px) scale(1.1) rotate(-12deg);
+  }
+}
+
+@keyframes music-face {
+  0% {
+    background-color: #a3e635;
+  }
+  33% {
+    background-color: #67e8f9;
+  }
+  66% {
+    background-color: #ffe14d;
   }
 }
 

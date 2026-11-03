@@ -10,28 +10,91 @@ import { useT } from "../lib/i18n";
 import { cn } from "../lib/utils";
 import { PRESS_MOTION } from "./ui/button";
 
-// An 8-bit music note on a 7x8 grid, drawn as pixels.
-const PIXEL_NOTE: ReadonlyArray<readonly [number, number, number, number]> = [
-  [3, 0, 4, 1], // flag
-  [3, 1, 1, 5], // stem
-  [6, 1, 1, 1],
-  [1, 5, 2, 2], // head
-  [0, 6, 1, 1],
-  [3, 6, 1, 1],
-  [1, 7, 2, 1],
-];
+// The sidebar's keycap: 48px, 3px border, press motion. Colours are
+// !important so the 3D stage dock's pill rules cannot repaint the key.
+const KEYCAP = `relative grid size-12 shrink-0 cursor-pointer place-items-center rounded-arc-s border-[3px] ${PRESS_MOTION} disabled:cursor-not-allowed`;
 
-// The sidebar's keycap (48px, 3px border, press motion) with a console face:
-// the whole key is the dark screen, so no light ring shows around it.
-const MUSIC_KEY_FACE = "bg-[#1F2937] inset-shadow-[0_2px_0_#ffffff26]";
-const KEYCAP = `relative grid size-12 shrink-0 cursor-pointer place-items-center rounded-arc-s border-[3px] border-border ${MUSIC_KEY_FACE} ${PRESS_MOTION} disabled:cursor-not-allowed disabled:opacity-50`;
+const FACE = {
+  // No music set: grey, dashed ghost of the note, not pressable.
+  empty:
+    "!border-[#6B7280] !bg-[#E5E7EB] !shadow-[0_6px_0_#9CA3AF] !opacity-100",
+  // Stopped: purple, the note sleeps.
+  stop: "!border-border !bg-[#C4B5FD] !shadow-[0_6px_0_#111] active:!shadow-none",
+  // Playing: the face flashes lime / cyan / yellow (lime when still).
+  playing:
+    "!border-border bg-[#A3E635] animate-[music-face_2.4s_steps(1)_infinite] !shadow-[0_6px_0_#111] active:!shadow-none motion-reduce:animate-none motion-reduce:!bg-[#A3E635]",
+} as const;
+
+/** The pixel note buddy on a 13x15 grid: stem, flag and a head with a face. */
+function NoteBuddy({ awake }: { awake: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      width="26"
+      height="30"
+      viewBox="0 0 13 15"
+      shapeRendering="crispEdges"
+      className={
+        awake
+          ? "origin-bottom animate-[music-hop_0.6s_ease-in-out_infinite] motion-reduce:animate-none"
+          : undefined
+      }
+    >
+      <g fill="#111">
+        <rect x="6" y="0" width="6" height="2" />
+        <rect x="10" y="2" width="2" height="1" />
+        <rect x="6" y="2" width="2" height="8" />
+        <rect x="1" y="9" width="7" height="6" />
+      </g>
+      <rect x="2" y="10" width="5" height="4" fill="#fff" />
+      {awake ? (
+        <>
+          <g fill="#111">
+            <rect x="3" y="11" width="1" height="1" />
+            <rect x="5" y="11" width="1" height="1" />
+            <rect x="3" y="13" width="3" height="1" />
+          </g>
+          <rect x="2" y="12" width="1" height="1" fill="#FF4D8D" />
+          <rect x="6" y="12" width="1" height="1" fill="#FF4D8D" />
+        </>
+      ) : (
+        <g fill="#111">
+          <rect x="2" y="12" width="2" height="1" />
+          <rect x="5" y="12" width="2" height="1" />
+        </g>
+      )}
+    </svg>
+  );
+}
+
+function NoteGhost() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="26"
+      height="30"
+      viewBox="0 0 13 15"
+      shapeRendering="crispEdges"
+      fill="none"
+      stroke="#6B7280"
+      strokeWidth="1"
+      strokeDasharray="1 1"
+    >
+      <path d="M6.5 1.5h5v2h-3v8" />
+      <rect x="1.5" y="9.5" width="7" height="5" />
+    </svg>
+  );
+}
+
+const POP =
+  "pointer-events-none absolute text-[11px] leading-none font-black text-ink opacity-0 motion-reduce:hidden";
 
 /**
- * A music key dressed as a handheld console: the dark face is the screen,
- * with a pixel note, dim when off, lit and bobbing while its music plays,
- * and a corner LED. The sidebar key drives the workspace music; the 3D
- * stage has its own. Its name is for screen readers only; the screen and
- * LED say the rest.
+ * A music key (option C, chosen 2026-11-03): a pixel note buddy. Empty (no
+ * music set) is a grey dashed ghost; stopped, it sleeps on purple; playing,
+ * it wakes, smiles and hops while notes pop out and the face flashes. The
+ * sidebar key drives the workspace music; the 3D stage has its own. Its name
+ * is for screen readers only; the buddy says the rest.
  */
 export function MusicKey({
   channel,
@@ -43,14 +106,16 @@ export function MusicKey({
   const t = useT();
   const on = useMusicOn(channel);
   const available = musicAvailable(channel);
+  const state = !available ? "empty" : on ? "playing" : "stop";
   return (
     <button
       type="button"
       data-music-key={channel}
+      data-music-state={state}
       data-playing={on || undefined}
-      className={cn(KEYCAP, className)}
+      className={cn(KEYCAP, FACE[state], className)}
       aria-label={
-        !available
+        state === "empty"
           ? t("musicUnavailable")
           : on
             ? t("musicPause")
@@ -60,26 +125,23 @@ export function MusicKey({
       disabled={!available}
       onClick={() => toggleMusic(channel)}
     >
-      <span
-        aria-hidden="true"
-        className={`absolute top-[4px] right-[4px] size-[6px] rounded-full ${on ? "bg-[#4ADE80] shadow-[0_0_6px_#4ADE80]" : "bg-[#4B5563]"}`}
-      />
-      <svg
-        aria-hidden="true"
-        width="18"
-        height="20"
-        viewBox="0 0 7 8"
-        shapeRendering="crispEdges"
-        className={
-          on
-            ? "animate-[music-bob_0.9s_ease-in-out_infinite] fill-[#A3E635] drop-shadow-[0_0_3px_#A3E635] motion-reduce:animate-none"
-            : "fill-[#A3E635]/60"
-        }
-      >
-        {PIXEL_NOTE.map(([x, y, w, h]) => (
-          <rect key={`${x}-${y}`} x={x} y={y} width={w} height={h} />
-        ))}
-      </svg>
+      {state === "empty" ? <NoteGhost /> : <NoteBuddy awake={on} />}
+      {on ? (
+        <>
+          <span
+            aria-hidden="true"
+            className={`${POP} top-0 -left-[5px] animate-[music-pop_1.2s_ease-out_infinite]`}
+          >
+            ♪
+          </span>
+          <span
+            aria-hidden="true"
+            className={`${POP} top-1 -right-[7px] animate-[music-pop_1.2s_ease-out_0.6s_infinite]`}
+          >
+            ♫
+          </span>
+        </>
+      ) : null}
     </button>
   );
 }
