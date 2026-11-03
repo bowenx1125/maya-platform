@@ -1174,23 +1174,30 @@ export function AppShell({
           className={`relative z-20 min-h-dvh border-r-[3px] border-border bg-sidebar max-[900px]:fixed max-[900px]:inset-y-0 max-[900px]:left-0 max-[900px]:z-50 max-[900px]:w-[min(300px,85vw)] max-[900px]:transition-transform max-[900px]:duration-150 max-[900px]:motion-reduce:transition-none ${drawerOpen ? "" : "max-[900px]:invisible max-[900px]:-translate-x-full"}`}
         >
           <div data-sidebar-pin className="sticky top-0 h-dvh">
-            <button
-              type="button"
-              data-sidebar-toggle
-              className={`group/toggle absolute ${mobile ? `top-4 right-3 size-8 rounded-arc-s ${ICON_MOTION}` : `top-[calc(50%-16px)] ${collapsed ? "-right-[26px]" : "-right-[22px]"} size-8 rounded-[8px] border-[3px] shadow-[0_4px_0_#111] transition-[translate,box-shadow] duration-[80ms] active:translate-y-1 active:shadow-none motion-reduce:transition-none`} z-10 grid place-items-center border-border bg-surface text-ink`}
-              aria-label={toggleLabel}
-              aria-expanded={mobile ? drawerOpen : !collapsed}
-              aria-controls={SIDEBAR_ID}
-              aria-keyshortcuts="Control+B Meta+B"
-              onClick={() => (mobile ? setDrawerPath(null) : toggleCollapsed())}
-            >
-              <WorkspaceIcon
-                name={
-                  mobile ? "pin" : collapsed ? "chevronRight" : "chevronLeft"
-                }
-                size={16}
+            {mobile ? (
+              // Mobile (2026-11-03): the drawer's corner key plays the
+              // workspace music; the backdrop, Esc or navigating closes it.
+              <MusicKey
+                channel="workspace"
+                className="absolute top-4 right-3 z-10"
               />
-            </button>
+            ) : (
+              <button
+                type="button"
+                data-sidebar-toggle
+                className={`group/toggle absolute ${`top-[calc(50%-16px)] ${collapsed ? "-right-[26px]" : "-right-[22px]"} size-8 rounded-[8px] border-[3px] shadow-[0_4px_0_#111] transition-[translate,box-shadow] duration-[80ms] active:translate-y-1 active:shadow-none motion-reduce:transition-none`} z-10 grid place-items-center border-border bg-surface text-ink`}
+                aria-label={toggleLabel}
+                aria-expanded={!collapsed}
+                aria-controls={SIDEBAR_ID}
+                aria-keyshortcuts="Control+B Meta+B"
+                onClick={() => toggleCollapsed()}
+              >
+                <WorkspaceIcon
+                  name={collapsed ? "chevronRight" : "chevronLeft"}
+                  size={16}
+                />
+              </button>
+            )}
             <div
               className={`flex h-full flex-col gap-5 pt-5 pb-4 ${collapsed ? "items-center overflow-visible px-2" : "overflow-y-auto px-3"}`}
             >
