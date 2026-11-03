@@ -20,6 +20,8 @@ export type WorkspaceIconName =
   | "mail"
   | "menu"
   | "pin"
+  | "music"
+  | "pause"
   | "chevronLeft"
   | "chevronRight";
 
@@ -49,6 +51,9 @@ const paths: Record<WorkspaceIconName, string> = {
   mail: "M3 5h18v14H3zm0 0 9 7 9-7",
   menu: "M4 6h16M4 12h16M4 18h16",
   pin: "M12 17v5M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V17h14v-1.8a2 2 0 0 0-1.1-1.8l-1.8-.9a2 2 0 0 1-1.1-1.8V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z",
+  music:
+    "M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm12-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z",
+  pause: "M8 5v14M16 5v14",
   chevronLeft: "m15 5-7 7 7 7",
   chevronRight: "m9 5 7 7-7 7",
 };

@@ -7,6 +7,9 @@ import errorCopy from "./error-copy.json";
  * separate setting.
  */
 const enMessages = {
+  musicPlay: "Play music",
+  musicPause: "Pause music",
+  musicUnavailable: "No music yet",
   appName: "Mayaform",
   sidebarCollapse: "Collapse sidebar",
   sidebarExpand: "Expand sidebar",
