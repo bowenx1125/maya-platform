@@ -1044,12 +1044,6 @@
   .pickLayoutSingle {
     grid-template-columns: minmax(0, 1fr);
   }
-  .pickHint {
-    margin: -4px 2px 0;
-    color: #374151;
-    font-size: 14px;
-    font-weight: 700;
-  }
   .kindSticker {
     display: block;
     width: fit-content;

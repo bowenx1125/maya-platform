@@ -22,6 +22,11 @@ export type WorkspaceIconName =
   | "pin"
   | "music"
   | "pause"
+  | "play"
+  | "next"
+  | "stop"
+  | "replay"
+  | "interact"
   | "chevronLeft"
   | "chevronRight";
 
@@ -54,6 +59,12 @@ const paths: Record<WorkspaceIconName, string> = {
   music:
     "M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm12-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z",
   pause: "M8 5v14M16 5v14",
+  play: "M7 4.5v15l12-7.5z",
+  next: "M5 12h14m-6-6 6 6-6 6",
+  stop: "M6 6h12v12H6z",
+  replay: "M3 12a9 9 0 1 0 2.6-6.4L3 8M3 3v5h5",
+  interact:
+    "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2z",
   chevronLeft: "m15 5-7 7 7 7",
   chevronRight: "m9 5 7 7-7 7",
 };

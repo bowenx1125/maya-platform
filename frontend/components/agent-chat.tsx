@@ -3098,13 +3098,6 @@ function AgentChatScope({
       ) : null}
       {newChatRoute ? (
         <>
-          {listKind ? (
-            <p className={styles.pickHint}>
-              {listKind === "team"
-                ? "Pick one Team. Done opens a Team chat."
-                : "Pick one Agent. Done opens an Agent chat."}
-            </p>
-          ) : null}
           <ChatTargetPicker
             surface={
               listKind === "team"

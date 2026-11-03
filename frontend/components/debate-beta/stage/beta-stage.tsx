@@ -42,6 +42,7 @@ import type { StageCharacter } from "../../stage3d/scholar-stage";
 import { cn } from "../../../lib/utils";
 import { useStageMusic } from "../../../lib/background-music";
 import { MusicKey } from "../../music-key";
+import { WorkspaceIcon } from "../../workspace-icon";
 import {
   BETA_CONNECTION_OVERLAY,
   BETA_DOCK,
@@ -3579,6 +3580,7 @@ export function BetaDebateStage({
         disabled={busyAction !== null || !canReplay}
         onClick={() => void runControl("replay")}
       >
+        <WorkspaceIcon name="replay" size={18} />
         Replay
       </button>
     ) : null;
@@ -3789,6 +3791,7 @@ export function BetaDebateStage({
             disabled={canStart ? busyAction !== null : !canAdvance}
             onClick={() => void runControl(canStart ? "start" : "next")}
           >
+            <WorkspaceIcon name={canStart ? "play" : "next"} size={18} />
             {canStart ? labels.start : finalActionLabel}
           </button>
         ) : null}
@@ -3815,6 +3818,7 @@ export function BetaDebateStage({
           aria-controls="debate-transcript"
           onClick={() => setTranscriptOpen((open) => !open)}
         >
+          <WorkspaceIcon name="file" size={18} />
           {beta.transcriptToggle}
         </button>
         <MusicKey channel="stage" className={BETA_DOCK_MUSIC_KEY} />
