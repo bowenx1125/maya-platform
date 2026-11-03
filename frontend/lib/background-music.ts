@@ -96,6 +96,8 @@ class Channel {
   wanted = false;
   /** Sound is coming out (or fading in). */
   audible = false;
+  /** The audio element is actually playing (its playing/pause events). */
+  playing = false;
   /** On, but the browser wants a gesture before it makes sound. */
   waiting = false;
   tracks: readonly string[];
@@ -133,6 +135,12 @@ class Channel {
     });
     created.addEventListener("playing", () => {
       failuresInRow = 0;
+      this.playing = true;
+      emit();
+    });
+    created.addEventListener("pause", () => {
+      this.playing = false;
+      emit();
     });
     this.audio = created;
     return created;
@@ -219,6 +227,7 @@ class Channel {
     this.stopFade();
     this.audio?.pause();
     this.audible = false;
+    this.playing = false;
     this.waiting = false;
     this.wanted = false;
     emit();
@@ -353,6 +362,18 @@ export function musicAvailable(name: MusicChannelName): boolean {
   return channels[name].tracks.length > 0;
 }
 
+/**
+ * Whether this channel is really sounding: the element is playing and no
+ * fade-out has begun. Read-only; drives the collapsed sidebar's notes.
+ */
+export function useMusicPlaying(name: MusicChannelName): boolean {
+  return useSyncExternalStore(
+    subscribe,
+    () => channels[name].playing && channels[name].audible,
+    () => false,
+  );
+}
+
 /** Mount on the 3D stage: its music plays while the stage is open. */
 export function useStageMusic(): void {
   useEffect(() => {
@@ -378,6 +399,7 @@ export function musicStateForTests(name: MusicChannelName) {
   return {
     wanted: channel.wanted,
     audible: channel.audible,
+    playing: channel.playing,
     waiting: channel.waiting,
     audio: channel.audio,
   };
