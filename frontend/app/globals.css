@@ -403,8 +403,17 @@ textarea {
     [data-sidebar-pin] > div :is(a, button) > span:not([aria-hidden]),
     [data-sidebar-group] > [id]
   ) {
-  opacity: 0;
-  transition: opacity 160ms ease-out;
+  animation: nav-label-out 160ms ease-out forwards;
+  /* the expand stagger leaves an inline delay on each label */
+  animation-delay: 0s !important;
+}
+@keyframes nav-label-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 .sidebar-music-notes {
   position: absolute;
