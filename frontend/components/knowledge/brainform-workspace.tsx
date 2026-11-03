@@ -2409,7 +2409,7 @@ function BrainformWorkspaceBody({
   const knowledgeNameError = filenameError ? localizeError(loadError) : null;
 
   return (
-    <main
+    <div
       className={
         ragPage
           ? ragAlbumClass
@@ -4125,7 +4125,7 @@ function BrainformWorkspaceBody({
           ) : null}
         </section>
       ) : null}
-    </main>
+    </div>
   );
 }
 

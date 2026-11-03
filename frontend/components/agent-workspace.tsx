@@ -2043,6 +2043,8 @@ export function AgentWorkbench({
                             <label className="document-select">
                               <input
                                 type="checkbox"
+                                aria-label={document.source_filename}
+                                aria-describedby={`rag-origin-${document.id}`}
                                 checked={selectedDocumentIds.includes(
                                   document.id,
                                 )}
@@ -2060,6 +2062,7 @@ export function AgentWorkbench({
                               />
                               <span className="document-main">
                                 <strong>{document.source_filename}</strong>
+                                <RagPickerOrigin document={document} />
                               </span>
                             </label>
                             <div className="row-actions">
@@ -2375,5 +2378,26 @@ function StudentSnapshot({ snapshotId }: { snapshotId: string }) {
         <LoadingCard label={t("loadingSnapshot")} />
       )}
     </SectionCard>
+  );
+}
+
+/**
+ * Who uploaded a RAG file and which Agents use it, so two files with the
+ * same name (each Agent's own baseline.md) can be told apart.
+ */
+function RagPickerOrigin({ document }: { document: KnowledgeDocument }) {
+  const t = useT();
+  const owner = document.owner_username;
+  const used = (document.used_by_agents ?? []).map((agent) => agent.name);
+  const parts = [
+    owner ? `@${owner}` : null,
+    used.length
+      ? t("ragPickerUsedBy", { names: used.join(", ") })
+      : t("ragNoAgentsYet"),
+  ].filter(Boolean);
+  return (
+    <small id={`rag-origin-${document.id}`} data-testid="rag-picker-origin">
+      {parts.join(" · ")}
+    </small>
   );
 }

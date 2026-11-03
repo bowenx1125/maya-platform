@@ -17,6 +17,10 @@ services:
 
   frontend:
     restart: unless-stopped
+    build:
+      args:
+        # The backend below turns quick login off; the login page skips it.
+        NEXT_PUBLIC_DEMO_QUICK_LOGIN: "false"
     networks: !override
       - maya_public
 

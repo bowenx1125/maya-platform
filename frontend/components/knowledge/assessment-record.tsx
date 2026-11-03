@@ -207,7 +207,7 @@ function ClipboardBoard({
   return (
     <section
       aria-labelledby={labelledBy}
-      className="relative mx-auto w-full max-w-[1120px] rounded-lg border-[4px] border-black bg-[#F5E6C8] bg-[radial-gradient(#E9DFC4_1.4px,transparent_1.4px)] bg-[length:22px_22px] px-9 pb-10 pt-14 shadow-[10px_10px_0_#67E8F9] min-h-[740px] before:absolute before:left-1/2 before:top-[-18px] before:h-9 before:w-[120px] before:-translate-x-1/2 before:rounded-t-lg before:rounded-b-sm before:border-[3px] before:border-black before:bg-[#C4B5FD] before:shadow-[inset_0_-6px_0_#A78BFA] before:content-['']"
+      className="relative mx-auto w-full min-w-0 max-w-[1120px] rounded-lg border-[4px] border-black bg-[#F5E6C8] bg-[radial-gradient(#E9DFC4_1.4px,transparent_1.4px)] bg-[length:22px_22px] px-9 max-[520px]:px-4 pb-10 pt-14 shadow-[10px_10px_0_#67E8F9] min-h-[740px] before:absolute before:left-1/2 before:top-[-18px] before:h-9 before:w-[120px] before:-translate-x-1/2 before:rounded-t-lg before:rounded-b-sm before:border-[3px] before:border-black before:bg-[#C4B5FD] before:shadow-[inset_0_-6px_0_#A78BFA] before:content-['']"
     >
       <span
         aria-hidden="true"
@@ -220,13 +220,13 @@ function ClipboardBoard({
 
 function ListChrome({ teacher, intro }: { teacher: boolean; intro: string }) {
   return (
-    <div className="mb-5 flex items-start gap-3.5">
+    <div className="mb-5 flex flex-wrap items-start gap-3.5">
       <h2
         id="brainform-record-heading"
         data-ui-guide="brainform.record"
         data-ui-guide-text={intro}
         tabIndex={0}
-        className="m-0 inline-block -rotate-[1.5deg] rounded-md border-[3px] border-black border-l-[10px] border-l-[#FACC15] bg-white px-[18px] py-1 text-[40px] font-extrabold leading-none shadow-[4px_4px_0_#FFE14D]"
+        className="m-0 inline-block -rotate-[1.5deg] rounded-md border-[3px] border-black border-l-[10px] border-l-[#FACC15] bg-white px-[18px] py-1 text-[40px] font-extrabold leading-none max-[520px]:text-[32px] shadow-[4px_4px_0_#FFE14D]"
       >
         Record
       </h2>
@@ -313,7 +313,7 @@ function EmptyAlbum() {
   const t = useT();
   return (
     <>
-      <div className="mt-2 grid grid-cols-3 gap-x-5 gap-y-6">
+      <div className="mt-2 grid grid-cols-3 gap-x-5 gap-y-6 max-[640px]:grid-cols-1">
         <div className="grid min-h-[280px] place-items-center content-center gap-3.5 rounded-[14px] border-[3px] border-black bg-white p-[22px] text-center shadow-[6px_6px_0_#67E8F9]">
           <span
             aria-hidden="true"
@@ -327,13 +327,13 @@ function EmptyAlbum() {
         </div>
         <div
           aria-hidden="true"
-          className="grid min-h-[280px] place-items-center rounded-[14px] border-[3px] border-dashed border-[#B9AE90] bg-white/35 text-[42px] font-extrabold text-[#C4BAA0]"
+          className="grid min-h-[280px] place-items-center rounded-[14px] border-[3px] border-dashed border-[#B9AE90] bg-white/35 text-[42px] font-extrabold text-[#C4BAA0] max-[640px]:hidden"
         >
           +
         </div>
         <div
           aria-hidden="true"
-          className="grid min-h-[280px] place-items-center rounded-[14px] border-[3px] border-dashed border-[#B9AE90] bg-white/35 text-[42px] font-extrabold text-[#C4BAA0]"
+          className="grid min-h-[280px] place-items-center rounded-[14px] border-[3px] border-dashed border-[#B9AE90] bg-white/35 text-[42px] font-extrabold text-[#C4BAA0] max-[640px]:hidden"
         >
           +
         </div>

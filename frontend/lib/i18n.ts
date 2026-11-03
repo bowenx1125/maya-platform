@@ -410,6 +410,7 @@ const enMessages = {
   brainformHideRagNamed: "Delete {name}",
   ragUsedBy: "Used by",
   ragNoAgentsYet: "No Agents yet",
+  ragPickerUsedBy: "Used by {names}",
   ragLastEditedBy: "Last edited by",
   brainformDeleteKnowledgeNamed: "Delete {name}",
   brainformDeleteKnowledgeConfirm:

@@ -27,4 +27,7 @@ export function classifyBackendFailure(error: unknown): ServiceProbe {
 export const publicRuntime = {
   mode: process.env.NEXT_PUBLIC_RUNTIME_MODE ?? "unknown",
   build: process.env.NEXT_PUBLIC_BUILD_SHA ?? "unreported",
+  // Built "false" where the backend turns quick login off (production), so
+  // the login page does not ask /auth/demo-identities for a 404 every time.
+  demoQuickLogin: process.env.NEXT_PUBLIC_DEMO_QUICK_LOGIN !== "false",
 };
