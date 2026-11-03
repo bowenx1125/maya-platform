@@ -1,3 +1,4 @@
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -10,6 +11,7 @@ import {
   startDefaultMusic,
   stopBackgroundMusic,
   toggleMusic,
+  useMusicPlaying,
 } from "../lib/background-music";
 
 // 2026-11-03: a music key beside Mayaform (workspace music, on by default)
@@ -251,6 +253,24 @@ describe("background music", () => {
     expect(player("workspace").paused).toBe(true);
     expect(player("stage").paused).toBe(true);
     expect(musicStateForTests("workspace").wanted).toBe(false);
+  });
+  it("reports playing only while the element really plays and no fade-out began", async () => {
+    const { result } = renderHook(() => useMusicPlaying("workspace"));
+    refuse = "autoplay";
+    act(() => startDefaultMusic());
+    await act(settle);
+    // Wanted but blocked: not playing.
+    expect(musicStateForTests("workspace").wanted).toBe(true);
+    expect(result.current).toBe(false);
+    refuse = false;
+    act(() => toggleMusic("workspace"));
+    await act(settle);
+    act(() => player("workspace").fire("playing"));
+    expect(result.current).toBe(true);
+    act(() => toggleMusic("workspace"));
+    expect(result.current).toBe(false);
+    act(() => player("workspace").fire("pause"));
+    expect(musicStateForTests("workspace").playing).toBe(false);
   });
 });
 
