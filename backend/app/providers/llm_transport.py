@@ -70,19 +70,22 @@ class LLMHTTPRejected(LLMTransportError):
 # or 502/503/504/529 (busy or briefly down). Those are named for the person
 # who sent the message, so they wait and send again; the call is still never
 # retried by the server.
-PROVIDER_RATE_LIMITED_STATUSES = frozenset({429})
-PROVIDER_BUSY_STATUSES = frozenset({502, 503, 504, 529})
+PROVIDER_STATUS_CODES = {
+    401: "provider_auth_failed",
+    403: "provider_auth_failed",
+    429: "provider_rate_limited",
+    502: "provider_busy",
+    503: "provider_busy",
+    504: "provider_busy",
+    529: "provider_busy",
+}
 
 
 def rejected_status_code(status: object, fallback: str) -> str:
     """The safe error code for a non-200 provider answer."""
 
-    if status in {401, 403}:
-        return "provider_auth_failed"
-    if status in PROVIDER_RATE_LIMITED_STATUSES:
-        return "provider_rate_limited"
-    if status in PROVIDER_BUSY_STATUSES:
-        return "provider_busy"
+    if isinstance(status, int) and not isinstance(status, bool):
+        return PROVIDER_STATUS_CODES.get(status, fallback)
     return fallback
 
 
