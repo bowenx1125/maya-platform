@@ -2880,6 +2880,10 @@ export interface components {
             can_delete?: boolean | null;
             /** Can Edit */
             can_edit: boolean;
+            /** Card Material Theme */
+            card_material_theme?: string | null;
+            /** Card Version Label */
+            card_version_label?: string | null;
             /**
              * Course Id
              * Format: uuid
@@ -2957,6 +2961,10 @@ export interface components {
             can_delete?: boolean | null;
             /** Can Edit */
             can_edit: boolean;
+            /** Card Material Theme */
+            card_material_theme?: string | null;
+            /** Card Version Label */
+            card_version_label?: string | null;
             /**
              * Course Id
              * Format: uuid

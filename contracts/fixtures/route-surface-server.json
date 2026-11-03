@@ -11601,6 +11601,20 @@
             "title": "Can Edit",
             "type": "boolean"
           },
+          "card_material_theme": {
+            "title": "Card Material Theme",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "card_version_label": {
+            "title": "Card Version Label",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "course_id": {
             "format": "uuid",
             "title": "Course Id",
@@ -11796,6 +11810,20 @@
           "can_edit": {
             "title": "Can Edit",
             "type": "boolean"
+          },
+          "card_material_theme": {
+            "title": "Card Material Theme",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "card_version_label": {
+            "title": "Card Version Label",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "course_id": {
             "format": "uuid",
@@ -18734,14 +18762,20 @@
             "type": "integer"
           },
           "question_version_id": {
-            "format": "uuid",
-            "title": "Question Version Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Version Id"
           }
         },
         "required": [
           "question_ordinal",
-          "question_version_id",
           "answer_text",
           "created_at"
         ],

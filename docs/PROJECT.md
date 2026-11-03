@@ -267,10 +267,8 @@ of Next/pause. Playing uses the blob (≤3s) else the URL once. Leaving aborts a
 
 ## Oct25 audio, locks and Next cost (PR C)
 
-DEBATE_AUDIO_MP3 (prod on): format=mp3 via ffmpeg, 64 MB memory LRU by WAV digest;
-WAV default; private,max-age=300, 304. Playback routes/WS commands off the event loop
-(offload.py, guard test); per-Debate thread + pg advisory lock; tickets in Postgres
-(0079, hash only). Next 103→35 SQL; tests/bench_debate_next.py.
+DEBATE_AUDIO_MP3 (prod on): mp3 via ffmpeg, 64 MB LRU, max-age=300/304. Playback off
+the event loop (offload.py); per-Debate lock; tickets in Postgres (0079). Next 103→35 SQL.
 
 ## Oct24 Debate generation parameters (PR E)
 
@@ -310,3 +308,9 @@ sweeps per 60s, freeing claims unheld twice (startup with a live peer: only thos
 Team streams wake on committed events; fallback poll ≤2s. Debate default Rulesets: en
 mirrors the spoken zh one (no spoken RAG/I-feel labels or +5/+2), both address a listener
 who missed earlier speeches; a copy mid-paragraph is rewritten, not cut out.
+
+## Nov3 cleanup and capacity
+
+Visits hide Knowledge; Debate param "?" shows its Chinese help on hover. core/locks.py
+holds every cross-process lock; SQLite leftovers gone. core/capacity.py: CPU-bound caps
+scale by cores/2. Idle polls 30s (+focus); Agent lists carry card label/theme.

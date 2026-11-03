@@ -61,7 +61,6 @@ type GroupOverview = {
 
 type AgentListItem = {
   agent: AgentSummary;
-  versions: AgentVersion[];
 };
 
 type StudyformGroupSnapshot = {
@@ -103,18 +102,12 @@ async function loadGroups(
   );
 }
 
-function versionBubble(agent: AgentSummary, versions: AgentVersion[]) {
-  const published =
-    versions.find(
-      (version) => version.id === agent.current_published_version_id,
-    ) ?? versions.find((version) => version.state === "published");
-  const draft =
-    versions.find((version) => version.id === agent.current_draft_version_id) ??
-    versions.find((version) => version.state === "draft");
-  const label = published?.version_label ?? draft?.version_label ?? "V1.0";
+// The list answer carries what the card shows (published, else the draft the
+// viewer may see), so a group page needs no per-Agent versions read.
+function versionBubble(agent: AgentSummary) {
   return {
-    label,
-    materialTheme: (published ?? draft)?.avatar_config?.material_theme,
+    label: agent.card_version_label ?? "V1.0",
+    materialTheme: agent.card_material_theme ?? undefined,
     pending: agent.status === "archived",
   };
 }
@@ -479,9 +472,9 @@ function GroupWorkspaceSession({
         run: () => Promise<T>,
       ): Promise<T> => cachedCall(api, cacheIdentity, name, args, run);
       try {
-        // Two round trips, not four: the group and its Agents together, then
-        // the course reads (which need the group's course) beside each
-        // Agent's versions.
+        // Two round trips: the group and its Agents together, then the course
+        // reads (which need the group's course). Cards read their label and
+        // theme from the Agent list, not from one versions read per Agent.
         const groupRequest = read("group", [groupId], () => api.group(groupId));
         const agentsRequest = read("agents", [groupId, true], () =>
           api.agents(groupId, true),
@@ -544,18 +537,10 @@ function GroupWorkspaceSession({
               : Promise.resolve([]),
           ]),
         );
-        const versionsRequest = agentsRequest.then((nextAgents) =>
-          Promise.all(
-            nextAgents.map((agent) =>
-              read("versions", [agent.id], () => api.versions(agent.id)),
-            ),
-          ),
-        );
         const settled = await Promise.allSettled([
           groupRequest,
           agentsRequest,
           courseRequest,
-          versionsRequest,
         ]);
         // The group's own answer decides first, as when it was read alone.
         const failed = settled.find((result) => result.status === "rejected");
@@ -563,7 +548,6 @@ function GroupWorkspaceSession({
         const nextGroup = await groupRequest;
         const nextAgents = await agentsRequest;
         const [nextTeams, nextChatAgents, nextPublished] = await courseRequest;
-        const versions = await versionsRequest;
         const listedIds = new Set(nextAgents.map((agent) => agent.id));
         const next: StudyformGroupSnapshot = {
           group: nextGroup,
@@ -572,10 +556,7 @@ function GroupWorkspaceSession({
           ),
           teams: Array.isArray(nextTeams) ? nextTeams : [],
           chatAgents: Array.isArray(nextChatAgents) ? nextChatAgents : [],
-          items: nextAgents.map((agent, index) => ({
-            agent,
-            versions: versions[index] ?? [],
-          })),
+          items: nextAgents.map((agent) => ({ agent })),
         };
         setGroup(next.group);
         setCourseAgents(next.courseAgents);
@@ -774,13 +755,12 @@ function GroupWorkspaceSession({
         >
           {items.length ? (
             <ModuleTiles variant="list">
-              {items.map(({ agent, versions }, index) => (
+              {items.map(({ agent }, index) => (
                 <GroupAgentRow
                   variant="list"
                   index={index}
                   agent={agent}
                   key={agent.id}
-                  versions={versions}
                   deleting={deleting !== null}
                   onDelete={() => void deleteAgent(agent.id)}
                   // Creator; for a public Agent also groupmates and course
@@ -879,7 +859,6 @@ function GroupWorkspaceSession({
 
 function GroupAgentRow({
   agent,
-  versions,
   deleting,
   canDelete = true,
   onDelete,
@@ -891,14 +870,13 @@ function GroupAgentRow({
   /** List position: picks the card tone as the mocks cycle it. */
   index?: number;
   agent: AgentSummary;
-  versions: AgentVersion[];
   deleting: boolean;
   canDelete?: boolean;
   onDelete: () => void;
   rename?: AgentRename;
 }) {
   const t = useT();
-  const bubble = versionBubble(agent, versions);
+  const bubble = versionBubble(agent);
   return (
     <VersionTile
       id={agent.id}

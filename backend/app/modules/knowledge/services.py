@@ -1551,11 +1551,16 @@ def prefetch_agent_reads(
         if agent.current_published_version_id
     }
     seqs: dict[str, int | None] = dict.fromkeys(current_ids)
-    for version_id, seq in db.execute(
-        select(AgentVersion.id, AgentVersion.version_seq).where(AgentVersion.id.in_(current_ids))
+    themes: dict[str, str | None] = dict.fromkeys(current_ids)
+    for version_id, seq, avatar_json in db.execute(
+        select(AgentVersion.id, AgentVersion.version_seq, AgentVersion.avatar_config_json).where(
+            AgentVersion.id.in_(current_ids)
+        )
     ).all():
         seqs[version_id] = seq
+        themes[version_id] = _material_theme(avatar_json)
     store(db, "version_seq", seqs)
+    store(db, "version_material_theme", themes)
     from app.modules.voices.preview import prefetch_bound_voices
 
     prefetch_bound_voices(
@@ -1768,6 +1773,29 @@ def version_dto(
     )
 
 
+def _material_theme(avatar_config_json: str | None) -> str | None:
+    try:
+        avatar = json.loads(avatar_config_json or "{}")
+    except (TypeError, ValueError):
+        return None
+    theme = avatar.get("material_theme") if isinstance(avatar, dict) else None
+    return theme if isinstance(theme, str) and theme else None
+
+
+def _published_material_theme(db: Session, agent: Agent) -> str | None:
+    version_id = agent.current_published_version_id
+    if not version_id:
+        return None
+    return prefetched(
+        db,
+        "version_material_theme",
+        version_id,
+        lambda: _material_theme(
+            db.scalar(select(AgentVersion.avatar_config_json).where(AgentVersion.id == version_id))
+        ),
+    )
+
+
 def _current_version_label(db: Session, agent: Agent) -> str | None:
     from app.core.version_label import agent_version_label
 
@@ -1839,6 +1867,9 @@ def agent_summary(
         if last_editor_id
         else None
     )
+    from app.core.version_label import agent_version_label
+
+    published_label = _current_version_label(db, agent)
     return AgentSummary(
         id=UUID(agent.id),
         group_id=UUID(agent.group_id) if agent.group_id else None,
@@ -1852,7 +1883,16 @@ def agent_summary(
         is_creator=context is not None and agent.owner_user_id == context.user.id,
         last_edited_by_name=last_editor,
         last_edited_at=audit.last_edited_at if audit is not None else None,
-        current_version_label=_current_version_label(db, agent),
+        current_version_label=published_label,
+        # What a list card shows without reading every version: the
+        # published version, else the draft this caller may see.
+        card_version_label=published_label
+        or (agent_version_label(draft.version_seq) if draft is not None else None),
+        card_material_theme=(
+            _published_material_theme(db, agent)
+            if agent.current_published_version_id
+            else (_material_theme(draft.avatar_config_json) if draft is not None else None)
+        ),
         name=agent.name,
         description=agent.description,
         metadata_revision=agent.metadata_revision,

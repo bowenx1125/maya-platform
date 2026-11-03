@@ -2195,8 +2195,14 @@ describe("Chatform", () => {
     await screen.findByText("Old Team answer");
     expect(state.api.conversationSession).toHaveBeenCalledTimes(1);
 
+    // An idle chat no longer re-reads every 5 s (2026-11-03: every 30 s;
+    // returning to the tab refreshes at once).
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(state.api.conversationSession).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(25000);
     });
 
     const notice = await screen.findByText(
@@ -2276,8 +2282,9 @@ describe("Chatform", () => {
       }),
     );
     await screen.findByText("Team answer before New");
+    // The idle refresh runs every 30 s (was 5 s, 2026-11-03).
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
+      await vi.advanceTimersByTimeAsync(30000);
     });
     expect(state.api.conversationSession).toHaveBeenCalledTimes(2);
 
@@ -2287,7 +2294,7 @@ describe("Chatform", () => {
     );
     await act(async () => resolveRefresh(lateTeamSession));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(10000);
+      await vi.advanceTimersByTimeAsync(30000);
     });
 
     expect(screen.queryByText("Late notice from the Team Chat.")).toBeNull();

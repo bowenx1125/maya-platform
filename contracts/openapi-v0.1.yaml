@@ -7199,6 +7199,16 @@ components:
         can_edit:
           title: Can Edit
           type: boolean
+        card_material_theme:
+          title: Card Material Theme
+          type:
+          - string
+          - 'null'
+        card_version_label:
+          title: Card Version Label
+          type:
+          - string
+          - 'null'
         course_id:
           format: uuid
           title: Course Id
@@ -7331,6 +7341,16 @@ components:
         can_edit:
           title: Can Edit
           type: boolean
+        card_material_theme:
+          title: Card Material Theme
+          type:
+          - string
+          - 'null'
+        card_version_label:
+          title: Card Version Label
+          type:
+          - string
+          - 'null'
         course_id:
           format: uuid
           title: Course Id

@@ -135,9 +135,25 @@ describe("Brainform polling", () => {
     expect(
       screen.getByRole("button", { name: "Download Question bank" }),
     ).toBeTruthy();
-    await advance(9_999);
+    // Idle again: the next read is 30 s later (was 10 s, 2026-11-03).
+    await advance(29_999);
     expect(state.api.brainformKnowledge).toHaveBeenCalledTimes(2);
     await advance(1);
+    expect(state.api.brainformKnowledge).toHaveBeenCalledTimes(3);
+  });
+
+  it("reads an idle workspace every 30 s, and at once when the page comes back", async () => {
+    render(workspace());
+    await advance(1);
+    expect(state.api.brainformKnowledge).toHaveBeenCalledTimes(1);
+    await advance(10_000);
+    expect(state.api.brainformKnowledge).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await advance(1);
+    expect(state.api.brainformKnowledge).toHaveBeenCalledTimes(2);
+    await advance(30_000);
     expect(state.api.brainformKnowledge).toHaveBeenCalledTimes(3);
   });
 
@@ -193,7 +209,7 @@ describe("Brainform polling", () => {
       expect(state.api.group).toHaveBeenCalledTimes(2);
       expect(state.api.knowledge).toHaveBeenCalledTimes(1);
       await act(async () => pending.resolve([]));
-      await advance(10_000);
+      await advance(30_000);
       expect(state.api.knowledge).toHaveBeenCalledTimes(2);
     },
   );
@@ -206,7 +222,7 @@ describe("Brainform polling", () => {
       .mockResolvedValue([]);
     vi.spyOn(window, "confirm").mockReturnValue(true);
     render(workspace());
-    await advance(10_001);
+    await advance(30_001);
     expect(state.api.brainformKnowledge).toHaveBeenCalledTimes(2);
 
     await act(async () => {
@@ -219,7 +235,7 @@ describe("Brainform polling", () => {
     expect(
       screen.queryByRole("button", { name: "Download Question bank" }),
     ).toBeNull();
-    await advance(10_000);
+    await advance(30_000);
     expect(state.api.brainformKnowledge).toHaveBeenCalledTimes(4);
     await act(async () => pending.resolve([knowledge]));
     expect(
@@ -234,7 +250,7 @@ describe("Brainform polling", () => {
       .mockReturnValueOnce(pending.promise)
       .mockResolvedValue([]);
     const view = render(workspace());
-    await advance(10_001);
+    await advance(30_001);
     expect(state.api.brainformKnowledge).toHaveBeenCalledTimes(2);
 
     state.user = { ...state.user, id: "teacher-two" };

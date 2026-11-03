@@ -460,6 +460,9 @@ function ragIndexFailureReason(
   return t("brainformRagIndexFailed");
 }
 
+/** Idle reload of the Brainform lists (a generation run polls at 1.5 s). */
+const IDLE_WORKSPACE_REFRESH_MS = 30_000;
+
 export function BrainformWorkspace({
   role,
   initialAgentId,
@@ -1117,25 +1120,33 @@ function BrainformWorkspaceBody({
     isGenerationActive(row.generation_state),
   );
   // Knowledge can also be produced by an Agent's tool outside this page, so
-  // the list keeps refreshing quietly, and quickly while a run is in progress.
+  // the list keeps refreshing quietly: quickly while a run is in progress,
+  // every 30 s otherwise (was 10 s), and at once when the page comes back.
   useEffect(() => {
     if (!courseId) return;
     const scope = identityScope;
+    const refresh = () => {
+      // Explicit saves may supersede a slow read; only the latest load
+      // blocks automatic refreshes, so an old hung request cannot stall them.
+      if (
+        document.visibilityState === "hidden" ||
+        !scopeIsCurrent(scope) ||
+        pendingWorkspaceLoad.current !== null
+      )
+        return;
+      void loadWorkspace(true);
+    };
     const timer = window.setInterval(
-      () => {
-        // Explicit saves may supersede a slow read; only the latest load
-        // blocks automatic refreshes, so an old hung request cannot stall them.
-        if (
-          document.visibilityState === "hidden" ||
-          !scopeIsCurrent(scope) ||
-          pendingWorkspaceLoad.current !== null
-        )
-          return;
-        void loadWorkspace(true);
-      },
-      generationActive ? 1500 : 10000,
+      refresh,
+      generationActive ? 1500 : IDLE_WORKSPACE_REFRESH_MS,
     );
-    return () => window.clearInterval(timer);
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
   }, [
     courseId,
     generationActive,

@@ -48,6 +48,11 @@ class AgentSummary(BaseModel):
     # Label of the current published version (e.g. "1.2"), for the open
     # button's hover tooltip 「最新编辑：…，Version：1.X」.
     current_version_label: str | None = None
+    # For list cards: the published version's label and avatar theme, else
+    # those of the draft this caller may see (so a list needs no per-Agent
+    # versions read).
+    card_version_label: str | None = None
+    card_material_theme: str | None = None
 
 
 class KnowledgeGenerationIntent(BaseModel):
