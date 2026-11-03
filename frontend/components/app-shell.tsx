@@ -24,7 +24,10 @@ import {
   type WorkspaceActions,
 } from "./workspace-actions";
 
-import { stopBackgroundMusic } from "../lib/background-music";
+import {
+  startDefaultMusic,
+  stopBackgroundMusic,
+} from "../lib/background-music";
 import { useT } from "../lib/i18n";
 import {
   endTeacherEnter,
@@ -300,6 +303,11 @@ export function AppShell({
       : membershipGroupIds.length === 1
         ? membershipGroupIds[0]
         : undefined);
+
+  // Background music is on by default once the signed-in site loads.
+  useEffect(() => {
+    startDefaultMusic();
+  }, []);
 
   useEffect(() => {
     const syncLocation = () => {
