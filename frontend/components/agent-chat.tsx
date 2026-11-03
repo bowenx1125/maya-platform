@@ -3312,11 +3312,7 @@ function AgentChatScope({
                             <span className={styles.pending} role="status">
                               {turn.state === "pending" ? (
                                 <>
-                                  <span
-                                    className="spinner"
-                                    aria-hidden="true"
-                                  />
-                                  {t("loading")}
+                                  <WaitDots label={t("loading")} />
                                 </>
                               ) : turn.state === "acceptance_unknown" ? (
                                 t("errorChatAcceptanceUnknown")
@@ -3343,8 +3339,7 @@ function AgentChatScope({
                       visibleTeamMemberResults(turn.member_results).length ===
                         0 ? (
                         <p className={styles.pending} role="status">
-                          <span className="spinner" aria-hidden="true" />
-                          {t("loading")}
+                          <WaitDots label={t("loading")} />
                         </p>
                       ) : null}
                       {turn.state === "acceptance_unknown" ? (
@@ -3441,11 +3436,7 @@ function AgentChatScope({
                                   ) : result.state === "pending" ||
                                     result.state === "running" ? (
                                     <p className={styles.pending} role="status">
-                                      <span
-                                        className="spinner"
-                                        aria-hidden="true"
-                                      />
-                                      {t("loading")}
+                                      <WaitDots label={t("loading")} />
                                     </p>
                                   ) : result.state === "acceptance_unknown" ? (
                                     <DismissibleAlert
@@ -3510,8 +3501,7 @@ function AgentChatScope({
                         ) : (
                           <div className={styles.reply}>
                             <span className={styles.pending} role="status">
-                              <span className="spinner" aria-hidden="true" />
-                              {t("loading")}
+                              <WaitDots label={t("loading")} />
                             </span>
                           </div>
                         )}
@@ -3851,6 +3841,25 @@ function AgentChatScope({
           </section>
         </div>
       )}
+    </>
+  );
+}
+
+/**
+ * Waiting for a reply: three dots in the current palette (pink, cyan,
+ * lime) bounce in turn, the way a chat shows someone typing. The word is
+ * for screen readers; the dots say it on screen (2026-11-03: the old
+ * spinner used the retired gold accent).
+ */
+function WaitDots({ label }: { label: string }) {
+  return (
+    <>
+      <span className={styles.waitDots} aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </span>
+      <span className="sr-only">{label}</span>
     </>
   );
 }

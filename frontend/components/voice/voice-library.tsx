@@ -1105,19 +1105,24 @@ export function VoiceLibrary({
   ) : undefined;
 
   const createAction = listenOnly ? null : creating ? (
-    // Top-right, where New was: back to the list, nothing is uploaded.
+    // Top-right, where New was: back to the list, nothing is uploaded. Icon
+    // and word, in the same key as New (2026-11-03: it was icon only).
     <button
-      className={cn(
-        buttonVariants({ variant: "neutral", size: "icon" }),
-        "min-h-0 rounded-[10px] p-0",
-      )}
+      className={
+        arcadePicker
+          ? AGENT_NEW_BUTTON
+          : cn(
+              buttonVariants({ variant: "neutral" }),
+              "gap-1.5 font-display text-base font-extrabold",
+            )
+      }
       type="button"
-      aria-label={t("cancel")}
       data-ui-guide="voice.cancelCreate"
       disabled={controlsDisabled}
       onClick={cancelCreate}
     >
-      <WorkspaceIcon name="back" />
+      <WorkspaceIcon name="back" size={16} />
+      <span>{t("back")}</span>
     </button>
   ) : (
     <button

@@ -191,7 +191,9 @@ const FLAT_PRESS = `shadow-none transition-[translate,box-shadow,background-colo
 const ITEM =
   "group/item relative flex min-h-12 items-center gap-2.5 rounded-arc-s border-[3px] px-3 py-2 font-body text-sm font-semibold text-ink no-underline";
 const ITEM_IDLE = `border-transparent bg-transparent ${FLAT_PRESS}`;
-const ITEM_ACTIVE = `border-border bg-main ${PRESS_MOTION}`;
+// While a click waits for its page, the lit item shows the common button
+// loading (the Done key's pink fill and press), not a spinner of its own.
+const ITEM_ACTIVE = `border-border bg-main ${PRESS_MOTION} ${BUSY_MOTION_PRIMARY}`;
 const ITEM_KEY = `border-border bg-surface ${PRESS_MOTION}`;
 const ICON_ITEM =
   "relative grid size-12 place-items-center rounded-arc-s border-[3px] text-ink no-underline";
@@ -979,9 +981,6 @@ export function AppShell({
       setPendingNav({ from: pathname, key });
     };
   }
-  const navSpinner = (
-    <span className="spinner ml-auto shrink-0" aria-hidden="true" />
-  );
   const mayaformHere =
     !agentsArea &&
     !ragArea &&
@@ -1041,13 +1040,8 @@ export function AppShell({
           className={`${collapsed ? ICON_ITEM : ITEM} isolate ${lit ? (collapsed ? ICON_ITEM_ACTIVE : ITEM_ACTIVE) : collapsed ? ICON_ITEM_IDLE : ITEM_IDLE}${current ? " is-active" : ""}`}
         >
           {lit ? pill : null}
-          {waiting && collapsed ? (
-            <span className="spinner" aria-hidden="true" />
-          ) : (
-            <WorkspaceIcon name={item.icon} size={18} />
-          )}
+          <WorkspaceIcon name={item.icon} size={18} />
           {collapsed ? null : <span>{item.label}</span>}
-          {waiting && !collapsed ? navSpinner : null}
           {isLive ? (
             collapsed ? (
               lamp(true, true)

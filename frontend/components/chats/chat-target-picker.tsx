@@ -95,14 +95,13 @@ export function ChatTargetPicker({
                 ? t("privateOption")
                 : t("publicOption")}
             </span>
-            <span
-              className={cn(
-                styles.pickBadge,
-                unavailable && styles.pickBadgeMuted,
-              )}
-            >
-              {unavailable ? t("unavailable") : t("available")}
-            </span>
+            {/* "Available" said nothing; only a card that cannot be picked
+                is labelled (2026-11-03). */}
+            {unavailable ? (
+              <span className={cn(styles.pickBadge, styles.pickBadgeMuted)}>
+                {t("unavailable")}
+              </span>
+            ) : null}
           </span>
           {picked ? (
             <span className={styles.pickMark} aria-hidden="true">

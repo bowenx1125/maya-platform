@@ -553,7 +553,6 @@ const enMessages = {
   ready: "Ready",
   checking: "Checking",
   unavailable: "Unavailable",
-  available: "Available",
   errorUnauthenticated: "Please sign in before continuing.",
   errorForbidden: "This account is not allowed to perform that action.",
   errorNotFound: "This item was deleted or is no longer available to you.",
