@@ -1422,19 +1422,12 @@ const PIXEL_NOTE: ReadonlyArray<readonly [number, number, number, number]> = [
   [3, 6, 1, 1],
   [1, 7, 2, 1],
 ];
-// Equalizer bars: rest height (shown with reduced motion) and bounce timing.
-const EQ_BARS = [
-  { rest: "motion-reduce:scale-y-[0.45]", delay: "[animation-delay:-0.45s]" },
-  { rest: "motion-reduce:scale-y-[0.85]", delay: "[animation-delay:-0.1s]" },
-  { rest: "motion-reduce:scale-y-[0.6]", delay: "[animation-delay:-0.3s]" },
-  { rest: "motion-reduce:scale-y-[0.75]", delay: "[animation-delay:-0.6s]" },
-] as const;
 
 /**
  * Background music key beside Mayaform in the open sidebar: the sidebar's
  * keycap and press motion, dressed as a handheld console. A small screen
- * shows a pixel note when off and bouncing equalizer bars while music plays;
- * the corner LED lights green. Nothing plays until it is pressed.
+ * shows a pixel note, dim when off; while music plays it lights up and bobs
+ * and the corner LED glows green. Nothing plays until it is pressed.
  */
 function MusicKey() {
   const t = useT();
@@ -1450,7 +1443,7 @@ function MusicKey() {
       type="button"
       data-music-key
       data-playing={playing || undefined}
-      className={`${ICON_ITEM} ${playing ? ICON_ITEM_ACTIVE : ICON_ITEM_KEY} shrink-0 cursor-pointer content-center gap-[3px] disabled:cursor-not-allowed disabled:opacity-50`}
+      className={`${ICON_ITEM} ${ICON_ITEM_KEY} shrink-0 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50`}
       aria-label={label}
       title={label}
       aria-pressed={playing}
@@ -1463,36 +1456,23 @@ function MusicKey() {
       />
       <span
         aria-hidden="true"
-        className="grid h-[20px] w-[28px] place-items-center rounded-[4px] border-2 border-border bg-[#1F2937] shadow-[inset_0_2px_0_#0B0F19]"
+        className="grid h-[26px] w-[30px] place-items-center rounded-[5px] border-2 border-border bg-[#1F2937] shadow-[inset_0_2px_0_#0B0F19]"
       >
-        {playing ? (
-          <span className="flex h-[12px] items-end gap-[2px]">
-            {EQ_BARS.map((bar, index) => (
-              <span
-                key={index}
-                className={`block h-full w-[3px] origin-bottom animate-[music-eq_0.8s_ease-in-out_infinite] bg-[#A3E635] motion-reduce:animate-none ${bar.rest} ${bar.delay}`}
-              />
-            ))}
-          </span>
-        ) : (
-          <svg
-            width="11"
-            height="12"
-            viewBox="0 0 7 8"
-            shapeRendering="crispEdges"
-            className="fill-[#A3E635]/70"
-          >
-            {PIXEL_NOTE.map(([x, y, w, h]) => (
-              <rect key={`${x}-${y}`} x={x} y={y} width={w} height={h} />
-            ))}
-          </svg>
-        )}
-      </span>
-      <span
-        aria-hidden="true"
-        className="font-display text-[8px] leading-none font-extrabold tracking-[0.12em] text-ink"
-      >
-        BGM
+        <svg
+          width="14"
+          height="16"
+          viewBox="0 0 7 8"
+          shapeRendering="crispEdges"
+          className={
+            playing
+              ? "animate-[music-bob_0.9s_ease-in-out_infinite] fill-[#A3E635] drop-shadow-[0_0_3px_#A3E635] motion-reduce:animate-none"
+              : "fill-[#A3E635]/60"
+          }
+        >
+          {PIXEL_NOTE.map(([x, y, w, h]) => (
+            <rect key={`${x}-${y}`} x={x} y={y} width={w} height={h} />
+          ))}
+        </svg>
       </span>
     </button>
   );

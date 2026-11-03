@@ -83,3 +83,16 @@ describe("background music", () => {
     expect(FakeAudio.made[0].paused).toBe(true);
   });
 });
+
+describe("track list from the deployment", () => {
+  // Site paths only: the production CSP allows media from the site alone.
+  it("keeps site paths in order, drops anything else", async () => {
+    const { parseTracks } = await import("../lib/background-music");
+    expect(
+      parseTracks(
+        " /music/a.mp3, https://cdn.example.org/b.m4a ,javascript:alert(1),//evil.example/c.mp3,http://x/d.mp3,,",
+      ),
+    ).toEqual(["/music/a.mp3"]);
+    expect(parseTracks(undefined)).toEqual([]);
+  });
+});

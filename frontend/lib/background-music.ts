@@ -11,9 +11,22 @@ import { useSyncExternalStore } from "react";
  * the person moves between pages (each page mounts its own AppShell) and
  * stops at logout. The list loops: after the last track the first plays.
  *
- * Tracks are files under frontend/public/music/, listed here in play order.
+ * The tracks come from the deployment, not the repository: the operator
+ * sets NEXT_PUBLIC_BGM_TRACKS at build time to a comma-separated list of
+ * paths this site serves (the production CSP allows media from the site
+ * only), in play order, for music they have the right to play to students.
+ * Unset, the key stays disabled.
  */
-export const BACKGROUND_TRACKS: readonly string[] = [];
+export function parseTracks(raw: string | undefined): readonly string[] {
+  return (raw ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => /^\/(?!\/)\S+$/.test(item));
+}
+
+export const BACKGROUND_TRACKS: readonly string[] = parseTracks(
+  process.env.NEXT_PUBLIC_BGM_TRACKS,
+);
 
 type Listener = () => void;
 

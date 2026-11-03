@@ -56,6 +56,14 @@ https://{$MAYA_DOMAIN} {
 		}
 	}
 
+	# Background music the operator places on the host (MAYA_MUSIC_DIR,
+	# read-only); never in the repository. NEXT_PUBLIC_BGM_TRACKS lists it.
+	handle_path /music/* {
+		header Cache-Control "public, max-age=86400"
+		root * /srv/music
+		file_server
+	}
+
 	handle {
 		reverse_proxy frontend:3000
 	}

@@ -352,14 +352,14 @@ textarea {
   }
 }
 
-/* Sidebar BGM key: equalizer bars bounce while music plays. */
-@keyframes music-eq {
+/* Sidebar music key: the pixel note bobs while music plays. */
+@keyframes music-bob {
   0%,
   100% {
-    transform: scaleY(0.3);
+    translate: 0 1px;
   }
   50% {
-    transform: scaleY(1);
+    translate: 0 -2px;
   }
 }
 
