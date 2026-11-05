@@ -516,9 +516,7 @@ export default function TeacherDebateControlPage() {
                     type="button"
                   >
                     <WorkspaceIcon name="interact" size={18} />
-                    {interactionBusy && !joinUrl
-                      ? betaLabels.interactionOpening
-                      : betaLabels.openInteraction}
+                    {betaLabels.openInteraction}
                   </button>
                 ) : null}
                 {!playbackComplete &&
