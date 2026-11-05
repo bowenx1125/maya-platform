@@ -33,6 +33,13 @@ vi.mock("../components/debate-beta/stage/bubble-progress", () => ({
 }));
 vi.mock("../components/ui", () => ({
   QrCode: ({ value }: { value: string }) => <div>{value}</div>,
+  useNoticeTrayAbove: () => undefined,
+  NoticeTraySlot: () => null,
+  RetryPill: ({ children, ...rest }: { children?: unknown }) => (
+    <button type="button" {...rest}>
+      {children as never}
+    </button>
+  ),
 }));
 
 afterEach(() => {

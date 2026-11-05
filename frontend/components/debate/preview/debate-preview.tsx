@@ -7,11 +7,11 @@ import { teachingRoundLabel } from "../../../lib/debate-rounds";
 import type { SegmentEvidence } from "../../../lib/evidence-grading";
 import { SegmentGrade } from "../../evidence/segment-grade";
 
-import { ErrorNotice, Notice } from "../../ui";
+import { ErrorNotice, Notice, RetryPill } from "../../ui";
 import { statusLabel, tm } from "../../../lib/i18n";
 import { cn } from "../../../lib/utils";
 import { buttonVariants } from "../../ui/button";
-import { IconBust, IconEye, IconPlay, IconRefresh } from "../../quiet-icons";
+import { IconBust, IconEye, IconPlay } from "../../quiet-icons";
 import {
   DEBATE_BUTTON,
   DEBATE_PAGE,
@@ -218,9 +218,7 @@ export function DebatePreview({
               tone="error"
               action={
                 onRetryTurn ? (
-                  <button
-                    className="inline-button"
-                    type="button"
+                  <RetryPill
                     data-testid="preview-audio-failed-retry"
                     disabled={retryingTurnId !== null}
                     onClick={() =>
@@ -228,7 +226,7 @@ export function DebatePreview({
                     }
                   >
                     Retry
-                  </button>
+                  </RetryPill>
                 ) : null
               }
             >
@@ -391,20 +389,15 @@ function PreviewTurnCard({
             </code>
           ) : null}
           {onRetry ? (
-            <button
-              className={cn(
-                DEBATE_BUTTON,
-                "ml-auto py-1 pr-2.5 pl-2.5 text-xs leading-[normal]",
-              )}
+            <RetryPill
+              className="ml-auto text-xs"
               aria-label={retrying ? "Retrying…" : "Retry turn"}
               aria-busy={retrying}
               disabled={retryBusy}
               onClick={() => onRetry(turn.id)}
-              type="button"
             >
-              <IconRefresh size={18} />
               {retrying ? "Retrying…" : "Retry turn"}
-            </button>
+            </RetryPill>
           ) : null}
         </div>
       ) : null}

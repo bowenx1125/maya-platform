@@ -51,7 +51,7 @@ export const MUSIC_FADE_MS = 900;
 // The stage music sits under the Debate speeches.
 const CHANNEL_VOLUME: Record<MusicChannelName, number> = {
   workspace: 0.6,
-  stage: 0.245,  // 70% of the previous 0.35 stage level
+  stage: 0.1225,  // 50% of the previous 0.245 stage level
 };
 
 const WORKSPACE_OFF_PREFIX = "maya.bgm.off.workspace.";
