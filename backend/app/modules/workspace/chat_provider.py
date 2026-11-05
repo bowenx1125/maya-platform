@@ -7,7 +7,7 @@ import re
 from collections.abc import Callable
 from contextlib import ExitStack
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID
 
 from agno.models.message import Message
@@ -453,6 +453,13 @@ def real_reply(
             actor_context=actor_context,
             generation_waker=generation_waker,
         )
+        if required_tool is None:
+            from app.modules.runtime_tools.builtin import ASSESSMENT_TOOL_NAMES
+
+            # An Agent Chat never holds a formal assessment (only a published
+            # Maya Team does). Course test and record Tools here only gave the
+            # model a generic course-tool role in place of its AGENT.md.
+            tools = [tool for tool in tools if tool.name not in ASSESSMENT_TOOL_NAMES]
 
     cursors: dict[str, int] = {}
     latest_operation: str | None = None
@@ -1282,8 +1289,18 @@ def chat_messages(
     sources: list[ChatSource],
     *,
     canonical_knowledge: list[dict[str, Any]] | None = None,
-    audience: Literal["student", "teacher"] = "student",
+    agent_name: str | None = None,
 ) -> tuple[list[dict[str, str]], str]:
+    """System text for a one-to-one Agent Chat.
+
+    It carries this Agent's own AGENT.md and Knowledge and no role template.
+    Prod (2026-11-05): a fixed "selected educational Agent" opening, a
+    teacher-tools paragraph and the course assessment Tools made a Nikola
+    Tesla Agent greet a teacher as a generic 教学助手 offering quizzes and
+    learning records. An Agent Chat never holds a formal assessment, so none
+    of that wording or those Tools belong here.
+    """
+
     context = {
         "agent_markdown": version.agent_md,
         "canonical_knowledge": canonical_knowledge or [],
@@ -1291,9 +1308,17 @@ def chat_messages(
             {"label": f"S{index + 1}", "text": item.excerpt} for index, item in enumerate(sources)
         ],
     }
+    name = " ".join((agent_name or "").split())
+    identity = (
+        f"You are {name}, the Agent defined by agent_markdown, in a private one-to-one "
+        "conversation. "
+        if name
+        else "You are the Agent defined by agent_markdown, in a private one-to-one conversation. "
+    )
     instruction = (
-        "You are the selected educational Agent in a private one-to-one conversation. "
-        "Follow the published agent_markdown for your identity, style and approach to questions. "
+        identity + "Your identity, persona, style and approach to questions come only from "
+        "agent_markdown. Do not present yourself as a generic assistant, tutor or "
+        "course tool, and do not offer functions agent_markdown does not describe. "
         "Determine the reply language from the final user message in this request. "
         "When that message is in Chinese, write the reply in Chinese; when it is in English, "
         "write the reply in English. Follow an explicit request to translate or answer in "
@@ -1307,27 +1332,12 @@ def chat_messages(
         "conversation, in chronological order, followed by the current question. Use the "
         "complete history directly for what was said in this window. Do not replace earlier "
         "turns with a summary, crop them, or behave as though they were discarded. "
-        f"{ACCOUNT_MEMORY_RULE} "
+        f"{ACCOUNT_MEMORY_RULE_NO_ASSESSMENT} "
         "Use only the supplied evidence for factual citations; cite [S1] etc only when relevant. "
         "Distinguish evidence from interpretation and acknowledge missing evidence. "
         "Never claim to have access to other people's conversations or private resources. "
-        "Reply directly in natural text. Use any available Maya Tools when the current task "
-        "calls for a saved record or formal activity action; never claim an action succeeded "
-        "unless its Tool returns success. "
-        + (
-            "The person writing is a course teacher, not a student taking a test. "
-            "Do not greet them as the learner or tell them to continue a question. "
-            "When they ask about attempts, answers, scores or summaries, call the teacher "
-            "tools and use only what those tools return. phase summary_not_saved, or "
-            "summary_status not_saved, means the answers are saved and the summary write "
-            "failed. Do not quote internal field names such as boundary_summary. "
-            "Do not say a report was generated, a download is below, or an answer sheet "
-            "is attached unless the tool result for this turn contains that report or "
-            "those attempts. "
-            if audience == "teacher"
-            else ""
-        )
-        + f"{AGENT_LIMIT_REPLY_RULE}\n"
-        + json.dumps(context, ensure_ascii=False)
+        "Reply directly in natural text. Call a Tool only when the user's current request "
+        "needs it; never claim an action succeeded unless its Tool returns success. "
+        f"{AGENT_LIMIT_REPLY_RULE}\n" + json.dumps(context, ensure_ascii=False)
     )
     return [{"role": "system", "content": instruction}, *history], markdown_hash(version.agent_md)

@@ -836,17 +836,12 @@ def _generate_reply_body(
         from app.modules.knowledge_sets.service import get_agent_runtime_knowledge
 
         canonical_knowledge = get_agent_runtime_knowledge(db, actor_context, agent.id)
-    audience: Literal["student", "teacher"] = "student"
-    if actor_context is not None:
-        membership = db.get(CourseMember, (row.course_id, actor_context.user.id))
-        if membership is not None and membership.role == "teacher":
-            audience = "teacher"
     messages, persona_hash = chat_messages(
         version,
         history,
         sources,
         canonical_knowledge=canonical_knowledge,
-        audience=audience,
+        agent_name=agent.name,
     )
     reply, operation_id = real_reply(
         db,
