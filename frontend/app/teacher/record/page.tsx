@@ -1,32 +1,41 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 
+import { AppShell } from "../../../components/app-shell";
+import { BrainformWorkspace } from "../../../components/knowledge/brainform-workspace";
 import { RouteGuard } from "../../../components/session-provider";
+import { LoadingPage } from "../../../components/ui";
 
-function RecordRedirect() {
-  const router = useRouter();
+function TeacherRecordRoute() {
   const query = useSearchParams();
-
-  useEffect(() => {
-    const groupId = query.get("group_id");
-    router.replace(
-      groupId ? `/teacher/quizzes/records?group_id=${groupId}` : "/teacher/quizzes/records",
-    );
-  }, [router, query]);
-
-  return null;
+  const q = (key: string) => query.get(key) ?? undefined;
+  return (
+    <RouteGuard role="teacher">
+      <AppShell role="teacher">
+        <BrainformWorkspace
+          role="teacher"
+          recordPage
+          initialAgentId={q("agent_id")}
+          initialSetId={q("set_id")}
+          initialCourseId={q("course_id")}
+          initialJobId={q("job_id")}
+          initialGroupId={q("group_id")}
+          initialMode={q("mode")}
+          initialDocumentId={q("document_id")}
+        />
+      </AppShell>
+    </RouteGuard>
+  );
 }
 
-// The query is read in the browser, so following a link here needs no
-// server render.
+// The query (and path) is read in the browser, so following a link here
+// needs no server render; only the page's own data requests wait.
 export default function TeacherRecordPage() {
   return (
-    <Suspense fallback={null}>
-      <RouteGuard role="teacher">
-        <RecordRedirect />
-      </RouteGuard>
+    <Suspense fallback={<LoadingPage />}>
+      <TeacherRecordRoute />
     </Suspense>
   );
 }
