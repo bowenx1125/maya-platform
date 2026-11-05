@@ -1910,6 +1910,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{conversation_id}/turns/{turn_id}/model-input": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Chat Turn Model Input */
+        get: operations["getChatTurnModelInput"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{conversation_id}/turns/{turn_id}:pause": {
         parameters: {
             query?: never;
@@ -2294,6 +2311,52 @@ export interface components {
             state: "pending" | "ready" | "partial" | "failed" | "acceptance_unknown" | "paused";
             /** User Text */
             user_text: string;
+        };
+        /** ModelInput */
+        ModelInput: {
+            /** Calls */
+            calls: components["schemas"]["ModelInputCall"][];
+        };
+        /**
+         * ModelInputCall
+         * @description One model request as sent, for the Details view under Check RAG.
+         */
+        ModelInputCall: {
+            /** Agent Md */
+            agent_md: string | null;
+            /** Attachments */
+            attachments: string | null;
+            /** Knowledge */
+            knowledge: string | null;
+            /** Speaker Name */
+            speaker_name: string;
+            /** System Prompt */
+            system_prompt: string;
+            /** Tool Messages */
+            tool_messages: components["schemas"]["ModelInputToolMessage"][];
+            /** Tools */
+            tools: components["schemas"]["ModelInputTool"][];
+        };
+        /** ModelInputTool */
+        ModelInputTool: {
+            /** Description */
+            description: string;
+            /** Name */
+            name: string;
+            /** Parameters */
+            parameters: string;
+        };
+        /** ModelInputToolMessage */
+        ModelInputToolMessage: {
+            /** Content */
+            content: string;
+            /** Name */
+            name: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "tool_call" | "tool_result";
         };
         /** CheckProvider */
         CheckProvider: {
@@ -10847,6 +10910,41 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getChatTurnModelInput: {
+        parameters: {
+            query?: {
+                /** @description A Team member's reply in this turn. Omit for an Agent Chat or every member. */
+                result_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelInput"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

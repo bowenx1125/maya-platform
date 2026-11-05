@@ -8162,6 +8162,78 @@
         ]
       }
     },
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/model-input": {
+      "get": {
+        "operationId": "getChatTurnModelInput",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "result_id",
+            "required": false,
+            "description": "A Team member's reply in this turn. Omit for an Agent Chat or every member.",
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid",
+              "title": "Result Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelInput"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Get Chat Turn Model Input",
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
     "/api/v1/conversations/{conversation_id}/turns/{turn_id}:pause": {
       "post": {
         "operationId": "pauseTeamConversationTurn",
@@ -9758,6 +9830,138 @@
           "safe_error_code"
         ],
         "title": "ChatTurn",
+        "type": "object"
+      },
+      "ModelInput": {
+        "additionalProperties": false,
+        "properties": {
+          "calls": {
+            "items": {
+              "$ref": "#/components/schemas/ModelInputCall"
+            },
+            "title": "Calls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "calls"
+        ],
+        "title": "ModelInput",
+        "type": "object"
+      },
+      "ModelInputCall": {
+        "additionalProperties": false,
+        "description": "One model request as sent, for the Details view under Check RAG.",
+        "properties": {
+          "agent_md": {
+            "title": "Agent Md",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attachments": {
+            "title": "Attachments",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "knowledge": {
+            "title": "Knowledge",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "speaker_name": {
+            "title": "Speaker Name",
+            "type": "string"
+          },
+          "system_prompt": {
+            "title": "System Prompt",
+            "type": "string"
+          },
+          "tool_messages": {
+            "items": {
+              "$ref": "#/components/schemas/ModelInputToolMessage"
+            },
+            "title": "Tool Messages",
+            "type": "array"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ModelInputTool"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "speaker_name",
+          "system_prompt",
+          "agent_md",
+          "knowledge",
+          "attachments",
+          "tools",
+          "tool_messages"
+        ],
+        "title": "ModelInputCall",
+        "type": "object"
+      },
+      "ModelInputTool": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parameters": {
+            "title": "Parameters",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "parameters"
+        ],
+        "title": "ModelInputTool",
+        "type": "object"
+      },
+      "ModelInputToolMessage": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "enum": [
+              "tool_call",
+              "tool_result"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "name",
+          "content"
+        ],
+        "title": "ModelInputToolMessage",
         "type": "object"
       },
       "CheckProvider": {

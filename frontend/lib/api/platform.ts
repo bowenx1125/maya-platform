@@ -272,6 +272,8 @@ export type AgentChatSession = ChatSession & {
 };
 export type ConversationSession = AgentChatSession | TeamChatSession;
 export type ChatAttachment = components["schemas"]["ChatAttachment"];
+export type ModelInput = components["schemas"]["ModelInput"];
+export type ModelInputCall = components["schemas"]["ModelInputCall"];
 export type TeamChatEntry =
   | { kind: "team"; team_id: string; team_version_id?: string | null }
   | { kind: "maya_team"; team_id: string };
@@ -1461,6 +1463,25 @@ export class PlatformApi {
       await this.client.GET("/conversations/{conversation_id}/attachments", {
         params: { path: { conversation_id: id } },
       }),
+    );
+  }
+
+  /** What one Chat turn sent to the model (Details under Check RAG). */
+  async chatTurnModelInput(
+    conversationId: string,
+    turnId: string,
+    resultId?: string,
+  ): Promise<ModelInput> {
+    return unwrap(
+      await this.client.GET(
+        "/conversations/{conversation_id}/turns/{turn_id}/model-input",
+        {
+          params: {
+            path: { conversation_id: conversationId, turn_id: turnId },
+            query: resultId ? { result_id: resultId } : {},
+          },
+        },
+      ),
     );
   }
 

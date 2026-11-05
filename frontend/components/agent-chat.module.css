@@ -586,6 +586,21 @@
     line-height: 1.55;
     white-space: pre-wrap;
   }
+  .ragDetailsCall + .ragDetailsCall {
+    margin-top: 12px;
+  }
+  .ragDetailsHeading {
+    font-weight: 800;
+  }
+  .ragDetailsText {
+    max-height: 420px;
+    margin: 8px 0 0;
+    overflow: auto;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
   .pending {
     display: flex;
     align-items: center;

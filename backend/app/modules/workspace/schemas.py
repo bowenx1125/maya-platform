@@ -310,3 +310,31 @@ class LiveSnapshot(ClosedModel):
     participants: list[LiveParticipant]
     turns: list[LiveTurn]
     playback: PlaybackStateDTO | None
+
+
+class ModelInputTool(ClosedModel):
+    name: str
+    description: str
+    parameters: str
+
+
+class ModelInputToolMessage(ClosedModel):
+    role: Literal["tool_call", "tool_result"]
+    name: str | None
+    content: str
+
+
+class ModelInputCall(ClosedModel):
+    """One model request as sent, for the Details view under Check RAG."""
+
+    speaker_name: str
+    system_prompt: str
+    agent_md: str | None
+    knowledge: str | None
+    attachments: str | None
+    tools: list[ModelInputTool]
+    tool_messages: list[ModelInputToolMessage]
+
+
+class ModelInput(ClosedModel):
+    calls: list[ModelInputCall]

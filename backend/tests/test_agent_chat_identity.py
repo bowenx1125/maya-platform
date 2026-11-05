@@ -122,3 +122,30 @@ def test_team_member_prompt_holds_only_its_own_agent_md(
             assert f"You are {name}." not in request.system_message
         assert ROLE_TEMPLATE.search(request.system_message) is None, request.speaker_name
         assert ASSESSMENT_WORDS.search(request.system_message) is None
+
+
+def test_debate_speaker_gets_only_its_own_rag_and_ruleset() -> None:
+    from app.modules.debates.generation.segments import build_segment_input
+    from app.modules.debates.teaching_rules import freeze_teaching_rules, frozen_system_prompt
+
+    from tests.test_segments_protocol import _context, _receipt
+
+    context = _context()
+    own = context.participant.snapshot_id
+    assert own is not None
+    snapshot = build_segment_input(
+        context,
+        persona=context.participant.persona,
+        receipts=(
+            _receipt(own, "chunk-own", "My own evidence."),
+            _receipt("snapshot-1", "chunk-other", "Another speaker's private evidence."),
+        ),
+    )
+    user = snapshot.to_user_json()
+    assert "My own evidence." in user
+    assert "Another speaker's private evidence." not in user
+    assert ROLE_TEMPLATE.search(user) is None
+    # The system message is the Debate's editable Ruleset, word for word.
+    ruleset = "# Rules\n\nRound {round}: speak as your Persona."
+    frozen = json.dumps(freeze_teaching_rules({"zh": ruleset, "en": ruleset}))
+    assert frozen_system_prompt(frozen, 2, "en") == "# Rules\n\nRound 2: speak as your Persona."

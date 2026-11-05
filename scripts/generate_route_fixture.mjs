@@ -123,6 +123,7 @@ const implemented = new Set([
   "deleteConversation",
   "updateConversation",
   "listConversationAttachments",
+  "getChatTurnModelInput",
   "downloadConversationReport",
   "uploadConversationAttachment",
   "deleteConversationAttachment",
