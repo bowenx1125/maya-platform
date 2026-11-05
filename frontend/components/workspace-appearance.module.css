@@ -246,6 +246,17 @@
     border-color: #edbec3;
   }
 
+  /* U3 mascot tray keeps the approved opaque pink (#FFE4E4), hard shadow,
+     and #111 border — appearance must not wash it to near-white. */
+  .appearance :global(.notice-tray .notice.notice-error),
+  .appearance :global(.notice-tray .dismissible-alert),
+  .appearance :global(.notice-tray .dismissible-alert-tray) {
+    background: #ffe4e4;
+    color: #111;
+    border: 3px solid #111;
+    box-shadow: 4px 4px 0 #111;
+  }
+
   .appearance :global(.notice-warning) {
     background: #fff7e5;
     color: #795200;

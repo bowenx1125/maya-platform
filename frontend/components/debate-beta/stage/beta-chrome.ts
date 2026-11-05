@@ -82,9 +82,19 @@ export const BETA_NOTICES =
 export const BETA_TOPIC =
   "absolute z-[4] top-[max(20px,env(safe-area-inset-top))] left-[max(22px,env(safe-area-inset-left))] w-fit max-w-[min(560px,58vw)] m-0 py-2 px-[14px] border-[2.5px] border-solid border-[#111] rounded-[14px] bg-white shadow-[4px_5px_0_#111] text-[#111] [font-family:var(--font-bricolage,var(--font-display,var(--font-ui,system-ui)))] [font-size:clamp(0.95rem,1.4vw,1.0625rem)] font-extrabold tracking-[-0.01em] leading-[1.3] [overflow-wrap:anywhere] max-[600px]:left-[max(10px,env(safe-area-inset-left))] max-[600px]:right-[max(10px,env(safe-area-inset-right))] max-[600px]:top-[max(12px,env(safe-area-inset-top))] max-[600px]:max-w-none max-[600px]:py-2 max-[600px]:px-3 max-[600px]:[font-size:14px]";
 
+/** DESIGN-RULES AlertDialog: #111 40% scrim, no blur. */
+export const BETA_END_PROMPT_SCRIM =
+  "absolute inset-0 z-20 bg-[#111]/40";
+/** White card, 3px #111 border, hard shadow (neobrutalism / DESIGN-RULES §3). */
 export const BETA_END_PROMPT =
-  "absolute z-20 top-1/2 left-1/2 grid gap-4 w-[min(420px,calc(100%_-_48px))] p-5 border border-solid [border-color:var(--line)] rounded-[16px] bg-[rgba(255,255,255,0.98)] shadow-[0_16px_48px_rgba(35,28,18,0.18)] [transform:translate(-50%,-50%)] [&_p]:m-0 [&_p]:[font-size:16px] [&_p]:leading-[1.5]";
-export const BETA_END_PROMPT_ACTIONS = "flex justify-end gap-2";
+  "absolute z-[21] top-1/2 left-1/2 grid gap-4 w-[min(420px,calc(100%_-_48px))] p-5 border-[3px] border-solid border-[#111] rounded-[10px] bg-white shadow-[6px_6px_0_#111] [transform:translate(-50%,-50%)] [&_p]:m-0 [&_p]:text-[16px] [&_p]:leading-[1.5] [&_p]:font-medium [&_p]:text-[#111]";
+export const BETA_END_PROMPT_ACTIONS = "flex flex-wrap justify-end gap-2";
+/** Cancel = Button neutral (white, 2px border, press). */
+export const BETA_END_PROMPT_CANCEL =
+  "inline-flex min-h-10 cursor-pointer items-center justify-center rounded-[10px] border-2 border-[#111] bg-white px-4 py-2 font-body text-sm font-bold text-[#111] shadow-[0_6px_0_#111] transition-[translate,box-shadow] duration-150 hover:-translate-y-0.5 active:translate-y-1.5 active:shadow-none disabled:cursor-default disabled:opacity-50 motion-reduce:transition-colors motion-reduce:hover:translate-y-0 motion-reduce:active:translate-y-0 motion-reduce:active:shadow-[0_6px_0_#111]";
+/** End = immerse soft-danger (NOTES), not delete-red. */
+export const BETA_END_PROMPT_END =
+  "inline-flex min-h-10 cursor-pointer items-center justify-center rounded-[10px] border-[3px] border-[#111] bg-[#FFE4E4] px-4 py-2 font-body text-sm font-bold text-[#9F1239] shadow-[0_3px_0_#F9A8D4] transition-[translate,box-shadow,background-color] duration-150 hover:-translate-y-0.5 hover:bg-[#FECDD3] active:translate-y-1 active:shadow-none disabled:cursor-default disabled:opacity-50 motion-reduce:transition-colors motion-reduce:hover:translate-y-0 motion-reduce:active:translate-y-0 motion-reduce:active:shadow-[0_3px_0_#F9A8D4]";
 
 /** A1 yellow ticket QR — bottom-left above the candy dock. */
 export const BETA_JOIN_CARD =

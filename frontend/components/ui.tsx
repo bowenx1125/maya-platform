@@ -231,7 +231,9 @@ export function Notice({
       id={id}
       className={cn(
         `notice notice-${tone}`,
-        "relative my-4 flex w-full items-start gap-2.5 rounded-[18px] border-[3px] border-border bg-surface py-3 pr-[42px] pl-3.5 text-left font-body text-sm leading-[1.45] font-medium text-ink shadow-[4px_4px_0_#111] max-[680px]:flex-wrap",
+        "relative my-4 flex w-full items-start gap-2.5 rounded-[18px] border-[3px] border-border py-3 pr-[42px] pl-3.5 text-left font-body text-sm leading-[1.45] font-medium text-ink shadow-[4px_4px_0_#111] max-[680px]:flex-wrap",
+        // Opaque fills only (U3): never rgba/translucent over a busy stage.
+        tone === "info" && "bg-surface",
         // Status dot instead of an icon font; the colour carries the tone.
         sticker
           ? "items-center py-3 pr-[46px] pl-3.5"
@@ -313,8 +315,9 @@ export function StickerBadge({
 }
 
 const NOTICE_TONE = {
-  error: "bg-err-bg before:bg-err",
-  warning: "bg-warn-bg before:bg-warn",
+  // Solid arcade fills — never translucent white over 3D / photos.
+  error: "bg-[#FFE4E4] before:bg-err",
+  warning: "bg-[#FFF7CC] before:bg-warn",
   success: "bg-ok-bg before:bg-ok",
   info: "",
 } as const;
