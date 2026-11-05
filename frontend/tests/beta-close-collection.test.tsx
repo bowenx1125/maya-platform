@@ -43,8 +43,6 @@ vi.mock("../components/debate-beta/stage", () => ({
   ),
   defaultBetaStageLabels: {
     openInteraction: "Interact",
-    hideInteraction: "Hide",
-    interactionOpening: "Opening…",
   },
 }));
 vi.mock("../components/report", () => ({
@@ -290,6 +288,32 @@ describe("segments_v2 interaction dock (A1: no Close collection)", () => {
     expect(api.closeInteraction).not.toHaveBeenCalled();
     expect(api.openInteraction).not.toHaveBeenCalled();
     expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("keeps Interact on first open click; never swaps to Hide or Opening…", async () => {
+    let release!: (value: TeacherInteraction) => void;
+    const pending = new Promise<TeacherInteraction>((resolve) => {
+      release = resolve;
+    });
+    const api = pageApi(interaction("closed"));
+    api.openInteraction.mockImplementation(async () => {
+      const next = await pending;
+      return next;
+    });
+    renderPage(api);
+    const toggle = await screen.findByRole("button", { name: "Interact" });
+    fireEvent.click(toggle);
+    expect(toggle.textContent).toContain("Interact");
+    expect(screen.queryByRole("button", { name: "Hide" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Opening…" })).toBeNull();
+    expect(toggle.hasAttribute("disabled")).toBe(true);
+    release(interaction("open"));
+    await waitFor(() =>
+      expect(toggle.getAttribute("aria-expanded")).toBe("true"),
+    );
+    expect(toggle.textContent).toContain("Interact");
+    expect(screen.queryByRole("button", { name: "Hide" })).toBeNull();
+    expect(screen.getByRole("img", { name: "Scan to join" })).toBeTruthy();
   });
 
   it("does not expose Close collection — collection stays open by default", async () => {

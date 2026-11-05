@@ -12,9 +12,7 @@ export type BetaStageLabels = {
   joinLabel: string;
   barrageCount: (count: number) => string;
   openInteraction: string;
-  hideInteraction: string;
   transcriptToggle: string;
-  interactionOpening: string;
   interactionClosedHint: string;
 };
 
@@ -25,9 +23,7 @@ export const defaultBetaStageLabels: BetaStageLabels = {
   joinLabel: "Scan to join",
   barrageCount: (count) => `${count} message${count === 1 ? "" : "s"}`,
   openInteraction: "Interact",
-  hideInteraction: "Hide",
   transcriptToggle: "Transcript",
-  interactionOpening: "Opening…",
   interactionClosedHint:
     "Open classroom messages to show a join code on the stage.",
 };
