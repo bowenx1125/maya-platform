@@ -28,6 +28,11 @@ type Intent = {
 };
 
 const AUDIO_QUEUE_POLL_MS = 1_000;
+const AUDIO_RESTORE_CONCURRENCY = 3;
+// Admission refused BEFORE synthesis; the backend stores this terminal receipt.
+// A fresh key is safe only for this pre-provider failure, not a TTS timeout or
+// interrupted/unknown acceptance (which require a teacher's explicit retry).
+const RETRYABLE_ADMISSION_CODE = "tts_provider_unavailable";
 type AudioRestoreJob = {
   ownerId?: string;
   revision: number;
@@ -69,7 +74,7 @@ function readAudioJob(id: string, ownerId?: string): AudioRestoreJob | null {
 
 function saveAudioJob(id: string, job: AudioRestoreJob | null) {
   try {
-    if (job && Object.keys(job.turns).length > 0) {
+    if (job) {
       localStorage.setItem(audioJobKey(id), JSON.stringify(job));
     } else {
       localStorage.removeItem(audioJobKey(id));
@@ -148,6 +153,7 @@ export function DebateCleanupControls({
     () => audioRestoreNeeded ?? missingAudioIds(detail).length > 0,
   );
   const [generatingAudio, setGeneratingAudio] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -193,108 +199,199 @@ export function DebateCleanupControls({
   const generateAudio = useCallback(
     async (resume = false) => {
       if (active.current) return;
+      const id = debateId ?? detail?.id;
+      if (!id) return;
+      let job = readAudioJob(id, restoreOwnerId);
+      if (resume && !job) return;
+      // Persist intent BEFORE fetching detail. Even navigation during the first
+      // GET must leave a resumable marker, including when no turn IDs are known.
+      job ??= { ownerId: restoreOwnerId, revision: -1, turns: {} };
+      if (!resume) {
+        for (const request of Object.values(job.turns)) {
+          if (request.failed) {
+            request.key = createIdempotencyHandle().key;
+            delete request.failed;
+          }
+        }
+      }
+      saveAudioJob(id, job);
       active.current = true;
       snapshotVersion.current += 1;
       setBusy(true);
       setGeneratingAudio(true);
+      setRevoice(true);
+      setAudioError(null);
+      // Only a detail-only caller needs local confirmation: its prop may be a
+      // frozen snapshot. List rows always verify against a fresh detail GET.
+      const confirmedReady = new Set<string>();
       try {
-        const id = debateId ?? detail?.id;
-        let job = id ? readAudioJob(id, restoreOwnerId) : null;
-        let snapshot: DebateDetail | undefined;
-        // A refresh may race a temporarily unavailable snapshot. Keep the already
-        // authorized job rather than losing its unsent turns.
-        for (;;) {
+        while (mounted.current) {
+          let snapshot: DebateDetail | undefined;
           try {
             snapshot = loadDetailRef.current
               ? await loadDetailRef.current()
               : detail;
-            break;
           } catch (cause) {
-            if (!resume || !job || !isAmbiguousMutationFailure(cause))
-              throw cause;
+            if (!isAmbiguousMutationFailure(cause)) throw cause;
             await wait(AUDIO_QUEUE_POLL_MS);
-            if (!mounted.current) return;
+            continue;
           }
-        }
-        if (!snapshot || !mounted.current) return;
-        if (job && job.revision !== snapshot.revision) {
-          saveAudioJob(snapshot.id, null);
-          job = null;
-          if (resume) return;
-        }
-        const missing = [
-          ...new Set([...missingAudioIds(snapshot), ...regenerableIds.current]),
-        ];
-        if (resume && !job) return;
-        job ??= {
-          ownerId: restoreOwnerId,
-          revision: snapshot.revision,
-          turns: {},
-        };
-        for (const turnId of Object.keys(job.turns)) {
-          if (!missing.includes(turnId)) delete job.turns[turnId];
-        }
-        if (!resume) {
+          if (!snapshot || !mounted.current) return;
+          if (job.revision !== snapshot.revision) {
+            // Reconcile the NEW snapshot, never drop the teacher's intent just
+            // because cleanup/Rebirth advanced the revision. Old keys must not
+            // be replayed with a different expected_revision/body.
+            if (job.revision !== -1) regenerableIds.current = [];
+            job = {
+              ownerId: restoreOwnerId,
+              revision: snapshot.revision,
+              turns: {},
+            };
+            confirmedReady.clear();
+          }
+          const missing = [
+            ...new Set([
+              ...missingAudioIds(snapshot),
+              ...regenerableIds.current,
+            ]),
+          ].filter(
+            (turnId) => loadDetailRef.current || !confirmedReady.has(turnId),
+          );
+          for (const turnId of Object.keys(job.turns)) {
+            if (!missing.includes(turnId)) delete job.turns[turnId];
+          }
+          // Resume also seeds IDs omitted from the stored batch (or exposed by
+          // the new snapshot). Persist the WHOLE queue before any dispatch.
           for (const turnId of missing) {
-            if (!job.turns[turnId] || job.turns[turnId].failed) {
-              job.turns[turnId] = { key: createIdempotencyHandle().key };
-            }
+            job.turns[turnId] ??= { key: createIdempotencyHandle().key };
           }
-        }
-        const restore = job;
-        // Persist the entire batch before dispatch, then submit every turn. A
-        // page unload cannot strand the later turns behind one slow TTS call.
-        saveAudioJob(snapshot.id, restore);
-        await Promise.all(
-          Object.entries(restore.turns).map(async ([turnId, request]) => {
-            if (request.failed) return;
-            const handle = new IdempotencyHandle(request.key);
-            while (mounted.current) {
-              try {
-                const result = await api.regenerateDebateTurnAudio(
-                  snapshot.id,
-                  turnId,
-                  { expected_revision: restore.revision },
-                  { idempotency: handle },
-                );
-                if (!mounted.current) return;
-                if (result.audio_ready) {
-                  delete restore.turns[turnId];
-                  regenerableIds.current = regenerableIds.current.filter(
-                    (id) => id !== turnId,
-                  );
-                  saveAudioJob(snapshot.id, restore);
-                  return;
+          saveAudioJob(id, job);
+          if (missing.length === 0) {
+            // Never clear intent just because the last request finished. Only
+            // a reconciled snapshot (or ready receipts without a loader) can.
+            saveAudioJob(id, null);
+            regenerableIds.current = [];
+            setRevoice(false);
+            break;
+          }
+          const restore = job;
+          const queue = Object.entries(restore.turns).filter(
+            ([, turn]) => !turn.failed,
+          );
+          if (queue.length === 0) {
+            const failedTurns = missing.map((turnId) => {
+              const turn = [
+                ...(snapshot.preview_turns ?? []),
+                ...snapshot.public_turns,
+              ].find((candidate) => candidate.id === turnId);
+              return turn && Number.isInteger(turn.turn_index)
+                ? turn.turn_index + 1
+                : turnId;
+            });
+            setAudioError(
+              `Audio could not be restored for ${missing.length} speech turn(s) (${failedTurns.join(", ")}). Click Revocalize to retry.`,
+            );
+            break;
+          }
+          let cursor = 0;
+          let reconcile = false;
+          await Promise.all(
+            Array.from(
+              { length: Math.min(AUDIO_RESTORE_CONCURRENCY, queue.length) },
+              async () => {
+                while (mounted.current && !reconcile && cursor < queue.length) {
+                  const [turnId, request] = queue[cursor++];
+                  let delay = AUDIO_QUEUE_POLL_MS;
+                  while (mounted.current && !reconcile) {
+                    // Construct from the persisted key each time: the API handle
+                    // completes on terminal results, but the durable receipt key
+                    // still identifies that attempt across reloads.
+                    const handle = new IdempotencyHandle(request.key);
+                    try {
+                      const result = await api.regenerateDebateTurnAudio(
+                        id,
+                        turnId,
+                        { expected_revision: restore.revision },
+                        { idempotency: handle },
+                      );
+                      if (!mounted.current) return;
+                      if (result.audio_ready) {
+                        delete restore.turns[turnId];
+                        confirmedReady.add(turnId);
+                        regenerableIds.current = regenerableIds.current.filter(
+                          (value) => value !== turnId,
+                        );
+                        saveAudioJob(id, restore);
+                        break;
+                      }
+                      if (result.status === "queued")
+                        delay = AUDIO_QUEUE_POLL_MS;
+                      if (
+                        result.status === "stale" ||
+                        result.safe_error_code === "stale_revision"
+                      ) {
+                        if (loadDetailRef.current) {
+                          reconcile = true;
+                          break;
+                        }
+                        request.failed = true;
+                      } else if (
+                        result.safe_error_code === RETRYABLE_ADMISSION_CODE
+                      ) {
+                        // Definitively NOT submitted to the provider. Reusing its
+                        // failed receipt would return the same failure forever.
+                        request.key = createIdempotencyHandle().key;
+                      } else if (
+                        result.status !== "queued" &&
+                        result.safe_error_code !== "claim_unavailable"
+                      ) {
+                        request.failed = true;
+                      }
+                      saveAudioJob(id, restore);
+                      if (request.failed) break;
+                    } catch (cause) {
+                      if (!mounted.current) return;
+                      if (
+                        cause instanceof PlatformApiError &&
+                        cause.code === "stale_revision" &&
+                        loadDetailRef.current
+                      ) {
+                        reconcile = true;
+                        break;
+                      }
+                      if (!isAmbiguousMutationFailure(cause)) {
+                        request.failed = true;
+                        saveAudioJob(id, restore);
+                        break;
+                      }
+                      // Network, 408/425/429/5xx: keep the exact durable key;
+                      // acceptance may be unknown, so never create a new attempt.
+                    }
+                    await wait(delay);
+                    delay = Math.min(delay * 2, 15_000);
+                  }
                 }
-                if (result.status !== "queued") {
-                  request.failed = true;
-                  saveAudioJob(snapshot.id, restore);
-                  return;
-                }
-              } catch (cause) {
-                if (!isAmbiguousMutationFailure(cause)) {
-                  request.failed = true;
-                  saveAudioJob(snapshot.id, restore);
-                  return;
-                }
-                // An ambiguous response must reuse its key, never bill a new retry.
-              }
-              await wait(AUDIO_QUEUE_POLL_MS);
-            }
-          }),
-        );
-        if (mounted.current && Object.keys(restore.turns).length === 0) {
-          regenerableIds.current = [];
-          setRevoice(false);
+              },
+            ),
+          );
+          // Re-fetch before claiming success or stopping with surfaced failures.
+          if (mounted.current && reconcile) await wait(AUDIO_QUEUE_POLL_MS);
         }
       } catch {
-        /* Leave Revocalize available when restoration fails. */
+        if (mounted.current) {
+          setAudioError(
+            "Audio restoration is unavailable. Click Revocalize to retry.",
+          );
+        }
+        // Keep the durable intent, including an empty queue, for the next mount.
       } finally {
         if (mounted.current) {
           await refresh();
-          active.current = false;
-          setBusy(false);
-          setGeneratingAudio(false);
+          if (mounted.current) {
+            active.current = false;
+            setBusy(false);
+            setGeneratingAudio(false);
+          }
         }
       }
     },
@@ -303,9 +400,9 @@ export function DebateCleanupControls({
 
   useEffect(() => {
     const id = debateId ?? detail?.id;
-    if (!id) return;
-    const job = readAudioJob(id, restoreOwnerId);
-    if (!job || !Object.values(job.turns).some((turn) => !turn.failed)) return;
+    if (!id || !readAudioJob(id, restoreOwnerId)) return;
+    // Failed-only and empty queues still reconcile detail: new eligible turns
+    // must be enqueued and definitive failures must remain visible after Back/F5.
     const timer = window.setTimeout(() => void generateAudio(true), 0);
     return () => window.clearTimeout(timer);
   }, [debateId, detail?.id, generateAudio, restoreOwnerId]);
@@ -403,6 +500,14 @@ export function DebateCleanupControls({
   const deleteBusy = removal === "all";
   return (
     <div className={className}>
+      {audioError ? (
+        <div
+          role="alert"
+          className="rounded-2xl border-2 border-[#111] bg-[#FFD6E7] px-4 py-3 text-[#111] shadow-[3px_3px_0_#111]"
+        >
+          {audioError}
+        </div>
+      ) : null}
       <button
         className={labelled ? iconClassName : `icon-action ${iconClassName}`}
         type="button"

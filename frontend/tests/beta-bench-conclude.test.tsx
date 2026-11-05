@@ -601,3 +601,27 @@ describe("Completed stage classroom Replay", () => {
     confirm.mockRestore();
   });
 });
+
+it.each(["playing", "paused", "waiting_next", "ready"] as const)(
+  "keeps Completed dock rebirth Replay available when a reloaded Review is %s",
+  async (status) => {
+    const detail = finishedSegmentsDetail();
+    detail.status = "completed";
+    detail.playback = { ...detail.playback, mode: "replay", status };
+    const api = pageApi(
+      interaction("finalized"),
+      interaction("finalized"),
+      detail,
+    );
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage(api);
+    const replay = await screen.findByRole("button", { name: "Replay" });
+    expect(replay).toHaveProperty("disabled", false);
+    fireEvent.click(replay);
+    await waitFor(() => expect(api.rebirthDebate).toHaveBeenCalledTimes(1));
+    expect(api.rebirthDebate.mock.calls[0][1]).toEqual({
+      expected_revision: 1,
+      expected_control_version: 4,
+    });
+  },
+);

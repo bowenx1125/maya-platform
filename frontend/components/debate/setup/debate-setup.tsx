@@ -148,6 +148,8 @@ export function TeacherDebateList({
     [api, controller, courseId, t],
   );
 
+  const refreshRows = useCallback(() => load(true), [load]);
+
   useEffect(() => {
     let stopped = false;
     let timer: number;
@@ -285,7 +287,7 @@ export function TeacherDebateList({
                     api={api}
                     debateId={debate.id}
                     loadDetail={() => api.debate(debate.id)}
-                    onVoiceDeleted={load}
+                    onVoiceDeleted={refreshRows}
                     onAllDeleted={() => {
                       loadSequence.current += 1;
                       setDebates((rows) =>

@@ -1106,3 +1106,65 @@ it("removes bulk Refresh and never retries stalled records when reading the list
   expect(api.remakeDebate).not.toHaveBeenCalled();
   expect(api.debate).not.toHaveBeenCalled();
 });
+
+it("resumes Revocalize with the same teacher after Preview and Back on the real list", async () => {
+  localStorage.clear();
+  const row = { ...completedDebate(), audio_restore_needed: true };
+  const detail = {
+    id: row.id,
+    revision: 7,
+    turn_protocol: "segments_v2",
+    playback: { control_version: 4 },
+    public_turns: [],
+    preview_turns: ["one", "two", "three"].map((id) => ({
+      id,
+      speech: `Saved speech ${id}`,
+      generation_status: "final_ready",
+      audio_ready: false,
+    })),
+  } as unknown as DebateDetail;
+  const generate = vi
+    .fn()
+    .mockResolvedValue({ status: "queued", audio_ready: false });
+  const load = vi.fn().mockImplementation(async () => [
+    {
+      ...row,
+      audio_restore_needed: detail.preview_turns!.some(
+        (turn) => !turn.audio_ready,
+      ),
+    },
+  ]);
+  const session = teacherSession();
+  useSessionMock.mockReturnValue({
+    ...session,
+    user: { ...session.user, id: "teacher-owner" },
+    api: {
+      debate: vi.fn().mockImplementation(async () => structuredClone(detail)),
+      regenerateDebateTurnAudio: generate,
+    },
+  });
+  const controller = { load };
+  const first = render(<TeacherDebateList controller={controller} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Revocalize" }));
+  await waitFor(() => expect(generate).toHaveBeenCalledTimes(3));
+  const job = JSON.parse(localStorage.getItem(`maya:revocalize:v1:${row.id}`)!);
+  expect(job.ownerId).toBe("teacher-owner");
+  first.unmount(); // Clicking Preview removes the list route.
+  generate.mockImplementation(async (_id, turnId) => {
+    detail.preview_turns!.find((turn) => turn.id === turnId)!.audio_ready =
+      true;
+    return { status: "completed", audio_ready: true };
+  });
+  render(<TeacherDebateList controller={controller} />); // Browser Back.
+  await waitFor(() => expect(generate).toHaveBeenCalledTimes(6));
+  expect(
+    generate.mock.calls.slice(3).map((call) => call[3].idempotency.key),
+  ).toEqual([job.turns.one.key, job.turns.two.key, job.turns.three.key]);
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Devocalize" })).toHaveProperty(
+      "disabled",
+      false,
+    ),
+  );
+  expect(localStorage.getItem(`maya:revocalize:v1:${row.id}`)).toBeNull();
+});

@@ -311,8 +311,8 @@ summary calls stay hidden (Rubric). Team/Debate audited clean. Not yet deployed.
 
 ## Nov6 recovery
 
-3D Replay=confirmed Rebirth;Review=retained playback. Revocalize saves teacher/revision/
-turn keys,dispatches all,resumes reloads,keeps queued/ambiguous keys beyond45s;terminal
-failures need explicit retry. Preview separates missing speech from TTS and respects
-predecessor readiness. Stalled unverified turn_generation_failed needs backend receipt
-recovery;safety gates kept. Focused checks passed;prod pending;BGM untouched.
+Off main70ecfa29 (#356/#357). Replay=Rebirth;Review=playback,not a rebirth lock.
+Revocalize:durable intent,3 workers,Back/F5 reseed/revision reconcile;admission refusal
+retries safely,ambiguous keys kept,definitive failures shown/manual retry.110 tests,
+types/scoped lint pass;full1121 pass/13 skip/2 unrelated Quiz-nav failures. No calls/deploy;
+volume untouched. Stalled needs backend receipt recovery;safety gates kept.
