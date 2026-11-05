@@ -143,6 +143,46 @@ from .llm_publication import SqlLLMPublication
 from .protocols import PreparedGenerationFence, PreparedSource, PreparedTurn
 from .schemas import RetrievalSourceDTO
 
+# Local EmbeddingPlanError codes raised by _validate_batch_before_send before
+# any transport call; such an attempt was never sent to the supplier.
+_PRESEND_EMBEDDING_PLAN_CODES = frozenset(
+    {"embedding_batch_tokens_exceeded", "embedding_batch_items_exceeded", "embedding_plan_empty"}
+)
+# Per-query cap (supplier item limit is 8192; batch limit 30000).
+_MAX_SUBQUERY_TOKENS = 6000
+
+
+def _clip_to_tokens(text: str, limit: int) -> str:
+    if count_tokens(text) <= limit:
+        return text
+    lo, hi = 1, len(text)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if count_tokens(text[:mid]) <= limit:
+            lo = mid
+        else:
+            hi = mid - 1
+    return text[:lo]
+
+
+def _fit_subqueries_to_embedding_batch(subqueries):  # type: ignore[no-untyped-def]
+    """Clip oversized retrieval queries so one embedding batch always fits.
+
+    Retrieval queries embed the topic + persona/opening text; a long AGENT.md
+    or opening can exceed the supplier batch limit, which fails the turn
+    before it is sent and (being terminal) used to stall Preview forever.
+    """
+    items = tuple(subqueries)
+    if not items:
+        return items
+    limit = min(_MAX_SUBQUERY_TOKENS, 28_000 // len(items))
+    out = []
+    for item in items:
+        clipped = _clip_to_tokens(item.text, limit)
+        out.append(item if clipped == item.text else type(item)(item.query_kind, clipped))
+    return tuple(out)
+
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -1541,7 +1581,7 @@ class SqlTurnPreparer:
         # hash is not required and is not what this query discloses.
         agent_md_hash = markdown_hash(owner.agent_md)
         query_group_id = owner.group_id
-        subqueries = build_turn_subqueries(context)
+        subqueries = _fit_subqueries_to_embedding_batch(build_turn_subqueries(context))
         try:
             query_plan = ensure_real_query_export_manifest(
                 db,
@@ -1587,13 +1627,25 @@ class SqlTurnPreparer:
         attempt_no = 1
         if prior_attempts:
             latest = max(prior_attempts, key=lambda operation: operation.attempt_no)
-            if _dual_real(self.settings) and latest.state not in {"succeeded", "not_sent"}:
+            # A batch rejected by local plan validation never reached the
+            # supplier (validation precedes transport.post), so it is
+            # provably unsent and may take the single not_sent retry slot.
+            presend_rejected = (
+                latest.state == "failed"
+                and str(getattr(latest, "safe_error_code", "") or "")
+                in _PRESEND_EMBEDDING_PLAN_CODES
+            )
+            if (
+                _dual_real(self.settings)
+                and latest.state not in {"succeeded", "not_sent"}
+                and not (presend_rejected and latest.attempt_no < 2)
+            ):
                 raise PlatformError(
                     "provider_retry_forbidden",
                     "The Real-Core query attempt is terminal; no retry is authorized.",
                     503,
                 )
-            if latest.state == "not_sent" and latest.attempt_no < 2:
+            if (latest.state == "not_sent" or presend_rejected) and latest.attempt_no < 2:
                 attempt_no = latest.attempt_no + 1
             else:
                 attempt_no = latest.attempt_no
