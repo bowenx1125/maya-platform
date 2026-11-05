@@ -101,6 +101,21 @@ function subscribeCollapsed(listener: () => void) {
   };
 }
 
+/**
+ * The Classroom group's student-facing rows: Live plus Quiz (M4). Teachers
+ * add their own rows (Debates, Accounts) on top of this base set.
+ */
+export const STUDENT_CLASSROOM_KEYS = ["live", "quiz"] as const;
+
+/** Pure helper for tests: which rows the Classroom group shows for a role. */
+export function classroomGroupKeys(
+  teacherSurface: boolean,
+): string[] {
+  return teacherSurface
+    ? ["live", "quiz", "classroom", "accounts"]
+    : [...STUDENT_CLASSROOM_KEYS, "classroom", "accounts"];
+}
+
 const MOBILE_QUERY = SIDEBAR_MOBILE_QUERY;
 
 function subscribeMobile(listener: () => void) {
@@ -684,6 +699,11 @@ export function AppShell({
             icon: "live" as const,
             disabled: !live,
           },
+          {
+            href: "/student/quiz",
+            label: "Quiz",
+            icon: "quiz" as const,
+          },
         ]),
     ...(teacherSurface
       ? [
@@ -865,11 +885,12 @@ export function AppShell({
       : groupId
         ? `/student/voices?group_id=${groupId}`
         : "/student/voices";
-  const recordHref = visit
+  const recordHref: string | undefined = visit
     ? `/teacher/record?group_id=${visit}`
     : teacherSurface
       ? "/teacher/record"
-      : "/student/record";
+      : // Students lost the Brainform Record row (M4): Records lives on Quiz.
+        undefined;
   const groups: SidebarGroup[] = [
     {
       key: "studyform",
@@ -910,12 +931,18 @@ export function AppShell({
           label: t("voices"),
           icon: "mic",
         },
-        {
-          key: "record",
-          href: recordHref,
-          label: t("sidebarRecord"),
-          icon: "clock",
-        },
+        // A student has no Brainform Record row (Quiz M4); the teacher and a
+        // visiting teacher keep theirs.
+        ...(recordHref
+          ? [
+              {
+                key: "record",
+                href: recordHref,
+                label: t("sidebarRecord"),
+                icon: "clock" as const,
+              },
+            ]
+          : []),
         // Knowledge is the teacher's own; inside a student group the sidebar
         // shows what the group's members see.
         ...(teacherSurface && !visitingGroup
@@ -959,7 +986,9 @@ export function AppShell({
       tile: "bg-surface",
       square: "bg-white",
       items: links
-        .filter((link) => ["live", "classroom", "accounts"].includes(link.icon))
+        .filter((link) =>
+          ["live", "classroom", "accounts", "quiz"].includes(link.icon),
+        )
         .map((link) => ({
           key: link.icon,
           href: link.href,
@@ -1444,6 +1473,7 @@ const PAGE_ROW: Record<string, string> = {
   "/student/voices": "voices",
   "/teacher/record": "record",
   "/student/record": "record",
+  "/student/quiz": "quiz",
 };
 
 /**

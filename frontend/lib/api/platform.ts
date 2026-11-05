@@ -240,6 +240,115 @@ export type RegenerateTurnAudioRequest =
 export type RegenerateTurnAudioResult =
   components["schemas"]["RegenerateTurnAudioResult"];
 
+export type QuizChoice = { id: string; label: string };
+export type QuizItemType = "single" | "multiple" | "short_text" | "long_text";
+export type QuizGradingStatus = "complete" | "pending" | "mixed";
+
+/** Student-facing quiz item — `answer` / `rubric` must never appear. */
+export type QuizItemStudent = {
+  id: string;
+  type: QuizItemType;
+  required: boolean;
+  prompt: string;
+  choices: QuizChoice[];
+  points: number;
+};
+
+/** Types mirror backend/app/modules/quiz/schemas.py (student projections). */
+export type StudentQuizDto = {
+  id: string;
+  course_id: string;
+  group_id: string | null;
+  title: string;
+  status: "published";
+  schema_version: number;
+  content_revision: number;
+  settings: {
+    shuffle_questions: boolean;
+    shuffle_choices: boolean;
+    allow_skip: boolean;
+    time_limit_sec: number | null;
+  };
+  locale: string;
+  items: QuizItemStudent[];
+  published_at: string | null;
+};
+
+export type QuizSummary = {
+  id: string;
+  course_id: string;
+  group_id: string | null;
+  title: string;
+  status: "draft" | "published";
+  schema_version: number;
+  content_revision: number;
+  attempt_count: number;
+  created_by_user_id: string;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type QuizAttemptDto = {
+  id: string;
+  quiz_id: string;
+  course_id: string;
+  actor_user_id: string;
+  content_revision: number;
+  status: "submitted";
+  grading_status: QuizGradingStatus;
+  score_objective: number;
+  score_max_objective: number;
+  answers: Array<Record<string, unknown>>;
+  submitted_at: string;
+};
+
+/** Unified Record row for Quiz and legacy chat attempts. */
+export type RecordAttemptDto = {
+  source: "quiz" | "chat";
+  attempt_id: string;
+  user_id: string;
+  student_name: string;
+  title: string;
+  status: string;
+  submitted_at: string | null;
+  score_objective: number | null;
+  score_max_objective: number | null;
+  grading_status: QuizGradingStatus | null;
+  quiz_id: string | null;
+  conversation_id: string | null;
+  points_awarded: number | null;
+  points_total: number | null;
+  phase: string | null;
+  team_name: string | null;
+};
+
+export type SubmitQuizAttemptRequest = {
+  answers: Array<{
+    item_id: string;
+    choice_ids?: string[];
+    text?: string;
+  }>;
+};
+
+/**
+ * Defense in depth: the student GET must not carry answer/rubric at any
+ * item (contract freeze); the mapper strips them even if a server ever
+ * leaked the teacher projection.
+ */
+export function sanitizeStudentQuiz(raw: unknown): StudentQuizDto {
+  const quiz = raw as StudentQuizDto;
+  const items = (quiz.items ?? []).map((item) => {
+    const safe = {
+      ...item,
+    } as QuizItemStudent & { answer?: unknown; rubric?: unknown };
+    delete safe.answer;
+    delete safe.rubric;
+    return safe as QuizItemStudent;
+  });
+  return { ...quiz, items };
+}
+
 /**
  * Browser-safe Real-Core Demo status. These handwritten DTOs intentionally
  * stay outside the frozen generated client: the endpoint exposes only
@@ -3165,6 +3274,45 @@ export class PlatformApi {
       content: await unwrap(result),
       filename: responseDownloadFilename(result.response, "maya-report.md"),
     };
+  }
+
+  // Classroom Quiz student ops (hand-written; quiz paths are not in the
+  // frozen OpenAPI schema).
+
+  /** Published quizzes only for a student; the server enforces the filter. */
+  listCourseQuizzes(courseId: string): Promise<QuizSummary[]> {
+    return this.getJson(`courses/${encodeURIComponent(courseId)}/quizzes`);
+  }
+
+  /** The student projection of one quiz; the mapper also strips answer keys. */
+  async getStudentQuiz(
+    courseId: string,
+    quizId: string,
+  ): Promise<StudentQuizDto> {
+    return sanitizeStudentQuiz(
+      await this.getJson(
+        `courses/${encodeURIComponent(courseId)}/quizzes/${encodeURIComponent(quizId)}`,
+      ),
+    );
+  }
+
+  /** One-shot submission; zero LLM, and the client never retries it. */
+  submitCourseQuizAttempt(
+    courseId: string,
+    quizId: string,
+    body: SubmitQuizAttemptRequest,
+  ): Promise<QuizAttemptDto> {
+    return this.postJson(
+      `courses/${encodeURIComponent(courseId)}/quizzes/${encodeURIComponent(quizId)}/attempts`,
+      body,
+    );
+  }
+
+  /** The signed-in student's own Record rows (quiz + legacy chat). */
+  listMyRecordAttempts(courseId: string): Promise<RecordAttemptDto[]> {
+    return this.getJson(
+      `courses/${encodeURIComponent(courseId)}/my-record-attempts`,
+    );
   }
 
   async snapshot(snapshotId: string): Promise<KnowledgeSnapshot> {
