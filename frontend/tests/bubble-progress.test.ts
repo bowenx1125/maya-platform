@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { bubbleProgressFrom } from "../components/debate-beta/stage/bubble-progress";
+import {
+  bubbleProgressFrom,
+  waitForBubblePaint,
+} from "../components/debate-beta/stage/bubble-progress";
 
 describe("Debates (beta) progressive speech bubble", () => {
   it("mounts the first code point at play start and for unknown duration", () => {
@@ -93,3 +96,21 @@ describe("Debates (beta) progressive speech bubble", () => {
     expect(bubbleProgressFrom(speech, 0, 10)).toBe("\u{1F642}");
   });
 });
+
+describe("waitForBubblePaint", () => {
+  it("resolves after two animation frames", async () => {
+    let frames = 0;
+    const original = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      frames += 1;
+      return original.call(globalThis, cb);
+    }) as typeof requestAnimationFrame;
+    try {
+      await waitForBubblePaint();
+      expect(frames).toBe(2);
+    } finally {
+      globalThis.requestAnimationFrame = original;
+    }
+  });
+});
+
