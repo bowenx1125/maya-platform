@@ -6,8 +6,6 @@ import { apiErrorMessage, type QuizSummary } from "../../lib/api";
 import { cachedCall, requestCacheIdentity } from "../../lib/request-cache";
 import { useSession } from "../session-provider";
 import { ErrorNotice, LoadingCard } from "../ui";
-import { PRESS_MOTION } from "../ui/button";
-import { cn } from "../../lib/utils";
 
 /**
  * Available: the course's published quizzes. Start opens the take view; the
@@ -73,10 +71,7 @@ export function QuizAvailable({
       {quizzes.map((quiz, index) => (
         <li
           key={quiz.id}
-          className={cn(
-            "relative flex flex-wrap items-center gap-3.5 rounded-[14px] border-[3px] border-border bg-white px-[18px] py-4 shadow-[6px_6px_0_#C4B5FD]",
-            PRESS_MOTION,
-          )}
+          className="relative flex flex-wrap items-center gap-3.5 rounded-[14px] border-[3px] border-border bg-white px-[18px] py-4 shadow-[6px_6px_0_#C4B5FD]"
         >
           <span
             aria-hidden="true"

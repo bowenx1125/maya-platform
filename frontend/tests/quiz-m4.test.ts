@@ -171,3 +171,17 @@ function studentBrainformKeys(): string[] {
 function teacherBrainformKeys(): string[] {
   return ["rag", "voices", "record"];
 }
+
+describe("Available row hit layer", () => {
+  it("does not put PRESS_MOTION/PRESS_HIT on the row (Start must stay clickable)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const src = readFileSync(
+      join(__dirname, "../components/quiz/quiz-available.tsx"),
+      "utf8",
+    );
+    expect(src).not.toMatch(/PRESS_MOTION/);
+    expect(src).not.toMatch(/hover:after:absolute/);
+    expect(src).toContain("Start");
+  });
+});
