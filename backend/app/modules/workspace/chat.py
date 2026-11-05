@@ -841,12 +841,18 @@ def _generate_reply_body(
         membership = db.get(CourseMember, (row.course_id, actor_context.user.id))
         if membership is not None and membership.role == "teacher":
             audience = "teacher"
+    from .formal_assessment import declares_assessment
+
+    # Same rule as ordinary Teams (#181): assessment prompt text and Tools only
+    # when this Agent declares a formal assessment, or an attempt is already open.
+    assessment_capable = assessment_active or declares_assessment(version.agent_md)
     messages, persona_hash = chat_messages(
         version,
         history,
         sources,
         canonical_knowledge=canonical_knowledge,
         audience=audience,
+        assessment_capable=assessment_capable,
     )
     reply, operation_id = real_reply(
         db,
@@ -868,6 +874,7 @@ def _generate_reply_body(
         # An assessment reply is rewritten from the ledger after the call, so
         # its model text is never shown as a draft.
         on_draft=None if assessment_active else on_draft,
+        assessment_capable=assessment_capable,
     )
     assessment_result = _assessment_result_for_turn(db, row.id, request_id, row.user_id)
     if assessment_active and assessment_result is None:
