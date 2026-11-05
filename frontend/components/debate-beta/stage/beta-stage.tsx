@@ -41,6 +41,7 @@ import { bubbleProgressFrom, waitForBubblePaint } from "./bubble-progress";
 import type { StageCharacter } from "../../stage3d/scholar-stage";
 import { cn } from "../../../lib/utils";
 import { useStageMusic } from "../../../lib/background-music";
+import { bindDebateSpeechVolume } from "../../../lib/debate-speech-audio";
 import { MusicKey } from "../../music-key";
 import { WorkspaceIcon } from "../../workspace-icon";
 import { NoticeTraySlot, RetryPill, useNoticeTrayAbove } from "../../ui";
@@ -724,6 +725,9 @@ export function BetaDebateStage({
   const pauseIdempotencyRef = useRef<IdempotencyHandle | null>(null);
   const resumeIdempotencyRef = useRef<IdempotencyHandle | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speechGainRef = useRef<ReturnType<typeof bindDebateSpeechVolume> | null>(
+    null,
+  );
   const [bubblePlayback, setBubblePlayback] = useState<{
     turnId: string;
     elapsed: number;
@@ -1322,6 +1326,8 @@ export function BetaDebateStage({
         audio.src = source;
         // Every Debate plays at 1.0: the speaking rate is in the audio (TTS rate).
         audio.playbackRate = 1;
+        // One unified speech level (1.5× browser default) via GainNode.
+        speechGainRef.current?.ensureRunning();
         // Live publicTurns lack this turn until started_ack → playback.started.
         // Seed from catalog/preview so the bubble can show text with the voice.
         const catalog = replayCatalogRef.current.get(turnId);
@@ -1708,6 +1714,8 @@ export function BetaDebateStage({
             audio.src = source;
             // Every Debate plays at 1.0: the speaking rate is in the audio (TTS rate).
             audio.playbackRate = 1;
+            // One unified speech level (1.5× browser default) via GainNode.
+            speechGainRef.current?.ensureRunning();
             if (current.cursor_ms > 0) {
               // A seek at 0 would only cost a second ranged request.
               try {
@@ -3933,7 +3941,15 @@ export function BetaDebateStage({
         </button>
         <MusicKey channel="stage" className={BETA_DOCK_MUSIC_KEY} />
         <audio
-          ref={audioRef}
+          ref={(element) => {
+            audioRef.current = element;
+            if (!element) {
+              speechGainRef.current?.dispose();
+              speechGainRef.current = null;
+              return;
+            }
+            speechGainRef.current = bindDebateSpeechVolume(element);
+          }}
           aria-label={labels.audioLabel}
           preload="auto"
           onEnded={onAudioEnded}
