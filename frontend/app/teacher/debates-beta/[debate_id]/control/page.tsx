@@ -541,13 +541,13 @@ export default function TeacherDebateControlPage() {
                     <ClassroomResetButton
                       debateId={debateId}
                       className="secondary-action"
+                      // Review can remain playing/paused after reload. Rebirth
+                      // fences playback server-side; only in-flight commands
+                      // should disable it, not the retained playback status.
                       disabled={
                         interactionBusy ||
                         finishBusy ||
-                        playbackAuthority.commandBusy ||
-                        !["completed", "stopped"].includes(
-                          detail.playback.status,
-                        )
+                        playbackAuthority.commandBusy
                       }
                       onDone={async () => {
                         await refreshSnapshot();
