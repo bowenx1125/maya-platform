@@ -5,13 +5,28 @@ import {
   bindDebateSpeechVolume,
 } from "../lib/debate-speech-audio";
 
+function fakeCtx(state: "running" | "suspended") {
+  const gain = { gain: { value: 0 }, connect: vi.fn() };
+  const source = { connect: vi.fn() };
+  const ctx = {
+    state,
+    destination: {},
+    resume: vi.fn(async () => {
+      ctx.state = "running";
+    }),
+    createGain: vi.fn(() => gain),
+    createMediaElementSource: vi.fn(() => source),
+  };
+  return { ctx, gain, source };
+}
+
 describe("Debate speech volume", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("exports the unified 0 dB (1.0) level", () => {
-    expect(DEBATE_SPEECH_VOLUME).toBe(1.0);
+  it("is +10 dB", () => {
+    expect(DEBATE_SPEECH_VOLUME).toBeCloseTo(3.1622776601683795, 12);
   });
 
   it("keeps element volume at 1 and is idempotent without Web Audio", () => {
@@ -19,30 +34,34 @@ describe("Debate speech volume", () => {
     vi.stubGlobal("webkitAudioContext", undefined);
     const audio = document.createElement("audio");
     const first = bindDebateSpeechVolume(audio);
-    const second = bindDebateSpeechVolume(audio);
-    expect(first).toBe(second);
-    expect(audio.volume).toBe(1);
+    expect(bindDebateSpeechVolume(audio)).toBe(first);
     first.ensureRunning();
+    expect(audio.volume).toBe(1);
     first.dispose();
   });
-});
 
-describe("Debate speech output path", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("never wires the element into Web Audio (direct output at 0 dB)", () => {
-    const ctor = vi.fn();
-    vi.stubGlobal("AudioContext", ctor);
+  it("wires gain only after the context is running; never while suspended", async () => {
+    const { ctx, gain, source } = fakeCtx("suspended");
+    vi.stubGlobal("AudioContext", function FakeCtx() {
+      return ctx;
+    });
     const audio = document.createElement("audio");
-    audio.volume = 0.2;
+    audio.src = "blob:http://localhost/x";
     const handle = bindDebateSpeechVolume(audio);
+    expect(ctx.createMediaElementSource).not.toHaveBeenCalled();
     handle.ensureRunning();
+    expect(ctx.createMediaElementSource).not.toHaveBeenCalled();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(ctx.resume).toHaveBeenCalled();
+    expect(ctx.createMediaElementSource).toHaveBeenCalledTimes(1);
+    expect(source.connect).toHaveBeenCalledWith(gain);
+    expect(gain.connect).toHaveBeenCalledWith(ctx.destination);
+    expect(gain.gain.value).toBeCloseTo(DEBATE_SPEECH_VOLUME);
+    // dispose + rebind (ref callback re-run) reuses wiring, never re-creates
     handle.dispose();
-    // rebind after dispose (ref callback re-run) still plays directly
     bindDebateSpeechVolume(audio).ensureRunning();
-    expect(ctor).not.toHaveBeenCalled();
-    expect(audio.volume).toBe(1);
+    await Promise.resolve();
+    expect(ctx.createMediaElementSource).toHaveBeenCalledTimes(1);
   });
 });
