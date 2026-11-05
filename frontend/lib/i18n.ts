@@ -1068,6 +1068,19 @@ const enMessages = {
   teamResume: "Resume",
   teamTurnPending:
     "This Team turn is still running. Check its status to resume updates.",
+  quizzes: "Quizzes",
+  noQuizzes: "No Quizzes yet.",
+  quizUnpublish: "Unpublish",
+  quizDraft: "Draft",
+  quizPublished: "Published",
+  quizNoCourse: "No course you teach is selected, so Quizzes cannot be listed.",
+  quizAttempts: "{count} attempts",
+  quizEditorTitle: "Quiz",
+  quizEditorNew: "New Quiz",
+  quizSave: "Save",
+  quizAddQuestion: "Add question",
+  quizRecords: "Records",
+  quizPublishedLocked: "Unpublish this quiz before editing it.",
 } as const;
 
 export type MessageKey = keyof typeof enMessages;
