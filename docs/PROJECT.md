@@ -246,8 +246,7 @@ malformed_request lists field+type. Each bar line's Done publishes that line. To
 
 ## Oct24 PostgreSQL only (PR B)
 
-SQLite DATABASE_URL is refused; the one-off copy script was retired 2026-11-03 (git
-history). Tests need MAYA_TEST_POSTGRES_URL. Fixed races: budget, Agent/document, attempt.
+SQLite DATABASE_URL refused; tests need MAYA_TEST_POSTGRES_URL. Races fixed: budget, Agent/document, attempt.
 
 ## Oct24 Immerse audio predownload (PR A2)
 
@@ -309,8 +308,9 @@ answer together (≤3; assessment Teams one at a time); history is one read. 390
 
 ## Nov5 Agent Chat identity
 
-A Nikola Tesla Agent greeted a teacher as a generic 教学助手 (quizzes, records). One-to-one
-Agent Chat sent a fixed "selected educational Agent" opening, a teacher-tools paragraph and
-13 (teacher)/8 (student) assessment Tools. Now: "You are <name>", own AGENT.md/Knowledge/
-RAG, no assessment wording or Tools (Agent Chats hold no attempt; Teams unchanged).
-Teachers read course results in Record or assessment Teams. Not yet deployed.
+A Tesla Agent greeted a teacher as 教学助手: Agent Chat sent a fixed "educational Agent"
+opening, teacher-tools text and 13/8 assessment Tools. Now "You are <name>", own AGENT.md/
+Knowledge/RAG only, no assessment Tools (Agent Chats hold no attempt; Teams unchanged).
+Check RAG → documents, then Details (owner-only GET …/turns/{id}/model-input from stored
+request bytes): system prompt, AGENT.md, Knowledge, attachments, Tools/results. Scoring/
+summary calls stay hidden (Rubric). Team/Debate audited clean. Not yet deployed.

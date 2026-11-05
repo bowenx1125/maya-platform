@@ -3322,7 +3322,19 @@ function AgentChatScope({
                               )}
                             </span>
                           )}
-                          <CheckRag sources={turn.sources ?? []} />
+                          <CheckRag
+                            sources={turn.sources ?? []}
+                            details={
+                              selected &&
+                              turn.mode === "real" &&
+                              turn.state !== "pending"
+                                ? {
+                                    conversationId: selected.id,
+                                    turnId: turn.id,
+                                  }
+                                : null
+                            }
+                          />
                         </div>
                       </div>
                     </div>
@@ -3457,7 +3469,21 @@ function AgentChatScope({
                                       )}
                                     </DismissibleAlert>
                                   )}
-                                  <CheckRag sources={result.sources ?? []} />
+                                  <CheckRag
+                                    sources={result.sources ?? []}
+                                    details={
+                                      turn.mode === "real" &&
+                                      turn.user_text &&
+                                      result.state !== "pending" &&
+                                      result.state !== "running"
+                                        ? {
+                                            conversationId: selectedTeam.id,
+                                            turnId: turn.id,
+                                            resultId: result.id,
+                                          }
+                                        : null
+                                    }
+                                  />
                                   {/* Formal progress hangs under the Summarizer line.
                                   Until that card exists, the executor card or
                                   the fallback below carries it. */}

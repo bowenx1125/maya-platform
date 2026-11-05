@@ -1102,6 +1102,8 @@ def test_single_chat_model_input_uses_current_canonical_knowledge_version(worksp
 def test_single_agent_replays_tools_from_the_exact_accepted_model_stage(
     workspace: Any, monkeypatch: Any
 ) -> None:
+    # read_agent_memory, not read_session: an Agent Chat holds no assessment
+    # and is no longer offered assessment Tools (2026-11-05).
     app, database, client = workspace
     adapter = _adapter(None)
     policy = replace(_valid_policy(), endpoint=adapter.config.resolved_endpoint)
@@ -1126,10 +1128,10 @@ def test_single_agent_replays_tools_from_the_exact_accepted_model_stage(
                             "content": None,
                             "tool_calls": [
                                 {
-                                    "id": "call-read-session",
+                                    "id": "call-read-memory",
                                     "type": "function",
                                     "function": {
-                                        "name": "read_session",
+                                        "name": "read_agent_memory",
                                         "arguments": '{"arguments":{}}',
                                     },
                                 }
@@ -1147,7 +1149,7 @@ def test_single_agent_replays_tools_from_the_exact_accepted_model_stage(
                     {
                         "message": {
                             "role": "assistant",
-                            "content": "I checked the saved session.",
+                            "content": "I checked the saved notes.",
                         },
                         "finish_reason": "stop",
                     }
@@ -1172,13 +1174,13 @@ def test_single_agent_replays_tools_from_the_exact_accepted_model_stage(
         json={
             "request_id": str(uuid4()),
             "expected_revision": 0,
-            "message": "Please check my saved session.",
+            "message": "Please check my saved notes.",
         },
     )
     assert response.status_code == 200, response.text
     turn = response.json()["turns"][0]
     assert turn["state"] == "ready"
-    assert turn["assistant_text"] == "I checked the saved session."
+    assert turn["assistant_text"] == "I checked the saved notes."
     assert transport.call_count == 2
     with database.session() as db:
         from app.modules.runtime_tools.models import RuntimeModelCallStage, RuntimeToolReceipt
@@ -1196,18 +1198,19 @@ def test_single_agent_replays_tools_from_the_exact_accepted_model_stage(
             assert stage.accepted_response_json.encode() == accepted.content
         first_wire = json.loads(stages[0].request_json)
         assert any(
-            tool.get("function", {}).get("name") == "read_session" for tool in first_wire["tools"]
+            tool.get("function", {}).get("name") == "read_agent_memory"
+            for tool in first_wire["tools"]
         )
         assert (
             json.loads(stages[0].accepted_response_json)["choices"][0]["message"]["tool_calls"][0][
                 "id"
             ]
-            == "call-read-session"
+            == "call-read-memory"
         )
         receipt = db.scalar(
             select(RuntimeToolReceipt).where(RuntimeToolReceipt.turn_id == turn["id"])
         )
-        assert receipt is not None and receipt.tool_name == "read_session"
+        assert receipt is not None and receipt.tool_name == "read_agent_memory"
 
 
 def test_single_not_sent_releases_reservation_and_a_new_request_can_continue(

@@ -109,6 +109,7 @@ from app.modules.workspace.attachments import router as chat_attachments_router
 from app.modules.workspace.chat import router as chat_router
 from app.modules.workspace.chat_reports import router as chat_reports_router
 from app.modules.workspace.live import router as live_router
+from app.modules.workspace.model_input import router as chat_model_input_router
 from app.modules.workspace.models import ProviderPreferences
 from app.modules.workspace.providers import preferences_settings
 from app.modules.workspace.providers import router as provider_settings_router
@@ -829,6 +830,7 @@ def create_app(
     app.include_router(reports_router, prefix="/api/v1")
     app.include_router(chat_router, prefix="/api/v1")
     app.include_router(chat_attachments_router, prefix="/api/v1")
+    app.include_router(chat_model_input_router, prefix="/api/v1")
     app.include_router(chat_reports_router, prefix="/api/v1")
     app.include_router(live_router, prefix="/api/v1")
     app.include_router(cardroom_router, prefix="/api/v1")
