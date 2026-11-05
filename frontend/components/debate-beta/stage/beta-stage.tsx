@@ -44,12 +44,12 @@ import { useStageMusic } from "../../../lib/background-music";
 import { MusicKey } from "../../music-key";
 import { WorkspaceIcon } from "../../workspace-icon";
 import { NoticeTraySlot, RetryPill, useNoticeTrayAbove } from "../../ui";
+import { EndRunningDebatePrompt } from "./end-running-debate-prompt";
+
 import {
   BETA_CONNECTION_OVERLAY,
   BETA_DOCK,
   BETA_DOCK_MUSIC_KEY,
-  BETA_END_PROMPT,
-  BETA_END_PROMPT_ACTIONS,
   BETA_JOIN_BODY,
   BETA_JOIN_CARD,
   BETA_JOIN_STICK,
@@ -3961,49 +3961,20 @@ export function BetaDebateStage({
         ) : null}
       </div>
       {blockedBy ? (
-        <div
-          className={BETA_END_PROMPT}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="end-running-debate"
-        >
-          <p id="end-running-debate">
-            {outputLanguage === "zh"
-              ? `「${blockedBy.topic}」正在进行。要结束那场辩论吗？`
-              : `“${blockedBy.topic}” is running. End that debate?`}
-          </p>
-          <div className={BETA_END_PROMPT_ACTIONS}>
-            <button
-              className="secondary-action"
-              type="button"
-              disabled={endRunningBusy}
-              onClick={() => {
-                setBlockedBy(null);
-                setControlError(null);
-              }}
-            >
-              {outputLanguage === "zh" ? "取消" : "Cancel"}
-            </button>
-            <button
-              className="primary-action"
-              type="button"
-              disabled={
-                endRunningBusy ||
-                typeof api.finishDebate !== "function" ||
-                typeof api.debate !== "function"
-              }
-              onClick={() => void endRunningDebate()}
-            >
-              {endRunningBusy
-                ? outputLanguage === "zh"
-                  ? "正在结束…"
-                  : "Ending…"
-                : outputLanguage === "zh"
-                  ? "结束"
-                  : "End"}
-            </button>
-          </div>
-        </div>
+        <EndRunningDebatePrompt
+          topic={blockedBy.topic}
+          zh={outputLanguage === "zh"}
+          busy={endRunningBusy}
+          canEnd={
+            typeof api.finishDebate === "function" &&
+            typeof api.debate === "function"
+          }
+          onCancel={() => {
+            setBlockedBy(null);
+            setControlError(null);
+          }}
+          onEnd={() => void endRunningDebate()}
+        />
       ) : null}
       <aside
         ref={transcriptRef}

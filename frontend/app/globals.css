@@ -2672,6 +2672,17 @@ dd {
   vertical-align: middle;
 }
 
+/* U3 tray: opaque pink error fill (never rgba white over immerse stage). */
+.notice-tray .notice.notice-error,
+.notice-tray > .dismissible-alert.dismissible-alert-tray,
+.notice-tray p.dismissible-alert[role="alert"],
+.notice-tray div.dismissible-alert[role="alert"] {
+  background: #ffe4e4;
+  border: 3px solid #111;
+  box-shadow: 4px 4px 0 #111;
+  color: #111;
+}
+
 /* A role=alert line moved into the mascot tray: the bubble, full width. */
 .notice-tray > .dismissible-alert.dismissible-alert-tray {
   display: flex;
