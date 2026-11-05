@@ -10,7 +10,11 @@ import { DebateCleanupControls } from "../components/debate/debate-cleanup-contr
 import type { DebateDetail, PlatformApi } from "../lib/api";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 it.each(["Devocalize", "Delete"])("keeps %s failures quiet", async (label) => {
   vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -273,4 +277,164 @@ it("returns to quiet Revocalize when audio restoration fails", async () => {
   );
   expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.queryByText("private details")).toBeNull();
+});
+
+it("regenerates every missing turn instead of stopping after the first", async () => {
+  const generate = vi
+    .fn()
+    .mockResolvedValueOnce({ status: "completed", audio_ready: true })
+    .mockResolvedValueOnce({ status: "completed", audio_ready: true });
+  const refresh = vi.fn();
+  const detail = {
+    id: "debate-multi",
+    revision: 4,
+    turn_protocol: "segments_v2",
+    playback: { control_version: 1 },
+    public_turns: [],
+    preview_turns: [
+      {
+        id: "turn-a",
+        speech: "First speech",
+        generation_status: "final_ready",
+        audio_ready: false,
+      },
+      {
+        id: "turn-b",
+        speech: "Second speech",
+        generation_status: "final_ready",
+        audio_ready: false,
+      },
+      {
+        id: "turn-ready",
+        speech: "Already has audio",
+        generation_status: "final_ready",
+        audio_ready: true,
+      },
+    ],
+  } as unknown as DebateDetail;
+  render(
+    <DebateCleanupControls
+      detail={detail}
+      api={{
+        deleteDebateVoice: vi.fn(),
+        deleteDebateAll: vi.fn(),
+        regenerateDebateTurnAudio: generate,
+      }}
+      onVoiceDeleted={refresh}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Revocalize" }));
+  await waitFor(() => expect(generate).toHaveBeenCalledTimes(2));
+  expect(generate.mock.calls.map((call) => call[1])).toEqual([
+    "turn-a",
+    "turn-b",
+  ]);
+  await waitFor(() => expect(refresh).toHaveBeenCalled());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Devocalize" })).toHaveProperty(
+      "disabled",
+      false,
+    ),
+  );
+});
+
+it("continues regenerating later turns when an earlier turn is not ready", async () => {
+  const generate = vi
+    .fn()
+    .mockResolvedValueOnce({
+      status: "failed",
+      audio_ready: false,
+      safe_error_code: "voice_unavailable",
+    })
+    .mockResolvedValueOnce({ status: "completed", audio_ready: true });
+  const refresh = vi.fn();
+  const detail = {
+    id: "debate-partial",
+    revision: 5,
+    turn_protocol: "segments_v2",
+    playback: { control_version: 1 },
+    public_turns: [],
+    preview_turns: [
+      {
+        id: "failed-turn",
+        speech: "Failed speech",
+        generation_status: "final_ready",
+        audio_ready: false,
+      },
+      {
+        id: "next-turn",
+        speech: "Next speech",
+        generation_status: "final_ready",
+        audio_ready: false,
+      },
+    ],
+  } as unknown as DebateDetail;
+  render(
+    <DebateCleanupControls
+      detail={detail}
+      api={{
+        deleteDebateVoice: vi.fn(),
+        deleteDebateAll: vi.fn(),
+        regenerateDebateTurnAudio: generate,
+      }}
+      onVoiceDeleted={refresh}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Revocalize" }));
+  await waitFor(() => expect(generate).toHaveBeenCalledTimes(2));
+  expect(generate.mock.calls.map((call) => call[1])).toEqual([
+    "failed-turn",
+    "next-turn",
+  ]);
+  await waitFor(() => expect(refresh).toHaveBeenCalled());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Revocalize" })).toHaveProperty(
+      "disabled",
+      false,
+    ),
+  );
+});
+
+it("revocalizes regenerable_turn_ids returned by Devocalize", async () => {
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  const generate = vi
+    .fn()
+    .mockResolvedValue({ status: "completed", audio_ready: true });
+  const remove = vi.fn().mockResolvedValue({
+    cleanup_status: "completed",
+    regenerable_turn_ids: ["regen-a", "regen-b"],
+  });
+  const detail = {
+    id: "debate-regen-ids",
+    revision: 2,
+    turn_protocol: "segments_v2",
+    playback: { control_version: 1 },
+    public_turns: [],
+    preview_turns: [],
+  } as unknown as DebateDetail;
+  render(
+    <DebateCleanupControls
+      detail={detail}
+      api={{
+        deleteDebateVoice: remove,
+        deleteDebateAll: vi.fn(),
+        regenerateDebateTurnAudio: generate,
+      }}
+      onVoiceDeleted={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Devocalize" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Revocalize" })).toHaveProperty(
+      "disabled",
+      false,
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Revocalize" }));
+  await waitFor(() => expect(generate).toHaveBeenCalledTimes(2));
+  expect(generate.mock.calls.map((call) => call[1])).toEqual([
+    "regen-a",
+    "regen-b",
+  ]);
+  vi.restoreAllMocks();
 });
