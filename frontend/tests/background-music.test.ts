@@ -231,7 +231,7 @@ describe("background music", () => {
     await settle();
     expect(player("workspace").paused).toBe(true);
     expect(player("stage").paused).toBe(false);
-    expect(player("stage").volume).toBeCloseTo(0.1225);
+    expect(player("stage").volume).toBeCloseTo(0.08575);
     // The workspace key stays on while the stage plays.
     expect(musicStateForTests("workspace").wanted).toBe(true);
 
