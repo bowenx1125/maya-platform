@@ -43,20 +43,18 @@ import { cn } from "../../../lib/utils";
 import { useStageMusic } from "../../../lib/background-music";
 import { MusicKey } from "../../music-key";
 import { WorkspaceIcon } from "../../workspace-icon";
+import { NoticeTraySlot, RetryPill, useNoticeTrayAbove } from "../../ui";
 import {
   BETA_CONNECTION_OVERLAY,
   BETA_DOCK,
   BETA_DOCK_MUSIC_KEY,
   BETA_END_PROMPT,
   BETA_END_PROMPT_ACTIONS,
-  BETA_FAILURE_CARD,
   BETA_JOIN_BODY,
   BETA_JOIN_CARD,
   BETA_JOIN_STICK,
   BETA_NOTICES,
   BETA_PANEL_ACTIONS,
-  BETA_PROVIDER_GATE_CARD,
-  BETA_RECONNECT_BUTTON,
   BETA_STAGE,
   BETA_STREAM_STYLES,
   BETA_TOPIC,
@@ -631,6 +629,10 @@ export function BetaDebateStage({
   const [, setFailure] = useState<string | null>(null);
   const [mediaRetryNeeded, setMediaRetryNeeded] = useState(false);
   const [controlError, setControlError] = useState<string | null>(null);
+  // Lift the shared U3 mascot tray above the candy dock so transient state
+  // errors speak bottom-right without covering Start/Next/Back.
+  const [dockElement, setDockElement] = useState<HTMLDivElement | null>(null);
+  useNoticeTrayAbove(dockElement);
   // Which debate is holding this course's running slot, when that is why a
   // command failed. Naming it here is what lets the recovery live beside the
   // failure instead of on a screen the teacher has to go find.
@@ -3747,8 +3749,8 @@ export function BetaDebateStage({
     >
       {!suppressConnectionUi && connectionRecovery ? (
         <div className={BETA_CONNECTION_OVERLAY} role="status">
-          <button
-            className={BETA_RECONNECT_BUTTON}
+          <RetryPill
+            className="ml-0"
             onClick={() => {
               if (connectionRecovery.kind === "sign-in") {
                 window.location.href = "/";
@@ -3756,10 +3758,9 @@ export function BetaDebateStage({
                 window.location.reload();
               }
             }}
-            type="button"
           >
             {connectionRecovery.label}
-          </button>
+          </RetryPill>
         </div>
       ) : null}
 
@@ -3809,7 +3810,12 @@ export function BetaDebateStage({
         visuals={stageVisuals}
       />
 
-      <div className={BETA_DOCK} role="group" aria-label={labels.stageTitle}>
+      <div
+        ref={setDockElement}
+        className={BETA_DOCK}
+        role="group"
+        aria-label={labels.stageTitle}
+      >
         {!readOnly ? (
           <button
             className="primary-action"
@@ -3862,11 +3868,15 @@ export function BetaDebateStage({
         />
       </div>
       <h1 className={BETA_TOPIC}>{detailState.topic}</h1>
+      {/* Immersive has no app shell tray slot; host one here so <900px still
+          places the mascot tray on this surface instead of under the stage. */}
+      <NoticeTraySlot className="pointer-events-none absolute inset-x-0 bottom-0 z-[60] h-0 overflow-visible" />
       <div className={BETA_NOTICES}>
         {controlError ? (
           <DismissibleAlert
             as="div"
-            className={BETA_FAILURE_CARD}
+            kind="bell"
+            transient
             resetKey={controlError}
           >
             {controlError}

@@ -69,6 +69,7 @@ import {
   ErrorNotice,
   LoadingCard,
   Notice,
+  RetryPill,
   PageIntro,
   SectionCard,
   StatusBadge,
@@ -1980,16 +1981,14 @@ export function AgentWorkbench({
                         title={t("knowledgePreviewRefreshFailed")}
                         onClose={() => setKnowledgePreviewRefreshFailed(false)}
                         action={
-                          <button
-                            className="inline-button"
-                            type="button"
+                          <RetryPill
                             disabled={
                               editingLocked || knowledgePreviewRefreshing
                             }
                             onClick={() => void refreshKnowledgePreview()}
                           >
                             {t("retry")}
-                          </button>
+                          </RetryPill>
                         }
                       />
                     ) : null}
@@ -2206,13 +2205,9 @@ export function DraftConflictNotice() {
         // A full reload re-reads the latest revision from the server (the
         // in-memory page cache and idempotency keys go with it), so the next
         // save carries the current expected_revision.
-        <button
-          className="inline-button"
-          type="button"
-          onClick={() => window.location.reload()}
-        >
+        <RetryPill onClick={() => window.location.reload()}>
           {t("refreshPage")}
-        </button>
+        </RetryPill>
       }
     >
       {t("conflictDetail")}

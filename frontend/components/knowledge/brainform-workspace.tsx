@@ -3141,14 +3141,13 @@ function BrainformWorkspaceBody({
                           </button>
                         ) : null}
                         {pendingRagAction?.documentId === document.id ? (
-                          <button
-                            className={styles.textAction}
-                            type="button"
+                          <RetryPill
+                            className="ml-0"
                             disabled={Boolean(busyKey)}
                             onClick={retryRagAction}
                           >
                             {t("retry")}
-                          </button>
+                          </RetryPill>
                         ) : null}
                       </div>
                     </li>
