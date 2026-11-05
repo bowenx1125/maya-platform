@@ -97,7 +97,7 @@ describe("background music", () => {
     expect(musicStateForTests("workspace").wanted).toBe(true);
     await settle();
     expect(audio.paused).toBe(false);
-    expect(audio.volume).toBeCloseTo(0.6);
+    expect(audio.volume).toBeCloseTo(1.0);
   });
 
   it("keeps the key on when autoplay is refused and plays on the first gesture", async () => {
@@ -113,7 +113,7 @@ describe("background music", () => {
     document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     await settle();
     expect(player("workspace").paused).toBe(false);
-    expect(player("workspace").volume).toBeCloseTo(0.6);
+    expect(player("workspace").volume).toBeCloseTo(1.0);
     // The listener is gone after the first gesture.
     const plays = player("workspace").play.mock.calls.length;
     document.body.dispatchEvent(new Event("keydown", { bubbles: true }));
@@ -179,6 +179,22 @@ describe("background music", () => {
     expect(player("stage").paused).toBe(false);
   });
 
+  it("loops the stage track list continuously while on stage", async () => {
+    resetBackgroundMusicForTests({
+      workspace: WORKSPACE,
+      stage: ["/music/stage-a.mp3", "/music/stage-b.mp3"],
+    });
+    enterStageMusic();
+    await settle();
+    const audio = player("stage");
+    expect(audio.src).toBe("/music/stage-a.mp3");
+    expect(audio.volume).toBeCloseTo(0.1);
+    audio.fire("ended");
+    expect(audio.src).toBe("/music/stage-b.mp3");
+    audio.fire("ended");
+    expect(audio.src).toBe("/music/stage-a.mp3");
+  });
+
   it("keeps the workspace preference across logout", async () => {
     startDefaultMusic();
     await settle();
@@ -205,7 +221,7 @@ describe("background music", () => {
     expect(audio.src).toBe("/music/a.mp3");
     expect(audio.volume).toBe(0);
     await settle();
-    expect(audio.volume).toBeCloseTo(0.6);
+    expect(audio.volume).toBeCloseTo(1.0);
     audio.fire("ended");
     expect(audio.src).toBe("/music/b.mp3");
     audio.fire("ended");
@@ -231,7 +247,7 @@ describe("background music", () => {
     await settle();
     expect(player("workspace").paused).toBe(true);
     expect(player("stage").paused).toBe(false);
-    expect(player("stage").volume).toBeCloseTo(0.060025);
+    expect(player("stage").volume).toBeCloseTo(0.1);
     // The workspace key stays on while the stage plays.
     expect(musicStateForTests("workspace").wanted).toBe(true);
 
@@ -240,7 +256,7 @@ describe("background music", () => {
     await settle();
     expect(player("stage").paused).toBe(true);
     expect(player("workspace").paused).toBe(false);
-    expect(player("workspace").volume).toBeCloseTo(0.6);
+    expect(player("workspace").volume).toBeCloseTo(1.0);
   });
 
   it("leaves the workspace silent after the stage when its key was off", async () => {
