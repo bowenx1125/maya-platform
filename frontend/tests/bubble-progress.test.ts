@@ -3,16 +3,21 @@ import { describe, expect, it } from "vitest";
 import { bubbleProgressFrom } from "../components/debate-beta/stage/bubble-progress";
 
 describe("Debates (beta) progressive speech bubble", () => {
-  it("returns empty before playback starts and for invalid time values", () => {
+  it("mounts the first code point at play start and for unknown duration", () => {
     const speech = "Water yields, and so it prevails.";
-    expect(bubbleProgressFrom(speech, 0, 10)).toBe("");
+    expect(bubbleProgressFrom(speech, 0, 10)).toBe("W");
+    expect(bubbleProgressFrom(speech, 0, Number.POSITIVE_INFINITY)).toBe("W");
+    expect(bubbleProgressFrom(speech, 5, Number.POSITIVE_INFINITY)).toBe("W");
+  });
+
+  it("returns empty for invalid time values", () => {
+    const speech = "Water yields, and so it prevails.";
     expect(bubbleProgressFrom(speech, -1, 10)).toBe("");
     expect(bubbleProgressFrom(speech, Number.NaN, 10)).toBe("");
     expect(bubbleProgressFrom(speech, Number.POSITIVE_INFINITY, 10)).toBe("");
     expect(bubbleProgressFrom(speech, 5, Number.NaN)).toBe("");
     expect(bubbleProgressFrom(speech, 5, 0)).toBe("");
     expect(bubbleProgressFrom(speech, 5, -3)).toBe("");
-    expect(bubbleProgressFrom(speech, 5, Number.POSITIVE_INFINITY)).toBe("");
   });
 
   it("returns empty for empty or annotation-only speech", () => {
@@ -85,5 +90,6 @@ describe("Debates (beta) progressive speech bubble", () => {
     // 5 of 10 code points at half time
     expect(bubbleProgressFrom(speech, 5, 10)).toBe("\u{1F642}".repeat(5));
     expect(bubbleProgressFrom(speech, 1, 10)).toBe("\u{1F642}");
+    expect(bubbleProgressFrom(speech, 0, 10)).toBe("\u{1F642}");
   });
 });
