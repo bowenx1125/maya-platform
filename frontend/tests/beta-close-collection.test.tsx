@@ -276,7 +276,7 @@ afterEach(() => {
 });
 
 describe("segments_v2 interaction dock (A1: no Close collection)", () => {
-  it("toggles the join code with Hide and never closes the collection", async () => {
+  it("toggles the join code with Interact and never closes the collection", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const api = pageApi(interaction("open"));
     renderPage(api);

@@ -35,11 +35,14 @@ const BOOT =
   "grid content-center justify-items-start gap-[18px] w-[min(680px,calc(100%_-_40px))] min-h-screen mx-auto my-0";
 const BOOT_BACK =
   "secondary-action inline-flex min-h-11 items-center no-underline";
+/* A1-report: yellow hard-shadow dialog (mock .repc box-shadow:7px 8px 0 #FFE14D). */
 const REPORT_DIALOG =
-  "w-[min(1040px,calc(100vw_-_40px))] max-h-[calc(100dvh_-_48px)] [padding:var(--workspace-inset)] border border-solid [border-color:var(--line)] rounded-[24px] [background:var(--paper,#fcfaf6)] [color:var(--ink)] shadow-[0_24px_80px_rgba(29,26,23,0.2)] backdrop:bg-[rgba(29,26,23,0.35)] backdrop:backdrop-blur-[4px] [&>section+section]:[margin-top:var(--workspace-gap)]";
-const REPORT_ACTIONS = "flex justify-end [margin:0_0_var(--workspace-gap)]";
+  "relative w-[min(900px,94vw)] max-h-[88vh] overflow-visible border-0 bg-transparent p-0 text-[#111] shadow-none backdrop:bg-[rgba(17,17,17,0.35)] open:grid open:place-items-center";
+const REPORT_CARD =
+  "relative max-h-[88vh] w-full overflow-auto rounded-[26px] border-[2.5px] border-solid border-[#111] bg-white p-5 text-[#111] shadow-[7px_8px_0_#FFE14D] [&>section+section]:mt-4";
+const REPORT_ACTIONS = "absolute right-3 top-3 z-10 m-0";
 const REPORT_CLOSE =
-  "inline-flex items-center justify-center w-[44px] h-[44px] min-h-[44px] p-0 rounded-[12px]";
+  "inline-grid size-8 place-items-center rounded-full border-2 border-solid border-[#111] bg-white p-0 text-[#111] shadow-[2px_2px_0_#111] cursor-pointer hover:bg-[#F1F7FF]";
 
 const INITIAL_PLAYBACK_AUTHORITY: PlaybackAuthorityState = {
   connection: "connecting",
@@ -501,7 +504,7 @@ export default function TeacherDebateControlPage() {
                   <WorkspaceIcon name="back" size={18} />
                   {t("debateBack")}
                 </Link>
-                {/* A1 dock order via data-dock: Back · Interact|Hide · Next · End · Transcript */}
+                {/* A1 dock order via data-dock: Back · Interact · Next · End · Transcript */}
                 {showOpenInteraction ? (
                   <button
                     aria-expanded={Boolean(joinUrl) && joinCodeVisible}
@@ -515,9 +518,7 @@ export default function TeacherDebateControlPage() {
                     <WorkspaceIcon name="interact" size={18} />
                     {interactionBusy && !joinUrl
                       ? betaLabels.interactionOpening
-                      : joinUrl && joinCodeVisible
-                        ? betaLabels.hideInteraction
-                        : betaLabels.openInteraction}
+                      : betaLabels.openInteraction}
                   </button>
                 ) : null}
                 {!playbackComplete &&
@@ -596,21 +597,23 @@ export default function TeacherDebateControlPage() {
               aria-label="Report"
               onClose={() => setReportOpen(false)}
             >
-              <form method="dialog" className={REPORT_ACTIONS}>
-                <button
-                  className={`secondary-action ${REPORT_CLOSE}`}
-                  aria-label={"Close"}
-                  type="submit"
-                  autoFocus
-                >
-                  <IconClose size={18} />
-                </button>
-              </form>
-              <AgentScores
-                participants={detail.participants}
-                turns={detail.public_turns}
-              />
-              <ReportPanel canRegenerate debateId={debateId} api={api} />
+              <div className={REPORT_CARD}>
+                <form method="dialog" className={REPORT_ACTIONS}>
+                  <button
+                    className={REPORT_CLOSE}
+                    aria-label={"Close"}
+                    type="submit"
+                    autoFocus
+                  >
+                    <IconClose size={18} />
+                  </button>
+                </form>
+                <AgentScores
+                  participants={detail.participants}
+                  turns={detail.public_turns}
+                />
+                <ReportPanel canRegenerate debateId={debateId} api={api} />
+              </div>
             </dialog>
           ) : null}
         </>
