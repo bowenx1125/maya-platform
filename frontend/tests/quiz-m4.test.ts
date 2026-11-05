@@ -23,7 +23,7 @@ import {
 import type { StudentQuizDto } from "../lib/api/platform";
 
 // M4 acceptance: IA Quiz, no Brainform Record row for students, one
-// localStorage key per course/user/quiz, /student/record redirects, and a
+// localStorage key per course/user/quiz, Quiz Records path, and a
 // zero-LLM request path.
 
 describe("quiz draft key", () => {
@@ -122,11 +122,8 @@ describe("sidebar Quiz IA", () => {
     expect(teacher).toContain("quiz");
   });
 
-  it("a student's Brainform rows exclude record; a teacher keeps it", () => {
-    const studentRows = studentBrainformKeys();
-    expect(studentRows).toContain("rag");
-    expect(studentRows).toContain("voices");
-    expect(studentRows).not.toContain("record");
+  it("student and teacher Brainform rows keep Record (Quiz Records is separate)", () => {
+    expect(studentBrainformKeys()).toContain("record");
     expect(teacherBrainformKeys()).toContain("record");
   });
 
@@ -154,18 +151,15 @@ describe("sidebar Quiz IA", () => {
   });
 });
 
-describe("record redirect", () => {
-  it("sends the old /student/record to the Quiz Records tab", () => {
+describe("quiz records path", () => {
+  it("Quiz Records tab path stays available alongside Brainform Record", () => {
     expect(QUIZ_RECORDS_PATH).toBe("/student/quiz?tab=records");
   });
 });
 
-/** Mirrors app-shell's student Brainform row list (recordHref undefined). */
+/** Mirrors app-shell's student Brainform row list (Record kept alongside Quiz). */
 function studentBrainformKeys(): string[] {
-  return ["rag", "voices"].concat(
-    // recordHref is undefined for students since M4.
-    [],
-  );
+  return ["rag", "voices", "record"];
 }
 
 function teacherBrainformKeys(): string[] {

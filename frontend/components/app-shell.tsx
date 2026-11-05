@@ -892,12 +892,11 @@ export function AppShell({
       : groupId
         ? `/student/voices?group_id=${groupId}`
         : "/student/voices";
-  const recordHref: string | undefined = visit
+  const recordHref = visit
     ? `/teacher/record?group_id=${visit}`
     : teacherSurface
       ? "/teacher/record"
-      : // Students lost the Brainform Record row (M4): Records lives on Quiz.
-        undefined;
+      : "/student/record";
   const groups: SidebarGroup[] = [
     {
       key: "studyform",
@@ -938,18 +937,12 @@ export function AppShell({
           label: t("voices"),
           icon: "mic",
         },
-        // A student has no Brainform Record row (Quiz M4); the teacher and a
-        // visiting teacher keep theirs.
-        ...(recordHref
-          ? [
-              {
-                key: "record",
-                href: recordHref,
-                label: t("sidebarRecord"),
-                icon: "clock" as const,
-              },
-            ]
-          : []),
+        {
+          key: "record",
+          href: recordHref,
+          label: t("sidebarRecord"),
+          icon: "clock",
+        },
         // Knowledge is the teacher's own; inside a student group the sidebar
         // shows what the group's members see.
         ...(teacherSurface && !visitingGroup
