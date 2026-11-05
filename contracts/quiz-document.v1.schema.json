@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mayaform.net/contracts/quiz-document.v1.schema.json",
+  "title": "QuizDocument",
+  "type": "object",
+  "required": ["schema_version", "title", "status", "settings", "items"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 1 },
+    "quiz_id": { "type": ["string", "null"], "format": "uuid" },
+    "group_id": { "type": ["string", "null"], "format": "uuid" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "locale": { "type": "string", "default": "en" },
+    "status": { "enum": ["draft", "published"] },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shuffle_questions": { "type": "boolean" },
+        "shuffle_choices": { "type": "boolean" },
+        "allow_skip": { "type": "boolean" },
+        "time_limit_sec": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/item" }
+    }
+  },
+  "$defs": {
+    "choice": {
+      "type": "object",
+      "required": ["id", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string" }
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": ["id", "type", "prompt", "points"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["single", "multiple", "short_text", "long_text"] },
+        "required": { "type": "boolean" },
+        "prompt": { "type": "string" },
+        "choices": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/choice" }
+        },
+        "answer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "choice_ids": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "rubric": { "type": "string" }
+          }
+        },
+        "points": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

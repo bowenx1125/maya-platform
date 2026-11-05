@@ -88,6 +88,7 @@ from app.modules.knowledge_sets.router import router as knowledge_sets_router
 from app.modules.knowledge_sets.task_manager import KnowledgeGenerationTaskManager
 from app.modules.learning.finalizer import AssessmentFinalizer
 from app.modules.learning.router import router as learning_router
+from app.modules.quiz.router import router as quiz_router
 from app.modules.org.router import router as org_router
 from app.modules.reports.real_provider import RealReportProvider
 from app.modules.reports.router import router as reports_router
@@ -819,6 +820,7 @@ def create_app(
     app.include_router(knowledge_metadata_router, prefix="/api/v1")
     app.include_router(knowledge_sets_router, prefix="/api/v1")
     app.include_router(learning_router, prefix="/api/v1")
+    app.include_router(quiz_router, prefix="/api/v1")
     app.include_router(teams_router, prefix="/api/v1")
     app.include_router(avatars_router, prefix="/api/v1")
     app.include_router(voices_router, prefix="/api/v1")
