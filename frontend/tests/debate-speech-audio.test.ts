@@ -10,8 +10,8 @@ describe("Debate speech volume", () => {
     vi.unstubAllGlobals();
   });
 
-  it("exports the unified 1.5× level", () => {
-    expect(DEBATE_SPEECH_VOLUME).toBe(1.5);
+  it("exports the unified 0 dB (1.0) level", () => {
+    expect(DEBATE_SPEECH_VOLUME).toBe(1.0);
   });
 
   it("keeps element volume at 1 and is idempotent without Web Audio", () => {

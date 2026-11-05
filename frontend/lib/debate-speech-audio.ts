@@ -1,13 +1,12 @@
 /**
  * Debate turn speech playback volume.
  *
- * Every Immersive Debate speech clip plays at this one level. 1.5× the
- * browser default (HTMLMediaElement.volume = 1), so clips that used to
- * sit at full element volume land 50% louder via a GainNode. Element
- * volume stays at 1; the boost is the gain. Workspace / stage BGM is
- * untouched (see background-music.ts).
+ * Every Immersive Debate speech clip plays at this one absolute level:
+ * 0 dB → linear gain 1.0 (10^(0/20)). Element volume stays at 1; the
+ * GainNode holds the level so all clips stay unified. Workspace / stage
+ * BGM is untouched (see background-music.ts).
  */
-export const DEBATE_SPEECH_VOLUME = 1.5;
+export const DEBATE_SPEECH_VOLUME = 1.0; // 0 dB
 
 type SpeechGainHandle = {
   /** Keep the AudioContext awake across user-gesture-gated play(). */
