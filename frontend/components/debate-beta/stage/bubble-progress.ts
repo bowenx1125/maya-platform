@@ -22,6 +22,10 @@ function cleanSpeech(speech: string): string {
     .trim();
 }
 
+function firstCodePoint(text: string): string {
+  return codePoints(text)[0] ?? "";
+}
+
 export function bubbleProgressFrom(
   speech: string,
   elapsedSeconds: number,
@@ -32,8 +36,19 @@ export function bubbleProgressFrom(
 
   const duration = Number(durationSeconds);
   const elapsed = Number(elapsedSeconds);
-  if (!Number.isFinite(duration) || duration <= 0) return "";
-  if (!Number.isFinite(elapsed) || elapsed <= 0) return "";
+  // Reject unset / failed durations. POSITIVE_INFINITY means playback has
+  // started but media metadata has not arrived yet — still mount the bubble.
+  if (Number.isNaN(duration) || duration <= 0) return "";
+  if (!Number.isFinite(elapsed) || elapsed < 0) return "";
+
+  if (!Number.isFinite(duration)) {
+    return firstCodePoint(text);
+  }
+
+  // At play start, expose one code point so the 3D bubble mounts with voice.
+  if (elapsed === 0) {
+    return firstCodePoint(text);
+  }
 
   if (elapsed >= duration) {
     const full = codePoints(text);

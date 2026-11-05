@@ -1319,6 +1319,15 @@ export function BetaDebateStage({
         audio.src = source;
         // Every Debate plays at 1.0: the speaking rate is in the audio (TTS rate).
         audio.playbackRate = 1;
+        // Mount the bubble before play so voice and text appear together.
+        // Infinity stands in until loadedmetadata supplies a real duration.
+        audioTurnRef.current = turnId;
+        setBubblePlayback({
+          turnId,
+          elapsed: 0,
+          duration: Number.POSITIVE_INFINITY,
+          failed: false,
+        });
         await audio.play();
       })();
       const pending = { key, play };
@@ -1640,7 +1649,8 @@ export function BetaDebateStage({
           setBubblePlayback({
             turnId: message.turn_id,
             elapsed: Math.max(0, current.cursor_ms / 1000),
-            duration: Number.NaN,
+            // Infinity until loadedmetadata; NaN would keep the bubble empty.
+            duration: Number.POSITIVE_INFINITY,
             failed: false,
           });
           setAudioPlayingTurnId(null);
@@ -3680,7 +3690,10 @@ export function BetaDebateStage({
     bubbleTurn && bubblePlayback?.turnId === bubbleTurn.id
       ? bubblePlayback.failed
         ? bubbleLineFrom(bubbleTurn.speech)
-        : playback.status === "playing" || playback.status === "paused"
+        : // Include "ready": startEarly can play audio before status flips to playing.
+          playback.status === "playing" ||
+            playback.status === "paused" ||
+            playback.status === "ready"
           ? bubbleProgressFrom(
               bubbleTurn.speech,
               bubblePlayback.elapsed,
