@@ -1,41 +1,22 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { QUIZ_RECORDS_PATH } from "../../../lib/quiz-draft";
 
-import { AppShell } from "../../../components/app-shell";
-import { BrainformWorkspace } from "../../../components/knowledge/brainform-workspace";
-import { RouteGuard } from "../../../components/session-provider";
-import { LoadingPage } from "../../../components/ui";
-
-function StudentRecordRoute() {
-  const query = useSearchParams();
-  const q = (key: string) => query.get(key) ?? undefined;
-  return (
-    <RouteGuard role="student">
-      <AppShell role="student">
-        <BrainformWorkspace
-          role="student"
-          recordPage
-          initialAgentId={q("agent_id")}
-          initialSetId={q("set_id")}
-          initialJobId={q("job_id")}
-          initialCourseId={q("course_id")}
-          initialGroupId={q("group_id")}
-          initialMode={q("mode")}
-          initialDocumentId={q("document_id")}
-        />
-      </AppShell>
-    </RouteGuard>
-  );
-}
-
-// The query (and path) is read in the browser, so following a link here
-// needs no server render; only the page's own data requests wait.
-export default function StudentRecordPage() {
-  return (
-    <Suspense fallback={<LoadingPage />}>
-      <StudentRecordRoute />
-    </Suspense>
-  );
+/**
+ * The old Brainform Record page for students moved under Quiz (M4). A tiny
+ * server redirect; the Quiz page owns the Records tab now. A query that
+ * names a course (course_id) survives so Quiz Records reads the same course.
+ */
+export default async function StudentRecordPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const params = await searchParams;
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "string") query.set(key, value);
+  }
+  const qs = query.toString();
+  redirect(qs ? `${QUIZ_RECORDS_PATH}&${qs}` : QUIZ_RECORDS_PATH);
 }
