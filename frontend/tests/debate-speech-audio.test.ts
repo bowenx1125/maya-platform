@@ -26,3 +26,23 @@ describe("Debate speech volume", () => {
     first.dispose();
   });
 });
+
+describe("Debate speech output path", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("never wires the element into Web Audio (direct output at 0 dB)", () => {
+    const ctor = vi.fn();
+    vi.stubGlobal("AudioContext", ctor);
+    const audio = document.createElement("audio");
+    audio.volume = 0.2;
+    const handle = bindDebateSpeechVolume(audio);
+    handle.ensureRunning();
+    handle.dispose();
+    // rebind after dispose (ref callback re-run) still plays directly
+    bindDebateSpeechVolume(audio).ensureRunning();
+    expect(ctor).not.toHaveBeenCalled();
+    expect(audio.volume).toBe(1);
+  });
+});
