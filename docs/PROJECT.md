@@ -241,9 +241,8 @@ malformed_request lists field+type. Each bar line's Done publishes that line. To
 
 ## Oct24 timing logs (PR A)
 
-Requests log `request_timing` JSON (route,status,ms,db/provider ms,slow≥1s); debate_timing
-adds prefetch/audio_serve. Browser samples 25% to POST /client-metrics (logged only).
-`scripts/slow_endpoints_report.py` (read-only): route p50/p95/p99,top20. No user data.
+`request_timing` JSON per request (+debate_timing); browser samples 25% to /client-metrics;
+`scripts/slow_endpoints_report.py` reads p50/p95/p99. No user data.
 
 ## Oct24 PostgreSQL only (PR B)
 
@@ -252,8 +251,7 @@ history). Tests need MAYA_TEST_POSTGRES_URL. Fixed races: budget, Agent/document
 
 ## Oct24 Immerse audio predownload (PR A2)
 
-From mount the stage downloads ready speeches as blobs, in speaking order, independent
-of Next/pause. Playing uses the blob (≤3s) else the URL once. Leaving aborts and frees blobs.
+Stage predownloads ready speeches as blobs in speaking order; plays blob (≤3s) else URL once.
 
 ## Oct25 audio, locks and Next cost (PR C)
 
@@ -308,3 +306,11 @@ Idle polls 30s; Agent lists carry card label/theme. Debate Rulesets state goals,
 Accounts: filter; Delete is real (DELETE /courses/{id}/members/{user}). Chat 429 →
 provider_rate_limited, 502/503/504/529 → provider_busy (one call). Ordinary Team members
 answer together (≤3; assessment Teams one at a time); history is one read. 390px Brainform fits.
+
+## Nov5 Agent Chat identity
+
+A Nikola Tesla Agent greeted a teacher as a generic 教学助手 (quizzes, records). One-to-one
+Agent Chat sent a fixed "selected educational Agent" opening, a teacher-tools paragraph and
+13 (teacher)/8 (student) assessment Tools. Now: "You are <name>", own AGENT.md/Knowledge/
+RAG, no assessment wording or Tools (Agent Chats hold no attempt; Teams unchanged).
+Teachers read course results in Record or assessment Teams. Not yet deployed.
