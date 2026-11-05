@@ -134,7 +134,7 @@ describe("sidebar groups", () => {
       "Record",
       "Knowledge",
     ]);
-    expect(groupRows("Classroom")).toEqual(["Debates", "Accounts"]);
+    expect(groupRows("Classroom")).toEqual(["Debates", "Accounts", "Quizzes"]);
     expect(nav().queryByText("Live")).toBeNull();
     expect(
       nav().getByRole("link", { name: "Agents" }).getAttribute("href"),

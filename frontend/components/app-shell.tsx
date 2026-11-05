@@ -717,6 +717,11 @@ export function AppShell({
             label: t("accounts"),
             icon: "accounts" as const,
           },
+          {
+            href: "/teacher/quizzes",
+            label: t("quizzes"),
+            icon: "classroom" as const,
+          },
         ]
       : []),
   ];
@@ -729,21 +734,23 @@ export function AppShell({
       ? agentsHref.split("?", 1)[0]
       : teacherSurface && pathname.startsWith("/teacher/agents/")
         ? "/teacher/agents"
-        : pathname.startsWith("/teacher/debates")
-          ? "/teacher/debates"
-          : pathname.startsWith("/student/groups/") &&
-              pathname.endsWith("/voices")
-            ? "/student/voices"
+        : pathname.startsWith("/teacher/quizzes")
+          ? "/teacher/quizzes"
+          : pathname.startsWith("/teacher/debates")
+            ? "/teacher/debates"
             : pathname.startsWith("/student/groups/") &&
-                pathname.endsWith("/agents/new")
-              ? "/student/agents"
+                pathname.endsWith("/voices")
+              ? "/student/voices"
               : pathname.startsWith("/student/groups/") &&
-                  pathname.endsWith("/knowledge")
-                ? "/student/knowledge"
-                : pathname === "/teacher/studyform" ||
-                    pathname.startsWith("/student/groups/")
-                  ? studyformHref.split("?", 1)[0]
-                  : pathname;
+                  pathname.endsWith("/agents/new")
+                ? "/student/agents"
+                : pathname.startsWith("/student/groups/") &&
+                    pathname.endsWith("/knowledge")
+                  ? "/student/knowledge"
+                  : pathname === "/teacher/studyform" ||
+                      pathname.startsWith("/student/groups/")
+                    ? studyformHref.split("?", 1)[0]
+                    : pathname;
   const studentGroupPicker =
     !teacherSurface &&
     pathname === "/student" &&
@@ -990,7 +997,10 @@ export function AppShell({
           ["live", "classroom", "accounts", "quiz"].includes(link.icon),
         )
         .map((link) => ({
-          key: link.icon,
+          // Debates and Quizzes share the classroom icon; the row key must
+          // stay unique or both rows light together (litSidebarKey matches
+          // on it) and React sees duplicate keys.
+          key: link.href === "/teacher/quizzes" ? "quizzes" : link.icon,
           href: link.href,
           label: link.label,
           icon: link.icon,

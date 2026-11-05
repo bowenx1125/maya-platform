@@ -111,6 +111,7 @@ describe("PW3-E teacher information architecture", () => {
       "Chat with Agent",
       "Debates",
       "Accounts",
+      "Quizzes",
     ]);
     expect(navHrefs()).toEqual([
       "/teacher",
@@ -118,6 +119,7 @@ describe("PW3-E teacher information architecture", () => {
       "/teacher/chat",
       "/teacher/debates",
       "/teacher/roster",
+      "/teacher/quizzes",
     ]);
     // Owner request (2026-10-20): Brainform's cards joined Studyform.
     expect(document.querySelector('[data-tour="brain"]')).toBeNull();
