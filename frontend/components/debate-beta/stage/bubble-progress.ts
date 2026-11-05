@@ -68,3 +68,17 @@ export function bubbleProgressFrom(
     ? window
     : windowPoints.slice(windowPoints.length - BUBBLE_LIMIT).join("");
 }
+
+/** Two animation frames so React can commit the bubble before audio starts. */
+export function waitForBubblePaint(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame !== "function") {
+      resolve();
+      return;
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
