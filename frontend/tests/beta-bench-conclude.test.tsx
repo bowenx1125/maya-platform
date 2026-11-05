@@ -361,10 +361,10 @@ describe("segments_v2 Bench Conclude and Report", () => {
     renderPage(api);
     fireEvent.click(await screen.findByRole("button", { name: "Conclude" }));
     await screen.findByRole("dialog", { name: "Report" });
-    expect(screen.getByRole("heading", { name: "Evaluation" })).toBeTruthy();
+    expect(screen.getByLabelText("Evaluation")).toBeTruthy();
+    expect(screen.getByText("Bowen")).toBeTruthy();
+    expect(screen.getAllByTestId("life-points").length).toBeGreaterThan(0);
     expect(screen.queryByText(/unscored/i)).toBeNull();
-    expect(screen.getByText("No match +0")).toBeTruthy();
-    expect(screen.getByText("Direct evidence +5")).toBeTruthy();
     expect(api.closeInteraction).toHaveBeenCalledTimes(1);
   });
 
@@ -380,7 +380,8 @@ describe("segments_v2 Bench Conclude and Report", () => {
     renderPage(api);
     const toggle = await screen.findByRole("button", { name: "Interact" });
     fireEvent.click(toggle);
-    expect(await screen.findByRole("button", { name: "Hide" })).toBe(toggle);
+    // Label stays Interact (like Transcript); only aria-expanded flips.
+    expect(await screen.findByRole("button", { name: "Interact" })).toBe(toggle);
     const url = screen.getByRole("img", { name: "Scan to join" }).textContent;
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     fireEvent.click(toggle);

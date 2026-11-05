@@ -278,7 +278,7 @@ export function IconEnter({ size = 16 }: { size?: number }) {
   );
 }
 
-/** Rebirth: three chasing arrows, like ♻️. Shape after lucide recycle (ISC). */
+/** Replay/rebirth recycle arrows. Shape after lucide recycle (ISC). */
 export function IconRecycle({ size = 16 }: { size?: number }) {
   return (
     <OutlineIcon size={size}>

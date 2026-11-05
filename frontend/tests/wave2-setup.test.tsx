@@ -229,7 +229,7 @@ describe("Wave 2 teacher debate setup", () => {
       try {
         render(<TeacherDebateList />);
         await screen.findByText("Completed");
-        const button = screen.getByRole("button", { name: "Rebirth" });
+        const button = screen.getByRole("button", { name: "Replay" });
         fireEvent.click(button);
         fireEvent.click(button);
         await waitFor(() => expect(api.debates).toHaveBeenCalledTimes(2));
@@ -245,7 +245,7 @@ describe("Wave 2 teacher debate setup", () => {
         );
         expect(confirmed).toHaveBeenCalledTimes(1);
         expect(screen.queryByText("Completed")).toBeNull();
-        expect(screen.queryByRole("button", { name: "Rebirth" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "Replay" })).toBeNull();
         // The row itself opens Preview; there is no separate Preview button.
         expect(screen.queryByRole("link", { name: "Preview" })).toBeNull();
         expect(
@@ -276,7 +276,7 @@ describe("Wave 2 teacher debate setup", () => {
     useSessionMock.mockReturnValue({ ...teacherSession(), api });
     try {
       render(<TeacherDebateList />);
-      fireEvent.click(await screen.findByRole("button", { name: "Rebirth" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Replay" }));
       const alert = await screen.findByRole("alert");
       expect(alert.textContent).toBeTruthy();
       expect(alert.textContent).not.toContain("private provider detail");
@@ -287,7 +287,7 @@ describe("Wave 2 teacher debate setup", () => {
       await waitFor(() => expect(api.debates).toHaveBeenCalledTimes(2));
       expect(screen.getByRole("alert")).toBeTruthy();
       expect(
-        (screen.getByRole("button", { name: "Rebirth" }) as HTMLButtonElement)
+        (screen.getByRole("button", { name: "Replay" }) as HTMLButtonElement)
           .disabled,
       ).toBe(false);
     } finally {
@@ -317,12 +317,12 @@ describe("Wave 2 teacher debate setup", () => {
           <TeacherDebateList />
         </>,
       );
-      fireEvent.click(await screen.findByRole("button", { name: "Rebirth" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Replay" }));
       const alert = await screen.findByRole("alert");
       expect(alert.textContent).toContain("The classroom was reset");
       expect(alert.textContent).not.toContain("private refresh failure");
       const reset = screen.getByRole("button", {
-        name: "Rebirth",
+        name: "Replay",
       }) as HTMLButtonElement;
       expect(reset.disabled).toBe(true);
       fireEvent.click(reset);
@@ -371,7 +371,7 @@ describe("Wave 2 teacher debate setup", () => {
     useSessionMock.mockReturnValue({ ...teacherSession(), api });
     try {
       render(<TeacherDebateList />);
-      fireEvent.click(await screen.findByRole("button", { name: "Rebirth" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Replay" }));
       fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
       await screen.findByText("Ready");
       expect(api.rebirthDebate).toHaveBeenCalledTimes(2);
@@ -395,7 +395,7 @@ describe("Wave 2 teacher debate setup", () => {
     useSessionMock.mockReturnValue({ ...teacherSession(), api });
     try {
       render(<TeacherDebateList />);
-      fireEvent.click(await screen.findByRole("button", { name: "Rebirth" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Replay" }));
       expect(api.debate).not.toHaveBeenCalled();
       expect(api.rebirthDebate).not.toHaveBeenCalled();
       expect(screen.getByText("Completed")).toBeTruthy();
@@ -491,7 +491,7 @@ describe("Wave 2 teacher debate setup", () => {
         if (status === "completed") {
           expect(
             screen
-              .getByRole("button", { name: "Rebirth" })
+              .getByRole("button", { name: "Replay" })
               .compareDocumentPosition(entry) &
               Node.DOCUMENT_POSITION_FOLLOWING,
           ).toBeTruthy();
@@ -593,9 +593,9 @@ describe("Wave 2 teacher debate setup", () => {
       }
       expect(within(scope).queryByText("Preview")).toBeNull();
     }
-    // Rebirth is a recycle icon, still named Rebirth.
-    const rebirth = within(finished).getByRole("button", { name: "Rebirth" });
-    expect(rebirth.textContent).toBe("Rebirth");
+    // Replay label; recycle icon; API remains rebirthDebate.
+    const rebirth = within(finished).getByRole("button", { name: "Replay" });
+    expect(rebirth.textContent).toBe("Replay");
     expect(rebirth.querySelector("svg[aria-hidden='true']")).toBeTruthy();
     // Audio present: a bell; clicking it devocalizes.
     const bell = within(voiced).getByRole("button", { name: "Devocalize" });

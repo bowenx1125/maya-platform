@@ -420,12 +420,12 @@ function ClassroomResetButton({
         className={DEBATE_ROW_BUTTON}
         disabled={busy || resetCommitted}
         type="button"
-        aria-label="Rebirth"
+        aria-label="Replay"
         aria-busy={busy || undefined}
         onClick={() => void reset()}
       >
         {busy ? <IconSpinner size={18} /> : <IconRecycle size={18} />}
-        <span>Rebirth</span>
+        <span>Replay</span>
       </Button>
     </>
   );

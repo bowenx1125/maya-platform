@@ -1,10 +1,7 @@
 "use client";
 
-import { BarChart, type ChartDatum } from "../charts";
-import { useT } from "../../lib/i18n";
 import {
   EVIDENCE_GRADE_POINTS,
-  EVIDENCE_GRADE_LABELS,
   gradeClaims,
   segmentEvidenceGrade,
 } from "../../lib/evidence-grading";
@@ -24,10 +21,23 @@ function claimsOf(turn: DebateTurn): { support_mode: string }[] {
   return claims;
 }
 
+export type AgentScoreRow = {
+  id: string;
+  label: string;
+  color: string;
+  value: number;
+};
+
+/** A1 life-point card tones (mock .sc --tone). */
+const SCORE_TONES = ["#FFE14D", "#67E8F9", "#A3E635", "#F9A8D4", "#C4B5FD"];
+
+/** Fixed 10 life dots as in A1-report mock; fill min(score, 10). */
+const LIFE_MAX = 10;
+
 export function agentScores(
   participants: DebateParticipant[],
   turns: DebateTurn[],
-): ChartDatum[] {
+): AgentScoreRow[] {
   const byParticipant = new Map<string, number>();
   const seen = new Set<string>();
   for (const turn of turns) {
@@ -48,12 +58,16 @@ export function agentScores(
     .map((participant, index) => ({
       id: participant.id,
       label: participant.agent_name,
-      color: ["#9685b3", "#c3a366", "#789985", "#a28f7b", "#ac92ac"][index % 5],
+      color: SCORE_TONES[index % SCORE_TONES.length]!,
       value: byParticipant.get(participant.id) ?? 0,
     }))
     .sort((a, b) => b.value - a.value);
 }
 
+/**
+ * A1 Report life-point scorecards (not the legacy Evaluation bar chart).
+ * Scoring math stays in `agentScores`; only chrome changes.
+ */
 export function AgentScores({
   participants,
   turns,
@@ -64,38 +78,51 @@ export function AgentScores({
   const data = agentScores(participants, turns);
   return (
     <section
-      aria-labelledby="agent-scores-title"
-      className="grid min-w-0 gap-(--section-content-gap) rounded-[22px] border border-(--line,#dedee3) bg-white p-(--workspace-inset)"
+      aria-label="Evaluation"
+      className="mr-9 mt-2 mb-4 grid grid-cols-3 gap-3 max-[600px]:mr-0 max-[600px]:grid-cols-1"
     >
-      <div className="flex items-start justify-between gap-4 border-b border-(--line,#dedee3) pb-(--section-content-gap)">
-        <div>
-          <h2
-            id="agent-scores-title"
-            className="m-0 text-[1.24rem] leading-[1.4] text-(--indigo-dark)"
-          >
-            Evaluation
-          </h2>
-        </div>
-      </div>
-      <div className="grid min-w-0 gap-(--section-content-gap) rounded-[14px] border border-transparent bg-(--surface-subtle,#f5f5f7) p-4">
-        <div className="min-w-0 border-0 bg-transparent p-0">
-          <div
-            aria-label="Evidence grading"
-            className="mb-4 flex flex-wrap gap-1.5 text-[0.78rem] text-(--muted) [&_[data-grade]]:rounded-[7px] [&_[data-grade]]:px-2 [&_[data-grade]]:py-1 [&_[data-grade]]:font-semibold [&_[data-grade=direct]]:bg-[#e7f0e7] [&_[data-grade=direct]]:text-[#386e54] [&_[data-grade=indirect]]:bg-[#f2e4c2] [&_[data-grade=indirect]]:text-[#806127] [&_[data-grade=none]]:bg-[#eee8f0] [&_[data-grade=none]]:text-[#71667f]"
-          >
-            {Object.entries(EVIDENCE_GRADE_LABELS).map(([grade, label]) => (
-              <span key={grade} data-grade={grade}>
-                {label}
-              </span>
-            ))}
-          </div>
-          <BarChart
-            data={data}
-            valueColor="var(--indigo-dark)"
-            emptyLabel="No public speeches yet."
-          />
-        </div>
-      </div>
+      {data.length === 0 ? (
+        <p className="col-span-full m-0 text-sm text-[#57534e]">
+          No public speeches yet.
+        </p>
+      ) : (
+        data.map((row) => {
+          const filled = Math.max(0, Math.min(LIFE_MAX, Math.round(row.value)));
+          return (
+            <article
+              key={row.id}
+              className="rounded-[18px] border-[2.5px] border-solid border-[#111] px-3.5 py-3"
+              style={{
+                background: `color-mix(in srgb, ${row.color} 28%, #fff)`,
+                boxShadow: `3px 4px 0 ${row.color}`,
+              }}
+            >
+              <b className="mb-1 block font-[family-name:var(--font-lexend,Lexend,system-ui)] text-sm font-extrabold text-[#111]">
+                {row.label}
+              </b>
+              <div className="my-0.5 mb-2 font-[family-name:var(--font-bricolage,var(--font-display),system-ui)] text-4xl leading-none font-extrabold text-[#111] tabular-nums">
+                {row.value}
+              </div>
+              <div
+                className="flex gap-[3px]"
+                aria-hidden="true"
+                data-testid="life-points"
+              >
+                {Array.from({ length: LIFE_MAX }, (_, i) => (
+                  <i
+                    key={i}
+                    className={
+                      i < filled
+                        ? "block size-2.5 rounded-full border-2 border-solid border-[#111] bg-[#111]"
+                        : "block size-2.5 rounded-full border-2 border-solid border-[#111] bg-white"
+                    }
+                  />
+                ))}
+              </div>
+            </article>
+          );
+        })
+      )}
     </section>
   );
 }

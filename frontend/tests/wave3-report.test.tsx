@@ -95,7 +95,7 @@ describe("Wave 3 M14 ReportPanel", () => {
       </>,
     );
 
-    await screen.findByText("Report");
+    await screen.findByRole("button", { name: "Regenerate" });
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Regenerate" })).toHaveProperty(
         "disabled",
@@ -129,7 +129,7 @@ describe("Wave 3 M14 ReportPanel", () => {
       </>,
     );
 
-    await screen.findByText("Report");
+    await screen.findByRole("button", { name: "Regenerate" });
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Regenerate" })).toHaveProperty(
         "disabled",
@@ -197,15 +197,12 @@ describe("Wave 3 M14 ReportPanel", () => {
       </>,
     );
 
-    expect(await screen.findByText("Report")).toBeTruthy();
     expect(await screen.findByText("Shared concern")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "History" })).toBeTruthy();
-    const versionHeader = screen.getByRole("heading", {
-      name: "Version 1",
-    }).parentElement!;
+    const tools = screen.getByTestId("report-version").parentElement!;
     expect(
-      Array.from(versionHeader.querySelectorAll("button")).map(
-        (button) => button.textContent,
+      Array.from(tools.querySelectorAll("button")).map((button) =>
+        button.textContent?.replace(/\s+/g, " ").trim(),
       ),
     ).toEqual(["Regenerate", "Download"]);
     await waitFor(() =>
@@ -379,7 +376,7 @@ describe("Wave 3 M14 ReportPanel", () => {
         <ReportPanel debateId={debateId} api={api} />
       </>,
     );
-    await screen.findByText("Report");
+    await screen.findByRole("button", { name: "Regenerate" });
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Regenerate" })).toHaveProperty(
         "disabled",
@@ -407,7 +404,7 @@ describe("Wave 3 M14 ReportPanel", () => {
         <ReportPanel debateId={debateId} api={api} />
       </>,
     );
-    await screen.findByText("Report");
+    await screen.findByRole("button", { name: "Regenerate" });
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Regenerate" })).toHaveProperty(
         "disabled",
@@ -433,7 +430,7 @@ describe("Wave 3 M14 ReportPanel", () => {
         <ReportPanel debateId={debateId} api={api} />
       </>,
     );
-    await screen.findByText("Report");
+    await screen.findByRole("button", { name: "Regenerate" });
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Regenerate" })).toHaveProperty(
         "disabled",
