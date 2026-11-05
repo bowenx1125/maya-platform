@@ -27,7 +27,7 @@ from app.core.postgres_compat import ensure_postgres_compat
 POSTGRES_POOL_SIZE = 15
 POSTGRES_MAX_OVERFLOW = 25
 
-ALEMBIC_HEAD = "0082_teacher_visit_expiry"
+ALEMBIC_HEAD = "0083_classroom_quizzes"
 # The oldest revision this checkout has (migrations squashed 2026-10-25).
 MIGRATION_BASELINE = "0080_drop_playback_rate"
 
@@ -155,6 +155,7 @@ def registered_metadata() -> MetaData:
 
     from app.modules.auth import admission as _admission_models
     from app.modules.cardroom import models as _cardroom_models
+    from app.modules.quiz import models as _quiz_models
     from app.modules.debates import models as _debate_models
     from app.modules.interactions import models as _interaction_models
     from app.modules.knowledge_sets import models as _knowledge_set_models
@@ -167,6 +168,7 @@ def registered_metadata() -> MetaData:
     del (
         _admission_models,
         _cardroom_models,
+        _quiz_models,
         _debate_models,
         _interaction_models,
         _knowledge_set_models,
