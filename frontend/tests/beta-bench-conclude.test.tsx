@@ -55,8 +55,6 @@ vi.mock("../components/debate-beta/stage", () => ({
   ),
   defaultBetaStageLabels: {
     openInteraction: "Interact",
-    hideInteraction: "Hide",
-    interactionOpening: "Opening…",
   },
 }));
 vi.mock("../components/report", () => ({

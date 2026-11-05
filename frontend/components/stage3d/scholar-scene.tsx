@@ -29,6 +29,8 @@ export type ScholarSceneProps = {
   speakingId?: string | null;
   /** The spoken line, already trimmed for the bubble. */
   bubbleText?: string;
+  /** Mount the bubble shell while audio is starting, even before text arrives. */
+  bubbleOpen?: boolean;
   loadingLabel: string;
   unavailableLabel: string;
   layout?: "classroom" | "preview";
@@ -53,6 +55,7 @@ export function ScholarScene({
   resting,
   speakingId,
   bubbleText,
+  bubbleOpen = false,
   loadingLabel,
   unavailableLabel,
   layout = "classroom",
@@ -278,6 +281,7 @@ export function ScholarScene({
   const bubbleWindow = Array.from(bubbleText ?? "")
     .slice(-52)
     .join("");
+  const showBubble = Boolean(bubbleWindow) || bubbleOpen;
   const bubbleHalfWidth = Math.min(145, viewportWidth * 0.31);
   const bubbleX = speaking
     ? Math.max(
@@ -290,7 +294,7 @@ export function ScholarScene({
   for (const source of [...anchors].sort((left, right) =>
     left.id.localeCompare(right.id),
   )) {
-    if (!source.visible || (source.id === speakingId && bubbleWindow)) continue;
+    if (!source.visible || (source.id === speakingId && showBubble)) continue;
     const anchor = { ...source };
     // Coincident or cramped heads need separate rows; only move a label
     // whose minimum readable box would collide with one already placed.
@@ -345,7 +349,7 @@ export function ScholarScene({
           ? characters.map((character) => {
               const anchor = nameAnchors.get(character.id);
               if (!anchor) return null;
-              if (character.id === speakingId && bubbleWindow) return null;
+              if (character.id === speakingId && showBubble) return null;
               // Neighbouring labels own separate horizontal space; the CSS
               // clamp keeps short names over their heads within those bounds.
               const neighbours = [...nameAnchors.values()].filter(
@@ -396,7 +400,7 @@ export function ScholarScene({
             })
           : null}
 
-        {status === "ready" && speaking?.visible && bubbleWindow ? (
+        {status === "ready" && speaking?.visible && showBubble ? (
           <div
             aria-live="polite"
             className={styles.bubble}

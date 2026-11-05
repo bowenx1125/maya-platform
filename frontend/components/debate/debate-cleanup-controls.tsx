@@ -9,6 +9,7 @@ import {
   type DebateCleanupRequest,
   type IdempotencyHandle,
   type PlatformApi,
+  type RegenerateTurnAudioResult,
 } from "../../lib/api";
 import { cn } from "../../lib/utils";
 import {
@@ -25,6 +26,9 @@ type Intent = {
   body: DebateCleanupRequest;
   key: IdempotencyHandle;
 };
+
+const AUDIO_QUEUE_POLL_MS = 1_000;
+const AUDIO_QUEUE_WAIT_MS = 45_000;
 
 function missingAudioIds(detail?: DebateDetail): string[] {
   if (detail?.turn_protocol !== "segments_v2") return [];
@@ -43,6 +47,12 @@ function missingAudioIds(detail?: DebateDetail): string[] {
         .map((turn) => turn.id),
     ]),
   ];
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 export function DebateCleanupControls({
@@ -88,6 +98,7 @@ export function DebateCleanupControls({
   );
   const [generatingAudio, setGeneratingAudio] = useState(false);
   const audioRequests = useRef(new Map<string, IdempotencyHandle>());
+  const regenerableIds = useRef<string[]>([]);
   const loadDetailRef = useRef(loadDetail);
   useEffect(() => {
     loadDetailRef.current = loadDetail;
@@ -96,8 +107,13 @@ export function DebateCleanupControls({
   useEffect(() => {
     const version = snapshotVersion.current;
     const timer = window.setTimeout(() => {
-      if (!active.current && version === snapshotVersion.current)
-        setRevoice(audioRestoreNeeded ?? missingAudioIds(detail).length > 0);
+      if (!active.current && version === snapshotVersion.current) {
+        setRevoice(
+          audioRestoreNeeded ??
+            (missingAudioIds(detail).length > 0 ||
+              regenerableIds.current.length > 0),
+        );
+      }
     }, 0);
     return () => window.clearTimeout(timer);
   }, [detail, debateId, audioRestoreNeeded]);
@@ -107,10 +123,33 @@ export function DebateCleanupControls({
       await onVoiceDeleted();
       if (loadDetailRef.current) {
         const snapshot = await loadDetailRef.current();
-        setRevoice(missingAudioIds(snapshot).length > 0);
+        setRevoice(
+          missingAudioIds(snapshot).length > 0 ||
+            regenerableIds.current.length > 0,
+        );
       }
     } catch {
       /* A failed refresh does not undo a committed action. */
+    }
+  }
+
+  async function regenerateOne(
+    debateIdValue: string,
+    turnId: string,
+    expectedRevision: number,
+    key: IdempotencyHandle,
+  ): Promise<RegenerateTurnAudioResult> {
+    const deadline = Date.now() + AUDIO_QUEUE_WAIT_MS;
+    for (;;) {
+      const result = await api.regenerateDebateTurnAudio(
+        debateIdValue,
+        turnId,
+        { expected_revision: expectedRevision },
+        { idempotency: key },
+      );
+      if (result.audio_ready || result.status !== "queued") return result;
+      if (Date.now() >= deadline) return result;
+      await wait(AUDIO_QUEUE_POLL_MS);
     }
   }
 
@@ -125,23 +164,36 @@ export function DebateCleanupControls({
         ? await loadDetailRef.current()
         : detail;
       if (!snapshot) return;
-      for (const turnId of missingAudioIds(snapshot)) {
+      const stored = regenerableIds.current.filter(Boolean);
+      const turnIds =
+        stored.length > 0 ? [...new Set(stored)] : missingAudioIds(snapshot);
+      let allReady = turnIds.length > 0;
+      for (const turnId of turnIds) {
         const key =
           audioRequests.current.get(turnId) ?? createIdempotencyHandle();
         audioRequests.current.set(turnId, key);
-        const result = await api.regenerateDebateTurnAudio(
-          snapshot.id,
-          turnId,
-          { expected_revision: snapshot.revision },
-          { idempotency: key },
-        );
-        if (!result.audio_ready) {
-          if (result.status !== "queued") audioRequests.current.delete(turnId);
-          return;
+        try {
+          const result = await regenerateOne(
+            snapshot.id,
+            turnId,
+            snapshot.revision,
+            key,
+          );
+          if (result.audio_ready) {
+            audioRequests.current.delete(turnId);
+          } else {
+            allReady = false;
+            if (result.status !== "queued") audioRequests.current.delete(turnId);
+          }
+        } catch {
+          allReady = false;
+          /* Keep the idempotency handle for a later Revocalize retry. */
         }
-        audioRequests.current.delete(turnId);
       }
-      setRevoice(false);
+      if (allReady) {
+        regenerableIds.current = [];
+        setRevoice(false);
+      }
     } catch {
       /* Leave Revocalize available when restoration fails. */
     } finally {
@@ -199,10 +251,17 @@ export function DebateCleanupControls({
       )(request.debateId, request.body, { idempotency: request.key });
       if (mode === "all") {
         intent.current = null;
+        regenerableIds.current = [];
         if (onAllDeleted) await onAllDeleted();
         else router.push(backHref);
       } else if (result.cleanup_status !== "pending") {
         intent.current = null;
+        if (
+          Array.isArray(result.regenerable_turn_ids) &&
+          result.regenerable_turn_ids.length > 0
+        ) {
+          regenerableIds.current = [...result.regenerable_turn_ids];
+        }
         setRevoice(true);
         await refresh();
       }

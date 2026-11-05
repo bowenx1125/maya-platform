@@ -37,19 +37,19 @@ import {
 import { QrCode } from "../../interaction/qr-code";
 import { BarrageLane, type BarrageBullet } from "../../stage3d/barrage-lane";
 import { ScholarScene } from "../../stage3d/scholar-scene";
-import { bubbleProgressFrom } from "./bubble-progress";
+import { bubbleProgressFrom, waitForBubblePaint } from "./bubble-progress";
 import type { StageCharacter } from "../../stage3d/scholar-stage";
 import { cn } from "../../../lib/utils";
 import { useStageMusic } from "../../../lib/background-music";
 import { MusicKey } from "../../music-key";
 import { WorkspaceIcon } from "../../workspace-icon";
 import { NoticeTraySlot, RetryPill, useNoticeTrayAbove } from "../../ui";
+import { EndRunningDebatePrompt } from "./end-running-debate-prompt";
+
 import {
   BETA_CONNECTION_OVERLAY,
   BETA_DOCK,
   BETA_DOCK_MUSIC_KEY,
-  BETA_END_PROMPT,
-  BETA_END_PROMPT_ACTIONS,
   BETA_JOIN_BODY,
   BETA_JOIN_CARD,
   BETA_JOIN_STICK,
@@ -729,6 +729,9 @@ export function BetaDebateStage({
     elapsed: number;
     duration: number;
     failed: boolean;
+    /** Seeded before playback.started when preview/catalog already has the line. */
+    speech?: string;
+    participantId?: string;
   } | null>(null);
   const [audioPlayingTurnId, setAudioPlayingTurnId] = useState<string | null>(
     null,
@@ -1319,15 +1322,38 @@ export function BetaDebateStage({
         audio.src = source;
         // Every Debate plays at 1.0: the speaking rate is in the audio (TTS rate).
         audio.playbackRate = 1;
-        // Mount the bubble before play so voice and text appear together.
-        // Infinity stands in until loadedmetadata supplies a real duration.
+        // Live publicTurns lack this turn until started_ack → playback.started.
+        // Seed from catalog/preview so the bubble can show text with the voice.
+        const catalog = replayCatalogRef.current.get(turnId);
+        const preview = detailRef.current.preview_turns?.find(
+          (turn) => turn.id === turnId,
+        );
+        const published = publicTurnsRef.current.find((turn) => turn.id === turnId);
+        const speech =
+          catalog?.speech ?? preview?.speech ?? published?.speech ?? undefined;
+        const participantId =
+          catalog?.participant_id ??
+          preview?.participant_id ??
+          published?.participant_id ??
+          undefined;
         audioTurnRef.current = turnId;
+        if (participantId) setActiveParticipant(participantId);
         setBubblePlayback({
           turnId,
           elapsed: 0,
           duration: Number.POSITIVE_INFINITY,
           failed: false,
+          speech,
+          participantId,
         });
+        // Let React commit the bubble shell (and any seeded text) before audio.
+        await waitForBubblePaint();
+        if (
+          playbackRef.current.current_turn_id !== turnId ||
+          playbackRef.current.status !== "ready"
+        ) {
+          throw new Error("stale early start");
+        }
         await audio.play();
       })();
       const pending = { key, play };
@@ -1337,7 +1363,7 @@ export function BetaDebateStage({
         if (earlyStartRef.current === pending) earlyStartRef.current = null;
       });
     },
-    [audioQueue, readOnly],
+    [audioQueue, readOnly, setActiveParticipant],
   );
 
   const scheduleMediaPrepare = useCallback(() => {
@@ -1646,38 +1672,59 @@ export function BetaDebateStage({
           audioTurnRef.current = message.turn_id;
           audioActionRef.current = action;
           startedAckRef.current = false;
+          const preparedTurnId = message.turn_id;
+          const catalog = replayCatalogRef.current.get(preparedTurnId);
+          const preview = detailRef.current.preview_turns?.find(
+            (turn) => turn.id === preparedTurnId,
+          );
+          const published = publicTurnsRef.current.find(
+            (turn) => turn.id === preparedTurnId,
+          );
+          const speech =
+            catalog?.speech ?? preview?.speech ?? published?.speech ?? undefined;
+          const participantId =
+            catalog?.participant_id ??
+            preview?.participant_id ??
+            published?.participant_id ??
+            undefined;
+          if (participantId) setActiveParticipant(participantId);
           setBubblePlayback({
-            turnId: message.turn_id,
+            turnId: preparedTurnId,
             elapsed: Math.max(0, current.cursor_ms / 1000),
             // Infinity until loadedmetadata; NaN would keep the bubble empty.
             duration: Number.POSITIVE_INFINITY,
             failed: false,
+            speech,
+            participantId,
           });
           setAudioPlayingTurnId(null);
           const audio = audioRef.current;
           if (!audio) return;
           const mediaUrl = message.media_url;
-          const preparedTurnId = message.turn_id;
           const early = earlyStartRef.current;
           earlyStartRef.current = null;
           cursorMsRef.current = current.cursor_ms;
-          const playFrom = (source: string): Promise<void> => {
-            try {
-              audio.src = source;
-              // Every Debate plays at 1.0: the speaking rate is in the audio (TTS rate).
-              audio.playbackRate = 1;
-              if (current.cursor_ms > 0) {
-                // A seek at 0 would only cost a second ranged request.
-                try {
-                  audio.currentTime = current.cursor_ms / 1000;
-                } catch {
-                  // A not-yet-loaded media element may reject a seek; playback starts at its saved server cursor.
-                }
+          const playFrom = async (source: string): Promise<void> => {
+            audio.src = source;
+            // Every Debate plays at 1.0: the speaking rate is in the audio (TTS rate).
+            audio.playbackRate = 1;
+            if (current.cursor_ms > 0) {
+              // A seek at 0 would only cost a second ranged request.
+              try {
+                audio.currentTime = current.cursor_ms / 1000;
+              } catch {
+                // A not-yet-loaded media element may reject a seek; playback starts at its saved server cursor.
               }
-              return Promise.resolve(audio.play());
-            } catch (cause) {
-              return Promise.reject(cause);
             }
+            // Bubble shell/text must paint before the first audible samples.
+            await waitForBubblePaint();
+            if (
+              mediaGeneration !== mediaGenerationRef.current ||
+              audioTurnRef.current !== preparedTurnId
+            ) {
+              return;
+            }
+            await audio.play();
           };
           let playResult: Promise<void>;
           if (early?.key === key) {
@@ -3070,6 +3117,9 @@ export function BetaDebateStage({
               elapsed,
               duration,
               failed: false,
+              speech: previous?.turnId === turnId ? previous.speech : undefined,
+              participantId:
+                previous?.turnId === turnId ? previous.participantId : undefined,
             },
       );
     },
@@ -3092,6 +3142,12 @@ export function BetaDebateStage({
                   elapsed: currentTime,
                   duration,
                   failed: false,
+                  speech:
+                    previous?.turnId === turnId ? previous.speech : undefined,
+                  participantId:
+                    previous?.turnId === turnId
+                      ? previous.participantId
+                      : undefined,
                 },
           );
         }
@@ -3686,29 +3742,36 @@ export function BetaDebateStage({
         hasCompletePublicPrefix(publicTurns) &&
         bubbleTurn?.turn_index === expectedTurnCount(detailState) - 1),
   );
-  const bubbleText =
-    bubbleTurn && bubblePlayback?.turnId === bubbleTurn.id
-      ? bubblePlayback.failed
-        ? bubbleLineFrom(bubbleTurn.speech)
-        : // Include "ready": startEarly can play audio before status flips to playing.
-          playback.status === "playing" ||
-            playback.status === "paused" ||
-            playback.status === "ready"
-          ? bubbleProgressFrom(
-              bubbleTurn.speech,
-              bubblePlayback.elapsed,
-              bubblePlayback.duration,
-            )
-          : playback.status === "waiting_next" ||
-              playback.status === "completed"
-            ? bubbleLineFrom(bubbleTurn.speech)
-            : ""
-      : bubbleTurn &&
-          (phase === "failed" ||
-            playback.status === "waiting_next" ||
-            playback.status === "completed")
-        ? bubbleLineFrom(bubbleTurn.speech)
-        : "";
+  const bubbleOwnsPlayback =
+    Boolean(bubblePlayback) &&
+    bubblePlayback!.turnId ===
+      (bubbleTurn?.id ?? playback.current_turn_id ?? "");
+  const bubbleSpeech = bubbleOwnsPlayback
+    ? (bubbleTurn?.speech ?? bubblePlayback?.speech ?? "")
+    : "";
+  const bubbleText = bubbleOwnsPlayback
+    ? bubblePlayback!.failed
+      ? bubbleLineFrom(bubbleSpeech)
+      : // Include "ready": startEarly can play audio before status flips to playing.
+        playback.status === "playing" ||
+          playback.status === "paused" ||
+          playback.status === "ready"
+        ? bubbleProgressFrom(
+            bubbleSpeech,
+            bubblePlayback!.elapsed,
+            bubblePlayback!.duration,
+          )
+        : playback.status === "waiting_next" ||
+            playback.status === "completed"
+          ? bubbleLineFrom(bubbleSpeech)
+          : ""
+    : bubbleTurn &&
+        (phase === "failed" ||
+          playback.status === "waiting_next" ||
+          playback.status === "completed")
+      ? bubbleLineFrom(bubbleTurn.speech)
+      : "";
+  const bubbleOpen = Boolean(bubblePlayback && !bubblePlayback.failed);
   const visibleStatus =
     phase === "ready"
       ? labels.phaseReady
@@ -3779,6 +3842,7 @@ export function BetaDebateStage({
 
       <ScholarScene
         onSceneSettled={() => setSceneSettled(true)}
+        bubbleOpen={bubbleOpen}
         bubbleText={bubbleText}
         characters={stageCharacters}
         layout="preview"
@@ -3818,7 +3882,7 @@ export function BetaDebateStage({
           phase === "stopped" ||
           phase === "failed"
         }
-        speakingId={bubbleTurn?.participant_id ?? currentParticipantId}
+        speakingId={bubbleTurn?.participant_id ?? bubblePlayback?.participantId ?? currentParticipantId}
         unavailableLabel={beta.sceneUnavailable}
         visuals={stageVisuals}
       />
@@ -3897,49 +3961,20 @@ export function BetaDebateStage({
         ) : null}
       </div>
       {blockedBy ? (
-        <div
-          className={BETA_END_PROMPT}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="end-running-debate"
-        >
-          <p id="end-running-debate">
-            {outputLanguage === "zh"
-              ? `「${blockedBy.topic}」正在进行。要结束那场辩论吗？`
-              : `“${blockedBy.topic}” is running. End that debate?`}
-          </p>
-          <div className={BETA_END_PROMPT_ACTIONS}>
-            <button
-              className="secondary-action"
-              type="button"
-              disabled={endRunningBusy}
-              onClick={() => {
-                setBlockedBy(null);
-                setControlError(null);
-              }}
-            >
-              {outputLanguage === "zh" ? "取消" : "Cancel"}
-            </button>
-            <button
-              className="primary-action"
-              type="button"
-              disabled={
-                endRunningBusy ||
-                typeof api.finishDebate !== "function" ||
-                typeof api.debate !== "function"
-              }
-              onClick={() => void endRunningDebate()}
-            >
-              {endRunningBusy
-                ? outputLanguage === "zh"
-                  ? "正在结束…"
-                  : "Ending…"
-                : outputLanguage === "zh"
-                  ? "结束"
-                  : "End"}
-            </button>
-          </div>
-        </div>
+        <EndRunningDebatePrompt
+          topic={blockedBy.topic}
+          zh={outputLanguage === "zh"}
+          busy={endRunningBusy}
+          canEnd={
+            typeof api.finishDebate === "function" &&
+            typeof api.debate === "function"
+          }
+          onCancel={() => {
+            setBlockedBy(null);
+            setControlError(null);
+          }}
+          onEnd={() => void endRunningDebate()}
+        />
       ) : null}
       <aside
         ref={transcriptRef}
