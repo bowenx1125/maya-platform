@@ -1334,7 +1334,9 @@ export function BetaDebateStage({
         const preview = detailRef.current.preview_turns?.find(
           (turn) => turn.id === turnId,
         );
-        const published = publicTurnsRef.current.find((turn) => turn.id === turnId);
+        const published = publicTurnsRef.current.find(
+          (turn) => turn.id === turnId,
+        );
         const speech =
           catalog?.speech ?? preview?.speech ?? published?.speech ?? undefined;
         const participantId =
@@ -1556,7 +1558,6 @@ export function BetaDebateStage({
     recoverPlayback,
   ]);
 
-
   const sendPlayFailure = useCallback(
     (
       code:
@@ -1687,7 +1688,10 @@ export function BetaDebateStage({
             (turn) => turn.id === preparedTurnId,
           );
           const speech =
-            catalog?.speech ?? preview?.speech ?? published?.speech ?? undefined;
+            catalog?.speech ??
+            preview?.speech ??
+            published?.speech ??
+            undefined;
           const participantId =
             catalog?.participant_id ??
             preview?.participant_id ??
@@ -3127,7 +3131,9 @@ export function BetaDebateStage({
               failed: false,
               speech: previous?.turnId === turnId ? previous.speech : undefined,
               participantId:
-                previous?.turnId === turnId ? previous.participantId : undefined,
+                previous?.turnId === turnId
+                  ? previous.participantId
+                  : undefined,
             },
       );
     },
@@ -3684,7 +3690,7 @@ export function BetaDebateStage({
         onClick={() => void runControl("replay")}
       >
         <WorkspaceIcon name="replay" size={18} />
-        Replay
+        Review
       </button>
     ) : null;
   // Before anything has been said the only move is Start; afterwards it is
@@ -3769,8 +3775,7 @@ export function BetaDebateStage({
             bubblePlayback!.elapsed,
             bubblePlayback!.duration,
           )
-        : playback.status === "waiting_next" ||
-            playback.status === "completed"
+        : playback.status === "waiting_next" || playback.status === "completed"
           ? bubbleLineFrom(bubbleSpeech)
           : ""
     : bubbleTurn &&
@@ -3890,7 +3895,11 @@ export function BetaDebateStage({
           phase === "stopped" ||
           phase === "failed"
         }
-        speakingId={bubbleTurn?.participant_id ?? bubblePlayback?.participantId ?? currentParticipantId}
+        speakingId={
+          bubbleTurn?.participant_id ??
+          bubblePlayback?.participantId ??
+          currentParticipantId
+        }
         unavailableLabel={beta.sceneUnavailable}
         visuals={stageVisuals}
       />

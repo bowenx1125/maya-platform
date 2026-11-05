@@ -1,15 +1,21 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DebateCleanupControls } from "../components/debate/debate-cleanup-controls";
-import type { DebateDetail, PlatformApi } from "../lib/api";
+import {
+  PlatformApiError,
+  type DebateDetail,
+  type PlatformApi,
+} from "../lib/api";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+beforeEach(() => localStorage.clear());
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
@@ -240,7 +246,9 @@ it("switches Devocalize to Revocalize only after successful deletion", async () 
 });
 
 it("returns to quiet Revocalize when audio restoration fails", async () => {
-  const generate = vi.fn().mockRejectedValue(new Error("private details"));
+  const generate = vi
+    .fn()
+    .mockRejectedValue(new PlatformApiError(422, "private details"));
   render(
     <DebateCleanupControls
       detail={
@@ -437,4 +445,221 @@ it("revocalizes regenerable_turn_ids returned by Devocalize", async () => {
     "regen-b",
   ]);
   vi.restoreAllMocks();
+});
+
+function restoreDetail(id = "restore-refresh"): DebateDetail {
+  return {
+    id,
+    revision: 7,
+    turn_protocol: "segments_v2",
+    playback: { control_version: 2 },
+    public_turns: [],
+    preview_turns: ["one", "two", "three"].map((id) => ({
+      id,
+      speech: `Speech ${id}`,
+      generation_status: "final_ready",
+      audio_ready: false,
+    })),
+  } as unknown as DebateDetail;
+}
+
+it("dispatches the entire batch before any speech finishes and resumes after refresh with the same keys", async () => {
+  const detail = restoreDetail();
+  const generate = vi
+    .fn()
+    .mockResolvedValue({ status: "queued", audio_ready: false });
+  const props = {
+    detail,
+    api: {
+      deleteDebateVoice: vi.fn(),
+      deleteDebateAll: vi.fn(),
+      regenerateDebateTurnAudio: generate,
+    },
+    onVoiceDeleted: vi.fn(),
+  };
+  const first = render(<DebateCleanupControls {...props} />);
+  fireEvent.click(screen.getByRole("button", { name: "Revocalize" }));
+  await waitFor(() => expect(generate).toHaveBeenCalledTimes(3));
+  const saved = JSON.parse(
+    localStorage.getItem(`maya:revocalize:v1:${detail.id}`)!,
+  );
+  expect(Object.keys(saved.turns)).toEqual(["one", "two", "three"]);
+  const keys = generate.mock.calls.map((call) => call[3].idempotency.key);
+  first.unmount();
+  generate.mockResolvedValue({ status: "completed", audio_ready: true });
+  render(<DebateCleanupControls {...props} />);
+  await waitFor(() => expect(generate).toHaveBeenCalledTimes(6));
+  expect(
+    generate.mock.calls.slice(3).map((call) => call[3].idempotency.key),
+  ).toEqual(keys);
+  await waitFor(() =>
+    expect(localStorage.getItem(`maya:revocalize:v1:${detail.id}`)).toBeNull(),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Devocalize" })).toHaveProperty(
+      "disabled",
+      false,
+    ),
+  );
+});
+
+it("keeps polling a queued batch beyond 45 seconds without creating a new operation", async () => {
+  vi.useFakeTimers();
+  const detail = restoreDetail("restore-long");
+  const generate = vi
+    .fn()
+    .mockResolvedValue({ status: "queued", audio_ready: false });
+  render(
+    <DebateCleanupControls
+      detail={detail}
+      api={{
+        deleteDebateVoice: vi.fn(),
+        deleteDebateAll: vi.fn(),
+        regenerateDebateTurnAudio: generate,
+      }}
+      onVoiceDeleted={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Revocalize" }));
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(46_000);
+  });
+  expect(screen.getByRole("button", { name: "Revocalize..." })).toHaveProperty(
+    "disabled",
+    true,
+  );
+  for (const id of ["one", "two", "three"]) {
+    const requests = generate.mock.calls.filter((call) => call[1] === id);
+    expect(requests.length).toBeGreaterThan(45);
+    expect(new Set(requests.map((call) => call[3].idempotency.key)).size).toBe(
+      1,
+    );
+  }
+  generate.mockResolvedValue({ status: "completed", audio_ready: true });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1_000);
+  });
+  expect(screen.getByRole("button", { name: "Devocalize" })).toHaveProperty(
+    "disabled",
+    false,
+  );
+});
+
+it("retries an ambiguous response using the persisted key, without stopping later turns", async () => {
+  vi.useFakeTimers();
+  const generate = vi
+    .fn()
+    .mockRejectedValueOnce(new TypeError("Network lost"))
+    .mockResolvedValue({ status: "completed", audio_ready: true });
+  render(
+    <DebateCleanupControls
+      detail={restoreDetail("restore-network")}
+      api={{
+        deleteDebateVoice: vi.fn(),
+        deleteDebateAll: vi.fn(),
+        regenerateDebateTurnAudio: generate,
+      }}
+      onVoiceDeleted={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Revocalize" }));
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1_000);
+  });
+  expect(generate).toHaveBeenCalledTimes(4);
+  expect(generate.mock.calls[3][3].idempotency.key).toBe(
+    generate.mock.calls[0][3].idempotency.key,
+  );
+  expect(screen.getByRole("button", { name: "Devocalize" })).toHaveProperty(
+    "disabled",
+    false,
+  );
+});
+
+it("does not reuse an old batch after Rebirth changes the revision", async () => {
+  const detail = restoreDetail("restore-stale");
+  localStorage.setItem(
+    `maya:revocalize:v1:${detail.id}`,
+    JSON.stringify({ revision: 6, turns: { one: { key: "old-key" } } }),
+  );
+  const generate = vi.fn();
+  render(
+    <DebateCleanupControls
+      detail={detail}
+      api={{
+        deleteDebateVoice: vi.fn(),
+        deleteDebateAll: vi.fn(),
+        regenerateDebateTurnAudio: generate,
+      }}
+      onVoiceDeleted={vi.fn()}
+    />,
+  );
+  await waitFor(() =>
+    expect(localStorage.getItem(`maya:revocalize:v1:${detail.id}`)).toBeNull(),
+  );
+  expect(generate).not.toHaveBeenCalled();
+});
+
+it("does not automatically create a new billable attempt after a definitive audio failure", async () => {
+  const detail = restoreDetail("restore-failed");
+  const generate = vi
+    .fn()
+    .mockResolvedValue({ status: "failed", audio_ready: false });
+  const props = {
+    detail,
+    api: {
+      deleteDebateVoice: vi.fn(),
+      deleteDebateAll: vi.fn(),
+      regenerateDebateTurnAudio: generate,
+    },
+    onVoiceDeleted: vi.fn(),
+  };
+  const first = render(<DebateCleanupControls {...props} />);
+  fireEvent.click(screen.getByRole("button", { name: "Revocalize" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Revocalize" })).toHaveProperty(
+      "disabled",
+      false,
+    ),
+  );
+  first.unmount();
+  render(<DebateCleanupControls {...props} />);
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
+  expect(generate).toHaveBeenCalledTimes(3);
+  fireEvent.click(screen.getByRole("button", { name: "Revocalize" }));
+  await waitFor(() => expect(generate).toHaveBeenCalledTimes(6));
+  expect(generate.mock.calls[3][3].idempotency.key).not.toBe(
+    generate.mock.calls[0][3].idempotency.key,
+  );
+});
+
+it("does not resume a previous teacher's authorization after an account switch", async () => {
+  const detail = restoreDetail("restore-owner");
+  localStorage.setItem(
+    `maya:revocalize:v1:${detail.id}`,
+    JSON.stringify({
+      ownerId: "previous-teacher",
+      revision: 7,
+      turns: { one: { key: "previous-request" } },
+    }),
+  );
+  const generate = vi.fn();
+  render(
+    <DebateCleanupControls
+      detail={detail}
+      restoreOwnerId="current-teacher"
+      api={{
+        deleteDebateVoice: vi.fn(),
+        deleteDebateAll: vi.fn(),
+        regenerateDebateTurnAudio: generate,
+      }}
+      onVoiceDeleted={vi.fn()}
+    />,
+  );
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
+  expect(generate).not.toHaveBeenCalled();
 });

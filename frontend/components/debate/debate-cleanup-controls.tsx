@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   createIdempotencyHandle,
   PlatformApiError,
+  isAmbiguousMutationFailure,
+  IdempotencyHandle,
   type DebateDetail,
   type DebateCleanupRequest,
-  type IdempotencyHandle,
   type PlatformApi,
-  type RegenerateTurnAudioResult,
 } from "../../lib/api";
 import { cn } from "../../lib/utils";
 import {
@@ -28,7 +28,56 @@ type Intent = {
 };
 
 const AUDIO_QUEUE_POLL_MS = 1_000;
-const AUDIO_QUEUE_WAIT_MS = 45_000;
+type AudioRestoreJob = {
+  ownerId?: string;
+  revision: number;
+  turns: Record<string, { key: string; failed?: boolean }>;
+};
+
+function audioJobKey(id: string) {
+  return `maya:revocalize:v1:${id}`;
+}
+
+function readAudioJob(id: string, ownerId?: string): AudioRestoreJob | null {
+  try {
+    const job = JSON.parse(localStorage.getItem(audioJobKey(id)) ?? "null");
+    if (
+      !job ||
+      job.ownerId !== ownerId ||
+      !Number.isInteger(job.revision) ||
+      !job.turns ||
+      typeof job.turns !== "object" ||
+      Array.isArray(job.turns)
+    )
+      return null;
+    if (
+      !Object.values(job.turns).every(
+        (turn) =>
+          turn &&
+          typeof turn === "object" &&
+          "key" in turn &&
+          typeof turn.key === "string" &&
+          turn.key.length > 0,
+      )
+    )
+      return null;
+    return job as AudioRestoreJob;
+  } catch {
+    return null;
+  }
+}
+
+function saveAudioJob(id: string, job: AudioRestoreJob | null) {
+  try {
+    if (job && Object.keys(job.turns).length > 0) {
+      localStorage.setItem(audioJobKey(id), JSON.stringify(job));
+    } else {
+      localStorage.removeItem(audioJobKey(id));
+    }
+  } catch {
+    // Storage can be unavailable in private browsing; this page can still finish.
+  }
+}
 
 function missingAudioIds(detail?: DebateDetail): string[] {
   if (detail?.turn_protocol !== "segments_v2") return [];
@@ -65,6 +114,7 @@ export function DebateCleanupControls({
   onAllDeleted,
   className = "row-actions",
   audioRestoreNeeded,
+  restoreOwnerId,
   iconClassName = "",
   labelled = false,
   dangerClassName = "",
@@ -75,6 +125,7 @@ export function DebateCleanupControls({
   onAllDeleted?: () => void | Promise<void>;
   className?: string;
   audioRestoreNeeded?: boolean;
+  restoreOwnerId?: string;
   iconClassName?: string;
   /** Draw icon + visible text (Debates list, final mockup F); the label
    * stays while busy, with a spinner and aria-busy. */
@@ -97,7 +148,13 @@ export function DebateCleanupControls({
     () => audioRestoreNeeded ?? missingAudioIds(detail).length > 0,
   );
   const [generatingAudio, setGeneratingAudio] = useState(false);
-  const audioRequests = useRef(new Map<string, IdempotencyHandle>());
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const regenerableIds = useRef<string[]>([]);
   const loadDetailRef = useRef(loadDetail);
   useEffect(() => {
@@ -118,7 +175,7 @@ export function DebateCleanupControls({
     return () => window.clearTimeout(timer);
   }, [detail, debateId, audioRestoreNeeded]);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     try {
       await onVoiceDeleted();
       if (loadDetailRef.current) {
@@ -131,78 +188,127 @@ export function DebateCleanupControls({
     } catch {
       /* A failed refresh does not undo a committed action. */
     }
-  }
+  }, [onVoiceDeleted]);
 
-  async function regenerateOne(
-    debateIdValue: string,
-    turnId: string,
-    expectedRevision: number,
-    key: IdempotencyHandle,
-  ): Promise<RegenerateTurnAudioResult> {
-    const deadline = Date.now() + AUDIO_QUEUE_WAIT_MS;
-    for (;;) {
-      const result = await api.regenerateDebateTurnAudio(
-        debateIdValue,
-        turnId,
-        { expected_revision: expectedRevision },
-        { idempotency: key },
-      );
-      if (result.audio_ready || result.status !== "queued") return result;
-      if (Date.now() >= deadline) return result;
-      await wait(AUDIO_QUEUE_POLL_MS);
-    }
-  }
-
-  async function generateAudio() {
-    if (active.current) return;
-    active.current = true;
-    snapshotVersion.current += 1;
-    setBusy(true);
-    setGeneratingAudio(true);
-    try {
-      const snapshot = loadDetailRef.current
-        ? await loadDetailRef.current()
-        : detail;
-      if (!snapshot) return;
-      const stored = regenerableIds.current.filter(Boolean);
-      const turnIds =
-        stored.length > 0 ? [...new Set(stored)] : missingAudioIds(snapshot);
-      let allReady = turnIds.length > 0;
-      for (const turnId of turnIds) {
-        const key =
-          audioRequests.current.get(turnId) ?? createIdempotencyHandle();
-        audioRequests.current.set(turnId, key);
-        try {
-          const result = await regenerateOne(
-            snapshot.id,
-            turnId,
-            snapshot.revision,
-            key,
-          );
-          if (result.audio_ready) {
-            audioRequests.current.delete(turnId);
-          } else {
-            allReady = false;
-            if (result.status !== "queued") audioRequests.current.delete(turnId);
+  const generateAudio = useCallback(
+    async (resume = false) => {
+      if (active.current) return;
+      active.current = true;
+      snapshotVersion.current += 1;
+      setBusy(true);
+      setGeneratingAudio(true);
+      try {
+        const id = debateId ?? detail?.id;
+        let job = id ? readAudioJob(id, restoreOwnerId) : null;
+        let snapshot: DebateDetail | undefined;
+        // A refresh may race a temporarily unavailable snapshot. Keep the already
+        // authorized job rather than losing its unsent turns.
+        for (;;) {
+          try {
+            snapshot = loadDetailRef.current
+              ? await loadDetailRef.current()
+              : detail;
+            break;
+          } catch (cause) {
+            if (!resume || !job || !isAmbiguousMutationFailure(cause))
+              throw cause;
+            await wait(AUDIO_QUEUE_POLL_MS);
+            if (!mounted.current) return;
           }
-        } catch {
-          allReady = false;
-          /* Keep the idempotency handle for a later Revocalize retry. */
+        }
+        if (!snapshot || !mounted.current) return;
+        if (job && job.revision !== snapshot.revision) {
+          saveAudioJob(snapshot.id, null);
+          job = null;
+          if (resume) return;
+        }
+        const missing = [
+          ...new Set([...missingAudioIds(snapshot), ...regenerableIds.current]),
+        ];
+        if (resume && !job) return;
+        job ??= {
+          ownerId: restoreOwnerId,
+          revision: snapshot.revision,
+          turns: {},
+        };
+        for (const turnId of Object.keys(job.turns)) {
+          if (!missing.includes(turnId)) delete job.turns[turnId];
+        }
+        if (!resume) {
+          for (const turnId of missing) {
+            if (!job.turns[turnId] || job.turns[turnId].failed) {
+              job.turns[turnId] = { key: createIdempotencyHandle().key };
+            }
+          }
+        }
+        const restore = job;
+        // Persist the entire batch before dispatch, then submit every turn. A
+        // page unload cannot strand the later turns behind one slow TTS call.
+        saveAudioJob(snapshot.id, restore);
+        await Promise.all(
+          Object.entries(restore.turns).map(async ([turnId, request]) => {
+            if (request.failed) return;
+            const handle = new IdempotencyHandle(request.key);
+            while (mounted.current) {
+              try {
+                const result = await api.regenerateDebateTurnAudio(
+                  snapshot.id,
+                  turnId,
+                  { expected_revision: restore.revision },
+                  { idempotency: handle },
+                );
+                if (!mounted.current) return;
+                if (result.audio_ready) {
+                  delete restore.turns[turnId];
+                  regenerableIds.current = regenerableIds.current.filter(
+                    (id) => id !== turnId,
+                  );
+                  saveAudioJob(snapshot.id, restore);
+                  return;
+                }
+                if (result.status !== "queued") {
+                  request.failed = true;
+                  saveAudioJob(snapshot.id, restore);
+                  return;
+                }
+              } catch (cause) {
+                if (!isAmbiguousMutationFailure(cause)) {
+                  request.failed = true;
+                  saveAudioJob(snapshot.id, restore);
+                  return;
+                }
+                // An ambiguous response must reuse its key, never bill a new retry.
+              }
+              await wait(AUDIO_QUEUE_POLL_MS);
+            }
+          }),
+        );
+        if (mounted.current && Object.keys(restore.turns).length === 0) {
+          regenerableIds.current = [];
+          setRevoice(false);
+        }
+      } catch {
+        /* Leave Revocalize available when restoration fails. */
+      } finally {
+        if (mounted.current) {
+          await refresh();
+          active.current = false;
+          setBusy(false);
+          setGeneratingAudio(false);
         }
       }
-      if (allReady) {
-        regenerableIds.current = [];
-        setRevoice(false);
-      }
-    } catch {
-      /* Leave Revocalize available when restoration fails. */
-    } finally {
-      await refresh();
-      active.current = false;
-      setBusy(false);
-      setGeneratingAudio(false);
-    }
-  }
+    },
+    [api, debateId, detail, refresh, restoreOwnerId],
+  );
+
+  useEffect(() => {
+    const id = debateId ?? detail?.id;
+    if (!id) return;
+    const job = readAudioJob(id, restoreOwnerId);
+    if (!job || !Object.values(job.turns).some((turn) => !turn.failed)) return;
+    const timer = window.setTimeout(() => void generateAudio(true), 0);
+    return () => window.clearTimeout(timer);
+  }, [debateId, detail?.id, generateAudio, restoreOwnerId]);
 
   async function remove(mode: "voice" | "all") {
     if (active.current) return;
@@ -250,11 +356,13 @@ export function DebateCleanupControls({
           : api.deleteDebateAll.bind(api)
       )(request.debateId, request.body, { idempotency: request.key });
       if (mode === "all") {
+        saveAudioJob(request.debateId, null);
         intent.current = null;
         regenerableIds.current = [];
         if (onAllDeleted) await onAllDeleted();
         else router.push(backHref);
       } else if (result.cleanup_status !== "pending") {
+        saveAudioJob(request.debateId, null);
         intent.current = null;
         if (
           Array.isArray(result.regenerable_turn_ids) &&

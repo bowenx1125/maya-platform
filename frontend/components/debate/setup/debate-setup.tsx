@@ -38,15 +38,10 @@ import { CreateCard } from "./create-card";
 import { validateDebateTopic } from "../../../lib/debate-topic";
 import { useT } from "../../../lib/i18n";
 import { useSession } from "../../session-provider";
+import { ClassroomResetButton } from "../classroom-reset-button";
 import { DebateCleanupControls } from "../debate-cleanup-controls";
 import { DebateStatus } from "../debate-status";
-import {
-  IconBust,
-  IconPlay,
-  IconPlus,
-  IconRecycle,
-  IconSpinner,
-} from "../../quiet-icons";
+import { IconBust, IconPlay, IconPlus, IconSpinner } from "../../quiet-icons";
 import { Button } from "../../ui/button";
 import { NewButton } from "../../ui/agent-card";
 import { cn } from "../../../lib/utils";
@@ -286,6 +281,7 @@ export function TeacherDebateList({
                     </Button>
                   )}
                   <DebateCleanupControls
+                    key={user?.id}
                     api={api}
                     debateId={debate.id}
                     loadDetail={() => api.debate(debate.id)}
@@ -301,6 +297,7 @@ export function TeacherDebateList({
                     iconClassName={DEBATE_ROW_BUTTON}
                     dangerClassName="ml-auto text-[#B91C1C] max-[600px]:ml-0"
                     audioRestoreNeeded={debate.audio_restore_needed}
+                    restoreOwnerId={user?.id}
                   />
                 </div>
               </div>
@@ -344,90 +341,6 @@ function DebateEmpty({ message }: { message: string }) {
         <strong>{message}</strong>
       </p>
     </div>
-  );
-}
-
-function ClassroomResetButton({
-  debateId,
-  onDone,
-}: {
-  debateId: string;
-  onDone: () => Promise<void>;
-}) {
-  const { api } = useSession();
-  const [busy, setBusy] = useState(false);
-  const [resetCommitted, setResetCommitted] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const active = useRef(false);
-  const intent = useRef<{
-    body: {
-      expected_revision: number;
-      expected_control_version: number;
-    };
-    idempotency: IdempotencyHandle;
-  } | null>(null);
-
-  async function reset() {
-    if (active.current) return;
-    if (
-      !resetCommitted &&
-      !intent.current &&
-      !window.confirm(
-        "Keep Preview and reset this classroom? Messages, Report and the final round will be removed.",
-      )
-    )
-      return;
-    active.current = true;
-    setBusy(true);
-    setError(null);
-    let committed = resetCommitted;
-    try {
-      if (!committed) {
-        if (!intent.current) {
-          const detail = await api.debate(debateId);
-          intent.current = {
-            body: {
-              expected_revision: detail.revision,
-              expected_control_version: detail.playback.control_version,
-            },
-            idempotency: createIdempotencyHandle(),
-          };
-        }
-        await api.rebirthDebate(debateId, intent.current.body, {
-          idempotency: intent.current.idempotency,
-        });
-        committed = true;
-        setResetCommitted(true);
-        intent.current = null;
-      }
-      await onDone();
-    } catch (cause) {
-      if (!isAmbiguousMutationFailure(cause)) intent.current = null;
-      setError(committed ? { code: "rebirth_refresh_failed" } : cause);
-    } finally {
-      active.current = false;
-      setBusy(false);
-    }
-  }
-
-  return (
-    <>
-      {error ? (
-        <ErrorNotice error={error} onRetry={() => void reset()} />
-      ) : null}
-      <Button
-        variant="noShadow"
-        className={DEBATE_ROW_BUTTON}
-        disabled={busy || resetCommitted}
-        type="button"
-        aria-label="Replay"
-        aria-busy={busy || undefined}
-        onClick={() => void reset()}
-      >
-        {busy ? <IconSpinner size={18} /> : <IconRecycle size={18} />}
-        <span>Replay</span>
-      </Button>
-    </>
   );
 }
 

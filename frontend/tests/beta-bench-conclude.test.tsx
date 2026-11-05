@@ -44,7 +44,7 @@ vi.mock("../components/debate-beta/stage", () => ({
   }) => (
     <section data-testid="beta-stage" data-join-url={joinUrl}>
       {typeof headerActions === "function"
-        ? headerActions(<button type="button">Replay</button>)
+        ? headerActions(<button type="button">Review</button>)
         : headerActions}
       {joinUrl && joinCodeVisible ? (
         <div id="classroom-join-code" role="img" aria-label="Scan to join">
@@ -276,6 +276,7 @@ function pageApi(
       .fn()
       .mockResolvedValue({ generation_status: "generating" }),
     finishDebate: vi.fn(),
+    rebirthDebate: vi.fn(),
   };
 }
 
@@ -379,7 +380,9 @@ describe("segments_v2 Bench Conclude and Report", () => {
     const toggle = await screen.findByRole("button", { name: "Interact" });
     fireEvent.click(toggle);
     // Label stays Interact (like Transcript); only aria-expanded flips.
-    expect(await screen.findByRole("button", { name: "Interact" })).toBe(toggle);
+    expect(await screen.findByRole("button", { name: "Interact" })).toBe(
+      toggle,
+    );
     const url = screen.getByRole("img", { name: "Scan to join" }).textContent;
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     fireEvent.click(toggle);
@@ -538,4 +541,63 @@ it("sorts evaluation by descending score and keeps names without numbering", () 
     [high.agent_name, 5],
     [low.agent_name, 0],
   ]);
+});
+
+describe("Completed stage classroom Replay", () => {
+  it.each(["completed", "debate_finished"] as const)(
+    "offers Rebirth Replay alongside retained Review for %s",
+    async (status) => {
+      const detail = { ...finishedSegmentsDetail(), status };
+      const api = pageApi(
+        interaction("finalized"),
+        interaction("finalized"),
+        detail,
+      );
+      const fresh = {
+        ...detail,
+        status: "draft" as const,
+        revision: 2,
+        public_turns: [],
+        final_input_frozen: false,
+        playback: {
+          ...detail.playback,
+          status: "ready" as const,
+          control_version: 5,
+        },
+      };
+      api.rebirthDebate.mockImplementation(async () => {
+        api.debate.mockResolvedValue(fresh);
+        return {};
+      });
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+      renderPage(api);
+      const replay = await screen.findByRole("button", {
+        name: "Replay",
+      });
+      expect(screen.getByRole("button", { name: "Review" })).toBeTruthy();
+      fireEvent.click(replay);
+      await waitFor(() => expect(api.rebirthDebate).toHaveBeenCalledTimes(1));
+      expect(confirm).toHaveBeenCalledWith(
+        "Keep Preview and reset this classroom? Messages, Report and the final round will be removed.",
+      );
+      expect(api.rebirthDebate).toHaveBeenCalledWith(
+        debateId,
+        { expected_revision: 1, expected_control_version: 4 },
+        { idempotency: expect.anything() },
+      );
+      await waitFor(() =>
+        expect(screen.queryByRole("button", { name: "Replay" })).toBeNull(),
+      );
+      confirm.mockRestore();
+    },
+  );
+
+  it("keeps the Completed classroom untouched when Replay confirmation is cancelled", async () => {
+    const api = pageApi(interaction("finalized"));
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderPage(api);
+    fireEvent.click(await screen.findByRole("button", { name: "Replay" }));
+    expect(api.rebirthDebate).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
 });

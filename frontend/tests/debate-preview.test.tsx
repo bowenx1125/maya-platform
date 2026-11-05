@@ -407,7 +407,7 @@ describe("teacher debate preview", () => {
       onRetryTurn,
     );
     expect(screen.getByTestId("preview-audio-failed").textContent).toContain(
-      "Audio failed for 2 turn(s)",
+      "Speech preparation stopped for 2 turn(s)",
     );
     fireEvent.click(screen.getByTestId("preview-audio-failed-retry"));
     expect(onRetryTurn).toHaveBeenCalledWith(["turn-a", "turn-b"]);

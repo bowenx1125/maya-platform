@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { ClassroomResetButton } from "../../../../../components/debate/classroom-reset-button";
 import { DismissibleAlert } from "../../../../../components/dismissible-alert";
 import {
   BetaDebateStage,
@@ -494,6 +495,7 @@ export default function TeacherDebateControlPage() {
             />
           ) : null}
           <BetaDebateStage
+            key={`${detail.id}:${detail.revision}`}
             headerActions={(replayButton) => (
               <>
                 <Link
@@ -533,7 +535,30 @@ export default function TeacherDebateControlPage() {
                     {finishBusy ? "Finishing…" : stageLabels.finish}
                   </button>
                 ) : null}
-                <span data-dock="replay">{replayButton}</span>
+                <span data-dock="replay" className="gap-2">
+                  {replayButton}
+                  {["completed", "debate_finished"].includes(detail.status) ? (
+                    <ClassroomResetButton
+                      debateId={debateId}
+                      className="secondary-action"
+                      disabled={
+                        interactionBusy ||
+                        finishBusy ||
+                        playbackAuthority.commandBusy ||
+                        !["completed", "stopped"].includes(
+                          detail.playback.status,
+                        )
+                      }
+                      onDone={async () => {
+                        await refreshSnapshot();
+                        setInteraction(null);
+                        setJoinUrl(null);
+                        setJoinCodeVisible(false);
+                        setReportOpen(false);
+                      }}
+                    />
+                  ) : null}
+                </span>
                 {showSegmentsConclude ? (
                   <button
                     className="primary-action"

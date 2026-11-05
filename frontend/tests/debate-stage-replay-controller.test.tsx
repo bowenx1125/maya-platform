@@ -292,7 +292,7 @@ describe("terminal segments replay controller", () => {
     ).toEqual([
       "Next",
       "Back",
-      "Replay",
+      "Review",
       "Conclude",
       "Transcript",
       "No music yet",
@@ -428,7 +428,13 @@ describe("terminal segments replay controller", () => {
       fireEvent.loadedMetadata(audio);
       audio.currentTime = 5;
       fireEvent.timeUpdate(audio);
-      expect(bubble.textContent).toBe("");
+      // Local playback reveals the saved speech without waiting for WebSocket echo.
+      expect(bubble.textContent).toBe(
+        initial.public_turns[0].speech.slice(
+          0,
+          Math.round(initial.public_turns[0].speech.length / 2),
+        ),
+      );
 
       act(() =>
         socket.emitMessage({
@@ -526,7 +532,9 @@ describe("terminal segments replay controller", () => {
     );
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /^Replay(?: whole debate)?$/ }),
+        screen.getByRole("button", {
+          name: /^(?:Review|Replay whole debate)$/,
+        }),
       ).toHaveProperty("disabled", false),
     );
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -539,7 +547,7 @@ describe("terminal segments replay controller", () => {
       "A retained paragraph",
     );
     fireEvent.click(
-      screen.getByRole("button", { name: /^Replay(?: whole debate)?$/ }),
+      screen.getByRole("button", { name: /^(?:Review|Replay whole debate)$/ }),
     );
     expect(
       socket
@@ -559,7 +567,7 @@ describe("terminal segments replay controller", () => {
       render(renderStage(kind, initial, api, socket));
 
       const replay = await screen.findByRole("button", {
-        name: /^Replay(?: whole debate)?$/,
+        name: /^(?:Review|Replay whole debate)$/,
       });
       await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
       fireEvent.click(replay);
@@ -584,7 +592,7 @@ describe("terminal segments replay controller", () => {
         expect(api.replayDebate).toHaveBeenCalledWith(debateId, 7),
       );
       if (kind === "beta") {
-        expect(screen.queryByRole("button", { name: "Replay" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "Review" })).toBeNull();
       } else {
         expect(
           screen.getByRole("button", { name: "Replay whole debate" }),
@@ -600,7 +608,7 @@ describe("terminal segments replay controller", () => {
       const socket = new ReplaySocket();
       render(renderStage(kind, initial, apiFor(initial), socket));
       const replay = await screen.findByRole("button", {
-        name: /^Replay(?: whole debate)?$/,
+        name: /^(?:Review|Replay whole debate)$/,
       });
       socket.emitOpen();
       socket.emitClose();
@@ -617,7 +625,7 @@ describe("terminal segments replay controller", () => {
       const socket = new ReplaySocket();
       render(renderStage(kind, initial, api, socket));
       const replay = await screen.findByRole("button", {
-        name: /^Replay(?: whole debate)?$/,
+        name: /^(?:Review|Replay whole debate)$/,
       });
       await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
 
@@ -711,7 +719,7 @@ describe("saved media failure recovery", () => {
     async (kind) => {
       const initial = detail();
       initial.status = "running";
-      initial.public_turns = [];
+      // Saved media can only play alongside its published speech.
       initial.playback = {
         ...initial.playback,
         status: "ready",
@@ -760,7 +768,7 @@ describe("saved media failure recovery", () => {
         socket.emitMessage(prepared);
         socket.emitMessage(prepared);
       });
-      expect(play).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(play).toHaveBeenCalledTimes(1));
       await act(async () =>
         rejectPlay(new DOMException("Interrupted", "AbortError")),
       );
