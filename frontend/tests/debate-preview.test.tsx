@@ -64,7 +64,7 @@ const detail: DebatePreviewSnapshot = {
 
 function renderPreview(
   snapshot: DebatePreviewSnapshot,
-  onRetryTurn: (turnId: string) => void = () => undefined,
+  onRetryTurn: (turnIds: string[]) => void = () => undefined,
 ) {
   return render(
     <>
@@ -119,7 +119,7 @@ describe("teacher debate preview", () => {
       const retry = card.getByRole("button", { name: "Retry turn" });
       expect(retry).toBeTruthy();
       fireEvent.click(retry);
-      expect(onRetry.mock.calls).toEqual([["turn-a"]]);
+      expect(onRetry.mock.calls).toEqual([[["turn-a"]]]);
       expect(screen.getByRole("link", { name: "Immerse" })).toBeTruthy();
     },
   );
@@ -185,7 +185,7 @@ describe("teacher debate preview", () => {
       expect(card.getByText("Audio Not Ready")).toBeTruthy();
       expect(screen.queryByRole("link", { name: "Immerse" })).toBeNull();
       fireEvent.click(card.getByRole("button", { name: "Retry turn" }));
-      expect(onRetry.mock.calls).toEqual([["turn-a"]]);
+      expect(onRetry.mock.calls).toEqual([[["turn-a"]]]);
     },
   );
 
@@ -219,7 +219,7 @@ describe("teacher debate preview", () => {
           name: "Retry turn",
         }),
       );
-      expect(onRetry.mock.calls).toEqual([["turn-a"], ["turn-b"]]);
+      expect(onRetry.mock.calls).toEqual([[["turn-a"]], [["turn-b"]]]);
     },
   );
 
@@ -249,7 +249,7 @@ describe("teacher debate preview", () => {
       "preparation_timeout",
     );
     fireEvent.click(card.getByRole("button", { name: "Retry turn" }));
-    expect(onRetry.mock.calls).toEqual([["turn-a"]]);
+    expect(onRetry.mock.calls).toEqual([[["turn-a"]]]);
   });
 
   it("keeps saved speech visible when audio failed and exposes exact RAG mapping", () => {
@@ -320,7 +320,7 @@ describe("teacher debate preview", () => {
     expect(button.querySelector("svg")).toBeTruthy();
     expect(button.textContent).toBe("Retry turn");
     fireEvent.click(button);
-    expect(retry).toHaveBeenCalledWith("turn-a");
+    expect(retry).toHaveBeenCalledWith(["turn-a"]);
     view.rerender(
       <DebatePreview
         detail={detail}
@@ -367,14 +367,50 @@ describe("teacher debate preview", () => {
     ).toBeTruthy();
     expect(screen.queryByText("Preview progress")).toBeNull();
   });
-  it("says at the top that audio failed and retries the first failed turn", () => {
+  it("says at the top that audio failed and retries failed turns in order", () => {
     const onRetryTurn = vi.fn();
     renderPreview(detail, onRetryTurn);
     expect(screen.getByTestId("preview-audio-failed").textContent).toContain(
       "Audio failed for 1 turn(s) (tts_failed)",
     );
     fireEvent.click(screen.getByTestId("preview-audio-failed-retry"));
-    expect(onRetryTurn).toHaveBeenCalledWith("turn-a");
+    expect(onRetryTurn).toHaveBeenCalledWith(["turn-a"]);
+  });
+
+  it("banner Retry batch-retries every failed turn in turn_index order", () => {
+    const onRetryTurn = vi.fn();
+    const first = detail.preview_turns![0];
+    const second = detail.preview_turns![1];
+    renderPreview(
+      {
+        ...detail,
+        preview: { prepared_turns: 0, expected_turns: 2, ready: false },
+        preview_turns: [
+          {
+            ...first,
+            id: "turn-a",
+            turn_index: 0,
+            generation_status: "failed",
+            audio_ready: false,
+            safe_error_code: "preparation_timeout",
+          },
+          {
+            ...second,
+            id: "turn-b",
+            turn_index: 1,
+            generation_status: "failed",
+            audio_ready: false,
+            safe_error_code: "tts_timeout",
+          },
+        ],
+      },
+      onRetryTurn,
+    );
+    expect(screen.getByTestId("preview-audio-failed").textContent).toContain(
+      "Audio failed for 2 turn(s)",
+    );
+    fireEvent.click(screen.getByTestId("preview-audio-failed-retry"));
+    expect(onRetryTurn).toHaveBeenCalledWith(["turn-a", "turn-b"]);
   });
 
   it("shows no audio failure banner when every turn has audio", () => {

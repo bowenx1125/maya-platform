@@ -195,7 +195,7 @@ const enMessages = {
   debatePreviewNotReady:
     "Preview is not ready yet. Open Preview to check the saved speeches before trying again.",
   debatePreviewAudioFailed:
-    "Audio failed for {count} turn(s) ({code}). Those turns will play as text only. Retry to try again.",
+    "Audio failed for {count} turn(s) ({code}). Those turns will play as text only. Retry retries them in order.",
   debateCleanupDeferred:
     "A classroom operation is still running. Wait for it to finish, then try again.",
   debateRebirthRefreshFailed:

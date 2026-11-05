@@ -206,6 +206,8 @@ class PlaybackRepository(Protocol):
 
     def mark_jobs_interrupted(self, db: Any, debate: Any, code: str) -> None: ...
 
+    def rebind_completed_prepare_jobs(self, db: Any, debate: Any) -> int: ...
+
     def teacher_allowed(self, db: Any, debate: Any, context: Any) -> bool: ...
 
     def course_running(
@@ -270,6 +272,7 @@ class MemoryPlaybackRepository:
     def __init__(self) -> None:
         self.debates: dict[str, MemoryDebate] = {}
         self.jobs_interrupted: list[tuple[str, str]] = []
+        self.jobs_rebound: list[tuple[str, int]] = []
         self.course_audio: dict[str, str | None] = {}
         self.audio_file_states: dict[str, str] = {}
         self.audit_logs: list[dict[str, Any]] = []
@@ -439,6 +442,13 @@ class MemoryPlaybackRepository:
     def mark_jobs_interrupted(self, db: Any, debate: MemoryDebate, code: str) -> None:
         del db
         self.jobs_interrupted.append((debate.id, code))
+        self.rebind_completed_prepare_jobs(None, debate)
+
+    def rebind_completed_prepare_jobs(self, db: Any, debate: MemoryDebate) -> int:
+        del db
+        generation = int(getattr(debate, "cancellation_generation", 0) or 0)
+        self.jobs_rebound.append((debate.id, generation))
+        return 0
 
     def claim_pause_playback(
         self,

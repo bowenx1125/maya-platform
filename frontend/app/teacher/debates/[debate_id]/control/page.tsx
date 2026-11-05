@@ -121,21 +121,28 @@ export default function TeacherDebateControlPage() {
     if (legacy && debateId) router.replace(immerseControlHref(debateId));
   }, [debateId, legacy, router]);
 
-  const retryPreviewTurn = useCallback(
-    async (turnId: string) => {
-      if (!detail || !debateId || retryingPreviewTurnId) return;
-      setRetryingPreviewTurnId(turnId);
+  const retryPreviewTurns = useCallback(
+    async (turnIds: string[]) => {
+      if (!detail || !debateId || retryingPreviewTurnId || turnIds.length === 0)
+        return;
       setError(null);
+      let controlVersion = detail.playback.control_version;
       try {
-        await api.retryDebatePreparation(
-          debateId,
-          {
-            turn_id: turnId,
-            expected_control_version: detail.playback.control_version,
-          },
-          { idempotency: createIdempotencyHandle() },
-        );
-        await refreshSnapshot();
+        // Banner Retry walks failed turns in turn_index order; per-card Retry
+        // still passes a single id. Stop on the first hard failure.
+        for (const turnId of turnIds) {
+          setRetryingPreviewTurnId(turnId);
+          await api.retryDebatePreparation(
+            debateId,
+            {
+              turn_id: turnId,
+              expected_control_version: controlVersion,
+            },
+            { idempotency: createIdempotencyHandle() },
+          );
+          const next = await refreshSnapshot();
+          controlVersion = next.playback.control_version;
+        }
       } catch (cause) {
         setError(cause);
       } finally {
@@ -163,7 +170,7 @@ export default function TeacherDebateControlPage() {
           <DebatePreview
             detail={detail}
             error={error ? localizeError(error) : null}
-            onRetryTurn={(turnId) => void retryPreviewTurn(turnId)}
+            onRetryTurn={(turnIds) => void retryPreviewTurns(turnIds)}
             retryingTurnId={retryingPreviewTurnId}
             openClassroomHref={immerseControlHref(debateId)}
           />

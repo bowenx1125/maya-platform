@@ -82,7 +82,7 @@ export function DebatePreview({
 }: {
   detail: DebatePreviewSnapshot;
   openClassroomHref: string;
-  onRetryTurn?: (turnId: string) => void;
+  onRetryTurn?: (turnIds: string[]) => void;
   retryingTurnId?: string | null;
   error?: string | null;
   actions?: ReactNode;
@@ -223,7 +223,9 @@ export function DebatePreview({
                     type="button"
                     data-testid="preview-audio-failed-retry"
                     disabled={retryingTurnId !== null}
-                    onClick={() => onRetryTurn(firstFailed.id)}
+                    onClick={() =>
+                      onRetryTurn(audioFailed.map((turn) => turn.id))
+                    }
                   >
                     Retry
                   </button>
@@ -259,7 +261,11 @@ export function DebatePreview({
               teachingProtocol={detail.teaching_protocol === "four_round_v1"}
               tone={tones.get(turn.participant_id) ?? PREVIEW_TONES[0]}
               turn={turn}
-              onRetry={onRetryTurn}
+              onRetry={
+                onRetryTurn
+                  ? (turnId) => onRetryTurn([turnId])
+                  : undefined
+              }
             />
           ))}
         </div>
