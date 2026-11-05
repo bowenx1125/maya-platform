@@ -93,6 +93,25 @@ async def test_early_finish_marks_debate_finished_but_stops_playback() -> None:
     assert debate.cancellation_generation == 1
     assert len(debate.turns) == 2
     assert repository.jobs_interrupted == [(debate.id, "debate_finished_partial")]
+    # Completed Preview prepare receipts must follow the new fence (same as Rebirth).
+    assert repository.jobs_rebound == [(debate.id, 1)]
+
+
+@pytest.mark.asyncio
+async def test_stop_rebinds_completed_prepare_jobs_to_new_generation() -> None:
+    repository = MemoryPlaybackRepository()
+    debate = _running_debate(repository, complete=False)
+    debate.playback.status = "playing"
+    debate.cancellation_generation = 6
+    service = PlaybackService(repository)
+
+    result = await service.stop(None, debate.id, expected_control_version=0)
+
+    assert result.status == "stopped"
+    assert debate.status == "stopped"
+    assert debate.cancellation_generation == 7
+    assert repository.jobs_interrupted == [(debate.id, "debate_stopped")]
+    assert repository.jobs_rebound == [(debate.id, 7)]
 
 
 @pytest.mark.asyncio

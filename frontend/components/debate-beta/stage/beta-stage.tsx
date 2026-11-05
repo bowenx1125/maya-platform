@@ -1489,6 +1489,31 @@ export function BetaDebateStage({
     recoverPlayback,
   ]);
 
+  useEffect(() => {
+    if (
+      !controllerReady ||
+      busyAction !== null ||
+      mediaRetryNeeded ||
+      playback.status !== "ready"
+    )
+      return;
+    // After Next/Start the stage sits in ready until playback.started. If the
+    // media handshake stalls, surface media retry so Next is clickable again
+    // and the teacher is not stuck with a blank/stale transcript forever.
+    const timer = window.setTimeout(() => {
+      setMediaRetryNeeded(true);
+      void recoverPlayback(true);
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [
+    controllerReady,
+    busyAction,
+    mediaRetryNeeded,
+    playback.status,
+    recoverPlayback,
+  ]);
+
+
   const sendPlayFailure = useCallback(
     (
       code:
@@ -1723,6 +1748,9 @@ export function BetaDebateStage({
           if (revocationIssue === "terminal") {
             setVisible(null);
             setActiveParticipant(null);
+          }
+          if (revocationIssue === "network") {
+            scheduleControllerAcquire();
           }
           if (message.reason === "start_next") {
             applyPlayback(
@@ -3280,11 +3308,10 @@ export function BetaDebateStage({
             await recoverPlayback();
             return;
           }
-          // Audio-backed Next reveals the transcript only after the media
-          // handshake publishes playback.started.
-          setVisible(null);
+          // Keep the previous speech visible until playback.started arrives.
+          // Clearing it here left teachers with a blank bubble and a disabled
+          // Next when started_ack/publish stalled after Rebirth.
           setAvatars([]);
-          setActiveParticipant(null);
           applyPlayback(next);
           pendingActionRef.current = next.mode === "replay" ? "replay" : "next";
           startEarly(next);

@@ -1729,6 +1729,17 @@ class SqlPlaybackRepository(PlaybackRepository):
                     ),
                     {"debate_id": debate_id, "updated_at": now},
                 )
+                # Keep retained Preview prepare receipts on the new fence so a
+                # later Rebirth/Start is not followed by Next gen mismatches.
+                claim_session.execute(
+                    text(
+                        "UPDATE jobs SET cancellation_generation=("
+                        "SELECT cancellation_generation FROM debates WHERE id=:debate_id), "
+                        "updated_at=:updated_at WHERE debate_id=:debate_id "
+                        "AND operation='debate_turn_prepare' AND state='completed'"
+                    ),
+                    {"debate_id": debate_id, "updated_at": now},
+                )
                 playback_changed = claim_session.execute(
                     text(
                         "UPDATE playback_states SET status='stopped', mode='live', "
@@ -2062,6 +2073,15 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "UPDATE jobs SET state='interrupted', "
                         "safe_error_code='operator_reset', updated_at=:updated_at "
                         "WHERE debate_id=:debate_id AND state IN ('pending','running')"
+                    ),
+                    {"updated_at": timestamp, "debate_id": debate_id},
+                )
+                claim_session.execute(
+                    text(
+                        "UPDATE jobs SET cancellation_generation=("
+                        "SELECT cancellation_generation FROM debates WHERE id=:debate_id), "
+                        "updated_at=:updated_at WHERE debate_id=:debate_id "
+                        "AND operation='debate_turn_prepare' AND state='completed'"
                     ),
                     {"updated_at": timestamp, "debate_id": debate_id},
                 )
@@ -3946,6 +3966,36 @@ class SqlPlaybackRepository(PlaybackRepository):
             ),
             {**updates, "debate_id": str(debate.id)},
         )
+        # Stop/Finish bump debates.cancellation_generation. Completed Preview
+        # prepare receipts must follow that fence or the next Start works while
+        # every Next claim fails on gen_match=false (Rebirth already rebinds).
+        self.rebind_completed_prepare_jobs(db, debate)
+
+    def rebind_completed_prepare_jobs(self, db: Any, debate: SqlRow) -> int:
+        if not self._has_table(db, "jobs"):
+            return 0
+        columns = self._columns(db, "jobs")
+        if "debate_id" not in columns or "cancellation_generation" not in columns:
+            return 0
+        generation = int(getattr(debate, "cancellation_generation", 0) or 0)
+        params: dict[str, Any] = {
+            "debate_id": str(debate.id),
+            "generation": generation,
+        }
+        updated_at_sql = ""
+        if "updated_at" in columns:
+            params["updated_at"] = _now()
+            updated_at_sql = ", updated_at=:updated_at"
+        result = db.execute(
+            text(
+                "UPDATE jobs SET cancellation_generation=:generation"
+                f"{updated_at_sql} "
+                "WHERE debate_id=:debate_id AND operation='debate_turn_prepare' "
+                "AND state='completed' AND COALESCE(cancellation_generation, -1) != :generation"
+            ),
+            params,
+        )
+        return int(getattr(result, "rowcount", 0) or 0)
 
     def teacher_allowed(self, db: Any, debate: SqlRow, context: Any) -> bool:
         try:
