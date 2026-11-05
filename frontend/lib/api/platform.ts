@@ -626,7 +626,11 @@ export class PlatformApiError extends Error {
  * explicit abandonment permits the next attempt to obtain a new key.
  */
 export class IdempotencyHandle {
-  private activeKey: string | undefined = newIdempotencyKey();
+  private activeKey: string | undefined;
+
+  constructor(key?: string) {
+    this.activeKey = key ?? newIdempotencyKey();
+  }
 
   get key(): string {
     if (!this.activeKey) this.activeKey = newIdempotencyKey();
@@ -3033,8 +3037,10 @@ export class PlatformApi {
     body: RegenerateTurnAudioRequest,
     options: IdempotentMutationOptions = {},
   ): Promise<RegenerateTurnAudioResult> {
-    return commitMutation(options.idempotency, async (key) =>
-      unwrap(
+    const handle = options.idempotency;
+    const key = handle?.key ?? newIdempotencyKey();
+    try {
+      const result = await unwrap(
         await this.client.POST(
           "/debates/{debate_id}/audio/{turn_id}/regenerate",
           {
@@ -3048,8 +3054,13 @@ export class PlatformApi {
             body,
           },
         ),
-      ),
-    );
+      );
+      if (result.status !== "queued") handle?.complete();
+      return result;
+    } catch (error) {
+      if (handle && !isAmbiguousMutationFailure(error)) handle.abandon();
+      throw error;
+    }
   }
 
   async deleteDebateVoice(

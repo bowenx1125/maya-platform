@@ -110,6 +110,13 @@ export function DebatePreview({
       (turn.generation_status === "failed" || Boolean(turn.safe_error_code)),
   );
   const firstFailed = audioFailed[0];
+  const speechFailed = audioFailed.some(
+    (turn) =>
+      !turn.speech?.trim() ||
+      ["turn_generation_failed", "preparation_timeout"].includes(
+        turn.safe_error_code ?? "",
+      ),
+  );
 
   const tones = new Map(
     detail.participants.map((participant, index) => [
@@ -231,10 +238,13 @@ export function DebatePreview({
               }
             >
               <span data-testid="preview-audio-failed">
-                {tm("debatePreviewAudioFailed", {
-                  count: audioFailed.length,
-                  code: firstFailed.safe_error_code ?? "turn_generation_failed",
-                })}
+                {speechFailed
+                  ? `Speech preparation stopped for ${audioFailed.length} turn(s) (${firstFailed.safe_error_code ?? "turn_generation_failed"}). Retry the next unprepared speech before continuing.`
+                  : tm("debatePreviewAudioFailed", {
+                      count: audioFailed.length,
+                      code:
+                        firstFailed.safe_error_code ?? "turn_generation_failed",
+                    })}
               </span>
             </Notice>
           </div>
@@ -260,9 +270,7 @@ export function DebatePreview({
               tone={tones.get(turn.participant_id) ?? PREVIEW_TONES[0]}
               turn={turn}
               onRetry={
-                onRetryTurn
-                  ? (turnId) => onRetryTurn([turnId])
-                  : undefined
+                onRetryTurn ? (turnId) => onRetryTurn([turnId]) : undefined
               }
             />
           ))}

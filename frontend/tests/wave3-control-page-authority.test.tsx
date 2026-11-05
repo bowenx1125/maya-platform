@@ -5,7 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AvatarConfig } from "../components/avatar";
@@ -28,6 +28,12 @@ vi.mock("../components/app-shell", () => ({
 }));
 vi.mock("../components/ui", () => ({
   ErrorNotice: () => <div>Error</div>,
+  RetryPill: ({
+    children,
+    ...props
+  }: ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button {...props}>{children}</button>
+  ),
   LoadingCard: () => <div>Loading</div>,
   Notice: ({
     children,
@@ -358,5 +364,45 @@ describe("Wave 3 control-page Finish authority gate", () => {
         expect.anything(),
       ),
     );
+  });
+  it("does not retry blocked successors while the first speech is still preparing", async () => {
+    const preview = runningDetail();
+    preview.status = "draft";
+    preview.turn_protocol = "segments_v2";
+    preview.preview = { prepared_turns: 0, expected_turns: 2, ready: false };
+    preview.preview_turns = [turnId, "next-turn"].map((id, index) => ({
+      id,
+      participant_id: participantId,
+      round_no: 1,
+      turn_index: index,
+      speech: "",
+      generation_status: "failed",
+      audio_ready: false,
+      safe_error_code:
+        index === 0 ? "turn_generation_failed" : "preparation_timeout",
+      segments: [],
+      sources: [],
+    }));
+    const api = pageApi();
+    api.debate.mockResolvedValueOnce(preview).mockResolvedValue({
+      ...preview,
+      playback: { ...preview.playback, control_version: 2 },
+      preview_turns: preview.preview_turns.map((turn, index) =>
+        index === 0
+          ? { ...turn, generation_status: "pending", safe_error_code: null }
+          : turn,
+      ),
+    });
+    useSessionMock.mockReturnValue({ api });
+    render(<TeacherDebateControlPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(api.debate).toHaveBeenCalledTimes(2));
+    expect(api.retryDebatePreparation).toHaveBeenCalledTimes(1);
+    expect(api.retryDebatePreparation.mock.calls[0][1]).toMatchObject({
+      turn_id: turnId,
+    });
+    expect(
+      screen.getByText(/Speech preparation stopped/).textContent,
+    ).not.toContain("play as text");
   });
 });

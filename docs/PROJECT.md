@@ -193,10 +193,9 @@ uploaded Voices ready at once (0073);▷ listens only;Team model call12 rows (wa
 
 ## Oct20–23 releases
 
-Oct20–21 (#225–#235, 0076): answer guard, public Agent editors/audit, Chat-independent
-Record, cascade recovery without auto-retry, login race fences. Oct22: shared editing
-with stale_base_version; constant Chat history SELECTs. Oct23: 50-user Mock passed
-(p95≤7.85s), PG poll REPEATABLE READ, #239 released. Details: git history.
+#225–#239/0076:answer guard,public Agent edits/audit,independent Record,cascade recovery
+(no auto-retry),login fences,stale_base_version,constant history SELECTs. 50-user Mock
+p95≤7.85s;PG polling REPEATABLE READ. Details:git history.
 
 ## Oct24 Team chats and junk (#241)
 
@@ -266,10 +265,8 @@ in 0080 (always 1.0).
 
 ## Oct27 UI (#305, 38)
 
-#305: G Agent cards (4-col width), Teams 3 columns, Teams empty = Agents empty.
-Sign-in: 38 v3 ([auth](ui-proposals/auth)). Every wait: one LoadingCard, 39 C flip
-cards ([loading](ui-proposals/loading)). Press keys: hit area stays put while keys
-move; a sidebar click lights its row with a wait; sidebar pages read the query (○).
+#305:Agents4-col,Teams3-col/shared empty. Sign-in38v3;waits:one39C LoadingCard.
+Keys:fixed hit area;sidebar:active wait/query context. [Auth](ui-proposals/auth)/[loading](ui-proposals/loading).
 
 ## Nov2 Chatform lists
 
@@ -280,12 +277,9 @@ Agent and Chat with Team are separate histories; no kind stays the Agent list.
 
 ## Nov2 Accounts group visit
 
-Accounts group cards were a no-op (`onGroupPress` empty since 2026-10-27). Enter
-writes one expiring `teacher_group_access` row (0082, 2h, refreshed, not a roster
-member). Backout, in Logout's place, deletes it and returns to Accounts. The visit edits that group's
-Studyform agents and public Brainform library/Knowledge, not the group, its
-agents' deletion, members, or another group. Expired rows fail reads; the minute
-sweep deletes them.
+0082:Enter grants2h teacher_group_access (not roster),renewed20min;Backout replaces
+Logout and removes it;expiry sweeps/min. Visits edit group Studyform Agents/public
+Brainform,not group/Agent deletion/other groups. Old group-card no-op fixed.
 
 ## Nov2 chat speed and recovery
 
@@ -314,3 +308,11 @@ Knowledge/RAG only, no assessment Tools (Agent Chats hold no attempt; Teams unch
 Check RAG → documents, then Details (owner-only GET …/turns/{id}/model-input from stored
 request bytes): system prompt, AGENT.md, Knowledge, attachments, Tools/results. Scoring/
 summary calls stay hidden (Rubric). Team/Debate audited clean. Not yet deployed.
+
+## Nov6 recovery
+
+3D Replay=confirmed Rebirth;Review=retained playback. Revocalize saves teacher/revision/
+turn keys,dispatches all,resumes reloads,keeps queued/ambiguous keys beyond45s;terminal
+failures need explicit retry. Preview separates missing speech from TTS and respects
+predecessor readiness. Stalled unverified turn_generation_failed needs backend receipt
+recovery;safety gates kept. Focused checks passed;prod pending;BGM untouched.

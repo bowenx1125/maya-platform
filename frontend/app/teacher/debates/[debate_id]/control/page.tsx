@@ -142,6 +142,12 @@ export default function TeacherDebateControlPage() {
           );
           const next = await refreshSnapshot();
           controlVersion = next.playback.control_version;
+          // Preparation is asynchronous and the server only permits the next
+          // unprepared speech. Do not immediately submit its blocked successors.
+          const retried = next.preview_turns?.find(
+            (turn) => turn.id === turnId,
+          );
+          if (retried && retried.generation_status !== "final_ready") break;
         }
       } catch (cause) {
         setError(cause);

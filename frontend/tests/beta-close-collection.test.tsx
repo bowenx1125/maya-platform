@@ -32,7 +32,7 @@ vi.mock("../components/debate-beta/stage", () => ({
   }) => (
     <section data-testid="beta-stage" data-join-url={joinUrl}>
       {typeof headerActions === "function"
-        ? headerActions(<button type="button">Replay</button>)
+        ? headerActions(<button type="button">Review</button>)
         : headerActions}
       {joinUrl && joinCodeVisible ? (
         <div id="classroom-join-code" role="img" aria-label="Scan to join">
