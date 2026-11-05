@@ -49,11 +49,11 @@ export type MusicChannelName = "workspace" | "stage";
 /** How long a hand-off fades, in milliseconds. */
 export const MUSIC_FADE_MS = 900;
 // Absolute HTMLMediaElement volumes (linear = 10^(dB/20)).
-// workspace: 0 dB → 1.0; stage: −20 dB → 0.1 (under Debate speeches).
+// workspace: 0 dB → 1.0; stage: −30 dB → 10^(−30/20) ≈ 0.0316 (under Debate speeches).
 // Each channel still loops its track list (see Channel.player "ended").
 const CHANNEL_VOLUME: Record<MusicChannelName, number> = {
   workspace: 1.0, // 0 dB
-  stage: 0.1, // −20 dB
+  stage: 10 ** (-30 / 20), // −30 dB ≈ 0.031623
 };
 
 const WORKSPACE_OFF_PREFIX = "maya.bgm.off.workspace.";
