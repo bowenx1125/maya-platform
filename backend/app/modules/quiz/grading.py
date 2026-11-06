@@ -37,9 +37,7 @@ def grade_objective(
         if item.type in ("single", "multiple"):
             has_objective = True
             score_max += points
-            expected = _as_choice_set(
-                item.answer.choice_ids if item.answer is not None else None
-            )
+            expected = _as_choice_set(item.answer.choice_ids if item.answer is not None else None)
             got = _as_choice_set(submission.choice_ids if submission else None)
             correct = got == expected and len(expected) > 0
             if correct:

@@ -77,6 +77,7 @@ def actors(app_bundle: tuple[FastAPI, Database, Any]):
 
     app = app_bundle[0]
     with ExitStack() as stack:
+
         def sign_in(username: str) -> Actor:
             return Actor(stack.enter_context(TestClient(app)), username)
 
@@ -161,9 +162,7 @@ def test_student_get_strips_answer_and_rubric(teacher: Actor, student: Actor) ->
         assert "prompt" in item
 
 
-def test_submit_grades_objective_and_pending_subjective(
-    teacher: Actor, student: Actor
-) -> None:
+def test_submit_grades_objective_and_pending_subjective(teacher: Actor, student: Actor) -> None:
     quiz_id = _create_and_publish(teacher)
     # multiple unordered; single correct; short_text pending
     submitted = student.post(

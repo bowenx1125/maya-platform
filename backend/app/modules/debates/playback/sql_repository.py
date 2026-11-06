@@ -878,8 +878,7 @@ class SqlPlaybackRepository(PlaybackRepository):
         if row is None:
             return False
         return (
-            str(row[0] or "") == "failed"
-            and str(row[1] or "") in RETRYABLE_PROVIDER_REJECT_CODES
+            str(row[0] or "") == "failed" and str(row[1] or "") in RETRYABLE_PROVIDER_REJECT_CODES
         )
 
     def audio_swap_journals(self, db: Any) -> list[SqlRow]:

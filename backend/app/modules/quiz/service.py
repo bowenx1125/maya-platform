@@ -137,9 +137,7 @@ def _student_dto(quiz: ClassroomQuiz) -> StudentQuizDTO:
     )
 
 
-def list_quizzes_for_actor(
-    db: Session, actor: AuthContext, course_id: str
-) -> list[QuizSummaryDTO]:
+def list_quizzes_for_actor(db: Session, actor: AuthContext, course_id: str) -> list[QuizSummaryDTO]:
     role = _require_member(db, actor, course_id)
     query = select(ClassroomQuiz).where(ClassroomQuiz.course_id == course_id)
     if role != "teacher":
@@ -222,11 +220,7 @@ def patch_quiz(
     title = body.title if body.title is not None else quiz.title
     locale = body.locale if body.locale is not None else str(document.get("locale") or "en")
     settings = body.settings if body.settings is not None else settings_from_document(document)
-    items = (
-        body.items
-        if body.items is not None
-        else teacher_items_from_document(document)
-    )
+    items = body.items if body.items is not None else teacher_items_from_document(document)
     group_id = quiz.group_id
     if "group_id" in body.model_fields_set:
         group_id = str(body.group_id) if body.group_id else None
@@ -253,9 +247,7 @@ def patch_quiz(
     return _teacher_dto(db, quiz)
 
 
-def publish_quiz(
-    db: Session, actor: AuthContext, course_id: str, quiz_id: str
-) -> TeacherQuizDTO:
+def publish_quiz(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:
     _require_teacher(db, actor, course_id)
     quiz = _get_quiz(db, course_id, quiz_id)
     if quiz.status == "published":
@@ -288,9 +280,7 @@ def publish_quiz(
     return _teacher_dto(db, quiz)
 
 
-def unpublish_quiz(
-    db: Session, actor: AuthContext, course_id: str, quiz_id: str
-) -> TeacherQuizDTO:
+def unpublish_quiz(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:
     _require_teacher(db, actor, course_id)
     quiz = _get_quiz(db, course_id, quiz_id)
     if quiz.status != "published":
