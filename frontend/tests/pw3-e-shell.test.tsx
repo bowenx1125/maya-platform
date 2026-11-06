@@ -454,6 +454,7 @@ describe("student shell navigation", () => {
       "/student",
       "/student/agents?group_id=group-b",
       "/student/chat",
+      "/student/quiz",
     ]);
     expect(
       document.querySelector('[data-tour="brain"]')?.textContent?.trim(),

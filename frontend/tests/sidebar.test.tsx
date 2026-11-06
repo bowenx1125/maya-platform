@@ -102,7 +102,7 @@ afterEach(() => {
 });
 
 describe("sidebar groups", () => {
-  it("gives a student Studyform, Brainform, Chatform and Classroom (Live)", () => {
+  it("gives a student Studyform, Brainform, Chatform and Classroom (Live, Quiz)", () => {
     renderShell("student", "/student");
     expect(groupRows("Studyform")).toEqual(["Agents", "Teams"]);
     expect(groupRows("Brainform")).toEqual(["RAG", "Voices", "Record"]);
@@ -110,7 +110,7 @@ describe("sidebar groups", () => {
       "Chat with Agent",
       "Chat with Team",
     ]);
-    expect(groupRows("Classroom")).toEqual(["Live"]);
+    expect(groupRows("Classroom")).toEqual(["Live", "Quiz"]);
     expect(
       nav().getByRole("link", { name: "Voices" }).getAttribute("href"),
     ).toBe("/student/voices?group_id=group-a");
