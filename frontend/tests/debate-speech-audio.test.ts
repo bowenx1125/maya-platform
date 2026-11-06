@@ -25,8 +25,8 @@ describe("Debate speech volume", () => {
     vi.unstubAllGlobals();
   });
 
-  it("is +10 dB", () => {
-    expect(DEBATE_SPEECH_VOLUME).toBeCloseTo(3.1622776601683795, 12);
+  it("is +5 dB", () => {
+    expect(DEBATE_SPEECH_VOLUME).toBeCloseTo(1.7782794100389228, 12);
   });
 
   it("keeps element volume at 1 and is idempotent without Web Audio", () => {

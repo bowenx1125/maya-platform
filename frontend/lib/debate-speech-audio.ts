@@ -2,7 +2,7 @@
  * Debate turn speech playback volume.
  *
  * Every Immersive Debate speech clip plays at one absolute level:
- * +10 dB → linear 10^(10/20) ≈ 3.1623. HTMLMediaElement.volume caps at 1,
+ * +5 dB → linear 10^(5/20) ≈ 1.778279. HTMLMediaElement.volume caps at 1,
  * so the boost needs a Web Audio GainNode. Workspace / stage BGM is
  * untouched (see background-music.ts).
  *
@@ -19,8 +19,8 @@
  * - dispose() only detaches listeners; re-binding the same element (React
  *   ref callback re-runs) reuses the existing wiring.
  */
-export const DEBATE_SPEECH_DB = 10;
-export const DEBATE_SPEECH_VOLUME = 10 ** (DEBATE_SPEECH_DB / 20); // +10 dB ≈ 3.1623
+export const DEBATE_SPEECH_DB = 5;
+export const DEBATE_SPEECH_VOLUME = 10 ** (DEBATE_SPEECH_DB / 20); // +5 dB ≈ 1.778279
 
 type SpeechGainHandle = {
   /** Resume the shared context and wire the gain if possible. */
