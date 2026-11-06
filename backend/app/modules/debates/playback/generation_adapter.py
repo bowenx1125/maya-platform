@@ -17,6 +17,9 @@ from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
 
+from sqlalchemy import select, text
+from sqlalchemy.orm import Session
+
 from app.core.config import Settings, configured_debate_llm_model
 from app.core.errors import PlatformError, conflict
 from app.core.models import (
@@ -141,8 +144,6 @@ from app.providers.llm_segments import (
 from app.providers.standing_consent import (
     apply_standing_provider_consent as _standing_provider_consent,
 )
-from sqlalchemy import select, text
-from sqlalchemy.orm import Session
 
 from .llm_publication import SqlLLMPublication
 from .protocols import PreparedGenerationFence, PreparedSource, PreparedTurn

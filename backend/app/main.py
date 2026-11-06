@@ -14,6 +14,13 @@ from uuid import uuid4
 
 import anyio
 import anyio.to_thread
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import JSONResponse
+from sqlalchemy import select
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
 from app.core import request_timing
 from app.core.adaptive_admission import (
     adaptive_admission_snapshot,
@@ -114,12 +121,6 @@ from app.providers.llm_recovery import recover_llm_startup
 from app.providers.llm_tokenizer import ConservativeLLMTokenizer
 from app.providers.policy_store import ensure_reviewed_policies
 from app.seed import COURSE_ID, seed_demo_data
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.openapi.utils import get_openapi
-from fastapi.responses import JSONResponse
-from sqlalchemy import select
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger("maya.backend")
 # Worker threads for sync handlers (AnyIO default 40). A request queued in
