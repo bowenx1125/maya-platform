@@ -524,6 +524,101 @@ def test_draft_retry_rejects_stale_control_and_unknown_or_ambiguous_failure(draf
         database.dispose()
 
 
+def test_draft_retry_allows_turn_generation_failed_after_llm_http_reject(draft_retry_db):
+    database, ids, _speech, _structured = draft_retry_db
+    repository = SqlPlaybackRepository(session_factory=database.session_factory)
+    digest = "a" * 64
+    try:
+        with database.session() as db:
+            db.execute(
+                text(
+                    "UPDATE debate_turns SET safe_error_code='turn_generation_failed' "
+                    "WHERE id=:turn_id"
+                ),
+                {"turn_id": ids["turn"]},
+            )
+            db.execute(
+                text(
+                    "UPDATE jobs SET safe_error_code='turn_generation_failed' "
+                    "WHERE id=:job_id"
+                ),
+                {"job_id": ids["job"]},
+            )
+            debate = repository.get_debate(db, ids["debate"])
+            assert debate is not None
+            turn = next(
+                item for item in repository.turns(db, debate) if str(item.id) == ids["turn"]
+            )
+            updated = db.execute(
+                text(
+                    "UPDATE provider_operations SET state='failed', "
+                    "request_count=1, charged_request_count=1, "
+                    "safe_error_code='schema_invalid' "
+                    "WHERE scope_id=:debate AND logical_item_id=:turn "
+                    "AND provider_operation='llm_debate_turn' AND attempt_no=1"
+                ),
+                {"debate": ids["debate"], "turn": ids["turn"]},
+            )
+            if int(getattr(updated, "rowcount", 0)) != 1:
+                db.execute(
+                    text(
+                        "INSERT INTO provider_operations ("
+                        "id, scope_id, provider_operation, logical_item_id, attempt_no, "
+                        "request_hash, max_tokens, max_cost_cny, policy_hash, "
+                        "export_manifest_hash, build_manifest_hash, model_key, state, "
+                        "request_count, charged_request_count, safe_error_code, "
+                        "created_at, updated_at) VALUES ("
+                        ":id, :debate, 'llm_debate_turn', :turn, 1, :digest, 1, 0, "
+                        ":digest, :digest, :digest, 'qwen3.8-flash', 'failed', 1, 1, "
+                        "'schema_invalid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                    ),
+                    {
+                        "id": _uid(501),
+                        "debate": ids["debate"],
+                        "turn": ids["turn"],
+                        "digest": digest,
+                    },
+                )
+            assert not repository.retryable_provider_llm_reject(db, ids["debate"], ids["turn"])
+            assert not repository.retry_draft_segment_turn(
+                db,
+                debate,
+                turn,
+                expected_control_version=0,
+                code="turn_generation_failed",
+            )
+            db.execute(
+                text(
+                    "UPDATE provider_operations SET safe_error_code='llm_http_rejected' "
+                    "WHERE scope_id=:debate AND logical_item_id=:turn "
+                    "AND provider_operation='llm_debate_turn' AND attempt_no=1"
+                ),
+                {"debate": ids["debate"], "turn": ids["turn"]},
+            )
+            debate = repository.get_debate(db, ids["debate"])
+            assert debate is not None
+            turn = next(
+                item for item in repository.turns(db, debate) if str(item.id) == ids["turn"]
+            )
+            assert repository.retryable_provider_llm_reject(db, ids["debate"], ids["turn"])
+            assert repository.retry_draft_segment_turn(
+                db,
+                debate,
+                turn,
+                expected_control_version=0,
+                code="turn_generation_failed",
+            )
+            assert db.execute(
+                text(
+                    "SELECT generation_status, safe_error_code FROM debate_turns "
+                    "WHERE id=:turn_id"
+                ),
+                {"turn_id": ids["turn"]},
+            ).one() == ("pending", None)
+    finally:
+        database.dispose()
+
+
 def test_draft_retry_cannot_skip_next_unprepared_preview_turn(draft_retry_db):
     database, ids, _speech, _structured = draft_retry_db
     repository = SqlPlaybackRepository(session_factory=database.session_factory)

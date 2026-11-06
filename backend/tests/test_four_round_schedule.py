@@ -54,6 +54,70 @@ def test_unattempted_recovery_never_retries_an_existing_llm_operation():
     engine.dispose()
 
 
+def test_retryable_provider_llm_reject_allows_http_429_not_charged_accepts():
+    engine = create_engine(new_database_url(schema=False))
+    with Session(engine) as db:
+        db.execute(
+            text(
+                "CREATE TABLE provider_operations ("
+                "id TEXT, scope_id TEXT, logical_item_id TEXT, "
+                "provider_operation TEXT, attempt_no INT, state TEXT, "
+                "safe_error_code TEXT, updated_at TEXT)"
+            )
+        )
+        repo = SqlPlaybackRepository()
+        assert not repo.retryable_provider_llm_reject(db, "debate", "turn")
+        db.execute(
+            text(
+                "INSERT INTO provider_operations VALUES "
+                "('op1','debate','turn','llm_debate_turn',1,'failed',"
+                "'llm_http_rejected','2026-01-01')"
+            )
+        )
+        assert repo.retryable_provider_llm_reject(db, "debate", "turn")
+        db.execute(
+            text(
+                "INSERT INTO provider_operations VALUES "
+                "('op-busy','debate','busy','llm_debate_turn',1,'failed',"
+                "'provider_busy','2026-01-01')"
+            )
+        )
+        assert repo.retryable_provider_llm_reject(db, "debate", "busy")
+        db.execute(
+            text(
+                "INSERT INTO provider_operations VALUES "
+                "('op-rate','debate','rate','llm_debate_turn',1,'failed',"
+                "'provider_rate_limited','2026-01-01')"
+            )
+        )
+        assert repo.retryable_provider_llm_reject(db, "debate", "rate")
+        db.execute(
+            text(
+                "INSERT INTO provider_operations VALUES "
+                "('op-auth','debate','auth','llm_debate_turn',1,'failed',"
+                "'provider_auth_failed','2026-01-01')"
+            )
+        )
+        assert not repo.retryable_provider_llm_reject(db, "debate", "auth")
+        db.execute(
+            text(
+                "INSERT INTO provider_operations VALUES "
+                "('op2','debate','turn','llm_debate_turn',2,'succeeded',"
+                "NULL,'2026-01-02')"
+            )
+        )
+        assert not repo.retryable_provider_llm_reject(db, "debate", "turn")
+        db.execute(
+            text(
+                "INSERT INTO provider_operations VALUES "
+                "('op-unknown','debate','unknown','llm_debate_turn',1,"
+                "'acceptance_unknown','llm_http_rejected','2026-01-01')"
+            )
+        )
+        assert not repo.retryable_provider_llm_reject(db, "debate", "unknown")
+    engine.dispose()
+
+
 @pytest.mark.parametrize("count", [2, 3, 4, 5])
 def test_four_round_plan_rotates_speakers_without_moving_ids_or_question_targets(count):
     people = [str(uuid4()) for _ in range(count)]
