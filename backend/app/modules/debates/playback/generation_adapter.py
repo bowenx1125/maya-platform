@@ -17,9 +17,6 @@ from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import select, text
-from sqlalchemy.orm import Session
-
 from app.core.config import Settings, configured_debate_llm_model
 from app.core.errors import PlatformError, conflict
 from app.core.models import (
@@ -46,10 +43,6 @@ from app.modules.debates.generation import (
     public_evidence_trace,
 )
 from app.modules.debates.generation.four_round import body_count
-from app.modules.debates.generation.retrieval import (
-    MAX_SUBQUERY_TOKENS as _MAX_SUBQUERY_TOKENS,
-    fit_subqueries_to_embedding_batch as _fit_subqueries_to_embedding_batch,
-)
 from app.modules.debates.generation.mutual_learning_policy import (
     MUTUAL_LEARNING_RULE_SET_ID,
 )
@@ -63,6 +56,9 @@ from app.modules.debates.generation.recovery import LLMRecoveryService
 from app.modules.debates.generation.recovery_input import (
     receipts_from_recovery_input,
     request_from_recovery_input,
+)
+from app.modules.debates.generation.retrieval import (
+    fit_subqueries_to_embedding_batch as _fit_subqueries_to_embedding_batch,
 )
 from app.modules.debates.generation.runtime import LLMTurnRuntime
 from app.modules.debates.generation.segments import (
@@ -105,6 +101,8 @@ from app.modules.knowledge.providers.query_manifest import (
 from app.modules.knowledge.providers.snapshot_build import REAL_EMBEDDING_PROVIDER
 from app.modules.knowledge.providers.sql_query import (
     PRESEND_EMBEDDING_PLAN_CODES as _PRESEND_EMBEDDING_PLAN_CODES,
+)
+from app.modules.knowledge.providers.sql_query import (
     SqlAlchemyQueryControlAdapter,
     SqlQueryError,
     controlled_query_provider,
@@ -143,6 +141,8 @@ from app.providers.llm_segments import (
 from app.providers.standing_consent import (
     apply_standing_provider_consent as _standing_provider_consent,
 )
+from sqlalchemy import select, text
+from sqlalchemy.orm import Session
 
 from .llm_publication import SqlLLMPublication
 from .protocols import PreparedGenerationFence, PreparedSource, PreparedTurn
