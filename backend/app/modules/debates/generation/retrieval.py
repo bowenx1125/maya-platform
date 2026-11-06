@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import Literal, Protocol, cast
 
 from app.modules.agents.markdown import AgentMarkdown
-from app.modules.knowledge.providers.tokenizer import count_tokens
 from app.modules.knowledge.mock_lexical import (
     MOCK_LEXICAL_ANCHOR_POLICY_ID,
     MockLexicalAnchorV2,
@@ -72,6 +71,11 @@ MAX_SUBQUERY_TOKENS = 6000
 
 def clip_to_tokens(text: str, limit: int) -> str:
     """Shorten ``text`` so ``count_tokens`` is at most ``limit``."""
+    # Imported lazily: a module-level tokenizer import pulls
+    # knowledge.providers, which circular-imports this package and
+    # crashes uvicorn on startup (ca68909f).
+    from app.modules.knowledge.providers.tokenizer import count_tokens
+
     if count_tokens(text) <= limit:
         return text
     lo, hi = 1, len(text)
