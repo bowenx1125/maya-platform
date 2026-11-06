@@ -1,5 +1,4 @@
 import pytest
-
 from app.modules.debates.generation.retrieval import TurnSubquery
 from app.modules.debates.playback import generation_adapter as ga
 from app.modules.knowledge.providers.packing import MAX_BATCH_TOKENS
