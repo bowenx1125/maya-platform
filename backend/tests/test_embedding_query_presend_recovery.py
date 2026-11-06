@@ -69,3 +69,17 @@ def test_prior_attempts_allow_presend_plan_failure():
             )
         )
     assert blocked.value.code == "embedding_query_retry_forbidden"
+
+
+def test_generation_uses_same_clip_as_disclosure_plan():
+    from app.modules.debates.generation.retrieval import (
+        MAX_SUBQUERY_TOKENS,
+        TurnSubquery,
+        fit_subqueries_to_embedding_batch,
+    )
+
+    assert ga._MAX_SUBQUERY_TOKENS == MAX_SUBQUERY_TOKENS
+    huge = TurnSubquery("viewpoint", "辩论观点证据。" * 20000)
+    assert ga._fit_subqueries_to_embedding_batch((huge,)) == fit_subqueries_to_embedding_batch(
+        (huge,)
+    )
