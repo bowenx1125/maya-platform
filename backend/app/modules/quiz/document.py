@@ -100,7 +100,10 @@ def build_document_dict(
         settings=settings,
         items=items,
     )
-    return json.loads(doc.model_dump_json())
+    payload = json.loads(doc.model_dump_json())
+    if not isinstance(payload, dict):
+        raise unprocessable("quiz_document_invalid", "Quiz document must be an object.")
+    return payload
 
 
 def teacher_items_from_document(document: dict[str, Any]) -> list[QuizItemTeacher]:
@@ -143,7 +146,7 @@ def student_document(document: dict[str, Any], *, quiz_id: str) -> QuizDocumentS
     return QuizDocumentStudent(
         schema_version=int(stripped.get("schema_version") or 1),
         quiz_id=quiz_id,  # type: ignore[arg-type]
-        group_id=stripped.get("group_id"),  # type: ignore[arg-type]
+        group_id=stripped.get("group_id"),
         title=str(stripped.get("title") or ""),
         locale=str(stripped.get("locale") or "en"),
         status="published",
