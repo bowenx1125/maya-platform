@@ -155,11 +155,11 @@ def registered_metadata() -> MetaData:
 
     from app.modules.auth import admission as _admission_models
     from app.modules.cardroom import models as _cardroom_models
-    from app.modules.quiz import models as _quiz_models
     from app.modules.debates import models as _debate_models
     from app.modules.interactions import models as _interaction_models
     from app.modules.knowledge_sets import models as _knowledge_set_models
     from app.modules.learning import models as _learning_models
+    from app.modules.quiz import models as _quiz_models
     from app.modules.reports import models as _report_models
     from app.modules.runtime_tools import models as _runtime_tool_models
     from app.modules.teams import models as _team_models
