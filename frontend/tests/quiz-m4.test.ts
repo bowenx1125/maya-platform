@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  classroomGroupKeys,
-  litSidebarKey,
-} from "../components/app-shell";
+import { classroomGroupKeys, litSidebarKey } from "../components/app-shell";
 import {
   clearQuizDraft,
   QUIZ_RECORDS_PATH,
@@ -11,9 +8,7 @@ import {
   readQuizDraft,
   writeQuizDraft,
 } from "../lib/quiz-draft";
-import {
-  sanitizeStudentQuiz,
-} from "../lib/api/platform";
+import { sanitizeStudentQuiz } from "../lib/api/platform";
 import {
   listCourseQuizzesPath,
   getStudentQuizPath,
@@ -110,7 +105,9 @@ describe("quiz request paths (zero LLM)", () => {
     expect(submitQuizAttemptPath("c1", "q1")).toBe(
       "courses/c1/quizzes/q1/attempts",
     );
-    expect(listMyRecordAttemptsPath("c1")).toBe("courses/c1/my-record-attempts");
+    expect(listMyRecordAttemptsPath("c1")).toBe(
+      "courses/c1/my-record-attempts",
+    );
   });
 });
 
@@ -131,9 +128,7 @@ describe("sidebar Quiz IA", () => {
     const groups = [
       {
         key: "classroom",
-        items: [
-          { key: "quiz", href: "/student/quiz" },
-        ],
+        items: [{ key: "quiz", href: "/student/quiz" }],
       },
     ];
     expect(litSidebarKey(groups, "/student/quiz", "/student/quiz")).toBe(
@@ -145,9 +140,9 @@ describe("sidebar Quiz IA", () => {
         items: [{ key: "record", href: "/teacher/record" }],
       },
     ];
-    expect(litSidebarKey(teacherGroups, "/teacher/record", "/teacher/record")).toBe(
-      "brainform:record",
-    );
+    expect(
+      litSidebarKey(teacherGroups, "/teacher/record", "/teacher/record"),
+    ).toBe("brainform:record");
   });
 });
 

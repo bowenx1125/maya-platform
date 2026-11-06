@@ -725,9 +725,9 @@ export function BetaDebateStage({
   const pauseIdempotencyRef = useRef<IdempotencyHandle | null>(null);
   const resumeIdempotencyRef = useRef<IdempotencyHandle | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const speechGainRef = useRef<ReturnType<typeof bindDebateSpeechVolume> | null>(
-    null,
-  );
+  const speechGainRef = useRef<ReturnType<
+    typeof bindDebateSpeechVolume
+  > | null>(null);
   const [bubblePlayback, setBubblePlayback] = useState<{
     turnId: string;
     elapsed: number;

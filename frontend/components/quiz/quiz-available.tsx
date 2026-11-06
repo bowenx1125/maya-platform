@@ -50,13 +50,7 @@ export function QuizAvailable({
   }, [load]);
 
   if (error) {
-    return (
-      <ErrorNotice
-        inline
-        error={error}
-        onRetry={() => void load(true)}
-      />
-    );
+    return <ErrorNotice inline error={error} onRetry={() => void load(true)} />;
   }
   if (quizzes === null) return <LoadingCard />;
   if (!quizzes.length) {
@@ -92,7 +86,7 @@ export function QuizAvailable({
                     minute: "2-digit",
                   })
                 : ""}
-          </span>
+            </span>
           </span>
           <button
             type="button"

@@ -27,10 +27,7 @@ import {
   QuestionnaireProgress,
 } from "../ui/questionnaire";
 
-type TakeApi = Pick<
-  PlatformApi,
-  "getStudentQuiz" | "submitCourseQuizAttempt"
->;
+type TakeApi = Pick<PlatformApi, "getStudentQuiz" | "submitCourseQuizAttempt">;
 
 /**
  * Take view: loads the student projection, renders the Questionnaire,

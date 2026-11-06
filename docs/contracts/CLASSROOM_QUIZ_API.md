@@ -9,24 +9,24 @@ All paths are under `/api/v1`. Mutations require session + `X-CSRF-Token`.
 
 ## Teacher
 
-| Method | Path | Op | Notes |
-|---|---|---|---|
-| GET | `/courses/{course_id}/quizzes` | `listCourseQuizzes` | Draft + published |
-| POST | `/courses/{course_id}/quizzes` | `createCourseQuiz` | Body: `CreateQuizRequest` |
-| GET | `/courses/{course_id}/quizzes/{quiz_id}` | `getCourseQuiz` | Teacher DTO **includes** `items[].answer` |
-| PATCH | `/courses/{course_id}/quizzes/{quiz_id}` | `patchCourseQuiz` | Draft only; published → **409** `quiz_published_immutable` |
-| POST | `.../publish` | `publishCourseQuiz` | Done; bumps `content_revision` |
-| POST | `.../unpublish` | `unpublishCourseQuiz` | Required before edit |
-| GET | `/courses/{course_id}/record-attempts` | `listCourseRecordAttempts` | Teacher aggregate; `source` |
+| Method | Path                                     | Op                         | Notes                                                      |
+| ------ | ---------------------------------------- | -------------------------- | ---------------------------------------------------------- |
+| GET    | `/courses/{course_id}/quizzes`           | `listCourseQuizzes`        | Draft + published                                          |
+| POST   | `/courses/{course_id}/quizzes`           | `createCourseQuiz`         | Body: `CreateQuizRequest`                                  |
+| GET    | `/courses/{course_id}/quizzes/{quiz_id}` | `getCourseQuiz`            | Teacher DTO **includes** `items[].answer`                  |
+| PATCH  | `/courses/{course_id}/quizzes/{quiz_id}` | `patchCourseQuiz`          | Draft only; published → **409** `quiz_published_immutable` |
+| POST   | `.../publish`                            | `publishCourseQuiz`        | Done; bumps `content_revision`                             |
+| POST   | `.../unpublish`                          | `unpublishCourseQuiz`      | Required before edit                                       |
+| GET    | `/courses/{course_id}/record-attempts`   | `listCourseRecordAttempts` | Teacher aggregate; `source`                                |
 
 ## Student
 
-| Method | Path | Op | Notes |
-|---|---|---|---|
-| GET | `/courses/{course_id}/quizzes` | `listCourseQuizzes` | **Published only** |
-| GET | `/courses/{course_id}/quizzes/{quiz_id}` | `getCourseQuiz` | `StudentQuizDTO`: **no** `answer` / `rubric` keys |
-| POST | `.../attempts` | `submitCourseQuizAttempt` | One shot; zero LLM |
-| GET | `/courses/{course_id}/my-record-attempts` | `listMyRecordAttempts` | `source: quiz\|chat` |
+| Method | Path                                      | Op                        | Notes                                             |
+| ------ | ----------------------------------------- | ------------------------- | ------------------------------------------------- |
+| GET    | `/courses/{course_id}/quizzes`            | `listCourseQuizzes`       | **Published only**                                |
+| GET    | `/courses/{course_id}/quizzes/{quiz_id}`  | `getCourseQuiz`           | `StudentQuizDTO`: **no** `answer` / `rubric` keys |
+| POST   | `.../attempts`                            | `submitCourseQuizAttempt` | One shot; zero LLM                                |
+| GET    | `/courses/{course_id}/my-record-attempts` | `listMyRecordAttempts`    | `source: quiz\|chat`                              |
 
 ## Submit body
 
@@ -59,10 +59,10 @@ Publishing and taking are now separate states. **Publish ≠ open for taking.**
 
 ### New endpoints (teacher only, CSRF)
 
-| Method | Path | Op | Behavior |
-|---|---|---|---|
-| POST | `/courses/{course_id}/quizzes/{quiz_id}/start-taking` | `startCourseQuizTaking` | Requires `status=published`. If `taking_open=false`: `taking_epoch += 1`, `taking_open=true`. If already open → **409** `quiz_taking_already_open`. |
-| POST | `/courses/{course_id}/quizzes/{quiz_id}/pause-taking` | `pauseCourseQuizTaking` | Requires `status=published`. Sets `taking_open=false` (epoch unchanged). If already closed → **409** `quiz_taking_already_closed`. |
+| Method | Path                                                  | Op                      | Behavior                                                                                                                                            |
+| ------ | ----------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/courses/{course_id}/quizzes/{quiz_id}/start-taking` | `startCourseQuizTaking` | Requires `status=published`. If `taking_open=false`: `taking_epoch += 1`, `taking_open=true`. If already open → **409** `quiz_taking_already_open`. |
+| POST   | `/courses/{course_id}/quizzes/{quiz_id}/pause-taking` | `pauseCourseQuizTaking` | Requires `status=published`. Sets `taking_open=false` (epoch unchanged). If already closed → **409** `quiz_taking_already_closed`.                  |
 
 ### State rules
 
