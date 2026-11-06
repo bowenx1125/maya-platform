@@ -850,6 +850,38 @@ class SqlPlaybackRepository(PlaybackRepository):
             is None
         )
 
+    def retryable_provider_llm_reject(self, db: Any, debate_id: str, turn_id: str) -> bool:
+        """True when the latest debate-turn LLM attempt is a retryable reject.
+
+        HTTP 429 and brief provider unavailability are recorded as a failed
+        ``llm_debate_turn`` row (often ``llm_http_rejected``).  That is not a
+        local pre-send miss and not an accepted stage, but the request never
+        produced a completion, so Preview may send again.  A successful or
+        ambiguous accept stays terminal.
+        """
+
+        if not self._has_table(db, "provider_operations"):
+            return False
+        # Lazy import: this module must not import provider adapters at
+        # collection time (circular-import lesson from retrieval clipping).
+        from app.providers.llm_transport import RETRYABLE_PROVIDER_REJECT_CODES
+
+        row = db.execute(
+            text(
+                "SELECT state, safe_error_code FROM provider_operations "
+                "WHERE scope_id=:debate AND logical_item_id=:turn "
+                "AND provider_operation='llm_debate_turn' "
+                "ORDER BY attempt_no DESC, updated_at DESC, id DESC LIMIT 1"
+            ),
+            {"debate": debate_id, "turn": turn_id},
+        ).first()
+        if row is None:
+            return False
+        return (
+            str(row[0] or "") == "failed"
+            and str(row[1] or "") in RETRYABLE_PROVIDER_REJECT_CODES
+        )
+
     def audio_swap_journals(self, db: Any) -> list[SqlRow]:
         if not self._has_table(db, "file_operations"):
             return []
@@ -3559,6 +3591,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             )
             not in self.recoverable_llm_turns(db)
             and not self.unattempted_llm_turn(db, debate_id, turn_id)
+            and not self.retryable_provider_llm_reject(db, debate_id, turn_id)
         ):
             return False
         cached_segment = code in tts_preview_retry_codes and _has_cached_segment_fence(turn)

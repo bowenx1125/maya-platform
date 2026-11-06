@@ -80,6 +80,17 @@ PROVIDER_STATUS_CODES = {
     529: "provider_busy",
 }
 
+# Teacher Preview Retry may send again after these provider rejects.
+# Successful or ambiguous accepts stay terminal so a billed completion
+# is not charged twice. HTTP 429 is stored today as llm_http_rejected.
+RETRYABLE_PROVIDER_REJECT_CODES = frozenset(
+    {
+        "llm_http_rejected",
+        "provider_rate_limited",
+        "provider_busy",
+    }
+)
+
 
 def rejected_status_code(status: object, fallback: str) -> str:
     """The safe error code for a non-200 provider answer."""
