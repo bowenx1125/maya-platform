@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   createIdempotencyHandle,
@@ -123,6 +129,7 @@ export function DebateCleanupControls({
   iconClassName = "",
   labelled = false,
   dangerClassName = "",
+  afterVoice,
 }: {
   detail?: DebateDetail;
   debateId?: string;
@@ -136,6 +143,8 @@ export function DebateCleanupControls({
    * stays while busy, with a spinner and aria-busy. */
   labelled?: boolean;
   dangerClassName?: string;
+  /** Rendered between Devocalize/Revocalize and Delete (list End). */
+  afterVoice?: ReactNode;
   api: Pick<
     PlatformApi,
     "deleteDebateVoice" | "deleteDebateAll" | "regenerateDebateTurnAudio"
@@ -526,6 +535,7 @@ export function DebateCleanupControls({
         )}
         {labelled ? <span>{voiceLabel}</span> : null}
       </button>
+      {afterVoice}
       <button
         className={
           labelled

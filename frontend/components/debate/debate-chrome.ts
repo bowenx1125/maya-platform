@@ -27,6 +27,13 @@ export const DEBATE_ROW_BUTTON = cn(
   "py-1 pr-3 pl-[9px] text-[13px] leading-[normal] disabled:pointer-events-none",
 );
 
+/** List row End: shared DEBATE_ROW_BUTTON motion (PRESS/BUSY) with
+ * immerse soft-danger colors (B2 / `.danger-action`). */
+export const DEBATE_ROW_DANGER_BUTTON = cn(
+  DEBATE_ROW_BUTTON,
+  "bg-[#ffe4e4] text-[#9f1239] shadow-[0_3px_0_#f9a8d4] hover:bg-[#fecdd3]",
+);
+
 /** F status pills (`.tag`). */
 export const DEBATE_TAG =
   "inline-flex items-center gap-1.5 rounded-full border-2 border-[#111] bg-white px-3 py-[3px] font-body text-xs leading-[normal] font-extrabold whitespace-nowrap text-[#111] [&>span[aria-hidden]]:hidden";

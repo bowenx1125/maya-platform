@@ -610,6 +610,126 @@ describe("Wave 2 teacher debate setup", () => {
     );
   });
 
+  it("ends a running debate from the list without immersing", async () => {
+    const running: DebateSummary = {
+      id: "running-classroom",
+      course_id: courseId,
+      topic: "A live classroom",
+      status: "running",
+      round_count: 4,
+      created_at: "2026-10-13T00:00:00Z",
+      audio_restore_needed: false,
+      prepared_turns: 8,
+      expected_turns: 8,
+      preview: { prepared_turns: 6, expected_turns: 6, ready: true },
+      stall: null,
+    };
+    const completed: DebateSummary = { ...running, status: "completed" };
+    let current = running;
+    const api = {
+      debates: vi.fn(async () => [current]),
+      debate: vi.fn().mockResolvedValue({
+        id: running.id,
+        playback: { control_version: 3, current_turn_id: "turn-2" },
+      }),
+      finishDebate: vi.fn().mockImplementation(async () => {
+        current = completed;
+        return { id: running.id, status: "completed" };
+      }),
+    };
+    useSessionMock.mockReturnValue({ ...teacherSession(), api });
+    render(<TeacherDebateList />);
+    const row = (
+      await screen.findByRole("heading", { name: "A live classroom" })
+    ).closest("[data-testid='debate-row']") as HTMLElement;
+    const immerse = within(row).getByRole("link", { name: "Immerse" });
+    const devocalize = within(row).getByRole("button", { name: "Devocalize" });
+    const end = within(row).getByRole("button", { name: "End" });
+    const remove = within(row).getByRole("button", { name: "Delete" });
+    expect(
+      immerse.compareDocumentPosition(devocalize) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      devocalize.compareDocumentPosition(end) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      end.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(end.className).toMatch(/ffe4e4/i);
+    expect(end.className).toMatch(/9f1239/i);
+    expect(end.className).toMatch(/f9a8d4/i);
+    expect(end.querySelector("svg[aria-hidden='true']")).toBeTruthy();
+
+    fireEvent.click(end);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain(
+      "“A live classroom” is running. End that debate?",
+    );
+    expect(api.debate).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(api.finishDebate).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    fireEvent.click(within(row).getByRole("button", { name: "End" }));
+    fireEvent.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "End",
+      }),
+    );
+    await screen.findByText("Completed");
+    expect(api.debate).toHaveBeenCalledWith(running.id);
+    expect(api.finishDebate).toHaveBeenCalledWith(
+      running.id,
+      {
+        expected_control_version: 3,
+        expected_current_turn_id: "turn-2",
+      },
+      expect.objectContaining({
+        idempotency: expect.objectContaining({ key: expect.any(String) }),
+      }),
+    );
+    expect(screen.getByRole("button", { name: "Replay" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "End" })).toBeNull();
+  });
+
+  it.each([
+    "draft",
+    "completed",
+    "debate_finished",
+    "failed",
+    "stopped",
+  ] as const)(
+    "hides list End unless the debate is running (%s)",
+    async (status) => {
+      useSessionMock.mockReturnValue(teacherSession());
+      render(
+        <TeacherDebateList
+          controller={{
+            load: vi.fn().mockResolvedValue([
+              {
+                id: "not-running",
+                course_id: courseId,
+                topic: "Idle classroom",
+                status,
+                round_count: 4,
+                created_at: "2026-10-13T00:00:00Z",
+                audio_restore_needed: false,
+                prepared_turns: 8,
+                expected_turns: 8,
+                preview: { prepared_turns: 6, expected_turns: 6, ready: true },
+                stall: null,
+              },
+            ]),
+          }}
+        />,
+      );
+      await screen.findByRole("heading", { name: "Idle classroom" });
+      expect(screen.queryByRole("button", { name: "End" })).toBeNull();
+    },
+  );
+
   it("uses separate Topic and Background cards with bidirectional height synchronization", async () => {
     let resized: ResizeObserverCallback | undefined;
     const disconnect = vi.fn();
