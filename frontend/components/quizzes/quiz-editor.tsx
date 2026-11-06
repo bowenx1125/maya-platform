@@ -136,10 +136,7 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
   const addChoice = (index: number) => {
     const item = items[index];
     patchItem(index, {
-      choices: [
-        ...item.choices,
-        { id: crypto.randomUUID(), label: "" },
-      ],
+      choices: [...item.choices, { id: crypto.randomUUID(), label: "" }],
     });
   };
 
@@ -234,11 +231,7 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
   return (
     <div className="space-y-4">
       <PageBanner title={title || "New quiz"}>
-        <PageAction
-          name="back"
-          href="/teacher/quizzes"
-          placement="page"
-        />
+        <PageAction name="back" href="/teacher/quizzes" placement="page" />
         {locked ? (
           <Button onClick={onUnpublish} disabled={busy} busy={busy}>
             Unpublish
@@ -343,7 +336,11 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
                         checked={checked}
                         disabled={disabled}
                         onChange={() =>
-                          toggleChoiceId(index, choice.id, item.type === "single")
+                          toggleChoiceId(
+                            index,
+                            choice.id,
+                            item.type === "single",
+                          )
                         }
                         aria-label="Mark as correct answer"
                       />
@@ -408,11 +405,20 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
       {!locked && (
         <div className="flex flex-wrap items-center gap-2">
           {(Object.keys(ITEM_TYPE_LABELS) as NewItemType[]).map((type) => (
-            <Button key={type} disabled={busy} onClick={() => setItems((prev) => [...prev, newItem(type)])}>
+            <Button
+              key={type}
+              disabled={busy}
+              onClick={() => setItems((prev) => [...prev, newItem(type)])}
+            >
               Add {ITEM_TYPE_LABELS[type]}
             </Button>
           ))}
-          <Button variant="neutral" disabled={busy} busy={busy} onClick={onSave}>
+          <Button
+            variant="neutral"
+            disabled={busy}
+            busy={busy}
+            onClick={onSave}
+          >
             Save
           </Button>
         </div>

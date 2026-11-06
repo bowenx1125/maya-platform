@@ -538,10 +538,7 @@ def test_draft_retry_allows_turn_generation_failed_after_llm_http_reject(draft_r
                 {"turn_id": ids["turn"]},
             )
             db.execute(
-                text(
-                    "UPDATE jobs SET safe_error_code='turn_generation_failed' "
-                    "WHERE id=:job_id"
-                ),
+                text("UPDATE jobs SET safe_error_code='turn_generation_failed' WHERE id=:job_id"),
                 {"job_id": ids["job"]},
             )
             debate = repository.get_debate(db, ids["debate"])
@@ -610,8 +607,7 @@ def test_draft_retry_allows_turn_generation_failed_after_llm_http_reject(draft_r
             )
             assert db.execute(
                 text(
-                    "SELECT generation_status, safe_error_code FROM debate_turns "
-                    "WHERE id=:turn_id"
+                    "SELECT generation_status, safe_error_code FROM debate_turns WHERE id=:turn_id"
                 ),
                 {"turn_id": ids["turn"]},
             ).one() == ("pending", None)

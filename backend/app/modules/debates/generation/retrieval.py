@@ -64,7 +64,6 @@ class TurnSubquery:
         return hashlib.sha256(self.text.strip().encode("utf-8")).hexdigest()
 
 
-
 # Per-query cap (supplier item limit is 8192; batch limit 30000).
 MAX_SUBQUERY_TOKENS = 6000
 
@@ -107,6 +106,7 @@ def fit_subqueries_to_embedding_batch(
         clipped = clip_to_tokens(item.text, limit)
         out.append(item if clipped == item.text else TurnSubquery(item.query_kind, clipped))
     return tuple(out)
+
 
 @dataclass(frozen=True, slots=True)
 class RetrievalResult:

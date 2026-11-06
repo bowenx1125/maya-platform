@@ -27,10 +27,7 @@ import {
   QuestionnaireProgress,
 } from "../ui/questionnaire";
 
-type TakeApi = Pick<
-  PlatformApi,
-  "getStudentQuiz" | "submitCourseQuizAttempt"
->;
+type TakeApi = Pick<PlatformApi, "getStudentQuiz" | "submitCourseQuizAttempt">;
 
 /**
  * Take view: loads the student projection, renders the Questionnaire,
@@ -68,6 +65,8 @@ export function QuizTake({
   useEffect(() => {
     if (quizProp || !effectiveQuizId || !client) return;
     let active = true;
+    // Reset before fetch; sync setState-in-effect is intentional for load UX.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale error on quiz id change
     setLoadError(null);
     client
       .getStudentQuiz(courseId, effectiveQuizId)

@@ -119,11 +119,7 @@ def strip_answers(document: dict[str, Any]) -> dict[str, Any]:
     for item in document.get("items") or []:
         if not isinstance(item, dict):
             continue
-        cleaned = {
-            key: value
-            for key, value in item.items()
-            if key not in ("answer", "rubric")
-        }
+        cleaned = {key: value for key, value in item.items() if key not in ("answer", "rubric")}
         # Nested rubric under answer already removed with answer; belt-and-suspenders:
         if "answer" in cleaned:
             del cleaned["answer"]

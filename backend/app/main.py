@@ -88,8 +88,8 @@ from app.modules.knowledge_sets.router import router as knowledge_sets_router
 from app.modules.knowledge_sets.task_manager import KnowledgeGenerationTaskManager
 from app.modules.learning.finalizer import AssessmentFinalizer
 from app.modules.learning.router import router as learning_router
-from app.modules.quiz.router import router as quiz_router
 from app.modules.org.router import router as org_router
+from app.modules.quiz.router import router as quiz_router
 from app.modules.reports.real_provider import RealReportProvider
 from app.modules.reports.router import router as reports_router
 from app.modules.reports.service import (

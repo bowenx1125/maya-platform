@@ -87,6 +87,8 @@ def _summary(db: Session, quiz: ClassroomQuiz) -> QuizSummaryDTO:
         schema_version=quiz.schema_version,
         content_revision=quiz.content_revision,
         attempt_count=_attempt_count(db, quiz.id),
+        taking_open=quiz.taking_open,
+        taking_epoch=quiz.taking_epoch,
         created_by_user_id=UUID(quiz.created_by_user_id),
         published_at=quiz.published_at,
         created_at=quiz.created_at,
@@ -130,6 +132,8 @@ def _student_dto(quiz: ClassroomQuiz) -> StudentQuizDTO:
         status="published",
         schema_version=quiz.schema_version,
         content_revision=quiz.content_revision,
+        taking_open=quiz.taking_open,
+        taking_epoch=quiz.taking_epoch,
         settings=settings_from_document(document),
         locale=str(document.get("locale") or "en"),
         items=items,  # type: ignore[arg-type]
@@ -137,9 +141,7 @@ def _student_dto(quiz: ClassroomQuiz) -> StudentQuizDTO:
     )
 
 
-def list_quizzes_for_actor(
-    db: Session, actor: AuthContext, course_id: str
-) -> list[QuizSummaryDTO]:
+def list_quizzes_for_actor(db: Session, actor: AuthContext, course_id: str) -> list[QuizSummaryDTO]:
     role = _require_member(db, actor, course_id)
     query = select(ClassroomQuiz).where(ClassroomQuiz.course_id == course_id)
     if role != "teacher":
@@ -182,6 +184,8 @@ def create_quiz(
         content_revision=0,
         content_hash=None,
         created_by_user_id=str(actor.user.id),
+        taking_open=False,
+        taking_epoch=0,
         published_at=None,
         created_at=now,
         updated_at=now,
@@ -222,11 +226,7 @@ def patch_quiz(
     title = body.title if body.title is not None else quiz.title
     locale = body.locale if body.locale is not None else str(document.get("locale") or "en")
     settings = body.settings if body.settings is not None else settings_from_document(document)
-    items = (
-        body.items
-        if body.items is not None
-        else teacher_items_from_document(document)
-    )
+    items = body.items if body.items is not None else teacher_items_from_document(document)
     group_id = quiz.group_id
     if "group_id" in body.model_fields_set:
         group_id = str(body.group_id) if body.group_id else None
@@ -253,9 +253,7 @@ def patch_quiz(
     return _teacher_dto(db, quiz)
 
 
-def publish_quiz(
-    db: Session, actor: AuthContext, course_id: str, quiz_id: str
-) -> TeacherQuizDTO:
+def publish_quiz(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:
     _require_teacher(db, actor, course_id)
     quiz = _get_quiz(db, course_id, quiz_id)
     if quiz.status == "published":
@@ -288,9 +286,7 @@ def publish_quiz(
     return _teacher_dto(db, quiz)
 
 
-def unpublish_quiz(
-    db: Session, actor: AuthContext, course_id: str, quiz_id: str
-) -> TeacherQuizDTO:
+def unpublish_quiz(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:
     _require_teacher(db, actor, course_id)
     quiz = _get_quiz(db, course_id, quiz_id)
     if quiz.status != "published":
@@ -300,6 +296,47 @@ def unpublish_quiz(
     quiz.document_json = dumps_document(document)
     quiz.status = "draft"
     quiz.published_at = None
+    # A draft can never be open for taking.
+    quiz.taking_open = False
+    quiz.updated_at = _now()
+    db.commit()
+    db.refresh(quiz)
+    return _teacher_dto(db, quiz)
+
+
+def start_taking(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:
+    """Open the published paper for taking; first open starts a new epoch."""
+
+    _require_teacher(db, actor, course_id)
+    quiz = _get_quiz(db, course_id, quiz_id)
+    if quiz.status != "published":
+        raise conflict("quiz_not_published", "The quiz is not published.")
+    if quiz.taking_open:
+        raise conflict(
+            "quiz_taking_already_open",
+            "The quiz is already open for taking.",
+        )
+    quiz.taking_epoch = int(quiz.taking_epoch) + 1
+    quiz.taking_open = True
+    quiz.updated_at = _now()
+    db.commit()
+    db.refresh(quiz)
+    return _teacher_dto(db, quiz)
+
+
+def pause_taking(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:
+    """Close taking without touching the epoch; re-opening keeps the epoch."""
+
+    _require_teacher(db, actor, course_id)
+    quiz = _get_quiz(db, course_id, quiz_id)
+    if quiz.status != "published":
+        raise conflict("quiz_not_published", "The quiz is not published.")
+    if not quiz.taking_open:
+        raise conflict(
+            "quiz_taking_already_closed",
+            "The quiz is already closed for taking.",
+        )
+    quiz.taking_open = False
     quiz.updated_at = _now()
     db.commit()
     db.refresh(quiz)
@@ -319,10 +356,17 @@ def submit_attempt(
     quiz = _get_quiz(db, course_id, quiz_id)
     if quiz.status != "published":
         raise not_found()
+    if not quiz.taking_open:
+        raise conflict(
+            "quiz_taking_closed",
+            "The quiz is not open for taking right now.",
+        )
+    epoch = int(quiz.taking_epoch)
     existing = db.scalar(
         select(ClassroomQuizAttempt).where(
             ClassroomQuizAttempt.quiz_id == quiz.id,
             ClassroomQuizAttempt.actor_user_id == str(actor.user.id),
+            ClassroomQuizAttempt.taking_epoch == epoch,
         )
     )
     if existing is not None:
@@ -338,6 +382,7 @@ def submit_attempt(
         course_id=course_id,
         actor_user_id=str(actor.user.id),
         content_revision=quiz.content_revision,
+        taking_epoch=epoch,
         document_snapshot_json=quiz.document_json,
         answers_json=json.dumps(normalized, ensure_ascii=False, separators=(",", ":")),
         score_objective=score,
@@ -356,6 +401,7 @@ def submit_attempt(
         course_id=UUID(attempt.course_id),
         actor_user_id=UUID(attempt.actor_user_id),
         content_revision=attempt.content_revision,
+        taking_epoch=attempt.taking_epoch,
         status="submitted",
         grading_status=attempt.grading_status,  # type: ignore[arg-type]
         score_objective=attempt.score_objective,
@@ -373,24 +419,26 @@ def _display_name(db: Session, user_id: str) -> str:
 
 
 def list_my_record_attempts(
-    db: Session, actor: AuthContext, course_id: str
+    db: Session, actor: AuthContext, course_id: str, quiz_id: str | None = None
 ) -> list[RecordAttemptDTO]:
-    """Student Record: quiz attempts + legacy chat attempts, newest first."""
+    """Student Record: quiz attempts + legacy chat attempts, newest first.
+
+    With ``quiz_id`` only that quiz's attempts are returned (chat excluded).
+    """
 
     from app.modules.learning.reports import list_my_assessment_attempts
 
     role = _require_member(db, actor, course_id)
     rows: list[RecordAttemptDTO] = []
 
-    quiz_attempts = db.scalars(
-        select(ClassroomQuizAttempt)
-        .where(
-            ClassroomQuizAttempt.course_id == course_id,
-            ClassroomQuizAttempt.actor_user_id == str(actor.user.id),
-            ClassroomQuizAttempt.teacher_hidden_at.is_(None),
-        )
-        .order_by(ClassroomQuizAttempt.submitted_at.desc())
-    ).all()
+    quiz_query = select(ClassroomQuizAttempt).where(
+        ClassroomQuizAttempt.course_id == course_id,
+        ClassroomQuizAttempt.actor_user_id == str(actor.user.id),
+        ClassroomQuizAttempt.teacher_hidden_at.is_(None),
+    )
+    if quiz_id is not None:
+        quiz_query = quiz_query.where(ClassroomQuizAttempt.quiz_id == quiz_id)
+    quiz_attempts = db.scalars(quiz_query.order_by(ClassroomQuizAttempt.submitted_at.desc())).all()
     for attempt in quiz_attempts:
         quiz = db.get(ClassroomQuiz, attempt.quiz_id)
         title = quiz.title if quiz is not None else "Quiz"
@@ -414,7 +462,9 @@ def list_my_record_attempts(
         )
 
     # Legacy chat attempts stay readable.
-    if role != "teacher":
+    if quiz_id is not None:
+        chat_rows = []
+    elif role != "teacher":
         chat_rows = list_my_assessment_attempts(db, actor, course_id=course_id)
     else:
         chat_rows = []
@@ -448,23 +498,25 @@ def list_my_record_attempts(
 
 
 def list_course_record_attempts(
-    db: Session, actor: AuthContext, course_id: str
+    db: Session, actor: AuthContext, course_id: str, quiz_id: str | None = None
 ) -> list[RecordAttemptDTO]:
-    """Teacher Record aggregate across quiz + chat sources."""
+    """Teacher Record aggregate across quiz + chat sources.
+
+    With ``quiz_id`` only that quiz's attempts are returned (chat excluded).
+    """
 
     from app.modules.learning.reports import list_course_assessment_attempts
 
     _require_teacher(db, actor, course_id)
     rows: list[RecordAttemptDTO] = []
 
-    quiz_attempts = db.scalars(
-        select(ClassroomQuizAttempt)
-        .where(
-            ClassroomQuizAttempt.course_id == course_id,
-            ClassroomQuizAttempt.teacher_hidden_at.is_(None),
-        )
-        .order_by(ClassroomQuizAttempt.submitted_at.desc())
-    ).all()
+    quiz_query = select(ClassroomQuizAttempt).where(
+        ClassroomQuizAttempt.course_id == course_id,
+        ClassroomQuizAttempt.teacher_hidden_at.is_(None),
+    )
+    if quiz_id is not None:
+        quiz_query = quiz_query.where(ClassroomQuizAttempt.quiz_id == quiz_id)
+    quiz_attempts = db.scalars(quiz_query.order_by(ClassroomQuizAttempt.submitted_at.desc())).all()
     for attempt in quiz_attempts:
         quiz = db.get(ClassroomQuiz, attempt.quiz_id)
         title = quiz.title if quiz is not None else "Quiz"
@@ -487,7 +539,11 @@ def list_course_record_attempts(
             )
         )
 
-    for chat in list_course_assessment_attempts(db, actor, course_id=course_id):
+    if quiz_id is not None:
+        chat_source: list[dict[str, Any]] = []
+    else:
+        chat_source = list(list_course_assessment_attempts(db, actor, course_id=course_id))
+    for chat in chat_source:
         rows.append(
             RecordAttemptDTO(
                 source="chat",
