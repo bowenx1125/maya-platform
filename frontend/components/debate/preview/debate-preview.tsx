@@ -239,7 +239,7 @@ export function DebatePreview({
             >
               <span data-testid="preview-audio-failed">
                 {speechFailed
-                  ? `Speech preparation stopped for ${audioFailed.length} turn(s) (${firstFailed.safe_error_code ?? "turn_generation_failed"}). Retry the next unprepared speech before continuing.`
+                  ? `Speech preparation stopped for ${audioFailed.length} turn(s) (${firstFailed.safe_error_code ?? "turn_generation_failed"}). Retry prepares every remaining failed turn in order.`
                   : tm("debatePreviewAudioFailed", {
                       count: audioFailed.length,
                       code:

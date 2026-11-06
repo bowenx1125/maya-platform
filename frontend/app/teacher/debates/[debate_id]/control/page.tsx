@@ -16,6 +16,7 @@ import {
   type DebateDetail,
 } from "../../../../../lib/api";
 import { localizeError } from "../../../../../lib/i18n";
+import { retryPreviewTurnsInOrder } from "../../../../../lib/retry-preview-turns";
 
 /** The 3D Immerse stage that classic-format (legacy_v1) debates now open in. */
 function immerseControlHref(debateId: string): string {
@@ -36,6 +37,7 @@ export default function TeacherDebateControlPage() {
   >(null);
   const snapshotRequest = useRef(0);
   const loadRequest = useRef(0);
+  const retrySession = useRef(0);
 
   const readSnapshot = useCallback(async () => {
     if (!debateId) throw new Error("Debate id is missing.");
@@ -78,6 +80,12 @@ export default function TeacherDebateControlPage() {
       window.clearTimeout(timer);
     };
   }, [load]);
+
+  useEffect(() => {
+    return () => {
+      retrySession.current += 1;
+    };
+  }, []);
 
   const showingPreview = detail?.turn_protocol === "segments_v2";
   useEffect(() => {
@@ -126,29 +134,28 @@ export default function TeacherDebateControlPage() {
       if (!detail || !debateId || retryingPreviewTurnId || turnIds.length === 0)
         return;
       setError(null);
-      let controlVersion = detail.playback.control_version;
+      const session = ++retrySession.current;
       try {
-        // Banner Retry walks failed turns in turn_index order; per-card Retry
-        // still passes a single id. Stop on the first hard failure.
-        for (const turnId of turnIds) {
-          setRetryingPreviewTurnId(turnId);
-          await api.retryDebatePreparation(
-            debateId,
-            {
-              turn_id: turnId,
-              expected_control_version: controlVersion,
-            },
-            { idempotency: createIdempotencyHandle() },
-          );
-          const next = await refreshSnapshot();
-          controlVersion = next.playback.control_version;
-          // Preparation is asynchronous and the server only permits the next
-          // unprepared speech. Do not immediately submit its blocked successors.
-          const retried = next.preview_turns?.find(
-            (turn) => turn.id === turnId,
-          );
-          if (retried && retried.generation_status !== "final_ready") break;
-        }
+        // One teacher click walks every remaining failed/timeout turn in
+        // turn_index order and waits until that speech is ready before the
+        // next retry. The server only permits the next unprepared speech.
+        await retryPreviewTurnsInOrder({
+          turnIds,
+          controlVersion: detail.playback.control_version,
+          isCancelled: () => retrySession.current !== session,
+          onTurnStart: setRetryingPreviewTurnId,
+          retry: async (turnId, controlVersion) => {
+            await api.retryDebatePreparation(
+              debateId,
+              {
+                turn_id: turnId,
+                expected_control_version: controlVersion,
+              },
+              { idempotency: createIdempotencyHandle() },
+            );
+          },
+          refresh: refreshSnapshot,
+        });
       } catch (cause) {
         setError(cause);
       } finally {
