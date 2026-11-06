@@ -8,7 +8,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-
 QuizStatus = Literal["draft", "published"]
 ItemType = Literal["single", "multiple", "short_text", "long_text"]
 GradingStatus = Literal["complete", "pending", "mixed"]
@@ -118,6 +117,8 @@ class QuizSummaryDTO(BaseModel):
     schema_version: int
     content_revision: int
     attempt_count: int = 0
+    taking_open: bool = False
+    taking_epoch: int = 0
     created_by_user_id: UUID
     published_at: datetime | None = None
     created_at: datetime
@@ -138,6 +139,8 @@ class StudentQuizDTO(BaseModel):
     status: Literal["published"]
     schema_version: int
     content_revision: int
+    taking_open: bool = False
+    taking_epoch: int = 0
     settings: QuizSettings
     locale: str = "en"
     items: list[QuizItemStudent] = Field(default_factory=list)
@@ -170,6 +173,7 @@ class QuizAttemptDTO(BaseModel):
     course_id: UUID
     actor_user_id: UUID
     content_revision: int
+    taking_epoch: int = 0
     status: Literal["submitted"]
     grading_status: GradingStatus
     score_objective: float
