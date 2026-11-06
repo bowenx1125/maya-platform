@@ -92,12 +92,13 @@ describe("retryPreviewTurnsInOrder", () => {
       delay: async () => undefined,
     });
 
-    expect(retry.mock.calls.map((call) => call[0])).toEqual([
+    const calls = retry.mock.calls as Array<[string, number]>;
+    expect(calls.map((call) => call[0])).toEqual([
       "turn-4",
       "turn-5",
       "turn-6",
     ]);
-    expect(retry.mock.calls.map((call) => call[1])).toEqual([1, 2, 3]);
+    expect(calls.map((call) => call[1])).toEqual([1, 2, 3]);
     expect(result).toEqual({ controlVersion: 4 });
   });
 
