@@ -61,6 +61,25 @@ REAL_CORE_DEMO_QUERY_MAX_REQUESTS = 2
 SQL_QUERY_PRICE_CNY_PER_MILLION = Decimal("0.5")
 SQL_QUERY_PROVIDER_OPERATION = QUERY_PROVIDER_OPERATION
 
+# Local plan-validation failures recorded as ``failed``: transport never ran,
+# so attempt N+1 may use the single not_sent-style retry slot.
+PRESEND_EMBEDDING_PLAN_CODES = frozenset(
+    {
+        "embedding_batch_tokens_exceeded",
+        "embedding_batch_items_exceeded",
+        "embedding_plan_empty",
+    }
+)
+
+
+def _presend_plan_rejected(operation: ProviderOperationV1) -> bool:
+    return (
+        operation.state == "failed"
+        and str(getattr(operation, "safe_error_code", "") or "")
+        in PRESEND_EMBEDDING_PLAN_CODES
+    )
+
+
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _SAFE_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,255}$")
 
@@ -503,7 +522,9 @@ class SqlAlchemyQueryControlAdapter(
                 continue
             if operation.attempt_no > self.request.attempt_no:
                 raise SqlQueryBudgetError("query attempt is older than an existing attempt")
-            if operation.state != "not_sent":
+            # A locally rejected embedding plan never reached the supplier.
+            # Treat it like ``not_sent`` so Preview can send a clipped retry.
+            if operation.state != "not_sent" and not _presend_plan_rejected(operation):
                 raise SqlQueryBudgetError(
                     "query retry is forbidden after provider acceptance is possible",
                     code="embedding_query_retry_forbidden",

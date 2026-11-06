@@ -100,6 +100,7 @@ from app.modules.knowledge.providers.query_manifest import (
 )
 from app.modules.knowledge.providers.snapshot_build import REAL_EMBEDDING_PROVIDER
 from app.modules.knowledge.providers.sql_query import (
+    PRESEND_EMBEDDING_PLAN_CODES as _PRESEND_EMBEDDING_PLAN_CODES,
     SqlAlchemyQueryControlAdapter,
     SqlQueryError,
     controlled_query_provider,
@@ -143,11 +144,6 @@ from .llm_publication import SqlLLMPublication
 from .protocols import PreparedGenerationFence, PreparedSource, PreparedTurn
 from .schemas import RetrievalSourceDTO
 
-# Local EmbeddingPlanError codes raised by _validate_batch_before_send before
-# any transport call; such an attempt was never sent to the supplier.
-_PRESEND_EMBEDDING_PLAN_CODES = frozenset(
-    {"embedding_batch_tokens_exceeded", "embedding_batch_items_exceeded", "embedding_plan_empty"}
-)
 # Per-query cap (supplier item limit is 8192; batch limit 30000).
 _MAX_SUBQUERY_TOKENS = 6000
 

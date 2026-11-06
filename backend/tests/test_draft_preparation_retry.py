@@ -153,6 +153,7 @@ def draft_retry_with_prefix(draft_retry_db):
     ("prefix_kind", "provider_code", "rejection"),
     [
         ("text", "provider_not_sent", None),
+        ("text", "provider_preflight_blocked", None),
         ("text", "provider_confirmation_required", None),
         ("audio", "provider_not_sent", None),
         ("audio", "provider_confirmation_required", None),
