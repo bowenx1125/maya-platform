@@ -8,7 +8,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-
 QuizStatus = Literal["draft", "published"]
 ItemType = Literal["single", "multiple", "short_text", "long_text"]
 GradingStatus = Literal["complete", "pending", "mixed"]

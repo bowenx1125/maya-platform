@@ -4,17 +4,15 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import Any
 from uuid import UUID, uuid4
-
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 
 from app.core.errors import conflict, forbidden, not_found, unprocessable
 from app.core.models import Group, User
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import course_member_role
 from app.modules.workspace.access import course_member
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from .document import (
     assert_no_answer_keys,
