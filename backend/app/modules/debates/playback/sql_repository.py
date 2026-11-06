@@ -3543,6 +3543,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             "provider_confirmation_required",
             "provider_confirmation_unavailable",
             "provider_not_sent",
+            "provider_preflight_blocked",
             "turn_generation_failed",
             _PREPARATION_TIMEOUT_CODE,
         } | tts_preview_retry_codes

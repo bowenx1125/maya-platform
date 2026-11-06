@@ -583,6 +583,7 @@ class PlaybackControlMixin(PlaybackCore):
                         "provider_confirmation_required",
                         "provider_confirmation_unavailable",
                         "provider_not_sent",
+                        "provider_preflight_blocked",
                         "preparation_timeout",
                     }
                     and code not in _DRAFT_TTS_RETRY_CODES
