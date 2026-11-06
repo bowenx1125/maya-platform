@@ -74,11 +74,19 @@ export interface PatchQuizRequest {
 
 interface ErrorBody {
   detail?:
-    | { code?: string; message?: string; details?: Record<string, unknown>; request_id?: string }
+    | {
+        code?: string;
+        message?: string;
+        details?: Record<string, unknown>;
+        request_id?: string;
+      }
     | string;
 }
 
-function toPlatformApiError(status: number, bodyText: string): PlatformApiError {
+function toPlatformApiError(
+  status: number,
+  bodyText: string,
+): PlatformApiError {
   let body: ErrorBody | undefined;
   try {
     body = bodyText ? (JSON.parse(bodyText) as ErrorBody) : undefined;
@@ -132,7 +140,10 @@ export class QuizApi {
     );
   }
 
-  createQuiz(courseId: string, payload: CreateQuizRequest): Promise<TeacherQuizDTO> {
+  createQuiz(
+    courseId: string,
+    payload: CreateQuizRequest,
+  ): Promise<TeacherQuizDTO> {
     return this.request<TeacherQuizDTO>(
       "POST",
       `/api/v1/courses/${courseId}/quizzes`,

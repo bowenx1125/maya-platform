@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 import { useSearchParams } from "next/navigation";
 
 import { QuizApi } from "@/lib/api/quiz";
@@ -66,9 +72,7 @@ export default function QuizRecords() {
           className="relative"
         />
       </PageBanner>
-      {error ? (
-        <ErrorNotice error={error} onRetry={() => void load()} />
-      ) : null}
+      {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       {rows === null && !error ? <LoadingCard /> : null}
       {rows && rows.length === 0 && !error ? (
         <EmptyCard title={t("quizNoRecords")} />
@@ -108,12 +112,15 @@ export default function QuizRecords() {
                     <span className="text-xs font-medium text-[#555]">
                       {row.student_name}
                       {row.submitted_at
-                        ? ` · ${new Date(row.submitted_at).toLocaleString("en", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}`
+                        ? ` · ${new Date(row.submitted_at).toLocaleString(
+                            "en",
+                            {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            },
+                          )}`
                         : ""}
                     </span>
                   </span>
@@ -181,8 +188,12 @@ function RecordDetail({
     <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-[10px] border-2 border-[#EBE5DF] bg-[#FFFDF8] px-4 py-3 font-body text-xs">
       {rows.map((row) => (
         <div key={row.label} className="contents">
-          <dt className="font-extrabold text-[#625E59] uppercase">{row.label}</dt>
-          <dd className="m-0 break-words font-semibold text-ink">{row.value}</dd>
+          <dt className="font-extrabold text-[#625E59] uppercase">
+            {row.label}
+          </dt>
+          <dd className="m-0 break-words font-semibold text-ink">
+            {row.value}
+          </dd>
         </div>
       ))}
     </dl>

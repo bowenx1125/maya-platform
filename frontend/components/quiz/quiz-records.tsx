@@ -76,7 +76,13 @@ export function QuizRecords({
       {rows.map((row, index) => {
         const expanded = openId === row.attempt_id;
         return (
-          <li key={row.attempt_id} className={cn("relative flex flex-wrap items-center gap-3.5 rounded-[14px] border-[3px] border-border bg-white px-[18px] py-4 shadow-[6px_6px_0_#67E8F9]", PRESS_MOTION)}>
+          <li
+            key={row.attempt_id}
+            className={cn(
+              "relative flex flex-wrap items-center gap-3.5 rounded-[14px] border-[3px] border-border bg-white px-[18px] py-4 shadow-[6px_6px_0_#67E8F9]",
+              PRESS_MOTION,
+            )}
+          >
             <span
               aria-hidden="true"
               className="w-7 shrink-0 font-mono text-sm font-extrabold text-[#9CA3AF]"
@@ -169,8 +175,12 @@ function RecordDetail({
     <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-[10px] border-2 border-[#EBE5DF] bg-[#FFFDF8] px-4 py-3 font-body text-xs">
       {rows.map((row) => (
         <div key={row.label} className="contents">
-          <dt className="font-extrabold text-[#625E59] uppercase">{row.label}</dt>
-          <dd className="m-0 break-words font-semibold text-ink">{row.value}</dd>
+          <dt className="font-extrabold text-[#625E59] uppercase">
+            {row.label}
+          </dt>
+          <dd className="m-0 break-words font-semibold text-ink">
+            {row.value}
+          </dd>
         </div>
       ))}
     </dl>

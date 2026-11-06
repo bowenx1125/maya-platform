@@ -10,7 +10,9 @@ function choice(id: string, label: string) {
   return { id, label };
 }
 
-function makeItem(partial: Partial<QuizItemTeacher> & Pick<QuizItemTeacher, "id" | "type">): QuizItemTeacher {
+function makeItem(
+  partial: Partial<QuizItemTeacher> & Pick<QuizItemTeacher, "id" | "type">,
+): QuizItemTeacher {
   return { prompt: "What?", choices: [], answer: null, ...partial };
 }
 
@@ -47,7 +49,9 @@ describe("quizDraftProblems", () => {
 
   it("flags an item with an empty prompt", () => {
     const bad = makeItem({ id: "p1", type: "short_text", prompt: "   " });
-    expect(quizDraftProblems("Quiz", [validSingle, bad]).length).toBeGreaterThan(0);
+    expect(
+      quizDraftProblems("Quiz", [validSingle, bad]).length,
+    ).toBeGreaterThan(0);
   });
 
   it("flags a choice item with zero choices", () => {
@@ -58,11 +62,15 @@ describe("quizDraftProblems", () => {
       choices: [],
       answer: { choice_ids: [] },
     });
-    expect(quizDraftProblems("Quiz", [validText, bad]).length).toBeGreaterThan(0);
+    expect(quizDraftProblems("Quiz", [validText, bad]).length).toBeGreaterThan(
+      0,
+    );
   });
 
   it("accepts a fully valid draft", () => {
-    expect(quizDraftProblems("Quiz", [validSingle, validMultiple, validText])).toEqual([]);
+    expect(
+      quizDraftProblems("Quiz", [validSingle, validMultiple, validText]),
+    ).toEqual([]);
   });
 });
 
@@ -84,7 +92,9 @@ describe("canPublish", () => {
   });
 
   it("is true when single/multiple items have answers and text items are fine", () => {
-    expect(canPublish("Quiz", [validSingle, validMultiple, validText])).toBe(true);
+    expect(canPublish("Quiz", [validSingle, validMultiple, validText])).toBe(
+      true,
+    );
   });
 });
 

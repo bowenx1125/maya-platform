@@ -308,7 +308,8 @@ export function ReportPanel({
           The report is still generating. Reopen this page later.
         </p>
       ) : null}
-      {report?.generation_status === "failed" || insight?.status === "failed" ? (
+      {report?.generation_status === "failed" ||
+      insight?.status === "failed" ? (
         <DismissibleAlert
           className="mt-2 rounded-[0.7rem] bg-[#fff8ec] px-[0.85rem] py-[0.7rem] leading-[1.55] text-[#8b6532]"
           role="status"
@@ -318,10 +319,7 @@ export function ReportPanel({
       ) : null}
 
       {insight?.items.length ? (
-        <ul
-          className="m-0 grid list-none gap-2 p-0"
-          aria-label={copy.insight}
-        >
+        <ul className="m-0 grid list-none gap-2 p-0" aria-label={copy.insight}>
           {insight.items.map((item, index) => (
             <li
               key={`${item.category}-${item.summary}-${index}`}
@@ -376,7 +374,9 @@ export function ReportPanel({
                 key={revision.id}
                 className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-dashed border-[#11111144] py-[0.55rem] last:border-b-0 max-[680px]:grid-cols-[1fr_auto]"
               >
-                <span className="font-bold">{revisionTitle(revision.revision_no)}</span>
+                <span className="font-bold">
+                  {revisionTitle(revision.revision_no)}
+                </span>
                 <span className="text-[0.8rem] text-[#57534e] max-[680px]:col-start-1">
                   {revision.status !== "ready"
                     ? reportStatusLabel(revision.status)
@@ -406,6 +406,5 @@ export function ReportPanel({
     </section>
   );
 }
-
 
 export default ReportPanel;

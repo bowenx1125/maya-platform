@@ -54,13 +54,7 @@ export function QuizAvailable({
   }, [load]);
 
   if (error) {
-    return (
-      <ErrorNotice
-        inline
-        error={error}
-        onRetry={() => void load(true)}
-      />
-    );
+    return <ErrorNotice inline error={error} onRetry={() => void load(true)} />;
   }
   if (quizzes === null) return <LoadingCard />;
   if (!quizzes.length) {

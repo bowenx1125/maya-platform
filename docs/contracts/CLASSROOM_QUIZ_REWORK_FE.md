@@ -12,34 +12,34 @@ All paths under `/api/v1`. Mutations need session + `X-CSRF-Token`.
 
 ## DTO 字段（列表/详情均有）
 
-| Field | Type | Meaning for FE |
-|---|---|---|
-| `status` | `"draft" \| "published"` | 卷面发布态（Done 写 published） |
-| `taking_open` | `bool` | 是否开放学生作答 |
-| `taking_epoch` | `int` | 当前开放轮次；每次从 closed → open +1 |
-| attempt.`taking_epoch` | `int` | 该次提交所属轮次 |
+| Field                  | Type                     | Meaning for FE                        |
+| ---------------------- | ------------------------ | ------------------------------------- |
+| `status`               | `"draft" \| "published"` | 卷面发布态（Done 写 published）       |
+| `taking_open`          | `bool`                   | 是否开放学生作答                      |
+| `taking_epoch`         | `int`                    | 当前开放轮次；每次从 closed → open +1 |
+| attempt.`taking_epoch` | `int`                    | 该次提交所属轮次                      |
 
 Student list/detail：仅 `status=published` 可见；**能否 Start 以 `taking_open===true` 为准**（不要再用「published 即可答」）。
 
 ## 老师控件 → API
 
-| UI | Method Path | Success | Conflict |
-|---|---|---|---|
-| Done（原 Save） | `POST .../quizzes/{id}/publish` | 200 TeacherQuizDTO；`taking_open` 仍 `false` | 已发布可幂等；连点防重是 FE 锁（W5） |
-| 开始评测 | `POST .../quizzes/{id}/start-taking` | 200；`taking_open=true`，`taking_epoch+=1`（若先前 closed） | **409** `quiz_taking_already_open` |
-| 暂停评测 | `POST .../quizzes/{id}/pause-taking` | 200；`taking_open=false`（epoch 不变） | **409** `quiz_taking_already_closed` |
-| Unpublish（若保留） | `POST .../unpublish` | 强制 `taking_open=false` | published immutable 规则不变 |
+| UI                  | Method Path                          | Success                                                     | Conflict                             |
+| ------------------- | ------------------------------------ | ----------------------------------------------------------- | ------------------------------------ |
+| Done（原 Save）     | `POST .../quizzes/{id}/publish`      | 200 TeacherQuizDTO；`taking_open` 仍 `false`                | 已发布可幂等；连点防重是 FE 锁（W5） |
+| 开始评测            | `POST .../quizzes/{id}/start-taking` | 200；`taking_open=true`，`taking_epoch+=1`（若先前 closed） | **409** `quiz_taking_already_open`   |
+| 暂停评测            | `POST .../quizzes/{id}/pause-taking` | 200；`taking_open=false`（epoch 不变）                      | **409** `quiz_taking_already_closed` |
+| Unpublish（若保留） | `POST .../unpublish`                 | 强制 `taking_open=false`                                    | published immutable 规则不变         |
 
 仅 `status=published` 时可 start/pause；草稿隐藏或禁用开始/暂停。
 
 ## 学生闸
 
-| 条件 | FE | 提交 |
-|---|---|---|
-| published && `taking_open` | Available → Start → Questionnaire | `POST .../attempts` → 201 |
-| published && !`taking_open` | 不可 Start（或显式「评测未开放/已暂停」） | 若绕过 → **409** `quiz_taking_closed` |
-| 同 epoch 已交 | Records 可见；不可再交本轮 | **409** `quiz_attempt_exists` |
-| 老师 pause→start 新 epoch | 可再次 Start | 新 attempt 带新 `taking_epoch`；旧 attempt 保留 |
+| 条件                        | FE                                        | 提交                                            |
+| --------------------------- | ----------------------------------------- | ----------------------------------------------- |
+| published && `taking_open`  | Available → Start → Questionnaire         | `POST .../attempts` → 201                       |
+| published && !`taking_open` | 不可 Start（或显式「评测未开放/已暂停」） | 若绕过 → **409** `quiz_taking_closed`           |
+| 同 epoch 已交               | Records 可见；不可再交本轮                | **409** `quiz_attempt_exists`                   |
+| 老师 pause→start 新 epoch   | 可再次 Start                              | 新 attempt 带新 `taking_epoch`；旧 attempt 保留 |
 
 ## Records（P1）
 
@@ -57,13 +57,13 @@ DTO 含 `source`、`score_objective`、`grading_status`、`taking_epoch` 等；*
 
 ## 错误码速查
 
-| Code | HTTP | FE hint |
-|---|---|---|
-| `quiz_taking_already_open` | 409 | 开始钮：已开放 |
-| `quiz_taking_already_closed` | 409 | 暂停钮：已暂停 |
-| `quiz_taking_closed` | 409 | 学生提交：评测未开放 |
-| `quiz_attempt_exists` | 409 | 本轮已交；等老师重开 |
-| `quiz_published_immutable` | 409 | 须 Unpublish 再改题 |
+| Code                         | HTTP | FE hint              |
+| ---------------------------- | ---- | -------------------- |
+| `quiz_taking_already_open`   | 409  | 开始钮：已开放       |
+| `quiz_taking_already_closed` | 409  | 暂停钮：已暂停       |
+| `quiz_taking_closed`         | 409  | 学生提交：评测未开放 |
+| `quiz_attempt_exists`        | 409  | 本轮已交；等老师重开 |
+| `quiz_published_immutable`   | 409  | 须 Unpublish 再改题  |
 
 ## 非目标（本轮 FE 勿做）
 

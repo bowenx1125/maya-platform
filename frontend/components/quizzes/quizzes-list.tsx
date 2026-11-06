@@ -137,9 +137,7 @@ export function QuizzesList() {
                         </span>
                         {quiz.status === "published" ? (
                           <span>
-                            {takingOpen
-                              ? t("quizAccepting")
-                              : t("quizPaused")}
+                            {takingOpen ? t("quizAccepting") : t("quizPaused")}
                           </span>
                         ) : null}
                         <span>

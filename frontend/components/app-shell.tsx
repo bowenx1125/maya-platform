@@ -108,9 +108,7 @@ function subscribeCollapsed(listener: () => void) {
 export const STUDENT_CLASSROOM_KEYS = ["live", "quiz"] as const;
 
 /** Pure helper for tests: which rows the Classroom group shows for a role. */
-export function classroomGroupKeys(
-  teacherSurface: boolean,
-): string[] {
+export function classroomGroupKeys(teacherSurface: boolean): string[] {
   return teacherSurface
     ? ["live", "quiz", "classroom", "accounts"]
     : [...STUDENT_CLASSROOM_KEYS, "classroom", "accounts"];

@@ -141,10 +141,7 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
   const addChoice = (index: number) => {
     const item = items[index];
     patchItem(index, {
-      choices: [
-        ...item.choices,
-        { id: crypto.randomUUID(), label: "" },
-      ],
+      choices: [...item.choices, { id: crypto.randomUUID(), label: "" }],
     });
   };
 
@@ -383,7 +380,11 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
                         checked={checked}
                         disabled={disabled}
                         onChange={() =>
-                          toggleChoiceId(index, choice.id, item.type === "single")
+                          toggleChoiceId(
+                            index,
+                            choice.id,
+                            item.type === "single",
+                          )
                         }
                         aria-label="Mark as correct answer"
                       />

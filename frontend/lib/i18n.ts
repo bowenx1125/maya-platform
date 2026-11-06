@@ -1091,7 +1091,8 @@ const enMessages = {
   quizTakingAlreadyOpen: "Taking is already open.",
   quizTakingAlreadyClosed: "Taking is already paused.",
   quizTakingClosed: "This quiz is not open for taking yet.",
-  quizAttemptExists: "You already submitted this round. Wait for the teacher to reopen taking.",
+  quizAttemptExists:
+    "You already submitted this round. Wait for the teacher to reopen taking.",
 } as const;
 
 export type MessageKey = keyof typeof enMessages;

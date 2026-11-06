@@ -65,7 +65,9 @@ describe("EmptyCard title usage (W1 smoke)", () => {
       "utf8",
     );
     expect(src).toContain('title={t("noQuizzes")}');
-    expect(src).not.toMatch(/<EmptyCard>\{\s*t\("noQuizzes"\)\s*\}<\/EmptyCard>/);
+    expect(src).not.toMatch(
+      /<EmptyCard>\{\s*t\("noQuizzes"\)\s*\}<\/EmptyCard>/,
+    );
   });
 });
 

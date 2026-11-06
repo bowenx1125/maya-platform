@@ -83,8 +83,7 @@ export const BETA_TOPIC =
   "absolute z-[4] top-[max(20px,env(safe-area-inset-top))] left-[max(22px,env(safe-area-inset-left))] w-fit max-w-[min(560px,58vw)] m-0 py-2 px-[14px] border-[2.5px] border-solid border-[#111] rounded-[14px] bg-white shadow-[4px_5px_0_#111] text-[#111] [font-family:var(--font-bricolage,var(--font-display,var(--font-ui,system-ui)))] [font-size:clamp(0.95rem,1.4vw,1.0625rem)] font-extrabold tracking-[-0.01em] leading-[1.3] [overflow-wrap:anywhere] max-[600px]:left-[max(10px,env(safe-area-inset-left))] max-[600px]:right-[max(10px,env(safe-area-inset-right))] max-[600px]:top-[max(12px,env(safe-area-inset-top))] max-[600px]:max-w-none max-[600px]:py-2 max-[600px]:px-3 max-[600px]:[font-size:14px]";
 
 /** DESIGN-RULES AlertDialog: #111 40% scrim, no blur. */
-export const BETA_END_PROMPT_SCRIM =
-  "absolute inset-0 z-20 bg-[#111]/40";
+export const BETA_END_PROMPT_SCRIM = "absolute inset-0 z-20 bg-[#111]/40";
 /** White card, 3px #111 border, hard shadow (neobrutalism / DESIGN-RULES §3). */
 export const BETA_END_PROMPT =
   "absolute z-[21] top-1/2 left-1/2 grid gap-4 w-[min(420px,calc(100%_-_48px))] p-5 border-[3px] border-solid border-[#111] rounded-[10px] bg-white shadow-[6px_6px_0_#111] [transform:translate(-50%,-50%)] [&_p]:m-0 [&_p]:text-[16px] [&_p]:leading-[1.5] [&_p]:font-medium [&_p]:text-[#111]";
