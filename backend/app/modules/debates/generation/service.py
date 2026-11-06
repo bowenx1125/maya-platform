@@ -42,6 +42,7 @@ from .retrieval import (
     SnapshotRetriever,
     TurnSubquery,
     build_turn_subqueries,
+    fit_subqueries_to_embedding_batch,
 )
 from .runtime import LLMTurnRuntime
 from .segments import (
@@ -194,7 +195,7 @@ class TurnGenerationService:
                 raise SegmentProtocolError(
                     "segments_v2 requires a compiled Persona", code="persona_missing"
                 )
-            subqueries = build_turn_subqueries(context)
+            subqueries = fit_subqueries_to_embedding_batch(build_turn_subqueries(context))
             retrieval: object
             if not subqueries:
                 retrieval = RetrievalResult(context.participant.snapshot_id, (), (), 0, 0)
@@ -530,7 +531,7 @@ class TurnGenerationService:
         active_claim = claim
         first_attempt = GenerationAttempt(attempt=1)
         try:
-            subqueries = build_turn_subqueries(context)
+            subqueries = fit_subqueries_to_embedding_batch(build_turn_subqueries(context))
             if self.mock_retrieval_policy_id is None:
                 retrieval = self.retriever.retrieve(context.participant.snapshot_id, subqueries)
             elif isinstance(self.retriever, SnapshotRetriever):
@@ -1028,7 +1029,7 @@ class TurnGenerationService:
         for attempt in (1, 2):
             attempt_record = GenerationAttempt(attempt=attempt)
             try:
-                subqueries = build_turn_subqueries(context)
+                subqueries = fit_subqueries_to_embedding_batch(build_turn_subqueries(context))
                 if self.mock_retrieval_policy_id is None:
                     retrieval = self.retriever.retrieve(context.participant.snapshot_id, subqueries)
                 elif isinstance(self.retriever, SnapshotRetriever):

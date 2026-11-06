@@ -46,6 +46,10 @@ from app.modules.debates.generation import (
     public_evidence_trace,
 )
 from app.modules.debates.generation.four_round import body_count
+from app.modules.debates.generation.retrieval import (
+    MAX_SUBQUERY_TOKENS as _MAX_SUBQUERY_TOKENS,
+    fit_subqueries_to_embedding_batch as _fit_subqueries_to_embedding_batch,
+)
 from app.modules.debates.generation.mutual_learning_policy import (
     MUTUAL_LEARNING_RULE_SET_ID,
 )
@@ -143,41 +147,6 @@ from app.providers.standing_consent import (
 from .llm_publication import SqlLLMPublication
 from .protocols import PreparedGenerationFence, PreparedSource, PreparedTurn
 from .schemas import RetrievalSourceDTO
-
-# Per-query cap (supplier item limit is 8192; batch limit 30000).
-_MAX_SUBQUERY_TOKENS = 6000
-
-
-def _clip_to_tokens(text: str, limit: int) -> str:
-    if count_tokens(text) <= limit:
-        return text
-    lo, hi = 1, len(text)
-    while lo < hi:
-        mid = (lo + hi + 1) // 2
-        if count_tokens(text[:mid]) <= limit:
-            lo = mid
-        else:
-            hi = mid - 1
-    return text[:lo]
-
-
-def _fit_subqueries_to_embedding_batch(subqueries):  # type: ignore[no-untyped-def]
-    """Clip oversized retrieval queries so one embedding batch always fits.
-
-    Retrieval queries embed the topic + persona/opening text; a long AGENT.md
-    or opening can exceed the supplier batch limit, which fails the turn
-    before it is sent and (being terminal) used to stall Preview forever.
-    """
-    items = tuple(subqueries)
-    if not items:
-        return items
-    limit = min(_MAX_SUBQUERY_TOKENS, 28_000 // len(items))
-    out = []
-    for item in items:
-        clipped = _clip_to_tokens(item.text, limit)
-        out.append(item if clipped == item.text else type(item)(item.query_kind, clipped))
-    return tuple(out)
-
 
 LOGGER = logging.getLogger(__name__)
 

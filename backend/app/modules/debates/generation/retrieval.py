@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol, cast
 
 from app.modules.agents.markdown import AgentMarkdown
+from app.modules.knowledge.providers.tokenizer import count_tokens
 from app.modules.knowledge.mock_lexical import (
     MOCK_LEXICAL_ANCHOR_POLICY_ID,
     MockLexicalAnchorV2,
@@ -63,6 +64,45 @@ class TurnSubquery:
     def query_hash(self) -> str:
         return hashlib.sha256(self.text.strip().encode("utf-8")).hexdigest()
 
+
+
+# Per-query cap (supplier item limit is 8192; batch limit 30000).
+MAX_SUBQUERY_TOKENS = 6000
+
+
+def clip_to_tokens(text: str, limit: int) -> str:
+    """Shorten ``text`` so ``count_tokens`` is at most ``limit``."""
+    if count_tokens(text) <= limit:
+        return text
+    lo, hi = 1, len(text)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if count_tokens(text[:mid]) <= limit:
+            lo = mid
+        else:
+            hi = mid - 1
+    return text[:lo]
+
+
+def fit_subqueries_to_embedding_batch(
+    subqueries: tuple[TurnSubquery, ...] | Sequence[TurnSubquery],
+) -> tuple[TurnSubquery, ...]:
+    """Clip oversized retrieval queries so one embedding batch always fits.
+
+    Retrieval queries embed the topic + persona/opening text; a long AGENT.md
+    or opening can exceed the supplier batch limit. The disclosure plan and
+    later Snapshot search must use the same clipped texts, or the frozen
+    query hashes will not match.
+    """
+    items = tuple(subqueries)
+    if not items:
+        return items
+    limit = min(MAX_SUBQUERY_TOKENS, 28_000 // len(items))
+    out: list[TurnSubquery] = []
+    for item in items:
+        clipped = clip_to_tokens(item.text, limit)
+        out.append(item if clipped == item.text else TurnSubquery(item.query_kind, clipped))
+    return tuple(out)
 
 @dataclass(frozen=True, slots=True)
 class RetrievalResult:
@@ -632,4 +672,7 @@ __all__ = [
     "TurnSubquery",
     "build_segment_subqueries",
     "build_turn_subqueries",
+    "clip_to_tokens",
+    "fit_subqueries_to_embedding_batch",
+    "MAX_SUBQUERY_TOKENS",
 ]
