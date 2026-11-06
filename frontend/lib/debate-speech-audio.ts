@@ -50,7 +50,10 @@ function getCtx(): AudioContext | null {
   try {
     sharedCtx = new Ctor();
   } catch (error) {
-    console.warn("[debate-speech] AudioContext unavailable; 0 dB direct", error);
+    console.warn(
+      "[debate-speech] AudioContext unavailable; 0 dB direct",
+      error,
+    );
     sharedCtx = null;
   }
   return sharedCtx;
@@ -67,7 +70,9 @@ function sourceIsWireable(audio: HTMLAudioElement): boolean {
   } catch {
     return false;
   }
-  return audio.crossOrigin === "anonymous" || audio.crossOrigin === "use-credentials";
+  return (
+    audio.crossOrigin === "anonymous" || audio.crossOrigin === "use-credentials"
+  );
 }
 
 function tryWire(audio: HTMLAudioElement, ctx: AudioContext): void {
