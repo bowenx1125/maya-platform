@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     Float,
@@ -43,6 +44,9 @@ class ClassroomQuiz(Base):
         String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Publish only freezes the paper; taking opens via start-taking epochs.
+    taking_open: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    taking_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -76,6 +80,7 @@ class ClassroomQuizAttempt(Base):
     grading_status: Mapped[str] = mapped_column(String(16), nullable=False, default="complete")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="submitted")
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    taking_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     teacher_hidden_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -92,7 +97,8 @@ class ClassroomQuizAttempt(Base):
         UniqueConstraint(
             "quiz_id",
             "actor_user_id",
-            name="ux_classroom_quiz_attempts_quiz_actor",
+            "taking_epoch",
+            name="ux_classroom_quiz_attempts_quiz_actor_epoch",
         ),
         Index("ix_classroom_quiz_attempts_course_actor", "course_id", "actor_user_id"),
         Index("ix_classroom_quiz_attempts_quiz", "quiz_id"),

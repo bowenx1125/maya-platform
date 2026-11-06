@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy.orm import Session
 
 from app.core.errors import Error
@@ -141,6 +141,48 @@ def unpublish_course_quiz(
 
 
 @router.post(
+    "/courses/{course_id}/quizzes/{quiz_id}/start-taking",
+    response_model=TeacherQuizDTO,
+    operation_id="startCourseQuizTaking",
+    responses={
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": Error},
+    },
+)
+def start_course_quiz_taking(
+    course_id: UUID,
+    quiz_id: UUID,
+    _csrf: CsrfHeader,
+    actor: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> TeacherQuizDTO:
+    return service.start_taking(db, actor, str(course_id), str(quiz_id))
+
+
+@router.post(
+    "/courses/{course_id}/quizzes/{quiz_id}/pause-taking",
+    response_model=TeacherQuizDTO,
+    operation_id="pauseCourseQuizTaking",
+    responses={
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": Error},
+    },
+)
+def pause_course_quiz_taking(
+    course_id: UUID,
+    quiz_id: UUID,
+    _csrf: CsrfHeader,
+    actor: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> TeacherQuizDTO:
+    return service.pause_taking(db, actor, str(course_id), str(quiz_id))
+
+
+@router.post(
     "/courses/{course_id}/quizzes/{quiz_id}/attempts",
     response_model=QuizAttemptDTO,
     status_code=201,
@@ -171,10 +213,13 @@ def submit_course_quiz_attempt(
 )
 def list_my_record_attempts(
     course_id: UUID,
+    quiz_id: UUID | None = Query(default=None),
     actor: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> list[RecordAttemptDTO]:
-    return service.list_my_record_attempts(db, actor, str(course_id))
+    return service.list_my_record_attempts(
+        db, actor, str(course_id), quiz_id=str(quiz_id) if quiz_id else None
+    )
 
 
 @router.get(
@@ -185,7 +230,10 @@ def list_my_record_attempts(
 )
 def list_course_record_attempts(
     course_id: UUID,
+    quiz_id: UUID | None = Query(default=None),
     actor: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> list[RecordAttemptDTO]:
-    return service.list_course_record_attempts(db, actor, str(course_id))
+    return service.list_course_record_attempts(
+        db, actor, str(course_id), quiz_id=str(quiz_id) if quiz_id else None
+    )
