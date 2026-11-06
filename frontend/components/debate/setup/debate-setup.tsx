@@ -53,9 +53,12 @@ import {
   DEBATE_PAGE,
   DEBATE_PRIMARY,
   DEBATE_ROW_BUTTON,
+  DEBATE_ROW_DANGER_BUTTON,
   DEBATE_TITLE,
   RIBBON_COLORS,
 } from "../debate-chrome";
+import { EndRunningDebatePrompt } from "../../debate-beta/stage/end-running-debate-prompt";
+import { WorkspaceIcon } from "../../workspace-icon";
 
 import { EmptyCard, ErrorNotice, LoadingCard, PageIntro } from "../../ui";
 import {
@@ -118,6 +121,9 @@ export function TeacherDebateList({
   const [error, setError] = useState<unknown>(null);
   const courseId = teacherCourseId(user);
   const loadSequence = useRef(0);
+  const [endingId, setEndingId] = useState<string | null>(null);
+  const [endBusy, setEndBusy] = useState(false);
+  const [endError, setEndError] = useState<unknown>(null);
 
   const load = useCallback(
     async (silent = false, propagateError = false) => {
@@ -149,6 +155,38 @@ export function TeacherDebateList({
   );
 
   const refreshRows = useCallback(() => load(true), [load]);
+
+  const ending = endingId
+    ? debates.find((row) => row.id === endingId)
+    : undefined;
+
+  const finishListedDebate = useCallback(async () => {
+    if (!ending || endBusy) return;
+    if (
+      typeof api.debate !== "function" ||
+      typeof api.finishDebate !== "function"
+    )
+      return;
+    setEndBusy(true);
+    setEndError(null);
+    try {
+      const running = await api.debate(ending.id);
+      await api.finishDebate(
+        ending.id,
+        {
+          expected_control_version: running.playback.control_version,
+          expected_current_turn_id: running.playback.current_turn_id,
+        },
+        { idempotency: createIdempotencyHandle() },
+      );
+      setEndingId(null);
+      await load(true, true);
+    } catch (cause) {
+      setEndError(cause);
+    } finally {
+      setEndBusy(false);
+    }
+  }, [api, ending, endBusy, load]);
 
   useEffect(() => {
     let stopped = false;
@@ -203,6 +241,30 @@ export function TeacherDebateList({
       </div>
       {loading ? <LoadingCard /> : null}
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
+      {endError ? (
+        <ErrorNotice
+          error={endError}
+          onRetry={() => void finishListedDebate()}
+        />
+      ) : null}
+      {ending ? (
+        <EndRunningDebatePrompt
+          topic={ending.topic}
+          zh={false}
+          busy={endBusy}
+          canEnd={
+            typeof api.finishDebate === "function" &&
+            typeof api.debate === "function"
+          }
+          onCancel={() => {
+            if (!endBusy) {
+              setEndingId(null);
+              setEndError(null);
+            }
+          }}
+          onEnd={() => void finishListedDebate()}
+        />
+      ) : null}
       {!loading && !error ? (
         debates.length === 0 ? (
           <DebateEmpty message={t("debateNoDebates")} />
@@ -300,6 +362,29 @@ export function TeacherDebateList({
                     dangerClassName="ml-auto text-[#B91C1C] max-[600px]:ml-0"
                     audioRestoreNeeded={debate.audio_restore_needed}
                     restoreOwnerId={user?.id}
+                    afterVoice={
+                      debate.status === "running" ? (
+                        <Button
+                          variant="noShadow"
+                          className={DEBATE_ROW_DANGER_BUTTON}
+                          type="button"
+                          aria-label="End"
+                          busy={endBusy && endingId === debate.id}
+                          disabled={endBusy}
+                          onClick={() => {
+                            setEndError(null);
+                            setEndingId(debate.id);
+                          }}
+                        >
+                          {endBusy && endingId === debate.id ? (
+                            <IconSpinner size={18} />
+                          ) : (
+                            <WorkspaceIcon name="stop" size={18} />
+                          )}
+                          <span>End</span>
+                        </Button>
+                      ) : null
+                    }
                   />
                 </div>
               </div>
