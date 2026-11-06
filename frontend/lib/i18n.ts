@@ -1081,6 +1081,13 @@ const enMessages = {
   quizAddQuestion: "Add question",
   quizRecords: "Records",
   quizPublishedLocked: "Unpublish this quiz before editing it.",
+  quizStartEvaluation: "Start evaluation",
+  quizPauseEvaluation: "Pause evaluation",
+  quizNotOpenYet: "Not open yet",
+  quizViewRecords: "Records",
+  quizNoRecords: "No records yet.",
+  quizAccepting: "Accepting submissions",
+  quizPaused: "Paused",
 } as const;
 
 export type MessageKey = keyof typeof enMessages;

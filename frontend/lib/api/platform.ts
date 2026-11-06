@@ -283,6 +283,8 @@ export type QuizSummary = {
   schema_version: number;
   content_revision: number;
   attempt_count: number;
+  /** Teacher opened evaluation; missing/false => students cannot Start. */
+  accepting_submissions?: boolean;
   created_by_user_id: string;
   published_at: string | null;
   created_at: string;

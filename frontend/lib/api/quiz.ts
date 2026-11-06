@@ -1,4 +1,4 @@
-import type { PlatformApi } from "./platform";
+import type { PlatformApi, RecordAttemptDto } from "./platform";
 import { PlatformApiError } from "./platform";
 
 export type QuizStatus = "draft" | "published";
@@ -40,6 +40,8 @@ export interface QuizSummaryDTO {
   schema_version: number;
   content_revision: number;
   attempt_count?: number;
+  /** Teacher opened evaluation; missing/false => students cannot Start. */
+  accepting_submissions?: boolean;
   created_by_user_id: string;
   published_at?: string | null;
   created_at: string;
@@ -166,6 +168,33 @@ export class QuizApi {
     return this.request<TeacherQuizDTO>(
       "POST",
       `/api/v1/courses/${courseId}/quizzes/${quizId}/unpublish`,
+    );
+  }
+
+  listCourseRecordAttempts(
+    courseId: string,
+    opts?: { quizId?: string },
+  ): Promise<RecordAttemptDto[]> {
+    const qs = opts?.quizId
+      ? `?quiz_id=${encodeURIComponent(opts.quizId)}`
+      : "";
+    return this.request(
+      "GET",
+      `/api/v1/courses/${courseId}/record-attempts${qs}`,
+    );
+  }
+
+  startEvaluation(courseId: string, quizId: string): Promise<TeacherQuizDTO> {
+    return this.request<TeacherQuizDTO>(
+      "POST",
+      `/api/v1/courses/${courseId}/quizzes/${quizId}/start-evaluation`,
+    );
+  }
+
+  pauseEvaluation(courseId: string, quizId: string): Promise<TeacherQuizDTO> {
+    return this.request<TeacherQuizDTO>(
+      "POST",
+      `/api/v1/courses/${courseId}/quizzes/${quizId}/pause-evaluation`,
     );
   }
 }

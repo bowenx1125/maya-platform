@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useSession } from "../session-provider";
@@ -20,6 +20,7 @@ import { Button } from "../ui/button";
 import { PageBanner } from "../page-banner";
 import { PageAction } from "../page-action";
 import { LIST_CARD_LIFT } from "../agent-chrome";
+import { beginDoneLock, releaseDoneLock } from "@/lib/quiz-gate";
 
 const ITEM_TYPE_LABELS = {
   single: "Single choice",
@@ -65,6 +66,7 @@ const DEFAULT_SETTINGS: QuizSettings = {
 
 export function QuizEditor({ quizId }: { quizId?: string }) {
   const { api, user } = useSession();
+  const t = useT();
   const router = useRouter();
   const quizApi = useMemo(() => new QuizApi(api), [api]);
 
@@ -76,7 +78,9 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
   const [status, setStatus] = useState("draft");
   const [loading, setLoading] = useState(Boolean(quizId));
   const [busy, setBusy] = useState(false);
+  const doneLock = useRef(false);
   const [error, setError] = useState<unknown>(null);
+  const [acceptingSubmissions, setAcceptingSubmissions] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
 
   const locked = isPublishedLocked(status);
@@ -90,6 +94,7 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
         if (!alive) return;
         setTitle(quiz.title);
         setStatus(quiz.status);
+        setAcceptingSubmissions(quiz.accepting_submissions === true);
         // Teacher DTO answer keys may be absent for text items; normalize so
         // the editor always edits defined fields.
         setItems(
@@ -165,22 +170,8 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
     return created.id;
   }, [courseId, items, quizApi, quizId, title]);
 
-  const onSave = async () => {
-    const draftProblems = quizDraftProblems(title, items);
-    setProblems(draftProblems);
-    if (draftProblems.length > 0) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await save();
-    } catch (err) {
-      setError(err);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const onDone = async () => {
+    if (!beginDoneLock(doneLock)) return;
     const draftProblems = quizDraftProblems(title, items);
     if (draftProblems.length > 0 || !canPublish(title, items)) {
       setProblems(
@@ -188,6 +179,7 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
           ? draftProblems
           : ["Every choice question needs at least one marked answer."],
       );
+      releaseDoneLock(doneLock);
       return;
     }
     setProblems([]);
@@ -198,6 +190,25 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
       const id = await save();
       await quizApi.publishQuiz(courseId, id);
       router.push("/teacher/quizzes");
+      // Keep doneLock held after success so remount/nav cannot double-fire.
+    } catch (err) {
+      setError(err);
+      releaseDoneLock(doneLock);
+      setBusy(false);
+    }
+  };
+
+  const onToggleEvaluation = async (next: "start" | "pause") => {
+    if (!quizId || !courseId || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated =
+        next === "start"
+          ? await quizApi.startEvaluation(courseId, quizId)
+          : await quizApi.pauseEvaluation(courseId, quizId);
+      setAcceptingSubmissions(updated.accepting_submissions === true);
+      setStatus(updated.status);
     } catch (err) {
       setError(err);
     } finally {
@@ -238,11 +249,39 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
           name="back"
           href="/teacher/quizzes"
           placement="page"
+          className="relative"
         />
         {locked ? (
-          <Button onClick={onUnpublish} disabled={busy} busy={busy}>
-            Unpublish
-          </Button>
+          <>
+            {acceptingSubmissions ? (
+              <Button
+                className="relative"
+                variant="neutral"
+                onClick={() => void onToggleEvaluation("pause")}
+                disabled={busy}
+                busy={busy}
+              >
+                {t("quizPauseEvaluation")}
+              </Button>
+            ) : (
+              <Button
+                className="relative"
+                onClick={() => void onToggleEvaluation("start")}
+                disabled={busy}
+                busy={busy}
+              >
+                {t("quizStartEvaluation")}
+              </Button>
+            )}
+            <Button
+              className="relative"
+              onClick={onUnpublish}
+              disabled={busy}
+              busy={busy}
+            >
+              {t("quizUnpublish")}
+            </Button>
+          </>
         ) : (
           <PageAction
             name="done"
@@ -250,6 +289,7 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
             disabled={busy}
             busy={busy}
             placement="page"
+            className="relative"
           />
         )}
       </PageBanner>
@@ -408,13 +448,16 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
       {!locked && (
         <div className="flex flex-wrap items-center gap-2">
           {(Object.keys(ITEM_TYPE_LABELS) as NewItemType[]).map((type) => (
-            <Button key={type} disabled={busy} onClick={() => setItems((prev) => [...prev, newItem(type)])}>
-              Add {ITEM_TYPE_LABELS[type]}
+            <Button
+              key={type}
+              className="relative"
+              disabled={busy}
+              onClick={() => setItems((prev) => [...prev, newItem(type)])}
+            >
+              <span aria-hidden="true">+</span>
+              {ITEM_TYPE_LABELS[type]}
             </Button>
           ))}
-          <Button variant="neutral" disabled={busy} busy={busy} onClick={onSave}>
-            Save
-          </Button>
         </div>
       )}
     </div>
