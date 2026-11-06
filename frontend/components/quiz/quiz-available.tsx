@@ -13,7 +13,7 @@ import { useT } from "@/lib/i18n";
  * Available: the course's published quizzes. Start opens the take view; the
  * server returns published only for a student, but the list still filters,
  * so a stale cached draft row can never start a draft quiz. Start is further
- * gated by accepting_submissions (teacher "Start evaluation").
+ * gated by taking_open (teacher "Start evaluation" / start-taking).
  */
 export function QuizAvailable({
   courseId,

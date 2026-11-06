@@ -80,7 +80,7 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
   const [busy, setBusy] = useState(false);
   const doneLock = useRef(false);
   const [error, setError] = useState<unknown>(null);
-  const [acceptingSubmissions, setAcceptingSubmissions] = useState(false);
+  const [takingOpen, setTakingOpen] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
 
   const locked = isPublishedLocked(status);
@@ -94,7 +94,7 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
         if (!alive) return;
         setTitle(quiz.title);
         setStatus(quiz.status);
-        setAcceptingSubmissions(quiz.accepting_submissions === true);
+        setTakingOpen(quiz.taking_open === true);
         // Teacher DTO answer keys may be absent for text items; normalize so
         // the editor always edits defined fields.
         setItems(
@@ -205,9 +205,9 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
     try {
       const updated =
         next === "start"
-          ? await quizApi.startEvaluation(courseId, quizId)
-          : await quizApi.pauseEvaluation(courseId, quizId);
-      setAcceptingSubmissions(updated.accepting_submissions === true);
+          ? await quizApi.startTaking(courseId, quizId)
+          : await quizApi.pauseTaking(courseId, quizId);
+      setTakingOpen(updated.taking_open === true);
       setStatus(updated.status);
     } catch (err) {
       setError(err);
@@ -253,7 +253,7 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
         />
         {locked ? (
           <>
-            {acceptingSubmissions ? (
+            {takingOpen ? (
               <Button
                 className="relative"
                 variant="neutral"

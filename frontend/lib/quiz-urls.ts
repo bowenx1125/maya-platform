@@ -28,10 +28,10 @@ export function listCourseRecordAttemptsPath(
   return `${base}?quiz_id=${encodeURIComponent(quizId)}`;
 }
 
-export function startEvaluationPath(courseId: string, quizId: string): string {
-  return `courses/${encodeURIComponent(courseId)}/quizzes/${encodeURIComponent(quizId)}/start-evaluation`;
+export function startTakingPath(courseId: string, quizId: string): string {
+  return `courses/${encodeURIComponent(courseId)}/quizzes/${encodeURIComponent(quizId)}/start-taking`;
 }
 
-export function pauseEvaluationPath(courseId: string, quizId: string): string {
-  return `courses/${encodeURIComponent(courseId)}/quizzes/${encodeURIComponent(quizId)}/pause-evaluation`;
+export function pauseTakingPath(courseId: string, quizId: string): string {
+  return `courses/${encodeURIComponent(courseId)}/quizzes/${encodeURIComponent(quizId)}/pause-taking`;
 }

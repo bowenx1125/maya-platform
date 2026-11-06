@@ -77,9 +77,9 @@ export function QuizzesList() {
     setError(null);
     try {
       if (next === "start") {
-        await quizApi.startEvaluation(courseId, quiz.id);
+        await quizApi.startTaking(courseId, quiz.id);
       } else {
-        await quizApi.pauseEvaluation(courseId, quiz.id);
+        await quizApi.pauseTaking(courseId, quiz.id);
       }
       await load();
     } catch (cause) {
@@ -111,7 +111,7 @@ export function QuizzesList() {
         ) : (
           <div className="grid gap-3.5">
             {quizzes.map((quiz) => {
-              const accepting = quiz.accepting_submissions === true;
+              const takingOpen = quiz.taking_open === true;
               const evalBusy = evalBusyId === quiz.id;
               return (
                 <article
@@ -137,7 +137,7 @@ export function QuizzesList() {
                         </span>
                         {quiz.status === "published" ? (
                           <span>
-                            {accepting
+                            {takingOpen
                               ? t("quizAccepting")
                               : t("quizPaused")}
                           </span>
@@ -162,7 +162,7 @@ export function QuizzesList() {
                       </Link>
                       {quiz.status === "published" ? (
                         <>
-                          {accepting ? (
+                          {takingOpen ? (
                             <Button
                               className="relative"
                               type="button"

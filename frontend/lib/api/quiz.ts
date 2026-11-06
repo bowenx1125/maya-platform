@@ -40,8 +40,10 @@ export interface QuizSummaryDTO {
   schema_version: number;
   content_revision: number;
   attempt_count?: number;
-  /** Teacher opened evaluation; missing/false => students cannot Start. */
-  accepting_submissions?: boolean;
+  /** Teacher opened taking; missing/false => students cannot Start. */
+  taking_open?: boolean;
+  /** Current taking round; increments each closed→open. */
+  taking_epoch?: number;
   created_by_user_id: string;
   published_at?: string | null;
   created_at: string;
@@ -184,17 +186,17 @@ export class QuizApi {
     );
   }
 
-  startEvaluation(courseId: string, quizId: string): Promise<TeacherQuizDTO> {
+  startTaking(courseId: string, quizId: string): Promise<TeacherQuizDTO> {
     return this.request<TeacherQuizDTO>(
       "POST",
-      `/api/v1/courses/${courseId}/quizzes/${quizId}/start-evaluation`,
+      `/api/v1/courses/${courseId}/quizzes/${quizId}/start-taking`,
     );
   }
 
-  pauseEvaluation(courseId: string, quizId: string): Promise<TeacherQuizDTO> {
+  pauseTaking(courseId: string, quizId: string): Promise<TeacherQuizDTO> {
     return this.request<TeacherQuizDTO>(
       "POST",
-      `/api/v1/courses/${courseId}/quizzes/${quizId}/pause-evaluation`,
+      `/api/v1/courses/${courseId}/quizzes/${quizId}/pause-taking`,
     );
   }
 }

@@ -10,8 +10,8 @@ import {
 } from "../lib/quiz-gate";
 import {
   listCourseRecordAttemptsPath,
-  pauseEvaluationPath,
-  startEvaluationPath,
+  pauseTakingPath,
+  startTakingPath,
 } from "../lib/quiz-urls";
 
 describe("listCourseRecordAttemptsPath", () => {
@@ -28,23 +28,23 @@ describe("listCourseRecordAttemptsPath", () => {
   });
 });
 
-describe("evaluation paths", () => {
-  it("builds start/pause evaluation paths", () => {
-    expect(startEvaluationPath("c1", "q1")).toBe(
-      "courses/c1/quizzes/q1/start-evaluation",
+describe("taking paths", () => {
+  it("builds start/pause taking paths", () => {
+    expect(startTakingPath("c1", "q1")).toBe(
+      "courses/c1/quizzes/q1/start-taking",
     );
-    expect(pauseEvaluationPath("c1", "q1")).toBe(
-      "courses/c1/quizzes/q1/pause-evaluation",
+    expect(pauseTakingPath("c1", "q1")).toBe(
+      "courses/c1/quizzes/q1/pause-taking",
     );
   });
 });
 
 describe("canStudentStartQuiz", () => {
-  it("allows Start only when accepting_submissions is true", () => {
-    expect(canStudentStartQuiz({ accepting_submissions: true })).toBe(true);
-    expect(canStudentStartQuiz({ accepting_submissions: false })).toBe(false);
+  it("allows Start only when taking_open is true", () => {
+    expect(canStudentStartQuiz({ taking_open: true })).toBe(true);
+    expect(canStudentStartQuiz({ taking_open: false })).toBe(false);
     expect(canStudentStartQuiz({})).toBe(false);
-    expect(canStudentStartQuiz({ accepting_submissions: null })).toBe(false);
+    expect(canStudentStartQuiz({ taking_open: null })).toBe(false);
   });
 });
 
@@ -78,5 +78,25 @@ describe("quiz-editor Done debounce + no bottom Save", () => {
     expect(src).toContain("beginDoneLock");
     expect(src).not.toMatch(/onClick=\{onSave\}/);
     expect(src).not.toMatch(/>\s*Save\s*</);
+  });
+});
+
+describe("formal taking contract wiring", () => {
+  it("FE source has no provisional accepting_submissions / *-evaluation paths", () => {
+    const files = [
+      "../lib/quiz-gate.ts",
+      "../lib/quiz-urls.ts",
+      "../lib/api/quiz.ts",
+      "../lib/api/platform.ts",
+      "../components/quizzes/quizzes-list.tsx",
+      "../components/quizzes/quiz-editor.tsx",
+      "../components/quiz/quiz-available.tsx",
+    ];
+    for (const rel of files) {
+      const src = readFileSync(join(__dirname, rel), "utf8");
+      expect(src, rel).not.toMatch(/accepting_submissions/);
+      expect(src, rel).not.toMatch(/start-evaluation|pause-evaluation/);
+      expect(src, rel).not.toMatch(/startEvaluation|pauseEvaluation/);
+    }
   });
 });

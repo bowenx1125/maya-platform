@@ -1088,6 +1088,10 @@ const enMessages = {
   quizNoRecords: "No records yet.",
   quizAccepting: "Accepting submissions",
   quizPaused: "Paused",
+  quizTakingAlreadyOpen: "Taking is already open.",
+  quizTakingAlreadyClosed: "Taking is already paused.",
+  quizTakingClosed: "This quiz is not open for taking yet.",
+  quizAttemptExists: "You already submitted this round. Wait for the teacher to reopen taking.",
 } as const;
 
 export type MessageKey = keyof typeof enMessages;
@@ -1289,6 +1293,10 @@ const errorCodeKeys: Record<string, MessageKey> = {
   chat_attachment_invalid: "errorChatAttachmentInvalid",
   chat_attachment_empty: "errorChatAttachmentInvalid",
   malformed_request: "errorMalformedRequest",
+  quiz_taking_already_open: "quizTakingAlreadyOpen",
+  quiz_taking_already_closed: "quizTakingAlreadyClosed",
+  quiz_taking_closed: "quizTakingClosed",
+  quiz_attempt_exists: "quizAttemptExists",
 };
 
 type ErrorCopyCatalog = {

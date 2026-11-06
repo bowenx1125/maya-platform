@@ -1,8 +1,8 @@
-/** Student Start is allowed only after the teacher starts evaluation. */
+/** Student Start is allowed only when taking_open is true. */
 export function canStudentStartQuiz(quiz: {
-  accepting_submissions?: boolean | null;
+  taking_open?: boolean | null;
 }): boolean {
-  return quiz.accepting_submissions === true;
+  return quiz.taking_open === true;
 }
 
 /**

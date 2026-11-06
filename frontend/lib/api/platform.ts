@@ -271,6 +271,8 @@ export type StudentQuizDto = {
   };
   locale: string;
   items: QuizItemStudent[];
+  taking_open?: boolean;
+  taking_epoch?: number;
   published_at: string | null;
 };
 
@@ -283,8 +285,10 @@ export type QuizSummary = {
   schema_version: number;
   content_revision: number;
   attempt_count: number;
-  /** Teacher opened evaluation; missing/false => students cannot Start. */
-  accepting_submissions?: boolean;
+  /** Teacher opened taking; missing/false => students cannot Start. */
+  taking_open?: boolean;
+  /** Current taking round; increments each closed→open. */
+  taking_epoch?: number;
   created_by_user_id: string;
   published_at: string | null;
   created_at: string;
@@ -302,6 +306,7 @@ export type QuizAttemptDto = {
   score_objective: number;
   score_max_objective: number;
   answers: Array<Record<string, unknown>>;
+  taking_epoch?: number;
   submitted_at: string;
 };
 
@@ -323,6 +328,7 @@ export type RecordAttemptDto = {
   points_total: number | null;
   phase: string | null;
   team_name: string | null;
+  taking_epoch?: number | null;
 };
 
 export type SubmitQuizAttemptRequest = {

@@ -184,6 +184,18 @@
     "providerConfirmationRequired": {
       "en": "The course teacher must confirm the data disclosure first."
     },
+    "quizAttemptExists": {
+      "en": "You already submitted this round. Wait for the teacher to reopen taking."
+    },
+    "quizTakingAlreadyClosed": {
+      "en": "Taking is already paused."
+    },
+    "quizTakingAlreadyOpen": {
+      "en": "Taking is already open."
+    },
+    "quizTakingClosed": {
+      "en": "This quiz is not open for taking yet."
+    },
     "recordInUse": {
       "en": "This record is still in use and wasn't deleted."
     },
@@ -690,6 +702,10 @@
     "query_invalid": "knowledgeSearchFailed",
     "query_scope_invalid": "knowledgeSearchFailed",
     "query_search_invalid": "knowledgeSearchFailed",
+    "quiz_attempt_exists": "quizAttemptExists",
+    "quiz_taking_already_closed": "quizTakingAlreadyClosed",
+    "quiz_taking_already_open": "quizTakingAlreadyOpen",
+    "quiz_taking_closed": "quizTakingClosed",
     "range_not_satisfiable": "notAvailable",
     "receipt_hash_changed": "aiStepFailed",
     "receipt_hash_invalid": "aiStepFailed",
