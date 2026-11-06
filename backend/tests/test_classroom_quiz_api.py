@@ -77,6 +77,7 @@ def actors(app_bundle: tuple[FastAPI, Database, Any]):
 
     app = app_bundle[0]
     with ExitStack() as stack:
+
         def sign_in(username: str) -> Actor:
             return Actor(stack.enter_context(TestClient(app)), username)
 
@@ -193,9 +194,7 @@ def test_student_get_strips_answer_and_rubric(teacher: Actor, student: Actor) ->
         assert "prompt" in item
 
 
-def test_submit_grades_objective_and_pending_subjective(
-    teacher: Actor, student: Actor
-) -> None:
+def test_submit_grades_objective_and_pending_subjective(teacher: Actor, student: Actor) -> None:
     quiz_id = _create_and_publish(teacher)
     # Publish alone does not open taking: submission is rejected.
     closed = _submit(quiz_id, student)
@@ -271,9 +270,7 @@ def test_retest_after_pause_and_restart(teacher: Actor, student: Actor) -> None:
     assert duplicate.json()["code"] == "quiz_attempt_exists"
 
     rows = student.get(f"/courses/{COURSE_ID}/my-record-attempts").json()
-    quiz_rows = [
-        row for row in rows if row["source"] == "quiz" and row["quiz_id"] == quiz_id
-    ]
+    quiz_rows = [row for row in rows if row["source"] == "quiz" and row["quiz_id"] == quiz_id]
     assert len(quiz_rows) == 2
 
     # start-taking while already open 409s.

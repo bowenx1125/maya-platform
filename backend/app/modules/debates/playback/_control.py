@@ -578,12 +578,9 @@ class PlaybackControlMixin(PlaybackCore):
                     )
                     if (
                         not accepted
+                        and not (callable(unattempted) and unattempted(db, debate_id, turn_id))
                         and not (
-                            callable(unattempted) and unattempted(db, debate_id, turn_id)
-                        )
-                        and not (
-                            callable(retryable_reject)
-                            and retryable_reject(db, debate_id, turn_id)
+                            callable(retryable_reject) and retryable_reject(db, debate_id, turn_id)
                         )
                     ):
                         raise invalid_state("The selected turn has no verified local recovery.")

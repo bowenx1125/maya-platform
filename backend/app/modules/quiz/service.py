@@ -141,9 +141,7 @@ def _student_dto(quiz: ClassroomQuiz) -> StudentQuizDTO:
     )
 
 
-def list_quizzes_for_actor(
-    db: Session, actor: AuthContext, course_id: str
-) -> list[QuizSummaryDTO]:
+def list_quizzes_for_actor(db: Session, actor: AuthContext, course_id: str) -> list[QuizSummaryDTO]:
     role = _require_member(db, actor, course_id)
     query = select(ClassroomQuiz).where(ClassroomQuiz.course_id == course_id)
     if role != "teacher":
@@ -228,11 +226,7 @@ def patch_quiz(
     title = body.title if body.title is not None else quiz.title
     locale = body.locale if body.locale is not None else str(document.get("locale") or "en")
     settings = body.settings if body.settings is not None else settings_from_document(document)
-    items = (
-        body.items
-        if body.items is not None
-        else teacher_items_from_document(document)
-    )
+    items = body.items if body.items is not None else teacher_items_from_document(document)
     group_id = quiz.group_id
     if "group_id" in body.model_fields_set:
         group_id = str(body.group_id) if body.group_id else None
@@ -259,9 +253,7 @@ def patch_quiz(
     return _teacher_dto(db, quiz)
 
 
-def publish_quiz(
-    db: Session, actor: AuthContext, course_id: str, quiz_id: str
-) -> TeacherQuizDTO:
+def publish_quiz(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:
     _require_teacher(db, actor, course_id)
     quiz = _get_quiz(db, course_id, quiz_id)
     if quiz.status == "published":
@@ -294,9 +286,7 @@ def publish_quiz(
     return _teacher_dto(db, quiz)
 
 
-def unpublish_quiz(
-    db: Session, actor: AuthContext, course_id: str, quiz_id: str
-) -> TeacherQuizDTO:
+def unpublish_quiz(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:
     _require_teacher(db, actor, course_id)
     quiz = _get_quiz(db, course_id, quiz_id)
     if quiz.status != "published":
@@ -314,9 +304,7 @@ def unpublish_quiz(
     return _teacher_dto(db, quiz)
 
 
-def start_taking(
-    db: Session, actor: AuthContext, course_id: str, quiz_id: str
-) -> TeacherQuizDTO:
+def start_taking(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:
     """Open the published paper for taking; first open starts a new epoch."""
 
     _require_teacher(db, actor, course_id)
@@ -336,9 +324,7 @@ def start_taking(
     return _teacher_dto(db, quiz)
 
 
-def pause_taking(
-    db: Session, actor: AuthContext, course_id: str, quiz_id: str
-) -> TeacherQuizDTO:
+def pause_taking(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:
     """Close taking without touching the epoch; re-opening keeps the epoch."""
 
     _require_teacher(db, actor, course_id)
@@ -452,9 +438,7 @@ def list_my_record_attempts(
     )
     if quiz_id is not None:
         quiz_query = quiz_query.where(ClassroomQuizAttempt.quiz_id == quiz_id)
-    quiz_attempts = db.scalars(
-        quiz_query.order_by(ClassroomQuizAttempt.submitted_at.desc())
-    ).all()
+    quiz_attempts = db.scalars(quiz_query.order_by(ClassroomQuizAttempt.submitted_at.desc())).all()
     for attempt in quiz_attempts:
         quiz = db.get(ClassroomQuiz, attempt.quiz_id)
         title = quiz.title if quiz is not None else "Quiz"
@@ -532,9 +516,7 @@ def list_course_record_attempts(
     )
     if quiz_id is not None:
         quiz_query = quiz_query.where(ClassroomQuizAttempt.quiz_id == quiz_id)
-    quiz_attempts = db.scalars(
-        quiz_query.order_by(ClassroomQuizAttempt.submitted_at.desc())
-    ).all()
+    quiz_attempts = db.scalars(quiz_query.order_by(ClassroomQuizAttempt.submitted_at.desc())).all()
     for attempt in quiz_attempts:
         quiz = db.get(ClassroomQuiz, attempt.quiz_id)
         title = quiz.title if quiz is not None else "Quiz"

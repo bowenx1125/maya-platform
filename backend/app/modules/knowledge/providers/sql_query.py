@@ -75,8 +75,7 @@ PRESEND_EMBEDDING_PLAN_CODES = frozenset(
 def _presend_plan_rejected(operation: ProviderOperationV1) -> bool:
     return (
         operation.state == "failed"
-        and str(getattr(operation, "safe_error_code", "") or "")
-        in PRESEND_EMBEDDING_PLAN_CODES
+        and str(getattr(operation, "safe_error_code", "") or "") in PRESEND_EMBEDDING_PLAN_CODES
     )
 
 
