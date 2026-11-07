@@ -155,9 +155,8 @@ describe("legacy group Brainform actor context", () => {
       "/student/groups/joined-group/agents/new",
     );
     expect(screen.queryByRole("heading", { name: "Voices" })).toBeNull();
-    expect(
-      screen.getByRole("link", { name: "Back" }).getAttribute("href"),
-    ).toBe("/teacher/roster");
+    expect(screen.queryByRole("link", { name: "Back" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Backout" })).toBeTruthy();
   });
 
   it("preserves group, course, Agent, Set, Job and mode on the legacy redirect", async () => {

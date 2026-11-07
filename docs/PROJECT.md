@@ -278,7 +278,7 @@ Agent and Chat with Team are separate histories; no kind stays the Agent list.
 ## Nov2 Accounts group visit
 
 0082:Enter grants2h teacher_group_access (not roster),renewed20min;Backout replaces
-Logout and removes it;expiry sweeps/min. Visits edit group Studyform Agents/public
+Logout;no page-header Back;expiry sweeps/min. Visits edit group Studyform Agents/public
 Brainform,not group/Agent deletion/other groups. Old group-card no-op fixed.
 
 ## Nov2 chat speed and recovery

@@ -121,9 +121,7 @@ describe("group navigation scope", () => {
     expect(
       screen.getByRole("link", { name: "Accounts" }).getAttribute("href"),
     ).toBe("/teacher/roster");
-    expect(
-      screen.getByRole("link", { name: "Back" }).getAttribute("href"),
-    ).toBe("/teacher/roster");
+    expect(screen.queryByRole("link", { name: "Back" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Backward" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Logout" })).toBeNull();
     const backout = screen.getByRole("button", { name: "Backout" });

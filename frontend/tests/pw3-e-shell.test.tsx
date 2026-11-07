@@ -346,10 +346,9 @@ describe("student shell navigation", () => {
       nav.getByRole("link", { name: "Accounts" }).getAttribute("aria-current"),
     ).toBeNull();
     expect(
-      within(screen.getByRole("main"))
-        .getByRole("link", { name: "Back" })
-        .getAttribute("href"),
-    ).toBe("/teacher/roster");
+      within(screen.getByRole("main")).queryByRole("link", { name: "Back" }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Backout" })).toBeTruthy();
     expect(nav.queryByRole("link", { name: "Homeward" })).toBeNull();
     expect(leaveGroupAsTeacher).not.toHaveBeenCalled();
   });
@@ -367,13 +366,12 @@ describe("student shell navigation", () => {
       try {
         renderTeacherShell(path);
         const nav = within(screen.getByRole("navigation"));
-        await waitFor(() =>
-          expect(
-            within(screen.getByRole("main"))
-              .getByRole("link", { name: "Back" })
-              .getAttribute("href"),
-          ).toBe("/teacher/roster"),
-        );
+        expect(
+          within(screen.getByRole("main")).queryByRole("link", {
+            name: "Back",
+          }),
+        ).toBeNull();
+        expect(screen.getByRole("button", { name: "Backout" })).toBeTruthy();
         expect(
           nav.getByRole("link", { name: label }).getAttribute("aria-current"),
         ).toBe("page");
