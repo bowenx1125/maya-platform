@@ -266,7 +266,7 @@ in 0080 (always 1.0).
 ## Oct27 UI (#305, 38)
 
 #305:Agents4-col,Teams3-col/shared empty. Sign-in38v3;waits:one39C LoadingCard.
-Keys:fixed hit area;sidebar:active wait/query context. [Auth](ui-proposals/auth)/[loading](ui-proposals/loading).
+Keys:fixed hit area;sidebar:active wait/query context. Sheets/mockups removed: chosen UI shipped.
 
 ## Nov2 Chatform lists
 

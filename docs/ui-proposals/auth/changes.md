@@ -1,4 +1,4 @@
-# 38 · Sign-in and registration in Arcade (design only, nothing implemented)
+# 38 · Sign-in and registration in Arcade
 
 The sign-in page (`/`: `app/page.tsx` with `LoginForm` and `RegisterForm`) is the
 last page still in the old Academy look (cream, gold, serif). Every sheet is a real
@@ -7,7 +7,7 @@ frontend render using the app's fonts, mascots, U3 error bubble and copy.
 ## v3 (current): scheme 1 with the game beats of 2 and 3
 
 User picked v2 scheme 1 and asked for the game-feel elements of schemes 2 and 3.
-`v3/scheme-1-plus.png` (mockup `?s=4`) keeps scheme 1's sunburst, outlined pink
+The v3 comparison sheet (removed 2026-11-07; still in git history) kept scheme 1's sunburst, outlined pink
 nameplate with stars, full-width lime stage, tilted taped form card, yellow
 speech-bubble heading and step coins, and adds:
 
@@ -24,7 +24,7 @@ speech-bubble heading and step coins, and adds:
 
 `app/page.tsx` + `components/academy/sign-in-stage.tsx`; the forms keep their
 logic and are dressed by `.auth-arcade` in `app/globals.css`. Differences from the
-mockup, all visible in `v3/approved-vs-impl.png`: the refusal rain lasts the
+mockup (comparison sheet removed the same day; git history): the refusal rain lasts the
 forms' existing 900 ms `refused` beat; the group list sits in the flow (Create
 account stays below it, the list scrolls past five rows); the cast gets an
 accurate label (`signInCastLabel`), since the cards flip rather than follow the
@@ -68,7 +68,8 @@ ring emblem; it is the sidebar's mark.
 
 ## Reproduce
 
-`src/page.demo.tsx` is the v2/v3 mockup page (`?s=1|2|3` for v2, `?s=4` for v3). Apply `src/mascot-mood.patch` (a held
-`mood` for `MascotFigure`, needed by schemes 1 and 2), copy the page to
-`frontend/app/auth-proposals/page.demo.tsx`, run `next dev`, then
-`SCHEMES=4 node src/shoot.js <out-dir>` (default `1,2,3`).
+The mockup page, `shoot.js`, and `mascot-mood.patch` were removed on
+2026-11-07. `MascotFigure` already takes `mood` in
+`frontend/components/academy/mascots.tsx`, and the shipped sign-in is
+`frontend/components/academy/sign-in-stage.tsx`. The sheets are only in git
+history.
