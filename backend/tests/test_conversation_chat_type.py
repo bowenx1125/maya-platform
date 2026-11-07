@@ -53,8 +53,9 @@ def _legacy_database(tmp_path: Path) -> Database:
     database = Database(named_url(f"{tmp_path}/chat-type", schema=False))
     with database.engine.begin() as connection:
         connection.execute(text(_LEGACY_TABLE))
-        # 0080 already had this table. Head is 0082, which adds expires_at,
-        # so a database stamped at 0080 must have the table before upgrade.
+        # 0080 already had teacher_group_access. 0082 adds expires_at, and
+        # 0083's quiz tables reference courses, groups and users, so a
+        # database stamped at 0080 must contain those parents before upgrade.
         connection.execute(
             text(
                 "CREATE TABLE teacher_group_access ("
@@ -64,6 +65,9 @@ def _legacy_database(tmp_path: Path) -> Database:
                 "PRIMARY KEY (group_id, user_id))"
             )
         )
+        connection.execute(text("CREATE TABLE users (id varchar(36) PRIMARY KEY)"))
+        connection.execute(text("CREATE TABLE courses (id varchar(36) PRIMARY KEY)"))
+        connection.execute(text("CREATE TABLE groups (id varchar(36) PRIMARY KEY)"))
         connection.execute(text("CREATE TABLE alembic_version (version_num varchar(64) NOT NULL)"))
         connection.execute(
             text("INSERT INTO alembic_version (version_num) VALUES ('0080_drop_playback_rate')")

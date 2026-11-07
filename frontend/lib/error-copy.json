@@ -184,17 +184,38 @@
     "providerConfirmationRequired": {
       "en": "The course teacher must confirm the data disclosure first."
     },
-    "quizAttemptExists": {
-      "en": "You already submitted this round. Wait for the teacher to reopen taking."
+    "quizAlreadyPublished": {
+      "en": "This quiz is already published."
     },
-    "quizTakingAlreadyClosed": {
-      "en": "Taking is already paused."
+    "quizAnswerInvalid": {
+      "en": "An answer does not match its question."
     },
-    "quizTakingAlreadyOpen": {
-      "en": "Taking is already open."
+    "quizAnswerLeak": {
+      "en": "This quiz still includes an answer students must not see."
     },
-    "quizTakingClosed": {
-      "en": "This quiz is not open for taking yet."
+    "quizAnswerRequired": {
+      "en": "Each choice question needs an answer."
+    },
+    "quizDocumentInvalid": {
+      "en": "This quiz could not be read."
+    },
+    "quizEmpty": {
+      "en": "Add at least one question before publishing."
+    },
+    "quizItemChoicesInvalid": {
+      "en": "A question's choices are not valid."
+    },
+    "quizItemDuplicate": {
+      "en": "Two questions use the same id."
+    },
+    "quizItemTypeInvalid": {
+      "en": "A question uses a type this quiz does not support."
+    },
+    "quizNotPublished": {
+      "en": "This quiz is not published."
+    },
+    "quizPublishedImmutable": {
+      "en": "Unpublish this quiz before editing it."
     },
     "recordInUse": {
       "en": "This record is still in use and wasn't deleted."
@@ -702,10 +723,17 @@
     "query_invalid": "knowledgeSearchFailed",
     "query_scope_invalid": "knowledgeSearchFailed",
     "query_search_invalid": "knowledgeSearchFailed",
-    "quiz_attempt_exists": "quizAttemptExists",
-    "quiz_taking_already_closed": "quizTakingAlreadyClosed",
-    "quiz_taking_already_open": "quizTakingAlreadyOpen",
-    "quiz_taking_closed": "quizTakingClosed",
+    "quiz_already_published": "quizAlreadyPublished",
+    "quiz_answer_invalid": "quizAnswerInvalid",
+    "quiz_answer_leak": "quizAnswerLeak",
+    "quiz_answer_required": "quizAnswerRequired",
+    "quiz_document_invalid": "quizDocumentInvalid",
+    "quiz_empty": "quizEmpty",
+    "quiz_item_choices_invalid": "quizItemChoicesInvalid",
+    "quiz_item_duplicate": "quizItemDuplicate",
+    "quiz_item_type_invalid": "quizItemTypeInvalid",
+    "quiz_not_published": "quizNotPublished",
+    "quiz_published_immutable": "quizPublishedImmutable",
     "range_not_satisfiable": "notAvailable",
     "receipt_hash_changed": "aiStepFailed",
     "receipt_hash_invalid": "aiStepFailed",
