@@ -11,8 +11,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # FFmpeg is required by the voice-enrollment boundary even when the host has it installed.
+# deb.debian.org is listed over HTTP. A build host whose HTTP path returns 500
+# (198.18.0.1:80) can still use the same official mirrors over HTTPS. Only the
+# scheme changes; Signed-By stays the Debian archive keyring.
 ARG FFMPEG_VERSION=7:5.1.9-0+deb12u1
-RUN apt-get update \
+RUN sed -i 's|^URIs: http://deb.debian.org|URIs: https://deb.debian.org|' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install --no-install-recommends --yes "ffmpeg=${FFMPEG_VERSION}" \
     && ffmpeg -version | grep -F "ffmpeg version 5.1.9" \
     && rm -rf /var/lib/apt/lists/*
