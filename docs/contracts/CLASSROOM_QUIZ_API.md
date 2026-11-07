@@ -1,29 +1,32 @@
 # Classroom Quiz contract
 
 This is the single prose contract for Classroom Quiz: the HTTP surface, state
-rules, student isolation, Record aggregation, the attempt export and the
-teacher/student controls that drive them. It replaces the separate
+rules, student isolation, attempt detail, hand grading, hiding, Record
+aggregation, the attempt export and the teacher/student controls that drive
+them. It replaces the separate
 2026-11-06 frontend rework note, which now only points here.
 
-Verified on 2026-11-08 (JST) against `main` at
-`8dec1dbeee2caedc25e039970895025dfc70efcb`. When this file and the code
+First verified on 2026-11-08 (JST) against `main` at
+`8dec1dbeee2caedc25e039970895025dfc70efcb`; updated the same day for
+migration `0085_quiz_manual_grading` (attempt detail, hand grading, hide,
+Record epochs, Record moved under Quiz). When this file and the code
 disagree, the code and its tests win; record the deviation here, do not
 silently rewrite either side. Progress and deployment facts live in
 [PROJECT](../PROJECT.md).
 
-| Concern               | Source of truth                                                                            |
-| --------------------- | ------------------------------------------------------------------------------------------ |
-| Routes and gates      | `backend/app/modules/quiz/router.py`, `service.py`                                         |
-| DTOs                  | `backend/app/modules/quiz/schemas.py`                                                      |
-| Item validation       | `backend/app/modules/quiz/document.py`                                                     |
-| Objective grading     | `backend/app/modules/quiz/grading.py`                                                      |
-| ZIP export            | `backend/app/modules/quiz/export.py`                                                       |
-| Tables                | `backend/migrations/versions/0083_classroom_quizzes.py`, `0084_quiz_taking_open_retest.py` |
-| Backend tests         | `backend/tests/test_classroom_quiz_api.py`, `test_classroom_quiz_export.py`                |
-| Frontend client/gates | `frontend/lib/api/quiz.ts`, `frontend/lib/quiz-gate.ts`, `frontend/lib/quiz-urls.ts`       |
-| Frontend tests        | `frontend/tests/quiz-*.test.ts`                                                            |
-| Decision record       | [ADR-011](../adr/ADR-011-classroom-quiz-parallel-domain.md)                                |
-| Document shape        | `contracts/quiz-document.v1.schema.json` (descriptive; no runtime code loads it)           |
+| Concern               | Source of truth                                                                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Routes and gates      | `backend/app/modules/quiz/router.py`, `service.py`                                                                        |
+| DTOs                  | `backend/app/modules/quiz/schemas.py`                                                                                     |
+| Item validation       | `backend/app/modules/quiz/document.py`                                                                                    |
+| Objective grading     | `backend/app/modules/quiz/grading.py`                                                                                     |
+| ZIP export            | `backend/app/modules/quiz/export.py`                                                                                      |
+| Tables                | `backend/migrations/versions/0083_classroom_quizzes.py`, `0084_quiz_taking_open_retest.py`, `0085_quiz_manual_grading.py` |
+| Backend tests         | `backend/tests/test_classroom_quiz_api.py`, `test_classroom_quiz_export.py`, `test_classroom_quiz_attempt_review.py`      |
+| Frontend client/gates | `frontend/lib/api/quiz.ts`, `frontend/lib/quiz-gate.ts`, `frontend/lib/quiz-urls.ts`                                      |
+| Frontend tests        | `frontend/tests/quiz-*.test.ts(x)`, `assessment-record-panel.test.tsx`                                                    |
+| Decision record       | [ADR-011](../adr/ADR-011-classroom-quiz-parallel-domain.md)                                                               |
+| Document shape        | `contracts/quiz-document.v1.schema.json` (descriptive; no runtime code loads it)                                          |
 
 Quiz is a parallel domain: it never writes `assessment_attempts` or
 conversations, and submission makes no model or Agent WebSocket call.
@@ -34,32 +37,39 @@ All paths are under `/api/v1`. Every mutation needs a signed-in session and an
 `X-CSRF-Token` header. None of these operations is in the frozen
 `contracts/openapi-v0.1.yaml`; see [Route-surface classification](#route-surface-classification).
 
-| Method | Path                                                     | operationId                | Who                        |
-| ------ | -------------------------------------------------------- | -------------------------- | -------------------------- |
-| GET    | `/courses/{course_id}/quizzes`                           | `listCourseQuizzes`        | course member              |
-| POST   | `/courses/{course_id}/quizzes`                           | `createCourseQuiz`         | course teacher             |
-| GET    | `/courses/{course_id}/quizzes/{quiz_id}`                 | `getCourseQuiz`            | course member              |
-| PATCH  | `/courses/{course_id}/quizzes/{quiz_id}`                 | `patchCourseQuiz`          | course teacher, draft only |
-| POST   | `/courses/{course_id}/quizzes/{quiz_id}/publish`         | `publishCourseQuiz`        | course teacher             |
-| POST   | `/courses/{course_id}/quizzes/{quiz_id}/unpublish`       | `unpublishCourseQuiz`      | course teacher             |
-| POST   | `/courses/{course_id}/quizzes/{quiz_id}/start-taking`    | `startCourseQuizTaking`    | course teacher             |
-| POST   | `/courses/{course_id}/quizzes/{quiz_id}/pause-taking`    | `pauseCourseQuizTaking`    | course teacher             |
-| POST   | `/courses/{course_id}/quizzes/{quiz_id}/attempts`        | `submitCourseQuizAttempt`  | course student             |
-| GET    | `/courses/{course_id}/quizzes/{quiz_id}/attempts/export` | `exportCourseQuizAttempts` | course teacher             |
-| GET    | `/courses/{course_id}/my-record-attempts`                | `listMyRecordAttempts`     | course member (own rows)   |
-| GET    | `/courses/{course_id}/record-attempts`                   | `listCourseRecordAttempts` | course teacher             |
+| Method | Path                                                                  | operationId                | Who                               |
+| ------ | --------------------------------------------------------------------- | -------------------------- | --------------------------------- |
+| GET    | `/courses/{course_id}/quizzes`                                        | `listCourseQuizzes`        | course member                     |
+| POST   | `/courses/{course_id}/quizzes`                                        | `createCourseQuiz`         | course teacher                    |
+| GET    | `/courses/{course_id}/quizzes/{quiz_id}`                              | `getCourseQuiz`            | course member                     |
+| PATCH  | `/courses/{course_id}/quizzes/{quiz_id}`                              | `patchCourseQuiz`          | course teacher, draft only        |
+| POST   | `/courses/{course_id}/quizzes/{quiz_id}/publish`                      | `publishCourseQuiz`        | course teacher                    |
+| POST   | `/courses/{course_id}/quizzes/{quiz_id}/unpublish`                    | `unpublishCourseQuiz`      | course teacher                    |
+| POST   | `/courses/{course_id}/quizzes/{quiz_id}/start-taking`                 | `startCourseQuizTaking`    | course teacher                    |
+| POST   | `/courses/{course_id}/quizzes/{quiz_id}/pause-taking`                 | `pauseCourseQuizTaking`    | course teacher                    |
+| POST   | `/courses/{course_id}/quizzes/{quiz_id}/attempts`                     | `submitCourseQuizAttempt`  | course student                    |
+| GET    | `/courses/{course_id}/quizzes/{quiz_id}/attempts/export`              | `exportCourseQuizAttempts` | course teacher                    |
+| GET    | `/courses/{course_id}/quizzes/{quiz_id}/attempts/{attempt_id}`        | `getCourseQuizAttempt`     | teacher, or the attempt's student |
+| DELETE | `/courses/{course_id}/quizzes/{quiz_id}/attempts/{attempt_id}`        | `hideCourseQuizAttempt`    | course teacher                    |
+| PUT    | `/courses/{course_id}/quizzes/{quiz_id}/attempts/{attempt_id}/grades` | `gradeCourseQuizAttempt`   | course teacher                    |
+| GET    | `/courses/{course_id}/my-record-attempts`                             | `listMyRecordAttempts`     | course member (own rows)          |
+| GET    | `/courses/{course_id}/record-attempts`                                | `listCourseRecordAttempts` | course teacher                    |
 
-There is no delete-quiz route (`DELETE …/quizzes/{quiz_id}` returns 405) and
-no route that reads, hides or grades a single quiz attempt.
+There is no delete-quiz route (`DELETE …/quizzes/{quiz_id}` returns 405).
+`/attempts/export` is declared before `/attempts/{attempt_id}` so "export" is
+never parsed as an attempt id.
 
 ## Permissions
 
 - Not an active member of the course: **404** on every operation.
 - Teacher-only operations reached by a student (create, patch, publish,
-  unpublish, start/pause, export, `record-attempts`): **404**
+  unpublish, start/pause, export, hide, grade, `record-attempts`): **404**
   (`workspace.access.course_member(teacher=True)` raises `not_found`). Tests
   accept 403 or 404; the observed status is 404.
 - A course teacher submitting an attempt: **403**.
+- Attempt detail: a course teacher reads any non-hidden attempt of the quiz;
+  a student reads only their own; anything else, and any hidden attempt, is
+  **404**.
 - A student never sees a draft: the list filters to `published` and
   `getCourseQuiz` on a draft returns **404**. Submitting to a draft is also
   **404**.
@@ -111,9 +121,9 @@ with at least one answer.
   violation that slips past its pre-check.
 - `single`/`multiple`: unordered set equality with the key scores the item's
   `points`, otherwise 0. Text items are stored with `points_awarded=null`.
-  `grading_status` is `complete` (objective only), `pending` (text only) or
-  `mixed`. No route grades text items later, so `pending`/`mixed` is final in
-  this version.
+  `grading_status` is `complete` (no text items), `pending` (text only) or
+  `mixed` until a teacher grades every text item by hand (see
+  [Hand grading](#hand-grading-no-model-call)).
 - Answers for unknown item ids are kept with `type: "unknown"` and not scored.
   Missing answers to `required` items are not rejected, and the `settings`
   flags (`shuffle_*`, `allow_skip`, `time_limit_sec`) are stored but not
@@ -131,6 +141,11 @@ with at least one answer.
 - `my-record-attempts` returns only the caller's own quiz attempts (plus, for
   students, their own legacy chat attempts). Rows carry scores and status, not
   answers.
+- A student's attempt detail is `StudentQuizAttemptDetailDTO` (`view:
+"student"`): their responses, per-item `correct`, points and the teacher's
+  feedback, with no `answer` key or rubric. The server asserts the key is
+  absent, and the test checks the raw JSON. The distinct `view` literal stops
+  FastAPI from serializing a student payload through the teacher model.
 - `listCourseQuizzes` uses the same `QuizSummaryDTO` for both roles, so a
   student also receives `attempt_count`: the course-wide number of non-hidden
   attempts on that quiz, across all epochs.
@@ -146,12 +161,56 @@ quiz's quiz-source rows.
 `RecordAttemptDTO` carries `attempt_id`, `user_id`, `student_name`, `title`,
 `status`, `submitted_at`, `score_objective`/`score_max_objective`,
 `grading_status`, `quiz_id`, `conversation_id`, `points_awarded`/`points_total`,
-`phase` and `team_name`. It does **not** carry `taking_epoch`,
-`content_revision` or answers. Quiz rows report `phase="completed"` when
-grading is complete and `"scoring_not_saved"` otherwise.
+`phase`, `team_name`, and for quiz rows `taking_epoch` and `content_revision`.
+It carries no answers. For quiz rows `points_awarded` is
+`score_objective + score_manual` and `points_total` covers every item,
+text questions included, so an ungraded paper never reads as full marks.
+`phase` is `"completed"` once grading is complete and `"grading_pending"`
+before.
 
-Attempts with `teacher_hidden_at` set are excluded from counts, Record and
-export. No route sets that column for quiz attempts yet.
+The Records pages show quiz rows from these endpoints and render chat rows
+through the existing chat Record board, which reads
+`/learning/courses/{course_id}/assessment-attempts` (teacher) or
+`/my-assessment-attempts` (student). See [Record placement](#record-placement).
+
+Attempts with `teacher_hidden_at` set are excluded from counts, Record,
+detail and export.
+
+## Attempt detail
+
+`GET …/attempts/{attempt_id}` returns the paper as it was frozen in the
+attempt's `document_snapshot_json`, item by item, with
+`response_choice_ids`/`response_text`, `correct` (choice items),
+`points_awarded`, `graded`, `feedback`, plus `taking_epoch`,
+`content_revision`, `score_objective`/`score_max_objective`,
+`score_manual`/`score_max_manual`, `points_awarded`/`points_total`,
+`grading_status` and `graded_at`. The teacher view (`view: "teacher"`) adds
+each item's `answer` (choice ids or rubric).
+
+## Hand grading (no model call)
+
+`PUT …/attempts/{attempt_id}/grades` with
+`{"grades": [{"item_id": "q3", "points_awarded": 2.5, "feedback": "…"}]}`
+(1–500 grades; feedback ≤ 4000 characters). No AI or model call is involved.
+
+- Only text items (`short_text`/`long_text`) of the attempt's frozen paper can
+  be graded; an unknown or choice item, or the same item twice in one
+  request, is **422** `quiz_grade_item_invalid`. Points must be finite, ≥ 0
+  and ≤ that item's points on the frozen paper (a later edit does not move
+  the cap): **422** `quiz_grade_points_invalid` with `details.max_points`.
+- A grade upserts per item and records the grader and time in
+  `manual_grades_json`. `score_manual` is the sum, `score_objective` never
+  changes, and `grading_status` becomes `complete` once every text item has
+  a grade. The row is locked (`SELECT … FOR UPDATE`) while grading.
+- Hidden attempts cannot be graded (**404**).
+
+## Hiding an attempt
+
+`DELETE …/attempts/{attempt_id}` (**204**) sets `teacher_hidden_at`. The
+attempt leaves teacher and student Record, `attempt_count`, detail and the
+export, for the student too. The row is kept, so the student still cannot
+submit again in that epoch (`quiz_attempt_exists`). There is no unhide
+route. A second hide, or a hide by a student, is **404**.
 
 ## Export
 
@@ -165,7 +224,9 @@ A non-integer `taking_epoch` is **400**.
 - Files: `manifest.json` (counts, filter, `taking_epoch_filter`),
   `quiz.json` (the quiz's **current** document, including the key),
   `attempts.json` (per attempt: id, user id, display name, revision, epoch,
-  time, grading, scores, answers) and `summary.md`. With zero submissions it
+  time, grading, objective and manual scores, `points_awarded`/`points_total`,
+  `graded_at`, `manual_grades`, answers) and `summary.md` (its Score column
+  is `points_awarded/points_total`). With zero submissions it
   still returns 200, `attempts.json` is `[]`, and `README.md`/`summary.md` say
   `No submissions yet.`
 - Rows contain no email, password or token fields (asserted). Each attempt's
@@ -175,72 +236,99 @@ A non-integer `taking_epoch` is **400**.
 
 ## Teacher and student controls
 
-| Page                                           | Control (English copy)                                            | Calls / rule                                                                                  |
-| ---------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Editor `/teacher/quizzes/new`, `/{id}`         | Done                                                              | create or patch, then publish; in-flight lock (`beginDoneLock`); then back to the list        |
-| Editor (published) and list row                | Start evaluation / Pause evaluation                               | `start-taking` / `pause-taking`; shown only for published quizzes                             |
-| Editor (published) and list row                | Unpublish                                                         | `unpublish`; until then the editor hides Done and the edit controls (`isPublishedLocked`)     |
-| List row                                       | Published/Draft, Accepting submissions/Paused, `{count} attempts` | from `QuizSummaryDTO`                                                                         |
-| List row → `/teacher/quizzes/records?quiz_id=` | Records, Download                                                 | `record-attempts?quiz_id=` (also filtered client-side); Download only when scoped to one quiz |
-| Student `/student/quiz`                        | Available: Start / Not open yet                                   | Start only when `taking_open === true` (`canStudentStartQuiz`)                                |
-| Student `/student/quiz?tab=records`            | Records                                                           | `my-record-attempts` without `quiz_id`                                                        |
+| Page                                           | Control (English copy)                                                      | Calls / rule                                                                                  |
+| ---------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Editor `/teacher/quizzes/new`, `/{id}`         | Done                                                                        | create or patch, then publish; in-flight lock (`beginDoneLock`); then back to the list        |
+| Editor (published) and list row                | Start evaluation / Pause evaluation                                         | `start-taking` / `pause-taking`; shown only for published quizzes                             |
+| Editor (published) and list row                | Unpublish                                                                   | `unpublish`; until then the editor hides Done and the edit controls (`isPublishedLocked`)     |
+| List row                                       | Published/Draft, Accepting submissions/Paused, `{count} attempts`           | from `QuizSummaryDTO`                                                                         |
+| List row → `/teacher/quizzes/records?quiz_id=` | Records, Download                                                           | `record-attempts?quiz_id=` (also filtered client-side); Download only when scoped to one quiz |
+| Teacher Records row (`Round N`)                | opens the attempt: Key column, points/feedback inputs, Save grades, Hide    | attempt detail, `grades`, hide (after a confirm)                                              |
+| Teacher `/teacher/quizzes/records` (no filter) | quiz submissions, then the chat Record board (CLASS ROSTER)                 | `record-attempts` quiz rows; chat board as before (report download, delete)                   |
+| Student `/student/quiz`                        | Available: Start / Not open yet                                             | Start only when `taking_open === true` (`canStudentStartQuiz`)                                |
+| Student `/student/quiz?tab=records`            | Records: own submissions (no Key), then the chat Record board (MY PROGRESS) | `my-record-attempts` quiz rows, attempt detail; chat board as before                          |
 
 Empty states appear only when the request succeeded with no rows. Student
-pages call through `PlatformApi`; teacher pages call through `QuizApi`
-(`frontend/lib/api/quiz.ts`). English copy for Quiz codes lives in
-`frontend/lib/i18n.ts` (`quiz_taking_already_open`,
-`quiz_taking_already_closed`, `quiz_taking_closed`, `quiz_attempt_exists`) and
-`frontend/lib/error-copy.json` (the other Quiz codes, #376). See gap 6 for
-the teacher path.
+pages call through `PlatformApi`; teacher pages and the attempt detail call
+through `QuizApi` (`frontend/lib/api/quiz.ts`), which reads the same
+top-level `{code, message, details, request_id}` error body as `PlatformApi`.
+English copy for Quiz codes lives in `frontend/lib/i18n.ts`
+(`quiz_taking_already_open`, `quiz_taking_already_closed`,
+`quiz_taking_closed`, `quiz_attempt_exists`) and `frontend/lib/error-copy.json`
+(the other Quiz codes, grading codes included). The Records rows carry no
+press-motion hit layer: its hover overlay covered the grading controls in a
+real browser.
 
-## Known gaps and deviations (evidence, not changed here)
+## Record placement
 
-1. **Route-surface gate.** `contracts/route-surface-placeholders.json` lists
-   nine Quiz operations but not `startCourseQuizTaking`,
-   `pauseCourseQuizTaking` or `exportCourseQuizAttempts`. On 8dec1db,
-   `node scripts/compare_route_surface.mjs --server-openapi …` fails with
-   "unexpected server operation" for exactly those three. CI has not reported
-   it because the `deterministic` job fails at an earlier backend-test step.
-2. The old frontend note promised that publish was idempotent and that Record
-   rows carried `taking_epoch`. Neither is true (see above).
-3. [ADR-011](../adr/ADR-011-classroom-quiz-parallel-domain.md) still says "one
-   submitted attempt per student per quiz". 0084 made it one per epoch.
-4. A student who already submitted in the open epoch still sees Start. No DTO
+Owner decision (2026-11-08): the formal chat-assessment Record moved out of
+Brainform. The Brainform sidebar row, the Brainform/Studyform Record cards and
+the `/teacher/record` and `/student/record` pages are gone. The two paths
+redirect to `/teacher/quizzes/records` and `/student/quiz?tab=records`. The
+chat board (`AssessmentRecordPanel` in
+`frontend/components/knowledge/assessment-record.tsx`) keeps its copy,
+grouping, answer sheets, report downloads and teacher delete, and its data
+and endpoints are unchanged. No chat attempt was copied or rewritten.
+
+## Known gaps (evidence, not changed here)
+
+1. A student who already submitted in the open epoch still sees Start. No DTO
    tells them, so they learn it from the 409 after answering.
-5. Teachers cannot see a quiz attempt's answers in the UI, hide or delete a
-   quiz attempt, grade text items or delete a quiz. Answers are reachable
-   only through the ZIP.
-6. **Teacher error copy.** The backend sends errors as top-level
-   `{code, message, details, request_id}`. `QuizApi`'s `toPlatformApiError`
-   only reads a FastAPI-style `detail` wrapper, so on the teacher pages the
-   code is dropped and the raw JSON body becomes the message. A local probe
-   (409 `quiz_taking_already_open` through `QuizApi.startTaking`) gave
-   `code=null` and rendered the JSON text instead of "Taking is already
-   open.". Student calls use `PlatformApi.readErrorPayload` and are not
-   affected.
+2. `listCourseQuizzes` gives students the course-wide `attempt_count`.
+3. `group_id` does not filter which students see a quiz; the server does not
+   enforce `required` or the `settings` flags.
+4. The export's `quiz.json` is the current paper, not each attempt's frozen
+   snapshot (the attempt detail does use the snapshot).
+5. No delete-quiz and no unhide route.
+
+Closed on 2026-11-08: the three unclassified route-surface operations, the
+teacher error copy (raw JSON), the missing attempt detail/hide/grading, the
+missing `taking_epoch` on Record rows, the frontend note's two wrong claims
+and ADR-011's per-quiz wording (amended there).
 
 ## Route-surface classification
 
 The Quiz operations are server extras outside the frozen OpenAPI and are
 classified in `contracts/route-surface-placeholders.json` (owner
-`T2-QUIZ-M1M3`). Gap 1 lists the three that still need a classification.
+`T2-QUIZ-M1M3`), all fifteen of them. `node scripts/compare_route_surface.mjs`
+passes against the exported server OpenAPI.
 
 ## Verification behind this file
 
-On 2026-11-08 (JST), tree 8dec1db, local PostgreSQL 16:
+2026-11-08 (JST), branch `claude/exciting-lamport-ualph4` on `main` 19e9ba19,
+local PostgreSQL 16, Node 24.14.0:
 
-- `cd backend && uv run pytest -p no:warnings tests/test_classroom_quiz_api.py tests/test_classroom_quiz_export.py tests/test_database.py`:
-  18 passed.
-- `pnpm -C frontend exec vitest run tests/quiz-export.test.ts tests/quiz-m4.test.ts tests/quiz-rework-b-r2.test.ts tests/quiz-validation.test.ts`:
-  31 passed.
-- Throwaway probes (not committed) confirmed the publish/unpublish/start
-  refusals, teacher-submit 403, student-export 404, the epoch after republish,
-  the concurrent-submit result and the teacher error parsing (gap 6) quoted
-  above.
-- The route-surface comparison failed as described in gap 1.
+- Backend full `uv run pytest`: 3172 tests, 131 failed. 129 of those fail
+  identically on `main` (Wave4 persona/prompt/mutual-learning, embedding
+  presend). The other 2 (`test_debate_voice_params`, one
+  `test_preview_recovery_regressions` case) passed 3/3 when rerun alone and
+  are load flakes. No Quiz, Record or migration test failed. `ruff check`,
+  `ruff format --check` and `mypy app` passed.
+- Frontend `pnpm -C frontend test --run`: 1155 passed, 13 skipped. Typecheck
+  passed, lint has 0 errors (4 pre-existing warnings), and the production
+  build passed.
+- Contract scripts from AGENTS.md (frozen OpenAPI, generated contracts/WS,
+  responses, document authority, Latin tables, repo boundary, route surface
+  incl. `compare_route_surface.mjs`, redocly, prettier) passed.
+- Migration: a database filled by `main` (0084) with a quiz and two submitted
+  attempts was backed up (`pg_dump -Fc` with `pg_restore --list` OK), then
+  upgraded by this branch to 0085. Rows were kept with `score_manual=0` and
+  `manual_grades_json={}`, and a pre-migration attempt then graded to
+  `complete`. An empty database upgraded twice and was ready.
+- Browser E2E (Playwright, `next dev` and a local mock-provider backend):
+  the teacher creates a quiz in the editor and publishes it with Done
+  (taking stays closed), then Start evaluation; two students submit; the
+  teacher sees Round 1, the key and rubric, hand-grades the text question
+  (4.5 / 5, Grades saved), hides one attempt after a confirm and downloads
+  the ZIP (1 attempt, hand grade included). Unscoped Records shows the chat
+  Record board, which opens. `/teacher/record` and `/student/record`
+  redirect, and neither sidebar has a Brainform Record row. The student sees
+  their own answers, (Correct), 2.5 / 3 and the feedback, with no Key and no
+  rubric, plus their chat Record board; the hidden attempt is gone for that
+  student. A pause → start retest shows Round 2. A stale Pause shows "Taking
+  is already paused.", not JSON. At 390px there is no horizontal scroll.
 
-These runs cover Quiz only. They are not a full-suite, browser or production
-acceptance.
+This is not a production acceptance; nothing was deployed.
 
 ## History
 
@@ -249,4 +337,6 @@ acceptance.
 - 2026-11-06, MAYA-QUIZ-REWORK-20261106-01 (P1/P3/P4): publish separated from
   taking, retest epochs, `quiz_id` Record filter; migration 0084.
 - 2026-11-07, #375/#374: teacher ZIP export (backend/frontend).
-- 2026-11-08: the frontend rework note merged into this file.
+- 2026-11-08: the frontend rework note merged into this file; migration 0085
+  adds attempt detail, hand grading (no AI), hide and Record epochs; the chat
+  Record moved from Brainform to Quiz Records.

@@ -30,15 +30,23 @@ from .grading import grade_objective
 from .models import ClassroomQuiz, ClassroomQuizAttempt
 from .schemas import (
     CreateQuizRequest,
+    GradeQuizAttemptRequest,
     PatchQuizRequest,
     QuizAttemptDTO,
+    QuizAttemptItemStudent,
+    QuizAttemptItemTeacher,
     QuizSettings,
     QuizSummaryDTO,
     RecordAttemptDTO,
+    StudentQuizAttemptDetailDTO,
     StudentQuizDTO,
     SubmitQuizAttemptRequest,
+    TeacherQuizAttemptDetailDTO,
     TeacherQuizDTO,
 )
+
+TEXT_TYPES = ("short_text", "long_text")
+CHOICE_TYPES = ("single", "multiple")
 
 
 def _now() -> datetime:
@@ -440,26 +448,7 @@ def list_my_record_attempts(
         quiz_query = quiz_query.where(ClassroomQuizAttempt.quiz_id == quiz_id)
     quiz_attempts = db.scalars(quiz_query.order_by(ClassroomQuizAttempt.submitted_at.desc())).all()
     for attempt in quiz_attempts:
-        quiz = db.get(ClassroomQuiz, attempt.quiz_id)
-        title = quiz.title if quiz is not None else "Quiz"
-        rows.append(
-            RecordAttemptDTO(
-                source="quiz",
-                attempt_id=UUID(attempt.id),
-                user_id=UUID(attempt.actor_user_id),
-                student_name=_display_name(db, attempt.actor_user_id),
-                title=title,
-                status=attempt.status,
-                submitted_at=attempt.submitted_at,
-                score_objective=attempt.score_objective,
-                score_max_objective=attempt.score_max_objective,
-                grading_status=attempt.grading_status,  # type: ignore[arg-type]
-                quiz_id=UUID(attempt.quiz_id),
-                points_awarded=attempt.score_objective,
-                points_total=attempt.score_max_objective,
-                phase="completed" if attempt.grading_status == "complete" else "scoring_not_saved",
-            )
-        )
+        rows.append(_quiz_record_row(db, attempt))
 
     # Legacy chat attempts stay readable.
     if quiz_id is not None:
@@ -518,26 +507,7 @@ def list_course_record_attempts(
         quiz_query = quiz_query.where(ClassroomQuizAttempt.quiz_id == quiz_id)
     quiz_attempts = db.scalars(quiz_query.order_by(ClassroomQuizAttempt.submitted_at.desc())).all()
     for attempt in quiz_attempts:
-        quiz = db.get(ClassroomQuiz, attempt.quiz_id)
-        title = quiz.title if quiz is not None else "Quiz"
-        rows.append(
-            RecordAttemptDTO(
-                source="quiz",
-                attempt_id=UUID(attempt.id),
-                user_id=UUID(attempt.actor_user_id),
-                student_name=_display_name(db, attempt.actor_user_id),
-                title=title,
-                status=attempt.status,
-                submitted_at=attempt.submitted_at,
-                score_objective=attempt.score_objective,
-                score_max_objective=attempt.score_max_objective,
-                grading_status=attempt.grading_status,  # type: ignore[arg-type]
-                quiz_id=UUID(attempt.quiz_id),
-                points_awarded=attempt.score_objective,
-                points_total=attempt.score_max_objective,
-                phase="completed" if attempt.grading_status == "complete" else "scoring_not_saved",
-            )
-        )
+        rows.append(_quiz_record_row(db, attempt))
 
     if quiz_id is not None:
         chat_source: list[dict[str, Any]] = []
@@ -570,3 +540,237 @@ def list_course_record_attempts(
         reverse=True,
     )
     return rows
+
+
+def _snapshot_items(attempt: ClassroomQuizAttempt) -> list[Any]:
+    """The paper this attempt answered: grading never follows later edits."""
+
+    return teacher_items_from_document(loads_document(attempt.document_snapshot_json))
+
+
+def _manual_grades(attempt: ClassroomQuizAttempt) -> dict[str, dict[str, Any]]:
+    raw = json.loads(attempt.manual_grades_json or "{}")
+    if not isinstance(raw, dict):
+        return {}
+    return {str(key): value for key, value in raw.items() if isinstance(value, dict)}
+
+
+def _manual_max(items: list[Any]) -> float:
+    return float(sum(float(item.points) for item in items if item.type in TEXT_TYPES))
+
+
+def _grading_status(items: list[Any], grades: dict[str, dict[str, Any]]) -> str:
+    """complete once every text item has a teacher grade (or there are none)."""
+
+    text_ids = [item.id for item in items if item.type in TEXT_TYPES]
+    if all(item_id in grades for item_id in text_ids):
+        return "complete"
+    return "mixed" if any(item.type in CHOICE_TYPES for item in items) else "pending"
+
+
+def _quiz_record_row(db: Session, attempt: ClassroomQuizAttempt) -> RecordAttemptDTO:
+    quiz = db.get(ClassroomQuiz, attempt.quiz_id)
+    score_max_manual = _manual_max(_snapshot_items(attempt))
+    return RecordAttemptDTO(
+        source="quiz",
+        attempt_id=UUID(attempt.id),
+        user_id=UUID(attempt.actor_user_id),
+        student_name=_display_name(db, attempt.actor_user_id),
+        title=quiz.title if quiz is not None else "Quiz",
+        status=attempt.status,
+        submitted_at=attempt.submitted_at,
+        score_objective=attempt.score_objective,
+        score_max_objective=attempt.score_max_objective,
+        grading_status=attempt.grading_status,  # type: ignore[arg-type]
+        quiz_id=UUID(attempt.quiz_id),
+        # Totals cover text items too, so an ungraded paper never reads as a
+        # full score over its choice questions alone.
+        points_awarded=attempt.score_objective + attempt.score_manual,
+        points_total=attempt.score_max_objective + score_max_manual,
+        phase="completed" if attempt.grading_status == "complete" else "grading_pending",
+        taking_epoch=attempt.taking_epoch,
+        content_revision=attempt.content_revision,
+    )
+
+
+def _visible_attempt(
+    db: Session, course_id: str, quiz_id: str, attempt_id: str, *, lock: bool = False
+) -> ClassroomQuizAttempt:
+    query = select(ClassroomQuizAttempt).where(
+        ClassroomQuizAttempt.id == attempt_id,
+        ClassroomQuizAttempt.quiz_id == quiz_id,
+        ClassroomQuizAttempt.course_id == course_id,
+        ClassroomQuizAttempt.teacher_hidden_at.is_(None),
+    )
+    if lock:
+        query = query.with_for_update()
+    attempt = db.scalar(query)
+    if attempt is None:
+        raise not_found()
+    return attempt
+
+
+def _attempt_detail(
+    db: Session, attempt: ClassroomQuizAttempt, *, teacher: bool
+) -> TeacherQuizAttemptDetailDTO | StudentQuizAttemptDetailDTO:
+    items = _snapshot_items(attempt)
+    grades = _manual_grades(attempt)
+    answers_raw = json.loads(attempt.answers_json)
+    answers = {
+        str(row.get("item_id")): row
+        for row in (answers_raw if isinstance(answers_raw, list) else [])
+        if isinstance(row, dict)
+    }
+    item_cls = QuizAttemptItemTeacher if teacher else QuizAttemptItemStudent
+    rows: list[Any] = []
+    for item in items:
+        answer = answers.get(item.id, {})
+        grade = grades.get(item.id)
+        entry: dict[str, Any] = {
+            "id": item.id,
+            "type": item.type,
+            "required": item.required,
+            "prompt": item.prompt,
+            "choices": item.choices,
+            "points": float(item.points),
+        }
+        if item.type in CHOICE_TYPES:
+            entry["response_choice_ids"] = list(answer.get("choice_ids") or [])
+            entry["correct"] = answer.get("correct")
+            entry["points_awarded"] = answer.get("points_awarded")
+            entry["graded"] = True
+        else:
+            entry["response_text"] = str(answer.get("text") or "")
+            entry["graded"] = grade is not None
+            if grade is not None:
+                entry["points_awarded"] = float(grade.get("points_awarded") or 0)
+                entry["feedback"] = str(grade.get("feedback") or "")
+        if teacher:
+            entry["answer"] = item.answer
+        rows.append(item_cls(**entry))
+    known = {item.id for item in items}
+    for item_id, answer in answers.items():
+        if item_id in known:
+            continue
+        rows.append(
+            item_cls(
+                id=item_id,
+                type="unknown",
+                response_choice_ids=answer.get("choice_ids"),
+                response_text=answer.get("text"),
+            )
+        )
+    quiz = db.get(ClassroomQuiz, attempt.quiz_id)
+    score_max_manual = _manual_max(items)
+    payload: dict[str, Any] = {
+        "id": UUID(attempt.id),
+        "quiz_id": UUID(attempt.quiz_id),
+        "course_id": UUID(attempt.course_id),
+        "user_id": UUID(attempt.actor_user_id),
+        "student_name": _display_name(db, attempt.actor_user_id),
+        "title": quiz.title if quiz is not None else "Quiz",
+        "content_revision": attempt.content_revision,
+        "taking_epoch": attempt.taking_epoch,
+        "status": "submitted",
+        "grading_status": attempt.grading_status,
+        "score_objective": attempt.score_objective,
+        "score_max_objective": attempt.score_max_objective,
+        "score_manual": attempt.score_manual,
+        "score_max_manual": score_max_manual,
+        "points_awarded": attempt.score_objective + attempt.score_manual,
+        "points_total": attempt.score_max_objective + score_max_manual,
+        "submitted_at": attempt.submitted_at,
+        "graded_at": attempt.graded_at,
+        "items": rows,
+    }
+    if teacher:
+        return TeacherQuizAttemptDetailDTO(**payload)
+    # Rebuilt through the student DTO: its items carry no answer field.
+    detail = StudentQuizAttemptDetailDTO(**payload)
+    assert_no_answer_keys(detail.model_dump(mode="json"))
+    return detail
+
+
+def get_attempt_for_actor(
+    db: Session, actor: AuthContext, course_id: str, quiz_id: str, attempt_id: str
+) -> TeacherQuizAttemptDetailDTO | StudentQuizAttemptDetailDTO:
+    """A teacher reads any visible attempt; a student only their own."""
+
+    role = _require_member(db, actor, course_id)
+    _get_quiz(db, course_id, quiz_id)
+    attempt = _visible_attempt(db, course_id, quiz_id, attempt_id)
+    if role == "teacher":
+        return _attempt_detail(db, attempt, teacher=True)
+    if attempt.actor_user_id != str(actor.user.id):
+        raise not_found()
+    return _attempt_detail(db, attempt, teacher=False)
+
+
+def hide_attempt(
+    db: Session, actor: AuthContext, course_id: str, quiz_id: str, attempt_id: str
+) -> None:
+    """Hide an attempt from Record, counts and export, for the student too.
+
+    The row stays (with its epoch), so hiding never reopens that round for
+    the student.
+    """
+
+    _require_teacher(db, actor, course_id)
+    _get_quiz(db, course_id, quiz_id)
+    attempt = _visible_attempt(db, course_id, quiz_id, attempt_id, lock=True)
+    attempt.teacher_hidden_at = _now()
+    db.commit()
+
+
+def grade_attempt(
+    db: Session,
+    actor: AuthContext,
+    course_id: str,
+    quiz_id: str,
+    attempt_id: str,
+    body: GradeQuizAttemptRequest,
+) -> TeacherQuizAttemptDetailDTO:
+    """A teacher's hand grade for text items; choice items keep the key's score."""
+
+    _require_teacher(db, actor, course_id)
+    _get_quiz(db, course_id, quiz_id)
+    attempt = _visible_attempt(db, course_id, quiz_id, attempt_id, lock=True)
+    items = {item.id: item for item in _snapshot_items(attempt)}
+    seen: set[str] = set()
+    for grade in body.grades:
+        item = items.get(grade.item_id)
+        if item is None or item.type not in TEXT_TYPES or grade.item_id in seen:
+            raise unprocessable(
+                "quiz_grade_item_invalid",
+                "Only each text question of this attempt can be graded, once per request.",
+                {"item_id": grade.item_id},
+            )
+        seen.add(grade.item_id)
+        if grade.points_awarded > float(item.points):
+            raise unprocessable(
+                "quiz_grade_points_invalid",
+                "Points cannot exceed the question's points.",
+                {"item_id": grade.item_id, "max_points": float(item.points)},
+            )
+    grades = _manual_grades(attempt)
+    now = _now()
+    for grade in body.grades:
+        grades[grade.item_id] = {
+            "points_awarded": float(grade.points_awarded),
+            "feedback": grade.feedback,
+            "graded_by_user_id": str(actor.user.id),
+            "graded_at": now.isoformat(),
+        }
+    attempt.manual_grades_json = json.dumps(grades, ensure_ascii=False, separators=(",", ":"))
+    attempt.score_manual = float(
+        sum(
+            float(value.get("points_awarded") or 0) for key, value in grades.items() if key in items
+        )
+    )
+    attempt.grading_status = _grading_status(list(items.values()), grades)
+    attempt.graded_at = now
+    db.commit()
+    db.refresh(attempt)
+    detail = _attempt_detail(db, attempt, teacher=True)
+    assert isinstance(detail, TeacherQuizAttemptDetailDTO)
+    return detail

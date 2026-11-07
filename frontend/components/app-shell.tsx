@@ -476,7 +476,6 @@ export function AppShell({
     teacherSurface &&
     (pathname === "/teacher/rag" ||
       pathname === "/teacher/voices" ||
-      pathname === "/teacher/record" ||
       pathname === "/teacher/chat")
       ? new URLSearchParams(locationSearch).get("group_id")
       : null;
@@ -546,7 +545,6 @@ export function AppShell({
     const reading =
       window.location.pathname === "/teacher/rag" ||
       window.location.pathname === "/teacher/voices" ||
-      window.location.pathname === "/teacher/record" ||
       window.location.pathname === "/teacher/chat"
         ? new URLSearchParams(window.location.search).get("group_id")
         : null;
@@ -890,11 +888,6 @@ export function AppShell({
       : groupId
         ? `/student/voices?group_id=${groupId}`
         : "/student/voices";
-  const recordHref = visit
-    ? `/teacher/record?group_id=${visit}`
-    : teacherSurface
-      ? "/teacher/record"
-      : "/student/record";
   const groups: SidebarGroup[] = [
     {
       key: "studyform",
@@ -934,12 +927,6 @@ export function AppShell({
           href: voicesHref,
           label: t("voices"),
           icon: "mic",
-        },
-        {
-          key: "record",
-          href: recordHref,
-          label: t("sidebarRecord"),
-          icon: "clock",
         },
         // Knowledge is the teacher's own; inside a student group the sidebar
         // shows what the group's members see.
@@ -1039,12 +1026,10 @@ export function AppShell({
     : collapsed
       ? t("sidebarExpand")
       : t("sidebarCollapse");
-  // RAG, Voices, Record and Teams each light only their own row, as Agents does.
+  // RAG, Voices and Teams each light only their own row, as Agents does.
   const ragArea = pathname === "/student/rag" || pathname === "/teacher/rag";
   const voicesArea =
     pathname === "/student/voices" || pathname === "/teacher/voices";
-  const recordArea =
-    pathname === "/student/record" || pathname === "/teacher/record";
   const teamsArea =
     pathname === "/student/teams" || pathname === "/teacher/teams";
   const knowledgeArea =
@@ -1086,7 +1071,6 @@ export function AppShell({
     !agentsArea &&
     !ragArea &&
     !voicesArea &&
-    !recordArea &&
     !teamsArea &&
     !knowledgeArea &&
     activeHref === home;
@@ -1472,8 +1456,6 @@ const PAGE_ROW: Record<string, string> = {
   "/student/rag": "rag",
   "/teacher/voices": "voices",
   "/student/voices": "voices",
-  "/teacher/record": "record",
-  "/student/record": "record",
   "/student/quiz": "quiz",
 };
 

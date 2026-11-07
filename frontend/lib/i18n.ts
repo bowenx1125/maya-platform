@@ -14,7 +14,6 @@ const enMessages = {
   sidebarCollapse: "Collapse sidebar",
   sidebarExpand: "Expand sidebar",
   sidebarTeams: "Teams",
-  sidebarRecord: "Record",
   sidebarChatAgent: "Chat with Agent",
   sidebarChatTeam: "Chat with Team",
   sidebarClassroom: "Classroom",
@@ -1093,6 +1092,22 @@ const enMessages = {
   quizTakingClosed: "This quiz is not open for taking yet.",
   quizAttemptExists:
     "You already submitted this round. Wait for the teacher to reopen taking.",
+  quizRound: "Round {n}",
+  quizSubmissions: "Quiz submissions",
+  quizNoSubmissions: "No quiz submissions yet.",
+  quizAnswerKey: "Key",
+  quizCorrect: "Correct",
+  quizIncorrect: "Incorrect",
+  quizNeedsGrading: "Needs grading",
+  quizNotGraded: "Not graded yet",
+  quizGradePointsFor: "Points for question {n}",
+  quizGradeFeedbackFor: "Feedback for question {n}",
+  quizSaveGrades: "Save grades",
+  quizGradesSaved: "Grades saved.",
+  quizHideAttempt: "Hide",
+  quizHideAttemptNamed: "Hide {name}'s attempt",
+  quizHideConfirm:
+    "Hide this attempt? It leaves Records and the export, for the student too.",
 } as const;
 
 export type MessageKey = keyof typeof enMessages;

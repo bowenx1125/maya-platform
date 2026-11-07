@@ -27,7 +27,7 @@ from app.core.postgres_compat import ensure_postgres_compat
 POSTGRES_POOL_SIZE = 15
 POSTGRES_MAX_OVERFLOW = 25
 
-ALEMBIC_HEAD = "0084_quiz_taking_open_retest"
+ALEMBIC_HEAD = "0085_quiz_manual_grading"
 # The oldest revision this checkout has (migrations squashed 2026-10-25).
 MIGRATION_BASELINE = "0080_drop_playback_rate"
 

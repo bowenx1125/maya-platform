@@ -329,6 +329,7 @@ export type RecordAttemptDto = {
   phase: string | null;
   team_name: string | null;
   taking_epoch?: number | null;
+  content_revision?: number | null;
 };
 
 export type SubmitQuizAttemptRequest = {
@@ -668,7 +669,9 @@ type ClientResult<T> = {
   response: Response;
 };
 
-function readErrorPayload(error: unknown): Partial<ErrorPayload> | undefined {
+export function readErrorPayload(
+  error: unknown,
+): Partial<ErrorPayload> | undefined {
   if (!error || typeof error !== "object") return undefined;
   const candidate = error as Partial<ErrorPayload>;
   return typeof candidate.message === "string" ? candidate : undefined;

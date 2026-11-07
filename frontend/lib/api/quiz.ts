@@ -1,6 +1,11 @@
 import type { PlatformApi, RecordAttemptDto } from "./platform";
-import { PlatformApiError, responseDownloadFilename } from "./platform";
-import { exportQuizAttemptsPath } from "../quiz-urls";
+import {
+  PlatformApiError,
+  readErrorPayload,
+  responseDownloadFilename,
+} from "./platform";
+import { tm } from "../i18n";
+import { exportQuizAttemptsPath, quizAttemptPath } from "../quiz-urls";
 
 export type QuizStatus = "draft" | "published";
 export type QuizItemType = "single" | "multiple" | "short_text" | "long_text";
@@ -57,6 +62,55 @@ export interface TeacherQuizDTO extends QuizSummaryDTO {
   items: QuizItemTeacher[];
 }
 
+export type QuizGradingStatusValue = "complete" | "pending" | "mixed";
+
+/** One item of the frozen paper an attempt answered, with the response. */
+export interface QuizAttemptItem {
+  id: string;
+  type: QuizItemType | "unknown";
+  required?: boolean;
+  prompt: string;
+  choices: QuizChoice[];
+  points: number;
+  response_choice_ids?: string[] | null;
+  response_text?: string | null;
+  correct?: boolean | null;
+  points_awarded?: number | null;
+  graded: boolean;
+  feedback?: string | null;
+  /** Teacher view only; a student's detail never carries the key. */
+  answer?: QuizAnswerKey | null;
+}
+
+export interface QuizAttemptDetail {
+  view: "teacher" | "student";
+  id: string;
+  quiz_id: string;
+  course_id: string;
+  user_id: string;
+  student_name: string;
+  title: string;
+  content_revision: number;
+  taking_epoch: number;
+  status: "submitted";
+  grading_status: QuizGradingStatusValue;
+  score_objective: number;
+  score_max_objective: number;
+  score_manual: number;
+  score_max_manual: number;
+  points_awarded: number;
+  points_total: number;
+  submitted_at: string;
+  graded_at?: string | null;
+  items: QuizAttemptItem[];
+}
+
+export interface QuizItemGrade {
+  item_id: string;
+  points_awarded: number;
+  feedback?: string;
+}
+
 export interface CreateQuizRequest {
   title: string;
   group_id?: string | null;
@@ -73,39 +127,25 @@ export interface PatchQuizRequest {
   locale?: string | null;
 }
 
-interface ErrorBody {
-  detail?:
-    | {
-        code?: string;
-        message?: string;
-        details?: Record<string, unknown>;
-        request_id?: string;
-      }
-    | string;
-}
-
+// The backend sends errors top-level ({code, message, details, request_id}),
+// the same shape PlatformApi reads; without the code the teacher pages lost
+// their English copy and showed the raw JSON body instead.
 function toPlatformApiError(
   status: number,
   bodyText: string,
 ): PlatformApiError {
-  let body: ErrorBody | undefined;
+  let body: unknown;
   try {
-    body = bodyText ? (JSON.parse(bodyText) as ErrorBody) : undefined;
+    body = bodyText ? JSON.parse(bodyText) : undefined;
   } catch {
     body = undefined;
   }
-  const detail = body?.detail;
-  if (typeof detail === "string") {
-    return new PlatformApiError(status, detail);
-  }
-  if (detail && typeof detail === "object") {
-    return new PlatformApiError(status, detail.message ?? "Request failed", {
-      code: detail.code,
-      details: detail.details,
-      request_id: detail.request_id,
-    });
-  }
-  return new PlatformApiError(status, bodyText || "Request failed");
+  const payload = readErrorPayload(body);
+  return new PlatformApiError(
+    status,
+    payload?.message ?? tm("httpError", { status }),
+    payload,
+  );
 }
 
 export class QuizApi {
@@ -242,6 +282,43 @@ export class QuizApi {
       "GET",
       `/api/v1/${exportQuizAttemptsPath(courseId, quizId)}`,
       `quiz-${quizId.slice(0, 8)}-attempts.zip`,
+    );
+  }
+
+  getAttempt(
+    courseId: string,
+    quizId: string,
+    attemptId: string,
+  ): Promise<QuizAttemptDetail> {
+    return this.request<QuizAttemptDetail>(
+      "GET",
+      `/api/v1/${quizAttemptPath(courseId, quizId, attemptId)}`,
+    );
+  }
+
+  /** Teacher only: hides the attempt from Records, counts and export. */
+  hideAttempt(
+    courseId: string,
+    quizId: string,
+    attemptId: string,
+  ): Promise<void> {
+    return this.request<void>(
+      "DELETE",
+      `/api/v1/${quizAttemptPath(courseId, quizId, attemptId)}`,
+    );
+  }
+
+  /** Teacher only: hand grades for text items; choice items keep the key. */
+  gradeAttempt(
+    courseId: string,
+    quizId: string,
+    attemptId: string,
+    grades: QuizItemGrade[],
+  ): Promise<QuizAttemptDetail> {
+    return this.request<QuizAttemptDetail>(
+      "PUT",
+      `/api/v1/${quizAttemptPath(courseId, quizId, attemptId)}/grades`,
+      { grades },
     );
   }
 }

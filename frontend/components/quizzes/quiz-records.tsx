@@ -20,6 +20,8 @@ import { EmptyCard, ErrorNotice, LoadingCard } from "../ui";
 import { BUSY_MOTION, PRESS_MOTION } from "../ui/button";
 import { IconDownload } from "../quiet-icons";
 import { cn } from "../../lib/utils";
+import { AssessmentRecordPanel } from "../knowledge/assessment-record";
+import { QuizAttemptDetailView } from "../quiz/quiz-attempt-detail";
 
 function triggerBlobDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
@@ -61,9 +63,13 @@ export default function QuizRecords() {
         quizId: quizIdFilter,
       });
       // Backend may ignore quiz_id; always filter client-side when set.
-      const filtered = quizIdFilter
-        ? next.filter((row) => row.quiz_id === quizIdFilter)
-        : next;
+      // Chat-assessment rows render in the Record board below, with their
+      // answer sheets, so this list keeps quiz submissions only.
+      const filtered = next.filter(
+        (row) =>
+          row.source === "quiz" &&
+          (!quizIdFilter || row.quiz_id === quizIdFilter),
+      );
       setRows(filtered);
     } catch (cause) {
       setError(cause);
@@ -129,7 +135,9 @@ export default function QuizRecords() {
       ) : null}
       {rows === null && !error ? <LoadingCard /> : null}
       {rows && rows.length === 0 && !error ? (
-        <EmptyCard title={t("quizNoRecords")} />
+        <EmptyCard
+          title={quizIdFilter ? t("quizNoRecords") : t("quizNoSubmissions")}
+        />
       ) : null}
       {rows && rows.length > 0 ? (
         <ul className="m-0 grid list-none gap-4 p-0">
@@ -138,10 +146,9 @@ export default function QuizRecords() {
             return (
               <li
                 key={row.attempt_id}
-                className={cn(
-                  "relative flex flex-wrap items-center gap-3.5 rounded-[14px] border-[3px] border-border bg-white px-[18px] py-4 shadow-[6px_6px_0_#67E8F9]",
-                  PRESS_MOTION,
-                )}
+                // No press motion: its hover hit layer covers the row and would swallow
+                // clicks on the grading inputs and buttons inside the opened attempt.
+                className="relative flex flex-wrap items-center gap-3.5 rounded-[14px] border-[3px] border-border bg-white px-[18px] py-4 shadow-[6px_6px_0_#67E8F9]"
               >
                 <span
                   aria-hidden="true"
@@ -165,6 +172,9 @@ export default function QuizRecords() {
                     </span>
                     <span className="text-xs font-medium text-[#555]">
                       {row.student_name}
+                      {row.taking_epoch
+                        ? ` · ${t("quizRound", { n: row.taking_epoch })}`
+                        : ""}
                       {row.submitted_at
                         ? ` · ${new Date(row.submitted_at).toLocaleString(
                             "en",
@@ -189,9 +199,19 @@ export default function QuizRecords() {
                   </span>
                   <ScoreRing ratio={recordRatio(row)} />
                 </button>
-                {expanded ? (
+                {expanded && row.quiz_id ? (
                   <div className="basis-full pt-3">
-                    <RecordDetail rows={rowDetailRows(row)} />
+                    <QuizAttemptDetailView
+                      courseId={courseId}
+                      quizId={row.quiz_id}
+                      attemptId={row.attempt_id}
+                      teacher
+                      onChanged={() => void load()}
+                      onHidden={() => {
+                        setOpenId(null);
+                        void load();
+                      }}
+                    />
                   </div>
                 ) : null}
               </li>
@@ -199,59 +219,21 @@ export default function QuizRecords() {
           })}
         </ul>
       ) : null}
+      {quizIdFilter ? null : (
+        <div className="mt-8">
+          <AssessmentRecordPanel courseId={courseId} scope="course" />
+        </div>
+      )}
     </div>
   );
 }
 
 function recordRatio(row: RecordAttemptDto): number | null {
-  const awarded = row.score_objective ?? row.points_awarded;
-  const total = row.score_max_objective ?? row.points_total;
+  // Totals include hand-graded text questions; objective-only is a fallback.
+  const awarded = row.points_awarded ?? row.score_objective;
+  const total = row.points_total ?? row.score_max_objective;
   if (awarded === null || awarded === undefined || !total) return null;
   return Math.max(0, Math.min(1, awarded / total));
-}
-
-function rowDetailRows(
-  row: RecordAttemptDto,
-): Array<{ label: string; value: string }> {
-  return [
-    { label: "Student", value: row.student_name },
-    { label: "Status", value: row.status },
-    {
-      label: "Grading",
-      value: row.grading_status ?? "—",
-    },
-    {
-      label: "Score",
-      value:
-        row.score_objective === null || row.score_objective === undefined
-          ? "—"
-          : row.score_max_objective
-            ? `${row.score_objective} / ${row.score_max_objective}`
-            : `${row.score_objective}`,
-    },
-    { label: "Source", value: row.source },
-  ];
-}
-
-function RecordDetail({
-  rows,
-}: {
-  rows: Array<{ label: string; value: string }>;
-}) {
-  return (
-    <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-[10px] border-2 border-[#EBE5DF] bg-[#FFFDF8] px-4 py-3 font-body text-xs">
-      {rows.map((row) => (
-        <div key={row.label} className="contents">
-          <dt className="font-extrabold text-[#625E59] uppercase">
-            {row.label}
-          </dt>
-          <dd className="m-0 break-words font-semibold text-ink">
-            {row.value}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
 }
 
 function ScoreRing({ ratio }: { ratio: number | null }) {

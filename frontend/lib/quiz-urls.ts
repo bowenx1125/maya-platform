@@ -43,6 +43,14 @@ export function exportQuizAttemptsPath(
   return `courses/${encodeURIComponent(courseId)}/quizzes/${encodeURIComponent(quizId)}/attempts/export`;
 }
 
+export function quizAttemptPath(
+  courseId: string,
+  quizId: string,
+  attemptId: string,
+): string {
+  return `courses/${encodeURIComponent(courseId)}/quizzes/${encodeURIComponent(quizId)}/attempts/${encodeURIComponent(attemptId)}`;
+}
+
 /** Banner Download shows only when Records is scoped to one quiz. */
 export function shouldShowExportDownload(
   quizId: string | null | undefined,

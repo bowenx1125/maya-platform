@@ -12,15 +12,17 @@ pre-code snapshots.
 ## Classroom Quiz
 
 [`CLASSROOM_QUIZ_API.md`](CLASSROOM_QUIZ_API.md) is the single Quiz contract:
-routes, permissions, publish/taking states, retest epochs, grading, student
-answer isolation, Record aggregation, the attempt ZIP export, the teacher and
+routes, permissions, publish/taking states, retest epochs, objective and hand
+grading, student answer isolation, attempt detail and hiding, Record
+aggregation, the attempt ZIP export, the teacher and
 student controls, and known gaps with evidence. Quiz routes sit outside the
 frozen OpenAPI; they are classified in
 [`../../contracts/route-surface-placeholders.json`](../../contracts/route-surface-placeholders.json).
 [`../../contracts/quiz-document.v1.schema.json`](../../contracts/quiz-document.v1.schema.json)
 describes the stored paper, and
 [ADR-011](../adr/ADR-011-classroom-quiz-parallel-domain.md) records why Quiz is a
-separate domain. [`CLASSROOM_QUIZ_REWORK_FE.md`](CLASSROOM_QUIZ_REWORK_FE.md) is
+separate domain. The contract also records the 2026-11-08 move of the formal
+chat-assessment Record from Brainform to the Quiz Records pages. [`CLASSROOM_QUIZ_REWORK_FE.md`](CLASSROOM_QUIZ_REWORK_FE.md) is
 the merged 2026-11-06 frontend brief, kept only as a pointer and a dated scope
 record.
 

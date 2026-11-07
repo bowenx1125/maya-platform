@@ -175,7 +175,7 @@ only `messages:stream`. Per process:LLM/write/create8,max128,in-flight48,sync256
 asyncio96 threads,pool15+25. Separate ready limiter;nested backstop wait fresh;
 refused Debate segments not_sent; hung backend autoheal≈100s.
 
-Oct17:Teacher Brainform Record replaces Memory:assessment Teams→student attempt/
+Oct17:Record replaces Memory:assessment Teams→student attempt/
 score/sheet/report,one cached read/test (0068). Accounts/group visits omit Test results;
 Student Record=own answers. Revoked/unfinished visible,teacher delete hides (0072).
 Voice owners delete in Studyform,Agents fall back; per-sign-in cache then refresh.
@@ -300,12 +300,13 @@ summary calls stay hidden (Rubric). Team/Debate audited clean. Not yet deployed.
 
 Off main70ecfa29 (#356/#357). Replay=Rebirth;Review=playback,not a rebirth lock.
 Revocalize:durable intent,3 workers,Back/F5 reseed/revision reconcile;admission refusal
-retries safely,ambiguous keys kept,definitive failures shown/manual retry.110 tests,
-types/scoped lint pass;full1121 pass/13 skip/2 unrelated Quiz-nav failures. No calls/deploy;
+retries safely,ambiguous keys kept,definitive failures shown/manual retry. No calls/deploy;
 volume untouched. Stalled needs backend receipt recovery;safety gates kept.
 
 ## Nov5–8 Classroom Quiz
 
-0083/0084(head):own Quiz domain;publish≠taking;start-taking opens a new epoch;1 attempt/
-student/epoch;#374/#375 teacher ZIP. [Contract](contracts/CLASSROOM_QUIZ_API.md) lists gaps.
-Nov8 local 8dec1db:Quiz BE18/FE31 pass,no full suite. V14 validation:history only.
+0083–0085(head):Quiz domain;publish≠taking;start-taking=new epoch,1 attempt/student/epoch;
+ZIP export. Nov8:attempt detail,hand-graded text(no AI,frozen paper),hide,Record
+epochs. Record moved Brainform→Quiz Records(chat data kept;old paths redirect).
+[Contract](contracts/CLASSROOM_QUIZ_API.md). Local:BE131 fails=main's129+2 flakes;FE1155 pass;
+build/contracts/E2E/0084→0085 ok;no deploy.

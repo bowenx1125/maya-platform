@@ -202,6 +202,12 @@
     "quizEmpty": {
       "en": "Add at least one question before publishing."
     },
+    "quizGradeItemInvalid": {
+      "en": "Only text questions can be graded by hand, each once per save."
+    },
+    "quizGradePointsInvalid": {
+      "en": "Points must be between 0 and the question's points."
+    },
     "quizItemChoicesInvalid": {
       "en": "A question's choices are not valid."
     },
@@ -729,6 +735,8 @@
     "quiz_answer_required": "quizAnswerRequired",
     "quiz_document_invalid": "quizDocumentInvalid",
     "quiz_empty": "quizEmpty",
+    "quiz_grade_item_invalid": "quizGradeItemInvalid",
+    "quiz_grade_points_invalid": "quizGradePointsInvalid",
     "quiz_item_choices_invalid": "quizItemChoicesInvalid",
     "quiz_item_duplicate": "quizItemDuplicate",
     "quiz_item_type_invalid": "quizItemTypeInvalid",

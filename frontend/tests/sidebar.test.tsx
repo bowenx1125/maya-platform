@@ -105,7 +105,8 @@ describe("sidebar groups", () => {
   it("gives a student Studyform, Brainform, Chatform and Classroom (Live, Quiz)", () => {
     renderShell("student", "/student");
     expect(groupRows("Studyform")).toEqual(["Agents", "Teams"]);
-    expect(groupRows("Brainform")).toEqual(["RAG", "Voices", "Record"]);
+    // Owner decision (2026-11-08): Record moved under Quiz's Records tab.
+    expect(groupRows("Brainform")).toEqual(["RAG", "Voices"]);
     expect(groupRows("Chatform")).toEqual([
       "Chat with Agent",
       "Chat with Team",
@@ -128,12 +129,8 @@ describe("sidebar groups", () => {
     state.user = teacher();
     renderShell("teacher", "/teacher");
     expect(groupRows("Studyform")).toEqual(["Agents", "Teams"]);
-    expect(groupRows("Brainform")).toEqual([
-      "RAG",
-      "Voices",
-      "Record",
-      "Knowledge",
-    ]);
+    // Owner decision (2026-11-08): Record moved under Quizzes Records.
+    expect(groupRows("Brainform")).toEqual(["RAG", "Voices", "Knowledge"]);
     expect(groupRows("Classroom")).toEqual(["Debates", "Accounts", "Quizzes"]);
     expect(nav().queryByText("Live")).toBeNull();
     expect(
