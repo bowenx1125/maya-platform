@@ -127,9 +127,7 @@ def export_quiz_attempts(
     )
     if taking_epoch is not None:
         query = query.where(ClassroomQuizAttempt.taking_epoch == taking_epoch)
-    attempts = list(
-        db.scalars(query.order_by(ClassroomQuizAttempt.submitted_at.desc())).all()
-    )
+    attempts = list(db.scalars(query.order_by(ClassroomQuizAttempt.submitted_at.desc())).all())
 
     exported_at = _iso(_now()) or datetime.now(UTC).isoformat().replace("+00:00", "Z")
     document = loads_document(quiz.document_json)
