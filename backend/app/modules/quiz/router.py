@@ -5,13 +5,14 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.errors import Error
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
 
+from . import export as quiz_export
 from . import service
 from .schemas import (
     CreateQuizRequest,
@@ -203,6 +204,38 @@ def submit_course_quiz_attempt(
     db: Session = Depends(get_db),
 ) -> QuizAttemptDTO:
     return service.submit_attempt(db, actor, str(course_id), str(quiz_id), body)
+
+
+@router.get(
+    "/courses/{course_id}/quizzes/{quiz_id}/attempts/export",
+    operation_id="exportCourseQuizAttempts",
+    response_class=Response,
+    responses={401: {"model": Error}, 403: {"model": Error}, 404: {"model": Error}},
+)
+def export_course_quiz_attempts(
+    course_id: UUID,
+    quiz_id: UUID,
+    taking_epoch: int | None = Query(default=None),
+    actor: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> Response:
+    download = quiz_export.export_quiz_attempts(
+        db,
+        actor,
+        str(course_id),
+        str(quiz_id),
+        taking_epoch=taking_epoch,
+    )
+    return Response(
+        content=download.content,
+        media_type=download.content_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{download.filename}"',
+            "Cache-Control": "no-store, max-age=0",
+            "Pragma": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.get(
