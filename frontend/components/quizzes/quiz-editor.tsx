@@ -21,6 +21,7 @@ import { PageBanner } from "../page-banner";
 import { PageAction } from "../page-action";
 import { LIST_CARD_LIFT } from "../agent-chrome";
 import { beginDoneLock, releaseDoneLock } from "@/lib/quiz-gate";
+import { celebrate } from "@/lib/confetti";
 
 const ITEM_TYPE_LABELS = {
   single: "Single choice",
@@ -186,6 +187,7 @@ export function QuizEditor({ quizId }: { quizId?: string }) {
       if (!courseId) throw new Error("No teacher course.");
       const id = await save();
       await quizApi.publishQuiz(courseId, id);
+      celebrate();
       router.push("/teacher/quizzes");
       // Keep doneLock held after success so remount/nav cannot double-fire.
     } catch (err) {

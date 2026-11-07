@@ -76,6 +76,7 @@ import {
   readinessIssues,
 } from "../../../lib/agent-readiness";
 import { PageAction } from "../../page-action";
+import { celebrate } from "../../../lib/confetti";
 
 export type { DebateDetail, DebateDraftRequest, DebateSummary };
 
@@ -699,6 +700,7 @@ export function TeacherDebateCreate({
       );
       if (!created?.id) throw new Error(copy(t, "debateCreateUnconfirmed"));
       createMutation.current = null;
+      celebrate();
       router.replace("/teacher/debates");
     } catch (cause) {
       if (!isAmbiguousMutationFailure(cause)) createMutation.current = null;

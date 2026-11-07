@@ -26,6 +26,8 @@ import {
   QuestionnaireItem,
   QuestionnaireProgress,
 } from "../ui/questionnaire";
+import { celebrate } from "../../lib/confetti";
+import { WorkspaceIcon } from "../workspace-icon";
 
 type TakeApi = Pick<PlatformApi, "getStudentQuiz" | "submitCourseQuizAttempt">;
 
@@ -120,6 +122,7 @@ export function QuizTake({
       );
       // The server holds the attempt; the draft has served its purpose.
       clearQuizDraft(courseId, userId, quiz.id);
+      celebrate();
       setResult(attempt);
     } catch (cause) {
       // One-shot: never retry a charged submission automatically.
@@ -230,8 +233,10 @@ export function QuizTake({
           type="button"
           disabled={submitting || !answered}
           onClick={() => void submit()}
-          className="inline-flex min-h-10 cursor-pointer items-center rounded-[10px] border-[3px] border-border bg-main px-[18px] py-2 font-body text-sm font-bold text-main-fg shadow-[0_6px_0_#111] transition-[translate,box-shadow] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-0.5 active:translate-y-1.5 active:shadow-none active:duration-[80ms] motion-reduce:transition-colors disabled:pointer-events-none disabled:opacity-50"
+          className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-[10px] border-[3px] border-border bg-main px-[18px] py-2 font-body text-sm font-bold text-main-fg shadow-[0_6px_0_#111] transition-[translate,box-shadow] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-0.5 active:translate-y-1.5 active:shadow-none active:duration-[80ms] motion-reduce:transition-colors disabled:pointer-events-none disabled:opacity-50"
         >
+          {/* Symbol + text, as on every page Done. */}
+          <WorkspaceIcon name="done" size={16} />
           {submitting ? "Submitting…" : "Submit"}
         </button>
       </QuestionnaireActions>

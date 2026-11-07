@@ -50,6 +50,7 @@ import { agentMascot } from "../ui/agent-card";
 import { WorkspaceIcon } from "../workspace-icon";
 import Link from "next/link";
 import styles from "../agent-chat.module.css";
+import { celebrate } from "../../lib/confetti";
 
 type KnowledgeSetChoice = { id: string; name: string };
 
@@ -624,6 +625,7 @@ export function TeamEntryFlow({
     }
     if (pendingMutation.current === pending) pendingMutation.current = null;
     if (!isCurrentIntent()) return;
+    celebrate();
     setSaving(false);
     setMutationUnknown(false);
     setError(null);
