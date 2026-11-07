@@ -1,4 +1,12 @@
 {
+  "historical_note": {
+    "status": "historical",
+    "annotated_on": "2026-11-08",
+    "meaning": "Fingerprint of the feat/mayaform-v14 resume inputs: a working tree on top of base commit `head`, with each file's ownership at resume time. Committed in f59df827 (2026-10-05). It is not an integrity gate for main, and no script reads it.",
+    "do_not_use_as": "current file hashes; a mismatch with the present tree is expected and is not a regression",
+    "observed_on_2026_11_08": "Of 51 recorded files: 0 match the 1b1bfcae tree (34 differ, 17 absent), 18 match f59df827, and 2 match main 8dec1db (6 differ, 43 no longer exist). The attachment named below is not in the repository.",
+    "current_authority": "docs/PROJECT.md"
+  },
   "record_kind": "resume_input_fingerprint",
   "head": "1b1bfcae73feeb2765a0b838bf967e8874a333fb",
   "branch": "feat/mayaform-v14",

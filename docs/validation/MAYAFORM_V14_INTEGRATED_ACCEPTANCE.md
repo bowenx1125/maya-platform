@@ -1,5 +1,19 @@
 # MayaForm v1.4 integrated acceptance matrix
 
+> **Historical evidence, not current status.** This matrix records the
+> requirements adopted on 2026-10-03 for the `feat/mayaform-v14` integrated
+> resume revision. It was added in `f59df827` (2026-10-05), and its text was
+> last revised in `13c8c4bb` (2026-10-09). Every NOT_RUN below is that
+> record's result. Nothing here has been re-run or upgraded to PASS since. As
+> of 2026-11-08 the product has moved on (Alembic head
+> `0084_quiz_taking_open_retest`, PostgreSQL only). Current progress,
+> acceptance boundaries and deployed versions are in
+> [PROJECT](../PROJECT.md). A new acceptance run belongs there, with its date,
+> commit, commands and results, not as edits to this table. The
+> [resume input fingerprint](mayaform-v14-resume-inputs.json) linked below is
+> a historical record of that revision's inputs. It is not a hash gate for
+> the current tree.
+
 Requirements adopted on 2026-10-03. All BF, AT and RS items below are NOT_RUN
 for the integrated resume revision until their concrete test/browser evidence
 is added. Historical PASS in the S01–S22 matrix is dated evidence only; lost
