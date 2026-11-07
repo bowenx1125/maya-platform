@@ -48,7 +48,7 @@ def test_alembic_upgrade_is_idempotent_and_readiness_checks_head(tmp_path: Path)
     db.upgrade_schema()
     db.upgrade_schema()
     assert db.using_migrations
-    assert ALEMBIC_HEAD == "0082_teacher_visit_expiry"
+    assert ALEMBIC_HEAD == "0084_quiz_taking_open_retest"
     assert db.check_ready()
     with db.engine.connect() as connection:
         assert (
@@ -129,7 +129,7 @@ def test_database_at_the_baseline_runs_no_ddl_and_keeps_its_version(tmp_path: Pa
     finally:
         event.remove(db.engine, "before_cursor_execute", record)
     assert MIGRATION_BASELINE == "0080_drop_playback_rate"
-    assert ALEMBIC_HEAD == "0082_teacher_visit_expiry"
+    assert ALEMBIC_HEAD == "0084_quiz_taking_open_retest"
     assert not {"CREATE", "ALTER", "DROP", "INSERT", "UPDATE", "DELETE"} & set(statements)
     with db.engine.connect() as connection:
         assert (

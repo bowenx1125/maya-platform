@@ -348,6 +348,10 @@ def test_visit_expiry_migration_keeps_rows_and_downgrades(tmp_path: Any) -> None
             )
         )
         connection.execute(text("ALTER TABLE agent_conversations DROP COLUMN IF EXISTS chat_type"))
+        # Models already include the tables 0083 creates. Replaying from 0080
+        # runs that CREATE, so the stamped copy must not still have them.
+        connection.execute(text("DROP TABLE IF EXISTS classroom_quiz_attempts"))
+        connection.execute(text("DROP TABLE IF EXISTS classroom_quizzes"))
         connection.execute(
             text("UPDATE alembic_version SET version_num = :version"),
             {"version": MIGRATION_BASELINE},
