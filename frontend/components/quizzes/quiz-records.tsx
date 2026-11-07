@@ -11,13 +11,28 @@ import { useSearchParams } from "next/navigation";
 
 import { QuizApi } from "@/lib/api/quiz";
 import type { RecordAttemptDto } from "@/lib/api/platform";
+import { shouldShowExportDownload } from "@/lib/quiz-urls";
 import { useSession } from "../session-provider";
 import { useT } from "@/lib/i18n";
 import { PageBanner } from "../page-banner";
 import { PageAction } from "../page-action";
 import { EmptyCard, ErrorNotice, LoadingCard } from "../ui";
-import { PRESS_MOTION } from "../ui/button";
+import { BUSY_MOTION, PRESS_MOTION } from "../ui/button";
+import { IconDownload } from "../quiet-icons";
 import { cn } from "../../lib/utils";
+
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.rel = "noreferrer";
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/** Match PageAction banner chrome (WorkspaceActionName has no download yet). */
+const BANNER_DOWNLOAD = `inline-flex h-auto min-h-11 w-auto shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] bg-white px-4 py-[7px] font-body text-sm [line-height:normal] font-extrabold text-[#111] no-underline disabled:cursor-not-allowed disabled:opacity-50 disabled:aria-busy:opacity-100 [&_svg]:size-4 ${PRESS_MOTION} ${BUSY_MOTION}`;
 
 export default function QuizRecords() {
   const t = useT();
@@ -32,6 +47,8 @@ export default function QuizRecords() {
   const [rows, setRows] = useState<RecordAttemptDto[] | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState<unknown>(null);
 
   const load = useCallback(async () => {
     if (!courseId) {
@@ -58,9 +75,25 @@ export default function QuizRecords() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  const onExport = useCallback(async () => {
+    if (!courseId || !quizIdFilter) return;
+    setExportBusy(true);
+    setExportError(null);
+    try {
+      const result = await quizApi.exportAttempts(courseId, quizIdFilter);
+      triggerBlobDownload(result.blob, result.filename);
+    } catch (cause) {
+      setExportError(cause);
+    } finally {
+      setExportBusy(false);
+    }
+  }, [courseId, quizApi, quizIdFilter]);
+
   if (!courseId) {
     return <EmptyCard title={t("quizRecords")}>{t("quizNoCourse")}</EmptyCard>;
   }
+
+  const showDownload = shouldShowExportDownload(quizIdFilter);
 
   return (
     <div>
@@ -71,8 +104,29 @@ export default function QuizRecords() {
           placement="page"
           className="relative"
         />
+        {showDownload ? (
+          <button
+            type="button"
+            className={cn(BANNER_DOWNLOAD, "relative")}
+            disabled={exportBusy}
+            aria-busy={exportBusy || undefined}
+            onClick={() => void onExport()}
+            data-testid="quiz-export-download"
+            data-ui-guide="quiz.exportDownload"
+          >
+            {exportBusy ? (
+              <span className="spinner" aria-hidden="true" />
+            ) : (
+              <IconDownload size={16} />
+            )}
+            <span>{t("download")}</span>
+          </button>
+        ) : null}
       </PageBanner>
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
+      {exportError ? (
+        <ErrorNotice error={exportError} onRetry={() => void onExport()} />
+      ) : null}
       {rows === null && !error ? <LoadingCard /> : null}
       {rows && rows.length === 0 && !error ? (
         <EmptyCard title={t("quizNoRecords")} />

@@ -35,3 +35,17 @@ export function startTakingPath(courseId: string, quizId: string): string {
 export function pauseTakingPath(courseId: string, quizId: string): string {
   return `courses/${encodeURIComponent(courseId)}/quizzes/${encodeURIComponent(quizId)}/pause-taking`;
 }
+
+export function exportQuizAttemptsPath(
+  courseId: string,
+  quizId: string,
+): string {
+  return `courses/${encodeURIComponent(courseId)}/quizzes/${encodeURIComponent(quizId)}/attempts/export`;
+}
+
+/** Banner Download shows only when Records is scoped to one quiz. */
+export function shouldShowExportDownload(
+  quizId: string | null | undefined,
+): boolean {
+  return Boolean(quizId && quizId.trim());
+}
