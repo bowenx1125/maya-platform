@@ -1,5 +1,6 @@
 import type { PlatformApi, RecordAttemptDto } from "./platform";
-import { PlatformApiError } from "./platform";
+import { PlatformApiError, responseDownloadFilename } from "./platform";
+import { exportQuizAttemptsPath } from "../quiz-urls";
 
 export type QuizStatus = "draft" | "published";
 export type QuizItemType = "single" | "multiple" | "short_text" | "long_text";
@@ -133,6 +134,28 @@ export class QuizApi {
     return (await response.json()) as T;
   }
 
+  private async requestBlob(
+    method: string,
+    path: string,
+    fallbackFilename: string,
+  ): Promise<{ blob: Blob; filename: string }> {
+    const response = await fetch(path, {
+      method,
+      credentials: "include",
+      headers: {
+        "X-CSRF-Token": this.platformApi.getCsrfToken() ?? "",
+      },
+    });
+    if (!response.ok) {
+      throw toPlatformApiError(response.status, await response.text());
+    }
+    const blob = await response.blob();
+    return {
+      blob,
+      filename: responseDownloadFilename(response, fallbackFilename),
+    };
+  }
+
   listQuizzes(courseId: string): Promise<QuizSummaryDTO[]> {
     return this.request<QuizSummaryDTO[]>(
       "GET",
@@ -208,6 +231,17 @@ export class QuizApi {
     return this.request<TeacherQuizDTO>(
       "POST",
       `/api/v1/courses/${courseId}/quizzes/${quizId}/pause-taking`,
+    );
+  }
+
+  exportAttempts(
+    courseId: string,
+    quizId: string,
+  ): Promise<{ blob: Blob; filename: string }> {
+    return this.requestBlob(
+      "GET",
+      `/api/v1/${exportQuizAttemptsPath(courseId, quizId)}`,
+      `quiz-${quizId.slice(0, 8)}-attempts.zip`,
     );
   }
 }
