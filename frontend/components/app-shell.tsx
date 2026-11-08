@@ -17,6 +17,7 @@ import workspaceStyles from "./workspace-theme.module.css";
 import { SecretDoor } from "./card-table/secret-door";
 import { ViewTransition } from "./view-transition";
 import { WorkspaceIcon, type WorkspaceIconName } from "./workspace-icon";
+import { pageActionClass } from "./page-action";
 import {
   WorkspaceActionsContext,
   type WorkspaceActionName,
@@ -50,7 +51,6 @@ import {
   SIDEBAR_REVEAL_EVENT,
 } from "../lib/sidebar-reveal";
 import {
-  BUSY_MOTION,
   BUSY_MOTION_PRIMARY,
   ICON_MOTION,
   PRESS_HIT,
@@ -1365,9 +1365,8 @@ export function AppShell({
                 const action = actions[name];
                 if (!action || action.placement === "page") return null;
                 const faded = Boolean(action.disabled);
-                const busyTone =
-                  name === "back" ? BUSY_MOTION : BUSY_MOTION_PRIMARY;
-                const cls = `inline-flex items-center gap-1.5 rounded-[10px] border-[3px] border-border px-[18px] py-2 font-body text-sm font-bold text-ink no-underline ${PRESS_MOTION} ${busyTone} max-[480px]:px-3 max-[480px]:py-1.5 max-[480px]:text-[13px] ${name === "back" ? "bg-surface" : "bg-main"}`;
+                // Same look as a banner's own keys (pageActionClass).
+                const cls = pageActionClass(name);
                 const content = (
                   <>
                     {action.busy ? (

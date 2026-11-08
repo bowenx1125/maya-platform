@@ -344,12 +344,6 @@ export function QuizEditor({
         actionsClassName="min-w-0 flex-[0_1_auto] flex-wrap justify-end"
       >
         <QuizStatus state={state} label={stateLabel} />
-        <PageAction
-          name="back"
-          href="/teacher/quizzes"
-          placement="page"
-          className="relative"
-        />
         {locked ? (
           takingOpen ? (
             <QuizKey
@@ -369,15 +363,6 @@ export function QuizEditor({
               {t("quizStartEvaluation")}
             </QuizKey>
           )
-        ) : view === "paper" ? (
-          <PageAction
-            name="done"
-            onClick={onDone}
-            disabled={busy}
-            busy={busy}
-            placement="page"
-            className="relative"
-          />
         ) : null}
         {hasRecord ? (
           <QuizKey
@@ -390,6 +375,32 @@ export function QuizEditor({
             {t("download")}
           </QuizKey>
         ) : null}
+        <PageAction
+          name="back"
+          href="/teacher/quizzes"
+          placement="page"
+          className="relative"
+        />
+        {/* Every quiz page keeps the Back + Done pair. A draft's Done
+            publishes it; a published quiz has nothing to save, so Done
+            finishes and returns to the list. */}
+        {locked ? (
+          <PageAction
+            name="done"
+            href="/teacher/quizzes"
+            placement="page"
+            className="relative"
+          />
+        ) : (
+          <PageAction
+            name="done"
+            onClick={onDone}
+            disabled={busy}
+            busy={busy}
+            placement="page"
+            className="relative"
+          />
+        )}
       </PageBanner>
 
       <QuizTabs<QuizPageTab>

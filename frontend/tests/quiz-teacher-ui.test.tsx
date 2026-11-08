@@ -208,7 +208,11 @@ describe("teacher Quiz editor", () => {
       screen.getByRole("button", { name: "Pause evaluation" }),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Download" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    // Back + Done stay as a pair; with nothing to save, Done returns.
+    expect(screen.getByRole("link", { name: "Back" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Done" }).getAttribute("href"),
+    ).toBe("/teacher/quizzes");
 
     fireEvent.click(within(tabs).getByRole("tab", { name: "Paper" }));
     expect(
