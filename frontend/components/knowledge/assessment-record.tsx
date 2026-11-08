@@ -851,3 +851,50 @@ function AnswerSheet({
     </div>
   );
 }
+
+/**
+ * The formal chat-assessment Record as one self-contained block: the Team
+ * list, then the opened Team. Owner decision (2026-11-08): it lives under
+ * Quizzes Records for teachers and Quiz Records for students, not Brainform.
+ */
+export function AssessmentRecordPanel({
+  courseId,
+  scope,
+}: {
+  courseId: string;
+  scope: RecordScope;
+}) {
+  const { api } = useSession();
+  const record = useAssessmentRecord(courseId, true, scope);
+  const [openTeam, setOpenTeam] = useState<string | null>(null);
+  if (openTeam !== null) {
+    return (
+      <RecordDetail
+        scope={scope}
+        team={record.teams.find((team) => team.name === openTeam)}
+        onBack={() => setOpenTeam(null)}
+        onDelete={
+          scope === "course"
+            ? async (attempt) => {
+                await api.deleteCourseAssessmentAttempt(
+                  courseId,
+                  attempt.attempt_id,
+                );
+                await record.reload();
+              }
+            : undefined
+        }
+      />
+    );
+  }
+  return (
+    <RecordSection
+      scope={scope}
+      teams={record.teams}
+      loaded={record.loaded}
+      error={record.error}
+      onRetry={() => void record.reload()}
+      onOpen={setOpenTeam}
+    />
+  );
+}

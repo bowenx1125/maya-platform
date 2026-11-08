@@ -17,7 +17,14 @@ from app.modules.auth.service import AuthContext
 
 from .document import loads_document
 from .models import ClassroomQuizAttempt
-from .service import _display_name, _get_quiz, _require_teacher
+from .service import (
+    _display_name,
+    _get_quiz,
+    _manual_grades,
+    _manual_max,
+    _require_teacher,
+    _snapshot_items,
+)
 
 
 @dataclass(frozen=True)
@@ -83,9 +90,7 @@ def _build_summary_md(
         ]
     )
     for row in attempt_rows:
-        score = row["score_objective"]
-        score_max = row["score_max_objective"]
-        score_cell = f"{score}/{score_max}"
+        score_cell = f"{row['points_awarded']}/{row['points_total']}"
         lines.append(
             "| {student} | {score} | {grading} | {submitted} | {epoch} |".format(
                 student=row["student_name"],
@@ -137,6 +142,7 @@ def export_quiz_attempts(
         answers_raw = json.loads(attempt.answers_json)
         if not isinstance(answers_raw, list):
             answers_raw = []
+        score_max_manual = _manual_max(_snapshot_items(attempt))
         attempt_rows.append(
             {
                 "attempt_id": attempt.id,
@@ -148,6 +154,12 @@ def export_quiz_attempts(
                 "grading_status": attempt.grading_status,
                 "score_objective": attempt.score_objective,
                 "score_max_objective": attempt.score_max_objective,
+                "score_manual": attempt.score_manual,
+                "score_max_manual": score_max_manual,
+                "points_awarded": attempt.score_objective + attempt.score_manual,
+                "points_total": attempt.score_max_objective + score_max_manual,
+                "graded_at": _iso(attempt.graded_at),
+                "manual_grades": _manual_grades(attempt),
                 "answers": answers_raw,
             }
         )

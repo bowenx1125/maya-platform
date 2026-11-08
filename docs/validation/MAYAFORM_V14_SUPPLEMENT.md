@@ -1,5 +1,13 @@
 # MayaForm v1.4 supplement: S01–S22 reproduction map
 
+> **Historical evidence, not current status.** This map was written for the
+> `feat/mayaform-v14` resume revision (added in `f59df827` on 2026-10-05,
+> last revised in `13c8c4bb` on 2026-10-09). "Current" below means current
+> at that date. On 2026-11-08, 29 of the 30 test files named below still
+> exist on `main`. `test_v14_migration_atomicity.py` (S22) does not, and the
+> files that remain have changed since. The entries are coverage targets, not
+> PASS claims, and none has been re-run as a set since. Current progress and acceptance are in [PROJECT](../PROJECT.md).
+
 The current [Brainform contract](../contracts/MAYAFORM_V14_BRAINFORM_ASSESSMENT.md),
 [UI contract](../contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) and
 [Tool resource contract](../contracts/MAYAFORM_V14_TOOL_RESOURCE_AUTHORIZATION.md)

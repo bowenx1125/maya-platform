@@ -53,11 +53,6 @@ import { ErrorNotice, isNotFound, LoadingCard } from "../ui";
 import { RetryPill } from "../ui/error-kit";
 import { ReportMarkdown } from "../report/report-markdown";
 import {
-  RecordDetail,
-  RecordSection,
-  useAssessmentRecord,
-} from "./assessment-record";
-import {
   IconClose,
   IconDownload,
   IconRefresh,
@@ -177,8 +172,7 @@ type Pane =
   | { kind: "knowledge-view"; documentId: string }
   | { kind: "knowledge-edit"; documentId: string }
   | { kind: "knowledge-new" }
-  | { kind: "rag-new" }
-  | { kind: "record"; team: string };
+  | { kind: "rag-new" };
 
 type PendingRagAction = { kind: "hide" | "reindex"; documentId: string };
 
@@ -476,18 +470,15 @@ export function BrainformWorkspace({
   ragPage = false,
   knowledgePage = false,
   onPaneChange,
-  recordPage = false,
 }: {
-  /** Rendered inside Studyform: RAG and Record join Studyform's grid. */
+  /** Rendered inside Studyform: RAG joins Studyform's grid. */
   embedded?: boolean;
   /** The dedicated RAG page (/student/rag, /teacher/rag): RAG only. */
   ragPage?: boolean;
   /** The teacher Knowledge album (/teacher/knowledge): Knowledge only. */
   knowledgePage?: boolean;
-  /** Embedded only: a RAG or Record page opened (true) or closed (false). */
+  /** Embedded only: a RAG page opened (true) or closed (false). */
   onPaneChange?: (open: boolean) => void;
-  /** Dedicated /student/record and /teacher/record: clipboard only. */
-  recordPage?: boolean;
   role: BrainformRole;
   initialAgentId?: string;
   initialSetId?: string;
@@ -605,7 +596,6 @@ export function BrainformWorkspace({
       ragPage={ragPage}
       knowledgePage={knowledgePage}
       onPaneChange={onPaneChange}
-      recordPage={recordPage}
       identityScope={dataScope}
       ragDraftScope={JSON.stringify([
         user?.id ?? null,
@@ -650,7 +640,6 @@ function BrainformWorkspaceBody({
   ragPage = false,
   knowledgePage: knowledgePageProp = false,
   onPaneChange,
-  recordPage = false,
   identityScope,
   ragDraftScope,
 }: {
@@ -658,7 +647,6 @@ function BrainformWorkspaceBody({
   ragPage?: boolean;
   knowledgePage?: boolean;
   onPaneChange?: (open: boolean) => void;
-  recordPage?: boolean;
   role: BrainformRole;
   courseIds: string[];
   courseId: string;
@@ -2382,10 +2370,6 @@ function BrainformWorkspaceBody({
         Number(left.agent_ids.includes(initialAgentId)),
     );
   }, [initialAgentId, knowledgeRows]);
-  // Teachers read the course's assessment results here; a student reads
-  // only their own answers (owner request, 2026-10-18: Memory became Record).
-  const recordScope = role === "teacher" ? "course" : "own";
-  const assessmentRecord = useAssessmentRecord(courseId, true, recordScope);
   // Owner request (2026-10-19): the sidebar New is gone; RAG and Knowledge
   // each add from a + at their top right, the same + as Studyform's Agents
   // and Teams. Only a teacher adds Knowledge. Inside a group the teacher
@@ -2447,7 +2431,6 @@ function BrainformWorkspaceBody({
         />
       ) : null}
       {(pane || initialMode) &&
-      !(recordPage && pane?.kind === "record") &&
       !knowledgeEditor &&
       !(
         ragPage &&
@@ -2982,7 +2965,6 @@ function BrainformWorkspaceBody({
         </section>
       ) : null}
       {!ragPage &&
-      !recordPage &&
       !knowledgePage &&
       !pane &&
       !initialMode &&
@@ -3349,55 +3331,7 @@ function BrainformWorkspaceBody({
               )}
             </section>
           ) : null}
-
-          <div className={styles.recordSlot} data-studyform-slot="record">
-            <RecordSection
-              scope={recordScope}
-              teams={assessmentRecord.teams}
-              loaded={assessmentRecord.loaded}
-              error={assessmentRecord.error}
-              onRetry={() => void assessmentRecord.reload()}
-              onOpen={(team) => setPane({ kind: "record", team })}
-            />
-          </div>
         </div>
-      ) : null}
-
-      {recordPage &&
-      !pane &&
-      !initialMode &&
-      (!loading || embedded) &&
-      !loadError &&
-      courseId ? (
-        <div className={styles.recordSlot} data-studyform-slot="record">
-          <RecordSection
-            scope={recordScope}
-            teams={assessmentRecord.teams}
-            loaded={assessmentRecord.loaded}
-            error={assessmentRecord.error}
-            onRetry={() => void assessmentRecord.reload()}
-            onOpen={(team) => setPane({ kind: "record", team })}
-          />
-        </div>
-      ) : null}
-
-      {pane?.kind === "record" ? (
-        <RecordDetail
-          scope={recordScope}
-          team={assessmentRecord.teams.find((team) => team.name === pane.team)}
-          onBack={recordPage ? closePane : undefined}
-          onDelete={
-            role === "teacher"
-              ? async (attempt) => {
-                  await api.deleteCourseAssessmentAttempt(
-                    courseId,
-                    attempt.attempt_id,
-                  );
-                  await assessmentRecord.reload();
-                }
-              : undefined
-          }
-        />
       ) : null}
 
       {ragPage && pane?.kind.startsWith("rag") ? (
@@ -3823,10 +3757,7 @@ function BrainformWorkspaceBody({
           )}
         </>
       ) : null}
-      {pane &&
-      pane.kind !== "record" &&
-      !knowledgeEditor &&
-      !(ragPage && pane.kind.startsWith("rag")) ? (
+      {pane && !knowledgeEditor && !(ragPage && pane.kind.startsWith("rag")) ? (
         <section
           className={styles.editorPanel}
           aria-labelledby="brainform-editor-heading"

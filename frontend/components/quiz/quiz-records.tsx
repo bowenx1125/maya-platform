@@ -10,12 +10,16 @@ import {
 import { cachedCall, requestCacheIdentity } from "../../lib/request-cache";
 import { useSession } from "../session-provider";
 import { ErrorNotice, LoadingCard } from "../ui";
-import { PRESS_MOTION } from "../ui/button";
-import { cn } from "../../lib/utils";
+import { useT } from "../../lib/i18n";
+import { AssessmentRecordPanel } from "../knowledge/assessment-record";
+import { QuizAttemptDetailView } from "./quiz-attempt-detail";
 
 type RecordsApi = Pick<PlatformApi, "listMyRecordAttempts">;
 
-/** The student's own attempts across quiz + legacy chat, with drill-down. */
+/**
+ * The student's own quiz submissions with their answers and grades, then the
+ * formal chat-assessment Record (moved here from Brainform, 2026-11-08).
+ */
 export function QuizRecords({
   courseId,
   api: apiProp,
@@ -24,6 +28,7 @@ export function QuizRecords({
   /** Test seam; production resolves useSession().api. */
   api?: RecordsApi;
 }) {
+  const t = useT();
   const session = useSession();
   const client = apiProp ?? (session.api as RecordsApi);
   const cacheIdentity = requestCacheIdentity(
@@ -46,7 +51,8 @@ export function QuizRecords({
           () => client.listMyRecordAttempts(courseId),
           { refresh },
         );
-        setRows(next);
+        // Chat rows are read by the Record board below with their answers.
+        setRows(next.filter((row) => row.source === "quiz"));
       } catch (cause) {
         setError(cause);
       }
@@ -59,18 +65,41 @@ export function QuizRecords({
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  if (error) {
-    return <ErrorNotice inline error={error} onRetry={() => void load(true)} />;
-  }
-  if (rows === null) return <LoadingCard />;
-  if (!rows.length) {
-    return (
-      <p className="m-0 rounded-arc-s border-[3px] border-border bg-surface px-4 py-6 text-center font-body text-sm font-bold text-ink shadow-[4px_4px_0_#111]">
-        No records yet.
-      </p>
-    );
-  }
-  const open = rows.find((row) => row.attempt_id === openId) ?? null;
+  return (
+    <div className="grid gap-8">
+      {error ? (
+        <ErrorNotice inline error={error} onRetry={() => void load(true)} />
+      ) : rows === null ? (
+        <LoadingCard />
+      ) : !rows.length ? (
+        <p className="m-0 rounded-arc-s border-[3px] border-border bg-surface px-4 py-6 text-center font-body text-sm font-bold text-ink shadow-[4px_4px_0_#111]">
+          {t("quizNoSubmissions")}
+        </p>
+      ) : (
+        <RecordList
+          rows={rows}
+          courseId={courseId}
+          openId={openId}
+          setOpenId={setOpenId}
+        />
+      )}
+      <AssessmentRecordPanel courseId={courseId} scope="own" />
+    </div>
+  );
+}
+
+function RecordList({
+  rows,
+  courseId,
+  openId,
+  setOpenId,
+}: {
+  rows: RecordAttemptDto[];
+  courseId: string;
+  openId: string | null;
+  setOpenId: (update: (current: string | null) => string | null) => void;
+}) {
+  const t = useT();
   return (
     <ul className="m-0 grid list-none gap-4 p-0">
       {rows.map((row, index) => {
@@ -78,10 +107,9 @@ export function QuizRecords({
         return (
           <li
             key={row.attempt_id}
-            className={cn(
-              "relative flex flex-wrap items-center gap-3.5 rounded-[14px] border-[3px] border-border bg-white px-[18px] py-4 shadow-[6px_6px_0_#67E8F9]",
-              PRESS_MOTION,
-            )}
+            // No press motion: its hover hit layer covers the row and would swallow
+            // clicks on the grading inputs and buttons inside the opened attempt.
+            className="relative flex flex-wrap items-center gap-3.5 rounded-[14px] border-[3px] border-border bg-white px-[18px] py-4 shadow-[6px_6px_0_#67E8F9]"
           >
             <span
               aria-hidden="true"
@@ -104,6 +132,9 @@ export function QuizRecords({
                   {row.title}
                 </span>
                 <span className="text-xs font-medium text-[#555]">
+                  {row.taking_epoch
+                    ? `${t("quizRound", { n: row.taking_epoch })} · `
+                    : ""}
                   {row.submitted_at
                     ? new Date(row.submitted_at).toLocaleString("en", {
                         month: "short",
@@ -125,9 +156,14 @@ export function QuizRecords({
               </span>
               <ScoreRing ratio={recordRatio(row)} />
             </button>
-            {expanded ? (
+            {expanded && row.quiz_id ? (
               <div className="basis-full pt-3">
-                <RecordDetail rows={rowDetailRows(row)} />
+                <QuizAttemptDetailView
+                  courseId={courseId}
+                  quizId={row.quiz_id}
+                  attemptId={row.attempt_id}
+                  teacher={false}
+                />
               </div>
             ) : null}
           </li>
@@ -138,53 +174,11 @@ export function QuizRecords({
 }
 
 function recordRatio(row: RecordAttemptDto): number | null {
-  const awarded = row.score_objective ?? row.points_awarded;
-  const total = row.score_max_objective ?? row.points_total;
+  // Totals include hand-graded text questions; objective-only is a fallback.
+  const awarded = row.points_awarded ?? row.score_objective;
+  const total = row.points_total ?? row.score_max_objective;
   if (awarded === null || awarded === undefined || !total) return null;
   return Math.max(0, Math.min(1, awarded / total));
-}
-
-function rowDetailRows(
-  row: RecordAttemptDto,
-): Array<{ label: string; value: string }> {
-  return [
-    { label: "Status", value: row.status },
-    {
-      label: "Grading",
-      value: row.grading_status ?? "—",
-    },
-    {
-      label: "Score",
-      value:
-        row.score_objective === null || row.score_objective === undefined
-          ? "—"
-          : row.score_max_objective
-            ? `${row.score_objective} / ${row.score_max_objective}`
-            : `${row.score_objective}`,
-    },
-    { label: "Source", value: row.source },
-  ];
-}
-
-function RecordDetail({
-  rows,
-}: {
-  rows: Array<{ label: string; value: string }>;
-}) {
-  return (
-    <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-[10px] border-2 border-[#EBE5DF] bg-[#FFFDF8] px-4 py-3 font-body text-xs">
-      {rows.map((row) => (
-        <div key={row.label} className="contents">
-          <dt className="font-extrabold text-[#625E59] uppercase">
-            {row.label}
-          </dt>
-          <dd className="m-0 break-words font-semibold text-ink">
-            {row.value}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
 }
 
 /** Copied minimal version of assessment-record's ScoreRing (not exported there). */

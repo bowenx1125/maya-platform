@@ -201,3 +201,70 @@ class RecordAttemptDTO(BaseModel):
     points_total: float | None = None
     phase: str | None = None
     team_name: str | None = None
+    taking_epoch: int | None = None
+    content_revision: int | None = None
+
+
+class QuizAttemptItemStudent(BaseModel):
+    """One item of the paper as it was frozen at submit, with the response.
+
+    No answer key or rubric: a student sees their own choices, whether a
+    choice item was right, and the teacher's grade and feedback.
+    """
+
+    id: str
+    type: ItemType | Literal["unknown"]
+    required: bool = True
+    prompt: str = ""
+    choices: list[QuizChoice] = Field(default_factory=list)
+    points: float = 0
+    response_choice_ids: list[str] | None = None
+    response_text: str | None = None
+    correct: bool | None = None
+    points_awarded: float | None = None
+    graded: bool = False
+    feedback: str | None = None
+
+
+class QuizAttemptItemTeacher(QuizAttemptItemStudent):
+    answer: QuizAnswerKey | None = None
+
+
+class StudentQuizAttemptDetailDTO(BaseModel):
+    # The route returns either shape; a distinct literal keeps a student's
+    # payload from ever validating as the teacher one (which adds the key).
+    view: Literal["student"] = "student"
+    id: UUID
+    quiz_id: UUID
+    course_id: UUID
+    user_id: UUID
+    student_name: str
+    title: str
+    content_revision: int
+    taking_epoch: int
+    status: Literal["submitted"]
+    grading_status: GradingStatus
+    score_objective: float
+    score_max_objective: float
+    score_manual: float
+    score_max_manual: float
+    points_awarded: float
+    points_total: float
+    submitted_at: datetime
+    graded_at: datetime | None = None
+    items: list[QuizAttemptItemStudent] = Field(default_factory=list)
+
+
+class TeacherQuizAttemptDetailDTO(StudentQuizAttemptDetailDTO):
+    view: Literal["teacher"] = "teacher"  # type: ignore[assignment]
+    items: list[QuizAttemptItemTeacher] = Field(default_factory=list)  # type: ignore[assignment]
+
+
+class QuizItemGrade(BaseModel):
+    item_id: str = Field(min_length=1, max_length=200)
+    points_awarded: float = Field(ge=0, allow_inf_nan=False)
+    feedback: str = Field(default="", max_length=4000)
+
+
+class GradeQuizAttemptRequest(BaseModel):
+    grades: list[QuizItemGrade] = Field(min_length=1, max_length=500)

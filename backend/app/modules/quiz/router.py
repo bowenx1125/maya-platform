@@ -16,12 +16,15 @@ from . import export as quiz_export
 from . import service
 from .schemas import (
     CreateQuizRequest,
+    GradeQuizAttemptRequest,
     PatchQuizRequest,
     QuizAttemptDTO,
     QuizSummaryDTO,
     RecordAttemptDTO,
+    StudentQuizAttemptDetailDTO,
     StudentQuizDTO,
     SubmitQuizAttemptRequest,
+    TeacherQuizAttemptDetailDTO,
     TeacherQuizDTO,
 )
 
@@ -236,6 +239,61 @@ def export_course_quiz_attempts(
             "X-Content-Type-Options": "nosniff",
         },
     )
+
+
+# Declared after /attempts/export: Starlette matches paths in order, and
+# "export" would otherwise reach the UUID parameter and fail validation.
+@router.get(
+    "/courses/{course_id}/quizzes/{quiz_id}/attempts/{attempt_id}",
+    response_model=TeacherQuizAttemptDetailDTO | StudentQuizAttemptDetailDTO,
+    operation_id="getCourseQuizAttempt",
+    responses={401: {"model": Error}, 404: {"model": Error}},
+)
+def get_course_quiz_attempt(
+    course_id: UUID,
+    quiz_id: UUID,
+    attempt_id: UUID,
+    actor: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> TeacherQuizAttemptDetailDTO | StudentQuizAttemptDetailDTO:
+    return service.get_attempt_for_actor(db, actor, str(course_id), str(quiz_id), str(attempt_id))
+
+
+@router.delete(
+    "/courses/{course_id}/quizzes/{quiz_id}/attempts/{attempt_id}",
+    status_code=204,
+    operation_id="hideCourseQuizAttempt",
+    response_class=Response,
+    responses={401: {"model": Error}, 404: {"model": Error}},
+)
+def hide_course_quiz_attempt(
+    course_id: UUID,
+    quiz_id: UUID,
+    attempt_id: UUID,
+    _csrf: CsrfHeader,
+    actor: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> Response:
+    service.hide_attempt(db, actor, str(course_id), str(quiz_id), str(attempt_id))
+    return Response(status_code=204)
+
+
+@router.put(
+    "/courses/{course_id}/quizzes/{quiz_id}/attempts/{attempt_id}/grades",
+    response_model=TeacherQuizAttemptDetailDTO,
+    operation_id="gradeCourseQuizAttempt",
+    responses={401: {"model": Error}, 404: {"model": Error}, 422: {"model": Error}},
+)
+def grade_course_quiz_attempt(
+    course_id: UUID,
+    quiz_id: UUID,
+    attempt_id: UUID,
+    body: GradeQuizAttemptRequest,
+    _csrf: CsrfHeader,
+    actor: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> TeacherQuizAttemptDetailDTO:
+    return service.grade_attempt(db, actor, str(course_id), str(quiz_id), str(attempt_id), body)
 
 
 @router.get(

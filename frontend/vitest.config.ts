@@ -1,6 +1,12 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  // Mirrors tsconfig "paths" so components importing "@/lib/..." (the teacher
+  // Quiz pages) can be rendered in tests too.
+  resolve: {
+    alias: { "@": fileURLToPath(new URL(".", import.meta.url)) },
+  },
   test: {
     environment: "jsdom",
     include: ["tests/**/*.test.{ts,tsx}"],

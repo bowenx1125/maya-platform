@@ -42,3 +42,15 @@ ledgers without migrating chat rows.
   `/api/v1/courses/{course_id}/quizzes` and `/record-attempts`.
 - Frontend (编码B/C) consumes frozen Quiz DTOs; must not call Agent WS on the
   student answer path.
+
+## Amendments
+
+- 2026-11-06 (`0084_quiz_taking_open_retest`): an attempt is unique per
+  student per quiz **per taking epoch**, not per quiz; each start-taking from
+  a closed state opens a new epoch (retest).
+- 2026-11-08 (`0085_quiz_manual_grading`): teachers grade text items by hand,
+  with no model call, against each attempt's frozen paper. `score_objective`
+  stays automatic and `score_manual` holds the hand grades. Teachers can hide
+  an attempt, and the formal chat-assessment Record moved from Brainform to
+  the Quiz Records pages, its data unchanged. Current behavior:
+  [Classroom Quiz contract](../contracts/CLASSROOM_QUIZ_API.md).

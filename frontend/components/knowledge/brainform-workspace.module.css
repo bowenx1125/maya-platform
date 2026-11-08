@@ -583,11 +583,10 @@
     }
   }
 
-  /* Studyform embeds Brainform's RAG and Record: the wrappers vanish so both
-   cards sit in Studyform's own grid. */
+  /* Studyform embeds Brainform's RAG: the wrappers vanish so its card sits
+   in Studyform's own grid. */
   .embeddedPage,
-  .embeddedSections,
-  .recordSlot {
+  .embeddedSections {
     display: contents;
   }
 

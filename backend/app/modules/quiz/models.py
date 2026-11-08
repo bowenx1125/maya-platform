@@ -84,6 +84,12 @@ class ClassroomQuizAttempt(Base):
     teacher_hidden_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Teacher-entered grades for text items: {item_id: {points_awarded,
+    # feedback, graded_by_user_id, graded_at}}. score_objective stays the
+    # automatic part so a manual grade can never rewrite the key's result.
+    manual_grades_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    score_manual: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    graded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         CheckConstraint(

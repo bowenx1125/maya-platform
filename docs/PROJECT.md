@@ -42,13 +42,13 @@ Keep legacy IDs/data,full Report Markdown/sources,colleagues' Classes/3D.0029:si
 course registration,normalized/collision-checked usernames/groups. Teacher Enter
 keeps role/ACL,catalog syncs memberships. Password change:keep current session,
 revoke others. Voices creator/course-teacher managed; classroom access grants no generation/control.
-Local :8080. 徐伯闻:teaching; 古月:3D/Voice/TTS; Kaikai:accounts/student UI.
+徐伯闻:teaching; 古月:3D/Voice/TTS; Kaikai:accounts/student UI.
 
 Agent.md/RAG uncapped; embeddings10 items/30,000 estimated tokens/batch.0031 tombstones
 keep Chats/snapshots. Chat:full history,current-message language,no hidden suffix.
 0033:no product request/token/CNY/call-ordinal/output caps; reservations/accounting/
 exact manifests/deduplication/authorization stay. Unknown scoped to request; HTTP200/
-charge≠success,no silent billed retries. AGENTS deployment checks apply. Real RAG/classroom load/voice quality unverified.
+charge≠success,no silent billed retries. Real RAG/classroom load/voice quality unverified.
 
 ## Preserved v1.4 work
 
@@ -175,7 +175,7 @@ only `messages:stream`. Per process:LLM/write/create8,max128,in-flight48,sync256
 asyncio96 threads,pool15+25. Separate ready limiter;nested backstop wait fresh;
 refused Debate segments not_sent; hung backend autoheal≈100s.
 
-Oct17:Teacher Brainform Record replaces Memory:assessment Teams→student attempt/
+Oct17:Record replaces Memory:assessment Teams→student attempt/
 score/sheet/report,one cached read/test (0068). Accounts/group visits omit Test results;
 Student Record=own answers. Revoked/unfinished visible,teacher delete hides (0072).
 Voice owners delete in Studyform,Agents fall back; per-sign-in cache then refresh.
@@ -195,7 +195,7 @@ uploaded Voices ready at once (0073);▷ listens only;Team model call12 rows (wa
 
 #225–#239/0076:answer guard,public Agent edits/audit,independent Record,cascade recovery
 (no auto-retry),login fences,stale_base_version,constant history SELECTs. 50-user Mock
-p95≤7.85s;PG polling REPEATABLE READ. Details:git history.
+p95≤7.85s;PG polling REPEATABLE READ.
 
 ## Oct24 Team chats and junk (#241)
 
@@ -205,7 +205,7 @@ kept (unless charged or holding a supplier id); empty Agents are swept after 1h.
 
 ## Oct24 true deletion (#242, supersedes #233)
 
-Head0080_drop_playback_rate. Voices/RAG/Knowledge/Agents/Teams/chats hard-deleted
+Voices/RAG/Knowledge/Agents/Teams/chats hard-deleted
 with storage; history FKs SET NULL with snapshot names, so Records/grades stay open.
 Deleting a chat keeps answers; deleting an Agent/Team ends its chats and abandons
 unfinished attempts. Debates own copies of AGENT.md, RAG/Knowledge and the voice
@@ -238,30 +238,17 @@ Agent in one sticky bar (pencil to /teacher/agents/{id}); blocking lines stop th
 Server still refuses with debate_agents_not_ready (not found unnamed; fence drift named).
 malformed_request lists field+type. Each bar line's Done publishes that line. Topic: any language.
 
-## Oct24 timing logs (PR A)
+## Oct24–25 infra (PRs A/A2/B/C/E)
 
-`request_timing` JSON per request (+debate_timing); browser samples 25% to /client-metrics;
-`scripts/slow_endpoints_report.py` reads p50/p95/p99. No user data.
-
-## Oct24 PostgreSQL only (PR B)
-
-SQLite DATABASE_URL refused; tests need MAYA_TEST_POSTGRES_URL. Races fixed: budget, Agent/document, attempt.
-
-## Oct24 Immerse audio predownload (PR A2)
-
-Stage predownloads ready speeches as blobs in speaking order; plays blob (≤3s) else URL once.
-
-## Oct25 audio, locks and Next cost (PR C)
-
-DEBATE_AUDIO_MP3 (prod on): mp3 via ffmpeg, 64 MB LRU, max-age=300/304. Playback off
-the event loop (offload.py); per-Debate lock; tickets in Postgres (0079). Next 103→35 SQL.
-
-## Oct24 Debate generation parameters (PR E)
-
-DEBATE_LLM_* (no MAYA_ prefix; unset = previous) and DEBATE_TTS_* freeze into
-rule_snapshot_json (ruleset_contract_v3; null = not sent). Contract:
-default_rules/{zh,en}.md. Pre-v3 Debates keep legacy. Playback rate removed
-in 0080 (always 1.0).
+A:`request_timing` JSON/request (+debate_timing);browser samples 25% to /client-metrics;
+`scripts/slow_endpoints_report.py` reads p50/p95/p99,no user data. B:SQLite DATABASE_URL
+refused;tests need MAYA_TEST_POSTGRES_URL;races fixed:budget,Agent/document,attempt.
+A2:Stage predownloads ready speeches as blobs in speaking order;blob (≤3s) else URL once.
+C:DEBATE_AUDIO_MP3 (prod on):ffmpeg mp3,64 MB LRU,max-age=300/304;playback off the event
+loop (offload.py);per-Debate lock;tickets in Postgres (0079);Next 103→35 SQL.
+E:DEBATE_LLM_* (no MAYA_ prefix;unset=previous)/DEBATE_TTS_* freeze into rule_snapshot_json
+(ruleset_contract_v3;null=not sent);contract default_rules/{zh,en}.md;pre-v3 Debates keep
+legacy;playback rate removed in 0080 (always 1.0).
 
 ## Oct27 UI (#305, 38)
 
@@ -313,6 +300,13 @@ summary calls stay hidden (Rubric). Team/Debate audited clean. Not yet deployed.
 
 Off main70ecfa29 (#356/#357). Replay=Rebirth;Review=playback,not a rebirth lock.
 Revocalize:durable intent,3 workers,Back/F5 reseed/revision reconcile;admission refusal
-retries safely,ambiguous keys kept,definitive failures shown/manual retry.110 tests,
-types/scoped lint pass;full1121 pass/13 skip/2 unrelated Quiz-nav failures. No calls/deploy;
+retries safely,ambiguous keys kept,definitive failures shown/manual retry. No calls/deploy;
 volume untouched. Stalled needs backend receipt recovery;safety gates kept.
+
+## Nov5–8 Classroom Quiz
+
+0083–0085(head):Quiz domain;publish≠taking;start-taking=new epoch,1 attempt/student/epoch;
+ZIP export. Nov8:attempt detail,hand-graded text(no AI,frozen paper),hide,Record
+epochs. Record moved Brainform→Quiz Records(chat data kept;old paths redirect).
+[Contract](contracts/CLASSROOM_QUIZ_API.md). Local:BE131 fails=main's129+2 flakes;FE1155 pass;
+build/contracts/E2E/0084→0085 ok;no deploy.

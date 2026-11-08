@@ -119,12 +119,9 @@ describe("sidebar Quiz IA", () => {
     expect(teacher).toContain("quiz");
   });
 
-  it("student and teacher Brainform rows keep Record (Quiz Records is separate)", () => {
-    expect(studentBrainformKeys()).toContain("record");
-    expect(teacherBrainformKeys()).toContain("record");
-  });
-
-  it("/student/quiz lights the classroom:quiz row; /student/record lights record (teacher keeps it)", () => {
+  // Owner decision (2026-11-08): Record moved out of Brainform into Quiz
+  // Records; the old /student/record and /teacher/record redirect there.
+  it("lights the classroom:quiz row on /student/quiz", () => {
     const groups = [
       {
         key: "classroom",
@@ -134,32 +131,14 @@ describe("sidebar Quiz IA", () => {
     expect(litSidebarKey(groups, "/student/quiz", "/student/quiz")).toBe(
       "classroom:quiz",
     );
-    const teacherGroups = [
-      {
-        key: "brainform",
-        items: [{ key: "record", href: "/teacher/record" }],
-      },
-    ];
-    expect(
-      litSidebarKey(teacherGroups, "/teacher/record", "/teacher/record"),
-    ).toBe("brainform:record");
   });
 });
 
 describe("quiz records path", () => {
-  it("Quiz Records tab path stays available alongside Brainform Record", () => {
+  it("Quiz Records tab path is where student Record lives", () => {
     expect(QUIZ_RECORDS_PATH).toBe("/student/quiz?tab=records");
   });
 });
-
-/** Mirrors app-shell's student Brainform row list (Record kept alongside Quiz). */
-function studentBrainformKeys(): string[] {
-  return ["rag", "voices", "record"];
-}
-
-function teacherBrainformKeys(): string[] {
-  return ["rag", "voices", "record"];
-}
 
 describe("Available row hit layer", () => {
   it("does not put PRESS_MOTION/PRESS_HIT on the row (Start must stay clickable)", async () => {
@@ -172,5 +151,20 @@ describe("Available row hit layer", () => {
     expect(src).not.toMatch(/PRESS_MOTION/);
     expect(src).not.toMatch(/hover:after:absolute/);
     expect(src).toContain("Start");
+  });
+
+  // The opened attempt holds grading inputs and Hide/Save buttons; a row hit
+  // layer would cover them in a real browser (seen in the 2026-11-08 E2E).
+  it("Records rows carry no hit layer over the opened attempt", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    for (const file of [
+      "../components/quiz/quiz-records.tsx",
+      "../components/quizzes/quiz-records.tsx",
+    ]) {
+      const src = readFileSync(join(__dirname, file), "utf8");
+      const row = src.slice(src.indexOf("<li"), src.indexOf("</li>"));
+      expect(row).not.toMatch(/PRESS_MOTION|PRESS_HIT|hover:after:absolute/);
+    }
   });
 });
