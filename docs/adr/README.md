@@ -18,3 +18,7 @@ ADRs record durable decisions, not execution history. Status is one of `PROPOSED
   and W0 extension probes for MayaForm.
 - [ADR-010](ADR-010-postgres-replicas-login-admission.md): PostgreSQL, backend
   replicas, and a login admission queue.
+- [ADR-011](ADR-011-classroom-quiz-parallel-domain.md): Classroom Quiz as a
+  parallel assessment domain.
+- [ADR-012](ADR-012-agent-name-card-and-public-conversion.md): the Agent name on
+  its own card; a private Agent can become public, never back.

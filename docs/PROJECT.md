@@ -305,8 +305,7 @@ volume untouched. Stalled needs backend receipt recovery;safety gates kept.
 
 ## Nov5–8 Classroom Quiz
 
-0083–0085(head):Quiz domain;publish≠taking;start=new epoch,1 attempt/student/epoch;
-ZIP export. #380:attempt detail,hand grading(no AI),hide,Record epochs;Record moved
-Brainform→Quiz(old URLs redirect). [Contract](contracts/CLASSROOM_QUIZ_API.md).
-Only main's known fails;E2E/0084→0085 ok;no deploy. Agent/Team/Debate/Quiz
-Done/Quiz Submit→confetti. Quiz UI A:1 page/quiz,Paper|Submissions;no Chat tests.
+0083–0085:Quiz domain;publish≠taking;start=new epoch,1 attempt/epoch;ZIP. #380:
+detail,hand grading,hide;Record→Quiz. #383/4:opt-in AI grading. UI A:1 page/quiz,
+Paper|Submissions,no Chat tests;New/Back/Done 1 style. [Contract](contracts/CLASSROOM_QUIZ_API.md)
+Agent name card;Private→Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)).

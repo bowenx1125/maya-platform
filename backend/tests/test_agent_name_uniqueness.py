@@ -7,8 +7,8 @@ from uuid import UUID, uuid4
 
 import pytest
 from app.core.models import Agent, AgentVersion
-from app.modules.agents.router import create_agent, update_agent_draft
-from app.modules.agents.schemas import AgentCreateRequest, UpdateAgentDraftRequest
+from app.modules.agents.router import create_agent, update_agent_metadata
+from app.modules.agents.schemas import AgentCreateRequest, UpdateAgentMetadataRequest
 from sqlalchemy import select
 
 from tests.conftest import login, make_foreign_group
@@ -83,8 +83,8 @@ def test_suffix_continues_after_highest_existing(client):
 
 
 @pytest.mark.parametrize("upload", [False, True])
-def test_markdown_heading_conflict_saves_draft_with_suffixed_name(client, upload):
-    """sujindong 2026-10-19: AGENT.md headed with a taken name must still save."""
+def test_agent_md_heading_never_renames_the_agent(client, upload):
+    """Owner 2026-11-08: the name is set on its own card, not by AGENT.md."""
     _, csrf = login(client, "bowen")
     assert _create(client, csrf, "Taken Name").status_code == 201
     agent = _create(client, csrf, "Original").json()
@@ -111,7 +111,22 @@ def test_markdown_heading_conflict_saves_draft_with_suffixed_name(client, upload
         saved = db.get(AgentVersion, version["id"])
         assert saved.revision == version["revision"] + 1
         assert saved.agent_md == "# taken name\nChanged content"
-        assert db.get(Agent, agent["id"]).name == "taken name-2"
+        renamed = db.get(Agent, agent["id"])
+        assert renamed.name == "Original"
+        assert renamed.metadata_revision == 0
+
+
+def test_rename_to_a_taken_name_gets_a_suffix(client):
+    _, csrf = login(client, "bowen")
+    assert _create(client, csrf, "Taken Name").status_code == 201
+    agent = _create(client, csrf, "Original").json()
+    renamed = client.patch(
+        f"/api/v1/agents/{agent['id']}",
+        headers=_headers(csrf),
+        json={"expected_metadata_revision": 0, "name": "taken name"},
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["name"] == "taken name-2"
 
 
 def test_public_heading_owned_by_classmate_does_not_block_new_agent(client):
@@ -133,9 +148,9 @@ def test_public_heading_owned_by_classmate_does_not_block_new_agent(client):
         json={"name": "Zhu Xi (Su voice)", "visibility": "public"},
     ).json()
     response = client.patch(
-        f"/api/v1/agent-versions/{agent['versions'][0]['id']}",
+        f"/api/v1/agents/{agent['id']}",
         headers=_headers(csrf),
-        json={"expected_revision": 0, "agent_md": "# Zhu Xi\nPersona body"},
+        json={"expected_metadata_revision": 0, "name": "Zhu Xi"},
     )
     assert response.status_code == 200, response.text
     with client.app.state.database.session() as db:
@@ -217,7 +232,6 @@ def test_deleted_or_other_workspace_names_do_not_block_creation(client):
 def test_concurrent_normalized_name_claims_have_one_winner(client, operations):
     user, csrf = login(client, "bowen")
     database = client.app.state.database
-    settings = client.app.state.settings
     context = _context(database, user["user"]["id"])
     first = _create(client, csrf, "First").json()
     second = _create(client, csrf, "Second").json()
@@ -233,15 +247,13 @@ def test_concurrent_normalized_name_claims_have_one_winner(client, operations):
 
     def save(agent, name):
         def operation(db):
-            result = update_agent_draft(
-                UUID(agent["versions"][0]["id"]),
-                UpdateAgentDraftRequest(expected_revision=0, agent_md=f"# {name}"),
+            return update_agent_metadata(
+                UUID(agent["id"]),
+                UpdateAgentMetadataRequest(expected_metadata_revision=0, name=name),
+                _csrf_header="c" * 32,
                 context=context,
                 db=db,
-                settings=settings,
             )
-            db.commit()
-            return result
 
         return operation
 

@@ -1,7 +1,7 @@
 # Classroom Quiz contract
 
 This is the single prose contract for Classroom Quiz: the HTTP surface, state
-rules, student isolation, attempt detail, hand grading, hiding, Record
+rules, student isolation, attempt detail, hand and opt-in AI grading, hiding, Record
 aggregation, the attempt export and the teacher/student controls that drive
 them. It replaces the separate
 2026-11-06 frontend rework note, which now only points here.
@@ -203,6 +203,30 @@ each item's `answer` (choice ids or rubric).
   a grade. The row is locked (`SELECT … FOR UPDATE`) while grading.
 - Hidden attempts cannot be graded (**404**).
 
+## AI grading (opt-in per text item)
+
+A text item may carry `grading: {mode: "ai", score_min, score_max, rules}`
+(absent or `mode: "manual"` = hand grading only). `rules` must be at least
+20 characters and `0 ≤ score_min ≤ score_max ≤ points`, else **422**
+`quiz_grading_invalid`; students never receive `grading`. The editor shows
+one "AI grading" switch beside Required: AI grades by the item's rubric
+within 0..points, so the editor sends `rules` = rubric, `score_min` = 0 and
+`score_max` = points.
+
+- Submit makes no model call. When the frozen paper has AI items and an LLM
+  is configured, a background task hands the attempt to a two-thread grading
+  pool and returns (queued in memory; a restart drops the queue and those
+  items stay pending for hand grading). With no LLM configured nothing is
+  queued.
+- The worker reads what needs scoring, calls the model with no transaction
+  open, then locks the row only to write `ai_score` for items that have
+  neither an AI score nor a teacher grade. Scores are clamped to the range.
+- A teacher grade always wins over `ai_score`. `grading_status` is
+  `complete` once every text item has a teacher grade or an AI score.
+- Teacher attempt items carry `ai_grading` and `ai_score`; the Submissions
+  paper shows "AI n / points" or "AI score pending" under the editable
+  points of AI items only. Rows keep Graded / Needs grading.
+
 ## Hiding an attempt
 
 `DELETE …/attempts/{attempt_id}` (**204**) sets `teacher_hidden_at`. The
@@ -368,6 +392,8 @@ This is not a production acceptance; nothing was deployed.
 - 2026-11-08: the frontend rework note merged into this file; migration 0085
   adds attempt detail, hand grading (no AI), hide and Record epochs; the chat
   Record moved from Brainform to Quiz Records.
+- 2026-11-08 (#383/#384 with review fixes): opt-in AI grading of text items;
+  no row lock or request thread held during the model call.
 - 2026-11-08 (second round): owner picked layout A, one page per quiz with
   Paper | Submissions and a single student list; the Chat tests board was
   removed from the UI (endpoints and data kept). Browser E2E on the new pages:

@@ -79,6 +79,9 @@ const enMessages = {
   agentVisibility: "Visibility",
   privateOption: "Private",
   publicOption: "Public",
+  agentMakePublicConfirm:
+    "Make this Agent public? Its RAG becomes public too, Done publishes it for your group, and it cannot go back to Private.",
+  agentPublicIsFinal: "A public Agent stays public.",
   makeAgentPublic: "Make Agent public",
   makeAgentPrivate: "Make Agent private",
   privateVisibilityLede:
@@ -557,8 +560,8 @@ const enMessages = {
   errorNotFound: "This item was deleted or is no longer available to you.",
   errorNetwork:
     "Maya could not be reached. Check your connection and try again.",
-  errorAgentVisibilityLocked:
-    "Private or Public is chosen when the Agent is created and does not change.",
+  errorAgentPublicIsFinal:
+    "A public Agent stays public. Private can only become Public.",
   errorRagFollowsAgent:
     "RAG added to an Agent is Private or Public like the Agent.",
   errorTeamMemberSourceUnavailable:
@@ -1227,7 +1230,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   agent_not_current: "errorAgentNotCurrent",
   agent_name_conflict: "errorAgentNameConflict",
   agent_archived: "errorAgentArchived",
-  agent_visibility_locked: "errorAgentVisibilityLocked",
+  agent_public_is_final: "errorAgentPublicIsFinal",
   document_visibility_follows_agent: "errorRagFollowsAgent",
   team_member_source_unavailable: "errorTeamMemberSourceUnavailable",
   cross_group_reference: "errorCrossGroupReference",

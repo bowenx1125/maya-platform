@@ -430,6 +430,10 @@ export function AgentWorkbench({
   const [draftVisibility, setDraftVisibility] = useState<"private" | "public">(
     "private",
   );
+  // An existing Agent's name typed on its Name card; null while unchanged.
+  // Done saves it before publishing (AGENT.md no longer renames the Agent).
+  const [renameDraft, setRenameDraft] = useState<string | null>(null);
+  const [makingPublic, setMakingPublic] = useState(false);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingRequest, setSavingRequest] = useState<{ scope: string } | null>(
@@ -1263,7 +1267,39 @@ export function AgentWorkbench({
     return { agent: created, version: saved };
   }
 
-  async function publish(retry = false) {
+  /**
+   * Private → Public, once, by the creator. Like copying the Agent to Public:
+   * the server turns it and its RAG public in place (same Agent, so chats
+   * carry on), then Done's publish makes the new public version.
+   */
+  async function makePublic() {
+    if (!window.confirm(t("agentMakePublicConfirm"))) return;
+    const requestScope = workbenchScope;
+    setMakingPublic(true);
+    setError(null);
+    try {
+      // A name typed on the card goes in the same request, so Done's
+      // publish below has nothing left to rename.
+      const typed = renameDraft?.trim();
+      const made = await api.updateAgentMetadata(currentAgent.id, {
+        visibility: "public",
+        ...(typed && typed !== currentAgent.name ? { name: typed } : {}),
+        expected_metadata_revision: currentAgent.metadata_revision,
+      });
+      if (!isCurrentScope(requestScope)) return;
+      setAgent((current) => (current ? { ...current, ...made } : current));
+      setRenameDraft(null);
+      setDraftVisibility("public");
+    } catch (cause) {
+      if (isCurrentScope(requestScope)) setError(cause);
+      return;
+    } finally {
+      if (workbenchMounted.current) setMakingPublic(false);
+    }
+    await publish(false, true);
+  }
+
+  async function publish(retry = false, nameSaved = false) {
     const requestScope = workbenchScope;
     if (publishLock.current?.scope === requestScope) return;
     if (unsavedCreate) {
@@ -1278,12 +1314,16 @@ export function AgentWorkbench({
         return;
       }
       setSubmitHint("");
+    } else if (renameDraft !== null && !renameDraft.trim()) {
+      setSubmitHint(t("agentNameRequired"));
+      setError(null);
+      return;
     }
     const request = { scope: requestScope };
     publishLock.current = request;
     setPublishingRequest(request);
     try {
-      await publishCurrent(retry);
+      await publishCurrent(retry, nameSaved);
     } catch (cause) {
       if (!isCurrentScope(requestScope)) return;
       if (isConflict(cause)) {
@@ -1302,7 +1342,7 @@ export function AgentWorkbench({
     }
   }
 
-  async function publishCurrent(retry: boolean) {
+  async function publishCurrent(retry: boolean, nameSaved = false) {
     const requestScope = workbenchScope;
     if (generationFlow && selectedDocumentIds.length === 0) {
       setGenerationSourcePrompt(true);
@@ -1357,6 +1397,20 @@ export function AgentWorkbench({
         finishSaving(savingRequest);
       }
       return;
+    }
+    // A typed name is saved first, on its own: the Name card owns the name.
+    if (
+      !nameSaved &&
+      renameDraft !== null &&
+      renameDraft.trim() !== currentAgent.name
+    ) {
+      const renamed = await api.updateAgentMetadata(currentAgent.id, {
+        name: renameDraft.trim(),
+        expected_metadata_revision: currentAgent.metadata_revision,
+      });
+      if (!isCurrentScope(requestScope)) return;
+      setAgent((current) => (current ? { ...current, ...renamed } : current));
+      setRenameDraft(null);
     }
     // The server only knows the last saved revision.  Never publish it while
     // the browser still holds newer AGENT/avatar/voice values.
@@ -1832,7 +1886,71 @@ export function AgentWorkbench({
                     </div>
                   </form>
                 </SectionCard>
-              ) : null}
+              ) : (
+                <SectionCard title={t("agentName")} className={NAME_CARD}>
+                  <form
+                    className="stack-form wide-form quiet-create"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void publish();
+                    }}
+                  >
+                    <label className="relative">
+                      <input
+                        aria-label={t("agentName")}
+                        value={renameDraft ?? currentAgent.name}
+                        disabled={editingLocked || makingPublic}
+                        maxLength={120}
+                        onChange={(event) => {
+                          setSubmitHint("");
+                          setRenameDraft(event.target.value);
+                        }}
+                      />
+                    </label>
+                    <div className="agent-identity">
+                      {/* Private can become Public (the creator, once);
+                          Public never goes back. */}
+                      <div
+                        className="visibility-toggle"
+                        role="group"
+                        aria-label={t("agentVisibility")}
+                        data-ui-guide="agent.visibility"
+                      >
+                        <button
+                          type="button"
+                          aria-pressed={currentAgent.visibility === "private"}
+                          disabled={currentAgent.visibility === "public"}
+                          title={
+                            currentAgent.visibility === "public"
+                              ? t("agentPublicIsFinal")
+                              : undefined
+                          }
+                        >
+                          {t("privateOption")}
+                        </button>
+                        <button
+                          type="button"
+                          aria-pressed={currentAgent.visibility === "public"}
+                          aria-busy={makingPublic || undefined}
+                          disabled={
+                            currentAgent.visibility === "private" &&
+                            (currentAgent.is_creator !== true ||
+                              editingLocked ||
+                              makingPublic)
+                          }
+                          onClick={() => {
+                            if (currentAgent.visibility === "private") {
+                              void makePublic();
+                            }
+                          }}
+                        >
+                          {t("publicOption")}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </SectionCard>
+              )}
               <SectionCard
                 title={t("agentMd")}
                 guide="agent.markdown"

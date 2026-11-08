@@ -2138,13 +2138,18 @@ export class PlatformApi {
   }
 
   /**
-   * Rename an Agent (CAS on its metadata revision). Only the name is sent:
-   * the server leaves the description alone when it is absent. The answer
-   * carries the name the server kept (it may add "-2" to avoid a clash).
+   * Rename an Agent and/or turn a private Agent public (CAS on its metadata
+   * revision). The description is never sent, so the server leaves it alone.
+   * The answer carries the name the server kept (it may add "-2" to avoid a
+   * clash). Public is final: asking for Private again is 409.
    */
   async updateAgentMetadata(
     agentId: string,
-    body: { name: string; expected_metadata_revision: number },
+    body: {
+      name?: string;
+      visibility?: "public";
+      expected_metadata_revision: number;
+    },
   ): Promise<AgentDetail> {
     return unwrap(
       await this.client.PATCH("/agents/{agent_id}", {
