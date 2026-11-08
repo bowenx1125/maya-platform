@@ -80,7 +80,6 @@ def test_ai_mode_missing_rules_returns_422(teacher: Actor) -> None:
     _assert_grading_invalid(created)
 
 
-
 def test_ai_mode_short_rules_returns_422(teacher: Actor) -> None:
     response = teacher.post(
         f"/courses/{COURSE_ID}/quizzes",
@@ -271,9 +270,7 @@ def test_worker_writes_clamped_ai_score_and_updates_status(
     assert item["ai_score"] == 4.0
     assert "grading" not in item
 
-    teacher_detail = teacher.get(
-        f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/{attempt_id}"
-    )
+    teacher_detail = teacher.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/{attempt_id}")
     assert teacher_detail.status_code == 200, teacher_detail.text
     tbody = teacher_detail.json()
     assert tbody["score_ai"] == 4.0
