@@ -9,8 +9,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PlatformApi } from "../lib/api/platform";
 
-// Owner pick (2026-11-08): option A for the teacher Quiz pages, with B's
-// LIVE lamp and B's dashed "Add question" slot in A's colours.
+// Owner pick (2026-11-08, second round): option A "one page per quiz". The
+// list rows carry no keys; a quiz page has Paper | Submissions. B's LIVE lamp
+// and dashed "Add question" slot stay.
 const state = vi.hoisted(() => ({
   api: {} as unknown,
   routes: [] as Array<{ match: RegExp; body: unknown }>,
@@ -67,7 +68,7 @@ afterEach(() => {
 });
 
 describe("teacher Quizzes list", () => {
-  it("shows one status pill per quiz, the LIVE lamp only while accepting, and symbol+word keys", async () => {
+  it("shows one state chip per row, the LIVE lamp only while accepting, and no row keys", async () => {
     state.routes.push({
       match: /\/quizzes$/,
       body: [
@@ -101,26 +102,21 @@ describe("teacher Quizzes list", () => {
     expect(rows).toHaveLength(3);
     const [live, paused, draft] = rows;
 
-    expect(within(live).getByText("Accepting submissions")).toBeTruthy();
+    // Rows are links to the quiz page and hold no keys of their own.
+    for (const row of rows) {
+      expect(within(row).queryByRole("button")).toBeNull();
+      expect(within(row).queryByRole("link")).toBeNull();
+    }
+    expect(live.getAttribute("href")).toBe("/teacher/quizzes/q-live");
+    expect(draft.getAttribute("href")).toBe("/teacher/quizzes/q-draft");
+
     expect(within(live).getByText("LIVE")).toBeTruthy();
-    expect(
-      within(live).getByRole("button", { name: "Pause evaluation" }),
-    ).toBeTruthy();
-
-    expect(within(paused).getByText("Published · Paused")).toBeTruthy();
+    expect(within(live).getByText("Accepting submissions")).toBeTruthy();
+    expect(within(live).getByText("12 attempts")).toBeTruthy();
+    expect(within(paused).getByText("Paused")).toBeTruthy();
     expect(within(paused).queryByText("LIVE")).toBeNull();
-    const start = within(paused).getByRole("button", {
-      name: "Start evaluation",
-    });
-    expect(start.querySelector("svg")).not.toBeNull();
-
     expect(within(draft).getByText("Draft")).toBeTruthy();
-    expect(within(draft).queryByRole("button")).toBeNull();
-    const records = within(draft).getByRole("link", { name: "Records" });
-    expect(records.querySelector("svg")).not.toBeNull();
-    expect(records.getAttribute("href")).toBe(
-      "/teacher/quizzes/records?quiz_id=q-draft",
-    );
+    expect(within(draft).queryByText(/attempts/)).toBeNull();
   });
 
   it("shows the sticker empty card only when the list is really empty", async () => {
@@ -133,6 +129,23 @@ describe("teacher Quizzes list", () => {
 });
 
 describe("teacher Quiz editor", () => {
+  it("a new quiz is Paper only: title typed in the banner, Submissions locked", async () => {
+    render(<QuizEditor />);
+    const tabs = screen.getByRole("tablist", { name: "Quiz" });
+    expect(
+      within(tabs)
+        .getByRole("tab", { name: "Paper" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
+    const submissions = within(tabs).getByRole("tab", { name: /Submissions/ });
+    expect(submissions.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(submissions);
+    expect(submissions.getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByLabelText("Title")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
+    expect(screen.getByText("Draft")).toBeTruthy();
+  });
+
   it("adds questions from the dashed slot and steps points", async () => {
     render(<QuizEditor />);
     expect(screen.getByRole("heading", { name: "Add question" })).toBeTruthy();
@@ -158,7 +171,7 @@ describe("teacher Quiz editor", () => {
     expect((marks[0] as HTMLInputElement).checked).toBe(true);
   });
 
-  it("shows a published quiz read-only with the lock notice and LIVE lamp", async () => {
+  it("opens a published quiz on Submissions; its Paper is read-only with Unpublish", async () => {
     state.routes.push({
       match: /\/quizzes\/q-live$/,
       body: {
@@ -183,17 +196,27 @@ describe("teacher Quiz editor", () => {
         ],
       },
     });
+    state.routes.push({ match: /record-attempts/, body: [] });
     render(<QuizEditor quizId="q-live" />);
-    expect(
-      await screen.findByText("Unpublish this quiz before editing it."),
-    ).toBeTruthy();
+    // A published quiz opens on its record.
+    const tabs = await screen.findByRole("tablist", { name: "Quiz" });
+    const submissions = within(tabs).getByRole("tab", { name: /Submissions/ });
+    expect(submissions.getAttribute("aria-selected")).toBe("true");
+    expect(await screen.findByText("No records yet.")).toBeTruthy();
     expect(screen.getByText("LIVE")).toBeTruthy();
-    expect(screen.queryByLabelText("Prompt")).toBeNull();
-    expect(screen.getByText("Which layer handles auth?")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Pause evaluation" }),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Unpublish" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Download" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+
+    fireEvent.click(within(tabs).getByRole("tab", { name: "Paper" }));
+    expect(
+      screen.getByText("Unpublish this quiz before editing it."),
+    ).toBeTruthy();
+    expect(screen.queryByLabelText("Prompt")).toBeNull();
+    expect(screen.queryByLabelText("Title")).toBeNull();
+    expect(screen.getByText("Which layer handles auth?")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Unpublish" })).toBeTruthy();
   });
 });

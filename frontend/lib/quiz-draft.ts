@@ -61,5 +61,5 @@ export function clearQuizDraft(
   }
 }
 
-/** The Records tab deep link; the old /student/record redirects here (M4). */
-export const QUIZ_RECORDS_PATH = "/student/quiz?tab=records";
+/** Where a student's results live (the one Quiz list); /student/record redirects here. */
+export const QUIZ_RECORDS_PATH = "/student/quiz";

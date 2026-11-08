@@ -5,15 +5,24 @@ import type { MouseEventHandler, ReactNode } from "react";
 
 import { cn } from "../../lib/utils";
 import { BUSY_MOTION, BUSY_MOTION_PRIMARY, PRESS_MOTION } from "../ui/button";
+import { IconLock } from "../quiet-icons";
 import { WorkspaceIcon, type WorkspaceIconName } from "../workspace-icon";
 
 /**
- * Teacher Quiz pages, owner pick 2026-11-08: option A ("arcade keys",
- * binder cards, clipboard Records, marked paper, sticker empties) with B's
- * blinking LIVE lamp. Every key is a symbol plus a word.
+ * Quiz pages, owner pick 2026-11-08 (second round): option A "one page per
+ * quiz". Lists are plain rows with one state chip; a quiz opens on its own
+ * page with Paper | Submissions. Every key is a symbol plus a word.
  */
 
-const KEY = `relative inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] px-4 py-[7px] font-body text-sm [line-height:normal] font-extrabold text-[#111] no-underline disabled:cursor-not-allowed disabled:opacity-50 disabled:aria-busy:opacity-100 [&_svg]:size-4 ${PRESS_MOTION}`;
+const KEY = `relative inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-arc border-[3px] border-border px-4 py-[7px] font-body text-sm [line-height:normal] font-extrabold text-ink no-underline disabled:cursor-not-allowed disabled:opacity-50 disabled:aria-busy:opacity-100 [&_svg]:size-4 ${PRESS_MOTION}`;
+
+/** Under 600px a key shows its symbol above its word (handoff §4). */
+const KEY_STACKED =
+  "max-[600px]:min-w-0 max-[600px]:flex-col max-[600px]:justify-center max-[600px]:gap-1 max-[600px]:px-2 max-[600px]:py-2 max-[600px]:text-xs";
+
+/** A row of keys; under 600px it becomes an even grid. */
+export const KEY_ROW =
+  "flex flex-wrap gap-2.5 max-[600px]:grid max-[600px]:w-full max-[600px]:grid-cols-[repeat(auto-fit,minmax(88px,1fr))]";
 
 export function QuizKey({
   icon,
@@ -44,17 +53,16 @@ export function QuizKey({
 }) {
   const classes = cn(
     KEY,
-    tone === "primary" ? "bg-[#FF4D8D]" : "bg-white",
+    KEY_STACKED,
+    tone === "primary" ? "bg-main" : "bg-white",
     tone === "primary" ? BUSY_MOTION_PRIMARY : BUSY_MOTION,
     className,
   );
+  // Busy keeps the symbol and the word: the shared fill is the only
+  // loading a key shows (handoff §2), no spinner in their place.
   const content = (
     <>
-      {busy ? (
-        <span className="spinner" aria-hidden="true" />
-      ) : (
-        <WorkspaceIcon name={icon} size={16} stroke={2.6} />
-      )}
+      <WorkspaceIcon name={icon} size={16} stroke={2.6} />
       <span>{children}</span>
     </>
   );
@@ -88,19 +96,6 @@ export function QuizKey({
   );
 }
 
-/** B's lamp: blinks while a Quiz accepts submissions; still under reduced motion. */
-export function LiveLamp() {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border-2 border-[#111] bg-white px-2.5 py-px font-body text-[11px] font-extrabold tracking-[0.06em] text-[#111]">
-      <i
-        aria-hidden="true"
-        className="inline-block size-2.5 rounded-full border-2 border-[#111] bg-[#EF4444] animate-quiz-live motion-reduce:animate-none"
-      />
-      LIVE
-    </span>
-  );
-}
-
 export type QuizState = "draft" | "paused" | "accepting";
 
 export function quizState(quiz: {
@@ -111,20 +106,16 @@ export function quizState(quiz: {
   return quiz.taking_open === true ? "accepting" : "paused";
 }
 
-/** Card offset shadow by state: lime accepting, cyan published, grey draft. */
-export const STATE_SHADOW: Record<QuizState, string> = {
-  accepting: "shadow-[6px_6px_0_#A3E635]",
-  paused: "shadow-[6px_6px_0_#67E8F9]",
-  draft: "shadow-[6px_6px_0_#D1D5DB]",
-};
-
 const STATE_PILL: Record<QuizState, { bg: string; dot: string }> = {
   accepting: { bg: "bg-[#ECFCCB]", dot: "bg-[#65A30D]" },
   paused: { bg: "bg-[#CFFAFE]", dot: "bg-[#0891B2]" },
   draft: { bg: "bg-[#F3F4F6]", dot: "bg-[#6B7280]" },
 };
 
-/** One status pill with a coloured dot in place of separate state chips. */
+/**
+ * The one state chip a quiz shows: a blinking LIVE lamp while it accepts
+ * submissions (B's lamp), otherwise Paused or Draft with a dot.
+ */
 export function QuizStatus({
   state,
   label,
@@ -135,13 +126,29 @@ export function QuizStatus({
   const tone = STATE_PILL[state];
   return (
     <span
-      className={`inline-flex items-center gap-2 rounded-full border-2 border-[#111] px-3 py-1 font-body text-xs font-extrabold text-[#111] ${tone.bg}`}
+      className={`inline-flex shrink-0 items-center gap-2 rounded-full border-2 border-border px-3 py-1 font-body text-xs font-extrabold text-ink ${tone.bg}`}
+      data-testid="quiz-state"
     >
-      <i
-        aria-hidden="true"
-        className={`inline-block size-2.5 rounded-full ${tone.dot}`}
-      />
-      {label}
+      {state === "accepting" ? (
+        <>
+          <i
+            aria-hidden="true"
+            className="inline-block size-2.5 rounded-full border-2 border-border bg-[#EF4444] animate-quiz-live motion-reduce:animate-none"
+          />
+          <span aria-hidden="true" className="tracking-[0.06em]">
+            LIVE
+          </span>
+          <span className="sr-only">{label}</span>
+        </>
+      ) : (
+        <>
+          <i
+            aria-hidden="true"
+            className={`inline-block size-2.5 rounded-full ${tone.dot}`}
+          />
+          {label}
+        </>
+      )}
     </span>
   );
 }
@@ -149,7 +156,7 @@ export function QuizStatus({
 /** A plain chip beside the status pill (date, attempts). */
 export function QuizChip({ children }: { children: ReactNode }) {
   return (
-    <span className="rounded-full border-2 border-[#111] bg-white px-3 py-1 font-body text-xs font-bold text-[#111]">
+    <span className="rounded-full border-2 border-border bg-white px-3 py-1 font-body text-xs font-bold text-ink">
       {children}
     </span>
   );
@@ -186,55 +193,85 @@ export function QuizEmpty({
 }) {
   return (
     <section
-      className={`group grid min-h-[280px] place-items-center content-center gap-[18px] rounded-2xl border-[3px] border-[#111] bg-white p-7 text-center ${EMPTY_CARD[kind]}`}
+      className={`group grid min-h-[280px] place-items-center content-center gap-[18px] rounded-2xl border-[3px] border-border bg-white p-7 text-center ${EMPTY_CARD[kind]}`}
     >
       <span
         aria-hidden="true"
-        className={`grid size-[88px] place-items-center rounded-[18px] border-[3px] border-[#111] text-[#111] ${EMPTY_TILE[kind]}`}
+        className={`grid size-[88px] place-items-center rounded-[18px] border-[3px] border-border text-ink ${EMPTY_TILE[kind]}`}
       >
         <WorkspaceIcon name={EMPTY_ICON[kind]} size={44} stroke={2.2} />
       </span>
-      <h2 className="m-0 -rotate-2 rounded-xl border-[3px] border-[#111] bg-[#FFE14D] px-[18px] py-2 font-display text-[22px] leading-tight font-extrabold text-[#111] shadow-[4px_4px_0_#FDE68A] transition-[rotate] duration-[400ms] ease-[cubic-bezier(.2,.8,.2,1)] group-hover:-rotate-6 motion-reduce:transition-none motion-reduce:group-hover:-rotate-2">
+      <h2 className="m-0 -rotate-2 rounded-xl border-[3px] border-border bg-[#FFE14D] px-[18px] py-2 font-display text-[22px] leading-tight font-extrabold text-ink shadow-[4px_4px_0_#FDE68A] transition-[rotate] duration-[400ms] ease-[cubic-bezier(.2,.8,.2,1)] group-hover:-rotate-6 motion-reduce:transition-none motion-reduce:group-hover:-rotate-2">
         {title}
       </h2>
     </section>
   );
 }
 
-/**
- * The Record clipboard (paper, dot grid, purple clip, tilted title, red
- * stamp) that Quiz submissions share with the chat Record board below.
- */
-export function ClipboardBoard({
-  title,
-  stamp,
-  children,
+/** A's list row card. Rows carry no keys: the row itself opens its page. */
+export const QUIZ_ROW_SHELL =
+  "relative flex flex-wrap items-center gap-x-3.5 gap-y-2.5 rounded-[14px] border-[3px] border-border bg-white shadow-[4px_4px_0_#111]";
+export const QUIZ_ROW = `${QUIZ_ROW_SHELL} px-[18px] py-4`;
+
+export type QuizTabSpec<T extends string> = {
+  value: T;
+  label: string;
+  count?: number;
+  /** Shown as a locked tab with this reason as its tooltip. */
+  lockedReason?: string;
+};
+
+/** Paper | Submissions: the one switch between editing and the record. */
+export function QuizTabs<T extends string>({
+  label,
+  tabs,
+  value,
+  onChange,
 }: {
-  title: string;
-  stamp: string;
-  children: ReactNode;
+  label: string;
+  tabs: QuizTabSpec<T>[];
+  value: T;
+  onChange: (next: T) => void;
 }) {
   return (
-    <section
-      aria-label={title}
-      className="relative mx-auto w-full min-w-0 max-w-[1120px] rounded-[10px] border-4 border-[#111] bg-[#F5E6C8] bg-[radial-gradient(#E9DFC4_1.4px,transparent_1.4px)] bg-[length:22px_22px] px-9 pt-14 pb-10 shadow-[10px_10px_0_#67E8F9] max-[520px]:px-4"
+    <div
+      role="tablist"
+      aria-label={label}
+      className="inline-flex max-w-full self-start overflow-hidden rounded-[12px] border-[3px] border-border shadow-[4px_4px_0_#111]"
     >
-      <span
-        aria-hidden="true"
-        className="absolute top-[-20px] left-1/2 h-9 w-[120px] -translate-x-1/2 rounded-t-lg rounded-b-sm border-[3px] border-[#111] bg-[#C4B5FD] shadow-[inset_0_-6px_0_#A78BFA]"
-      />
-      <div className="mb-[22px] flex flex-wrap items-start gap-3.5">
-        <h2 className="m-0 max-w-full -rotate-[1.5deg] rounded-md border-[3px] border-l-[10px] border-[#111] border-l-[#FACC15] bg-white px-[18px] py-1 font-display text-[32px] leading-tight font-extrabold break-words text-[#111] shadow-[4px_4px_0_#FFE14D] max-[520px]:text-[26px]">
-          {title}
-        </h2>
-        <span
-          aria-hidden="true"
-          className="ml-auto rotate-[8deg] rounded-lg border-[3px] border-[#EF4444] bg-white/85 px-3.5 py-1.5 text-[13px] font-extrabold text-[#EF4444]"
-        >
-          {stamp}
-        </span>
-      </div>
-      {children}
-    </section>
+      {tabs.map((tab) => {
+        const selected = tab.value === value;
+        const locked = Boolean(tab.lockedReason);
+        return (
+          <button
+            key={tab.value}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            aria-disabled={locked || undefined}
+            title={tab.lockedReason}
+            onClick={() => {
+              if (!locked) onChange(tab.value);
+            }}
+            className={cn(
+              "inline-flex min-h-11 items-center gap-2 border-0 border-r-[3px] border-border px-[18px] font-body text-sm font-extrabold last:border-r-0",
+              selected
+                ? "bg-main text-ink"
+                : locked
+                  ? "cursor-not-allowed bg-[#F3F4F6] text-arc-muted"
+                  : "cursor-pointer bg-white text-ink hover:bg-warn-bg",
+            )}
+          >
+            {locked ? <IconLock size={14} /> : null}
+            {tab.label}
+            {tab.count !== undefined && !locked ? (
+              <span className="rounded-full border-2 border-border bg-white px-2 font-mono text-xs">
+                {tab.count}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
   );
 }

@@ -1105,6 +1105,11 @@ const enMessages = {
   quizGradeFeedbackFor: "Feedback for question {n}",
   quizSaveGrades: "Save grades",
   quizGradesSaved: "Grades saved.",
+  quizTabPaper: "Paper",
+  quizTabSubmissions: "Submissions",
+  quizSubmissionsLockedReason: "Submissions open after Done.",
+  quizAllRounds: "All rounds",
+  quizFilterSubmissions: "Filter submissions",
   quizHideAttempt: "Hide",
   quizHideAttemptNamed: "Hide {name}'s attempt",
   quizHideConfirm:

@@ -92,7 +92,7 @@ describe("formal taking contract wiring", () => {
       "../lib/api/platform.ts",
       "../components/quizzes/quizzes-list.tsx",
       "../components/quizzes/quiz-editor.tsx",
-      "../components/quiz/quiz-available.tsx",
+      "../components/quiz/quiz-list.tsx",
     ];
     for (const rel of files) {
       const src = readFileSync(join(__dirname, rel), "utf8");

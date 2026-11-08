@@ -135,8 +135,8 @@ describe("sidebar Quiz IA", () => {
 });
 
 describe("quiz records path", () => {
-  it("Quiz Records tab path is where student Record lives", () => {
-    expect(QUIZ_RECORDS_PATH).toBe("/student/quiz?tab=records");
+  it("student results live on the one Quiz list", () => {
+    expect(QUIZ_RECORDS_PATH).toBe("/student/quiz");
   });
 });
 
@@ -145,7 +145,7 @@ describe("Available row hit layer", () => {
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const src = readFileSync(
-      join(__dirname, "../components/quiz/quiz-available.tsx"),
+      join(__dirname, "../components/quiz/quiz-list.tsx"),
       "utf8",
     );
     expect(src).not.toMatch(/PRESS_MOTION/);
@@ -159,8 +159,8 @@ describe("Available row hit layer", () => {
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     for (const file of [
-      "../components/quiz/quiz-records.tsx",
-      "../components/quizzes/quiz-records.tsx",
+      "../components/quiz/quiz-list.tsx",
+      "../components/quizzes/quiz-submissions.tsx",
     ]) {
       const src = readFileSync(join(__dirname, file), "utf8");
       const row = src.slice(src.indexOf("<li"), src.indexOf("</li>"));

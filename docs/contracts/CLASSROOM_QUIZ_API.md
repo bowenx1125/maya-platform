@@ -24,7 +24,7 @@ silently rewrite either side. Progress and deployment facts live in
 | Tables                | `backend/migrations/versions/0083_classroom_quizzes.py`, `0084_quiz_taking_open_retest.py`, `0085_quiz_manual_grading.py` |
 | Backend tests         | `backend/tests/test_classroom_quiz_api.py`, `test_classroom_quiz_export.py`, `test_classroom_quiz_attempt_review.py`      |
 | Frontend client/gates | `frontend/lib/api/quiz.ts`, `frontend/lib/quiz-gate.ts`, `frontend/lib/quiz-urls.ts`                                      |
-| Frontend tests        | `frontend/tests/quiz-*.test.ts(x)`, `assessment-record-panel.test.tsx`                                                    |
+| Frontend tests        | `frontend/tests/quiz-*.test.ts(x)`                                                                                        |
 | Decision record       | [ADR-011](../adr/ADR-011-classroom-quiz-parallel-domain.md)                                                               |
 | Document shape        | `contracts/quiz-document.v1.schema.json` (descriptive; no runtime code loads it)                                          |
 
@@ -168,10 +168,9 @@ text questions included, so an ungraded paper never reads as full marks.
 `phase` is `"completed"` once grading is complete and `"grading_pending"`
 before.
 
-The Records pages show quiz rows from these endpoints and render chat rows
-through the existing chat Record board, which reads
-`/learning/courses/{course_id}/assessment-attempts` (teacher) or
-`/my-assessment-attempts` (student). See [Record placement](#record-placement).
+The Quiz pages show only `source: "quiz"` rows: a quiz's Submissions tab
+(teacher) and the student's Quiz list. Chat rows are no longer shown in the
+UI; the endpoints still return them. See [Record placement](#record-placement).
 
 Attempts with `teacher_hidden_at` set are excluded from counts, Record,
 detail and export.
@@ -232,21 +231,21 @@ A non-integer `taking_epoch` is **400**.
 - Rows contain no email, password or token fields (asserted). Each attempt's
   own `document_snapshot_json` is not exported, so an attempt from an earlier
   `content_revision` is shown beside the current paper.
-- The Records page calls export without `taking_epoch` (all epochs).
+- The quiz page's Download calls export without `taking_epoch` (all epochs).
 
 ## Teacher and student controls
 
-| Page                                           | Control (English copy)                                                      | Calls / rule                                                                                  |
-| ---------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Editor `/teacher/quizzes/new`, `/{id}`         | Done                                                                        | create or patch, then publish; in-flight lock (`beginDoneLock`); then back to the list        |
-| Editor (published) and list row                | Start evaluation / Pause evaluation                                         | `start-taking` / `pause-taking`; shown only for published quizzes                             |
-| Editor (published) and list row                | Unpublish                                                                   | `unpublish`; until then the editor hides Done and the edit controls (`isPublishedLocked`)     |
-| List row                                       | Published/Draft, Accepting submissions/Paused, `{count} attempts`           | from `QuizSummaryDTO`                                                                         |
-| List row → `/teacher/quizzes/records?quiz_id=` | Records, Download                                                           | `record-attempts?quiz_id=` (also filtered client-side); Download only when scoped to one quiz |
-| Teacher Records row (`Round N`)                | opens the attempt: Key column, points/feedback inputs, Save grades, Hide    | attempt detail, `grades`, hide (after a confirm)                                              |
-| Teacher `/teacher/quizzes/records` (no filter) | quiz submissions, then the chat Record board (CLASS ROSTER)                 | `record-attempts` quiz rows; chat board as before (report download, delete)                   |
-| Student `/student/quiz`                        | Available: Start / Not open yet                                             | Start only when `taking_open === true` (`canStudentStartQuiz`)                                |
-| Student `/student/quiz?tab=records`            | Records: own submissions (no Key), then the chat Record board (MY PROGRESS) | `my-record-attempts` quiz rows, attempt detail; chat board as before                          |
+| Page                                      | Control (English copy)                                                         | Calls / rule                                                                             |
+| ----------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| List `/teacher/quizzes`                   | New; one row per quiz: LIVE / Paused / Draft chip, `{count} attempts`; no keys | `QuizSummaryDTO`; the row opens `/teacher/quizzes/{id}`                                  |
+| Quiz page `/teacher/quizzes/new`, `/{id}` | Tabs Paper \| Submissions (`?tab=paper\|submissions`)                          | Submissions is locked until the quiz is published or has attempts                        |
+| Paper tab (draft)                         | title typed in the banner, Done                                                | create or patch, then publish; in-flight lock (`beginDoneLock`); then back to the list   |
+| Paper tab (published)                     | read-only paper, lock notice with Unpublish                                    | `unpublish`; until then Done and the edit controls are hidden (`isPublishedLocked`)      |
+| Quiz page banner (published)              | Start evaluation / Pause evaluation, Download                                  | `start-taking` / `pause-taking`; `attempts/export` (Download also when a draft has rows) |
+| Submissions tab                           | All rounds / Round N / Needs grading · N filters; rows by student              | `record-attempts?quiz_id=` (also filtered client-side); a published quiz opens here      |
+| Submissions row                           | opens the attempt: Key column, points/feedback inputs, Save grades, Hide       | attempt detail, `grades`, hide (after a confirm)                                         |
+| Student `/student/quiz`                   | one list: Start rows, own results (Round N, Graded / Not graded yet), Not open | Start only when `taking_open === true` and no result for the open round                  |
+| Student result row                        | opens own marked paper (no Key)                                                | `my-record-attempts` quiz rows, attempt detail                                           |
 
 Empty states appear only when the request succeeded with no rows. Student
 pages call through `PlatformApi`; teacher pages and the attempt detail call
@@ -255,44 +254,49 @@ top-level `{code, message, details, request_id}` error body as `PlatformApi`.
 English copy for Quiz codes lives in `frontend/lib/i18n.ts`
 (`quiz_taking_already_open`, `quiz_taking_already_closed`,
 `quiz_taking_closed`, `quiz_attempt_exists`) and `frontend/lib/error-copy.json`
-(the other Quiz codes, grading codes included). The Records rows carry no
-press-motion hit layer: its hover overlay covered the grading controls in a
+(the other Quiz codes, grading codes included). Submissions and result rows
+carry no press-motion hit layer: its hover overlay covered the grading controls in a
 real browser.
 
-## Teacher page look (owner pick, 2026-11-08)
+## Page layout (owner pick, 2026-11-08, second round)
 
-Option A from the design comparison, with two parts of B:
+Option A, "one page per quiz", replaced the first-round look after the owner
+found it redundant:
 
-- **Quizzes list:** binder cards whose offset shadow shows the state (lime
-  accepting, cyan published, grey draft). One status pill with a dot. While
-  accepting, B's blinking LIVE lamp (still under reduced motion).
-- **Editor:** a worksheet layout. Each question card is numbered `#01` in mono
-  with a type pill and ruled paper. Points is a − n + stepper. The correct
-  choice is a lime key; the real radio or checkbox keeps "Mark as correct
-  answer". New questions come from B's dashed "Add question" slot in A's
-  colours.
-- **Published (locked) editor:** a read-only paper with the
-  `quizPublishedLocked` notice, the status pill and the LIVE lamp.
-- **Records:** quiz submissions sit on the Record clipboard board. Scoped to
-  one quiz, the board is titled with the quiz and rows lead with the student.
-  Each row has a Graded / Needs grading chip and a score ring.
-- **Opened attempt:** a "marked paper" with a red margin, a red total, lime
-  rows for right answers and red-tint rows for wrong ones.
-- **Empty states:** sticker cards (icon tile plus the existing one-line copy).
-- **Keys:** arcade keys with a symbol and a word (`QuizKey` in
-  `frontend/components/quizzes/quiz-chrome.tsx`), using the shared press and
-  busy motion.
+- **Lists are rows, not cards with keys.** A teacher row shows one state chip
+  (B's blinking LIVE lamp while accepting, still under reduced motion;
+  otherwise Paused or Draft), the title and the attempt count. The whole row
+  opens the quiz. New is the shared banner action.
+- **One quiz page, two tabs.** Paper is the question sheet; Submissions is the
+  quiz's record. That is how editing and the record are told apart: a draft
+  opens on Paper with its Submissions tab locked; a published quiz opens on
+  Submissions and its Paper is read-only. Rare actions (Start/Pause, Download)
+  sit in the banner; Unpublish sits on the lock notice it lifts.
+- **Paper:** worksheet question cards (`#01`, type pill, ruled paper), a
+  − n + points stepper, a lime correct-answer key that keeps the real radio or
+  checkbox ("Mark as correct answer"), and B's dashed "Add question" slot.
+- **Submissions:** round and Needs grading filters, rows by student with
+  round, a Graded / Needs grading chip and a mono score. A row opens the
+  marked paper (red margin, red total, lime/red rows).
+- **Student:** one list with no tabs. Quizzes open now (Start) come first,
+  then the student's results (opening their marked paper), then quizzes not
+  open yet.
+- **Empty states:** sticker cards with the existing one-line copy.
+- **Keys:** a symbol and a word (`QuizKey` in
+  `frontend/components/quizzes/quiz-chrome.tsx`), shared press and busy
+  motion, stacked symbol-over-word under 600px.
 
 ## Record placement
 
-Owner decision (2026-11-08): the formal chat-assessment Record moved out of
-Brainform. The Brainform sidebar row, the Brainform/Studyform Record cards and
-the `/teacher/record` and `/student/record` pages are gone. The two paths
-redirect to `/teacher/quizzes/records` and `/student/quiz?tab=records`. The
-chat board (`AssessmentRecordPanel` in
-`frontend/components/knowledge/assessment-record.tsx`) keeps its copy,
-grouping, answer sheets, report downloads and teacher delete, and its data
-and endpoints are unchanged. No chat attempt was copied or rewritten.
+Owner decisions (2026-11-08): the formal chat-assessment Record left
+Brainform, and in the second round its board ("Chat tests") was removed from
+the Quiz pages because teachers no longer use it. `/teacher/record` redirects
+to `/teacher/quizzes`, `/student/record` to `/student/quiz`, and the old
+`/teacher/quizzes/records?quiz_id=` link to that quiz's Submissions tab (no
+`quiz_id`: the list). The chat-assessment endpoints, their data and their
+permission checks are unchanged; only the frontend board
+(`AssessmentRecordPanel`) was deleted. No attempt was copied, rewritten or
+removed.
 
 ## Known gaps (evidence, not changed here)
 
@@ -364,3 +368,11 @@ This is not a production acceptance; nothing was deployed.
 - 2026-11-08: the frontend rework note merged into this file; migration 0085
   adds attempt detail, hand grading (no AI), hide and Record epochs; the chat
   Record moved from Brainform to Quiz Records.
+- 2026-11-08 (second round): owner picked layout A, one page per quiz with
+  Paper | Submissions and a single student list; the Chat tests board was
+  removed from the UI (endpoints and data kept). Browser E2E on the new pages:
+  list rows open their quiz; a new quiz has Submissions locked; a live quiz
+  opens on Submissions, a text answer is hand-graded and saved; Paper is
+  read-only with Unpublish; a two-round quiz filters by Round 2; old Records
+  links redirect; the student opens a result without the key; no horizontal
+  scroll at 390px.

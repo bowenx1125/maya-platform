@@ -32,12 +32,12 @@ vi.mock("../components/session-provider", () => ({
 }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(state.search),
-  usePathname: () => "/teacher/quizzes/records",
+  usePathname: () => "/teacher/quizzes/quiz-1",
   useRouter: () => ({ push: vi.fn() }),
 }));
 
-import QuizRecords from "../components/quizzes/quiz-records";
-import { QuizRecords as StudentQuizRecords } from "../components/quiz/quiz-records";
+import { QuizSubmissions } from "../components/quizzes/quiz-submissions";
+import { StudentQuizList } from "../components/quiz/quiz-list";
 
 type Call = { method: string; url: string; body?: unknown };
 let calls: Call[] = [];
@@ -169,6 +169,7 @@ beforeEach(() => {
     myAssessmentAttempts: vi.fn().mockResolvedValue([]),
     deleteCourseAssessmentAttempt: vi.fn().mockResolvedValue(undefined),
     listMyRecordAttempts: vi.fn().mockResolvedValue([quizRow, chatRow]),
+    listCourseQuizzes: vi.fn().mockResolvedValue([]),
   });
   invalidateRequestCache(state.api);
   vi.stubGlobal(
@@ -233,13 +234,21 @@ describe("QuizApi errors", () => {
   });
 });
 
-describe("teacher Quiz Records", () => {
+describe("teacher Quiz Submissions tab", () => {
+  const second = {
+    ...quizRow,
+    attempt_id: "att-2",
+    student_name: "Ben",
+    taking_epoch: 1,
+    grading_status: "complete",
+    points_awarded: 5,
+  };
   beforeEach(() => {
     routes.push(
       {
         method: "GET",
         match: /record-attempts/,
-        reply: () => json([quizRow, chatRow]),
+        reply: () => json([quizRow, second, chatRow]),
       },
       {
         method: "GET",
@@ -259,26 +268,41 @@ describe("teacher Quiz Records", () => {
     );
   });
 
-  it("lists quiz submissions with their round and moves chat Record below", async () => {
-    render(<QuizRecords />);
-    const row = await screen.findByRole("button", { name: /Week 3 Quiz/ });
+  const renderTab = () =>
+    render(<QuizSubmissions courseId="course-1" quizId="quiz-1" />);
+
+  it("lists this quiz's attempts by student with round, state and score, and no chat rows", async () => {
+    renderTab();
+    const row = await screen.findByRole("button", { name: /^Ada/ });
     expect(row.textContent).toContain("Round 2");
-    expect(screen.queryByRole("button", { name: /^Keynotes/ })).toBeNull();
-    expect(
-      await screen.findByRole("button", {
-        name: "Open the Record for Keynotes",
-      }),
-    ).toBeTruthy();
+    expect(row.textContent).toContain("Needs grading");
+    expect(row.textContent).toContain("3 / 6");
+    expect(screen.getByRole("button", { name: /^Ben/ })).toBeTruthy();
+    expect(screen.queryByText("Keynotes")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Record" })).toBeNull();
+  });
+
+  it("filters by round and by what still needs grading", async () => {
+    renderTab();
+    await screen.findByRole("button", { name: /^Ada/ });
+    const group = screen.getByRole("group", { name: "Filter submissions" });
+    fireEvent.click(within(group).getByRole("button", { name: "Round 1" }));
+    expect(screen.queryByRole("button", { name: /^Ada/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Ben/ })).toBeTruthy();
+    fireEvent.click(
+      within(group).getByRole("button", { name: "Needs grading · 1" }),
+    );
+    expect(screen.getByRole("button", { name: /^Ada/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Ben/ })).toBeNull();
   });
 
   it("grades a text question by hand and shows the key", async () => {
-    render(<QuizRecords />);
-    const row = await screen.findByRole("button", { name: /Week 3 Quiz/ });
-    // The row carries the grading state; the opened paper does not repeat it.
-    expect(row.textContent).toContain("Needs grading");
+    renderTab();
+    const row = await screen.findByRole("button", { name: /^Ada/ });
     fireEvent.click(row);
     const sheet = await screen.findByTestId("quiz-attempt-detail");
     expect(within(sheet).getByText("Mentions decoupling.")).toBeTruthy();
+    // The row carries the grading state; the opened paper does not repeat it.
     expect(within(sheet).queryByText("Needs grading")).toBeNull();
     fireEvent.change(
       within(sheet).getByRole("spinbutton", { name: "Points for question 2" }),
@@ -304,8 +328,8 @@ describe("teacher Quiz Records", () => {
 
   it("hides an attempt only after a confirm", async () => {
     const confirm = vi.spyOn(window, "confirm");
-    render(<QuizRecords />);
-    fireEvent.click(await screen.findByRole("button", { name: /Week 3 Quiz/ }));
+    renderTab();
+    fireEvent.click(await screen.findByRole("button", { name: /^Ada/ }));
     const hide = await screen.findByRole("button", {
       name: "Hide Ada's attempt",
     });
@@ -318,28 +342,61 @@ describe("teacher Quiz Records", () => {
       expect(calls.some((call) => call.method === "DELETE")).toBe(true),
     );
   });
-
-  it("scoped to one quiz names the quiz on the board and shows no chat Record", async () => {
-    state.search = "quiz_id=quiz-1";
-    render(<QuizRecords />);
-    const row = await screen.findByRole("button", { name: /^Ada/ });
-    expect(row.textContent).toContain("Round 2");
-    expect(row.textContent).toContain("Needs grading");
-    expect(screen.getByRole("heading", { name: "Week 3 Quiz" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Record" })).toBeNull();
-  });
 });
 
-describe("student Quiz Records", () => {
-  it("shows own answers and grades without the key, then own chat Record", async () => {
+describe("student Quiz list", () => {
+  it("puts own results in the one list, opens them without the key, and shows no chat Record", async () => {
     state.role = "student";
+    (state.api.listCourseQuizzes as ReturnType<typeof vi.fn>).mockResolvedValue(
+      [
+        {
+          id: "quiz-open",
+          course_id: "course-1",
+          group_id: null,
+          title: "Week 9 Quiz",
+          status: "published",
+          schema_version: 1,
+          content_revision: 1,
+          attempt_count: 0,
+          taking_open: true,
+          taking_epoch: 1,
+          created_by_user_id: "t",
+          published_at: null,
+          created_at: "",
+          updated_at: "",
+        },
+        {
+          id: "quiz-1",
+          course_id: "course-1",
+          group_id: null,
+          title: "Week 3 Quiz",
+          status: "published",
+          schema_version: 1,
+          content_revision: 1,
+          attempt_count: 1,
+          taking_open: false,
+          taking_epoch: 2,
+          created_by_user_id: "t",
+          published_at: null,
+          created_at: "",
+          updated_at: "",
+        },
+      ],
+    );
     routes.push({
       method: "GET",
       match: /attempts\/att-1$/,
       reply: () => json(detail("student")),
     });
-    render(<StudentQuizRecords courseId="course-1" />);
-    fireEvent.click(await screen.findByRole("button", { name: /Week 3 Quiz/ }));
+    const onStart = vi.fn();
+    render(<StudentQuizList courseId="course-1" onStart={onStart} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    expect(onStart).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "quiz-open" }),
+    );
+    // Taken and closed: shown once, as its result, not as "Not open yet".
+    expect(screen.queryByTestId("quiz-not-open")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Week 3 Quiz/ }));
     const sheet = await screen.findByTestId("quiz-attempt-detail");
     expect(
       within(sheet).queryByRole("columnheader", { name: "Key" }),
@@ -347,9 +404,7 @@ describe("student Quiz Records", () => {
     expect(within(sheet).getByText("Not graded yet")).toBeTruthy();
     expect(within(sheet).getByText("Correct")).toBeTruthy();
     expect(within(sheet).queryByRole("button", { name: /Hide/ })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Record" })).toBeTruthy();
-    expect(
-      state.api.myAssessmentAttempts as ReturnType<typeof vi.fn>,
-    ).toHaveBeenCalledWith("course-1");
+    expect(screen.queryByText("Keynotes")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Record" })).toBeNull();
   });
 });
