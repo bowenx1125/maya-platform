@@ -203,6 +203,8 @@ class RecordAttemptDTO(BaseModel):
     score_objective: float | None = None
     score_max_objective: float | None = None
     grading_status: GradingStatus | None = None
+    # Optional aggregate of AI item scores (FE G5); absent while none scored.
+    score_ai: float | None = None
     quiz_id: UUID | None = None
     conversation_id: UUID | None = None
     points_awarded: float | None = None
@@ -232,6 +234,8 @@ class QuizAttemptItemStudent(BaseModel):
     points_awarded: float | None = None
     graded: bool = False
     feedback: str | None = None
+    # Present after the AI worker writes a score; omit/null while pending.
+    ai_score: float | None = None
 
 
 class QuizAttemptItemTeacher(QuizAttemptItemStudent):
@@ -256,6 +260,8 @@ class StudentQuizAttemptDetailDTO(BaseModel):
     score_max_objective: float
     score_manual: float
     score_max_manual: float
+    # Optional aggregate of AI item scores when any ai_score is present.
+    score_ai: float | None = None
     points_awarded: float
     points_total: float
     submitted_at: datetime

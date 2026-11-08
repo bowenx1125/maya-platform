@@ -80,6 +80,16 @@ def test_ai_mode_missing_rules_returns_422(teacher: Actor) -> None:
     _assert_grading_invalid(created)
 
 
+
+def test_ai_mode_short_rules_returns_422(teacher: Actor) -> None:
+    response = teacher.post(
+        f"/courses/{COURSE_ID}/quizzes",
+        {"title": "AI short rules", "items": [_ai_item(rules="too short")]},
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "quiz_grading_invalid"
+
+
 def test_ai_mode_missing_score_bounds_returns_422(teacher: Actor) -> None:
     missing_min = _ai_item()
     del missing_min["grading"]["score_min"]
@@ -253,10 +263,21 @@ def test_worker_writes_clamped_ai_score_and_updates_status(
 
     detail = student.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/{attempt_id}")
     assert detail.status_code == 200, detail.text
-    item = {row["id"]: row for row in detail.json()["items"]}["q_ai"]
+    body = detail.json()
+    assert body["score_ai"] == 4.0
+    item = {row["id"]: row for row in body["items"]}["q_ai"]
     assert item["graded"] is True
     assert item["points_awarded"] == 4.0
+    assert item["ai_score"] == 4.0
     assert "grading" not in item
+
+    teacher_detail = teacher.get(
+        f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/{attempt_id}"
+    )
+    assert teacher_detail.status_code == 200, teacher_detail.text
+    tbody = teacher_detail.json()
+    assert tbody["score_ai"] == 4.0
+    assert {row["id"]: row for row in tbody["items"]}["q_ai"]["ai_score"] == 4.0
 
 
 def test_worker_keeps_pending_when_manual_text_remains(

@@ -50,6 +50,7 @@ def _validate_item_grading(item: QuizItemTeacher) -> None:
     score_max = grading.score_max
     if (
         not rules
+        or len(rules) < 20
         or score_min is None
         or score_max is None
         or not isinstance(score_min, (int, float))
@@ -59,7 +60,7 @@ def _validate_item_grading(item: QuizItemTeacher) -> None:
     ):
         raise unprocessable(
             "quiz_grading_invalid",
-            f"Item {item.id} AI grading requires finite score_min, score_max, and non-empty rules.",
+            f"Item {item.id} AI grading requires finite score_min, score_max, and rules of at least 20 characters.",
             {"item_id": item.id},
         )
     lo = float(score_min)

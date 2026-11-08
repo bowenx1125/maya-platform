@@ -606,6 +606,17 @@ def _compute_score_manual(
     return total
 
 
+def _compute_score_ai(answers: dict[str, dict[str, Any]]) -> float | None:
+    """Sum of written ai_score values; None when none have been scored yet."""
+
+    scores = [
+        float(row["ai_score"])
+        for row in answers.values()
+        if isinstance(row, dict) and row.get("ai_score") is not None
+    ]
+    return sum(scores) if scores else None
+
+
 def _grading_status(
     items: list[Any],
     grades: dict[str, dict[str, Any]],
@@ -634,6 +645,7 @@ def _quiz_record_row(db: Session, attempt: ClassroomQuizAttempt) -> RecordAttemp
         score_objective=attempt.score_objective,
         score_max_objective=attempt.score_max_objective,
         grading_status=attempt.grading_status,  # type: ignore[arg-type]
+        score_ai=_compute_score_ai(_answers_by_id(attempt)),
         quiz_id=UUID(attempt.quiz_id),
         # Totals cover text items too, so an ungraded paper never reads as a
         # full score over its choice questions alone.
@@ -688,6 +700,8 @@ def _attempt_detail(
             entry["graded"] = True
         else:
             entry["response_text"] = str(answer.get("text") or "")
+            if answer.get("ai_score") is not None:
+                entry["ai_score"] = float(answer["ai_score"])
             if grade is not None:
                 entry["graded"] = True
                 entry["points_awarded"] = float(grade.get("points_awarded") or 0)
@@ -731,6 +745,7 @@ def _attempt_detail(
         "score_max_objective": attempt.score_max_objective,
         "score_manual": attempt.score_manual,
         "score_max_manual": score_max_manual,
+        "score_ai": _compute_score_ai(answers),
         "points_awarded": attempt.score_objective + attempt.score_manual,
         "points_total": attempt.score_max_objective + score_max_manual,
         "submitted_at": attempt.submitted_at,
