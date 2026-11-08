@@ -24,6 +24,13 @@ class QuizAnswerKey(BaseModel):
     rubric: str | None = None
 
 
+class QuizItemGrading(BaseModel):
+    mode: Literal["manual", "ai"] = "manual"
+    score_min: float | None = None
+    score_max: float | None = None
+    rules: str | None = None
+
+
 class QuizItemTeacher(BaseModel):
     id: str
     type: ItemType
@@ -32,6 +39,7 @@ class QuizItemTeacher(BaseModel):
     choices: list[QuizChoice] = Field(default_factory=list)
     answer: QuizAnswerKey | None = None
     points: float = 1
+    grading: QuizItemGrading | None = None
 
 
 class QuizItemStudent(BaseModel):
