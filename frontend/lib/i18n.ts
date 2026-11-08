@@ -1099,6 +1099,7 @@ const enMessages = {
   quizCorrect: "Correct",
   quizIncorrect: "Incorrect",
   quizNeedsGrading: "Needs grading",
+  quizGradingInvalid: "AI grading settings are invalid.",
   quizGraded: "Graded",
   quizNotGraded: "Not graded yet",
   quizGradePointsFor: "Points for question {n}",
@@ -1319,6 +1320,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   quiz_taking_already_closed: "quizTakingAlreadyClosed",
   quiz_taking_closed: "quizTakingClosed",
   quiz_attempt_exists: "quizAttemptExists",
+  quiz_grading_invalid: "quizGradingInvalid",
 };
 
 type ErrorCopyCatalog = {

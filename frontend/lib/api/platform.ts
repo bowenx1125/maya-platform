@@ -322,6 +322,8 @@ export type RecordAttemptDto = {
   score_objective: number | null;
   score_max_objective: number | null;
   grading_status: QuizGradingStatus | null;
+  /** Optional AI score aggregate; tolerate absence until BE ships it. */
+  score_ai?: number | null;
   quiz_id: string | null;
   conversation_id: string | null;
   points_awarded: number | null;
@@ -350,9 +352,14 @@ export function sanitizeStudentQuiz(raw: unknown): StudentQuizDto {
   const items = (quiz.items ?? []).map((item) => {
     const safe = {
       ...item,
-    } as QuizItemStudent & { answer?: unknown; rubric?: unknown };
+    } as QuizItemStudent & {
+      answer?: unknown;
+      rubric?: unknown;
+      grading?: unknown;
+    };
     delete safe.answer;
     delete safe.rubric;
+    delete safe.grading;
     return safe as QuizItemStudent;
   });
   return { ...quiz, items };

@@ -275,7 +275,7 @@ describe("teacher Quiz Submissions tab", () => {
     renderTab();
     const row = await screen.findByRole("button", { name: /^Ada/ });
     expect(row.textContent).toContain("Round 2");
-    expect(row.textContent).toContain("Needs grading");
+    expect(row.textContent).toContain("Mixed");
     expect(row.textContent).toContain("3 / 6");
     expect(screen.getByRole("button", { name: /^Ben/ })).toBeTruthy();
     expect(screen.queryByText("Keynotes")).toBeNull();
@@ -340,6 +340,65 @@ describe("teacher Quiz Submissions tab", () => {
     fireEvent.click(hide);
     await waitFor(() =>
       expect(calls.some((call) => call.method === "DELETE")).toBe(true),
+    );
+  });
+
+  it("shows pending instead of a fake AI score until one arrives", async () => {
+    routes[1] = {
+      method: "GET",
+      match: /attempts\/att-1$/,
+      reply: () =>
+        json({
+          ...detail("teacher"),
+          grading_status: "pending",
+          items: detail("teacher").items.map((item) =>
+            item.id === "q3"
+              ? { ...item, graded: false, ai_score: null }
+              : item,
+          ),
+        }),
+    };
+    renderTab();
+    const row = await screen.findByRole("button", { name: /^Ada/ });
+    expect(
+      within(row).getByTestId("quiz-record-grading-status").textContent,
+    ).toBe("Mixed");
+    fireEvent.click(row);
+    const sheet = await screen.findByTestId("quiz-attempt-detail");
+    expect(within(sheet).getByTestId("quiz-grading-status").textContent).toBe(
+      "Pending",
+    );
+    expect(
+      within(sheet).getByTestId("quiz-item-ai-pending-q3").textContent,
+    ).toBe("Pending");
+    expect(within(sheet).queryByText(/AI score:/)).toBeNull();
+  });
+
+  it("shows the AI score after grading completes", async () => {
+    routes[1] = {
+      method: "GET",
+      match: /attempts\/att-1$/,
+      reply: () =>
+        json({
+          ...detail("teacher", true),
+          grading_status: "complete",
+          score_ai: 2,
+          items: detail("teacher", true).items.map((item) =>
+            item.id === "q3" ? { ...item, ai_score: 2 } : item,
+          ),
+        }),
+    };
+    renderTab();
+    fireEvent.click(await screen.findByRole("button", { name: /^Ada/ }));
+    const sheet = await screen.findByTestId("quiz-attempt-detail");
+    expect(within(sheet).getByTestId("quiz-grading-status").textContent).toBe(
+      "Complete",
+    );
+    expect(within(sheet).getByTestId("quiz-score-ai").textContent).toBe(
+      "AI score: 2",
+    );
+    expect(within(sheet).getByTestId("quiz-item-ai-score-q3").textContent).toBe(
+      "AI score: 2",
     );
   });
 });
