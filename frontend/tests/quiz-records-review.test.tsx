@@ -342,6 +342,61 @@ describe("teacher Quiz Submissions tab", () => {
       expect(calls.some((call) => call.method === "DELETE")).toBe(true),
     );
   });
+
+  it("marks only AI-graded items, pending until a score arrives", async () => {
+    routes[1] = {
+      method: "GET",
+      match: /attempts\/att-1$/,
+      reply: () =>
+        json({
+          ...detail("teacher"),
+          items: detail("teacher").items.map((item) =>
+            item.id === "q3"
+              ? { ...item, graded: false, ai_score: null, ai_grading: true }
+              : item,
+          ),
+        }),
+    };
+    renderTab();
+    const row = await screen.findByRole("button", { name: /^Ada/ });
+    // One status on the row; no AI totals or extra status chips.
+    expect(row.textContent).toContain("Needs grading");
+    expect(row.textContent).not.toMatch(/AI|Mixed|Pending/);
+    fireEvent.click(row);
+    const sheet = await screen.findByTestId("quiz-attempt-detail");
+    expect(within(sheet).getByTestId("quiz-item-ai-q3").textContent).toBe(
+      "AI score pending",
+    );
+    expect(within(sheet).queryByTestId("quiz-item-ai-q1")).toBeNull();
+    expect(within(sheet).queryByText(/Mixed|Complete/)).toBeNull();
+  });
+
+  it("shows the AI score beside the editable points once it arrives", async () => {
+    routes[1] = {
+      method: "GET",
+      match: /attempts\/att-1$/,
+      reply: () =>
+        json({
+          ...detail("teacher", true),
+          score_ai: 2,
+          items: detail("teacher", true).items.map((item) =>
+            item.id === "q3"
+              ? { ...item, ai_score: 2, ai_grading: true }
+              : item,
+          ),
+        }),
+    };
+    renderTab();
+    fireEvent.click(await screen.findByRole("button", { name: /^Ada/ }));
+    const sheet = await screen.findByTestId("quiz-attempt-detail");
+    expect(within(sheet).getByTestId("quiz-item-ai-q3").textContent).toBe(
+      "AI 2 / 3",
+    );
+    // The teacher can still overrule it.
+    expect(
+      within(sheet).getByRole("spinbutton", { name: "Points for question 2" }),
+    ).toBeTruthy();
+  });
 });
 
 describe("student Quiz list", () => {

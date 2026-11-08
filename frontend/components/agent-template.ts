@@ -1,7 +1,6 @@
 export function buildAgentTemplate(name: string): string {
-  return `# ${name}
-
-# Who I am
+  // The name lives on the Name card; AGENT.md no longer carries it.
+  return `# Who I am
 I am ${name}.
 
 # My characteristics

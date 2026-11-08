@@ -322,6 +322,8 @@ export type RecordAttemptDto = {
   score_objective: number | null;
   score_max_objective: number | null;
   grading_status: QuizGradingStatus | null;
+  /** Optional AI score aggregate; tolerate absence until BE ships it. */
+  score_ai?: number | null;
   quiz_id: string | null;
   conversation_id: string | null;
   points_awarded: number | null;
@@ -350,9 +352,14 @@ export function sanitizeStudentQuiz(raw: unknown): StudentQuizDto {
   const items = (quiz.items ?? []).map((item) => {
     const safe = {
       ...item,
-    } as QuizItemStudent & { answer?: unknown; rubric?: unknown };
+    } as QuizItemStudent & {
+      answer?: unknown;
+      rubric?: unknown;
+      grading?: unknown;
+    };
     delete safe.answer;
     delete safe.rubric;
+    delete safe.grading;
     return safe as QuizItemStudent;
   });
   return { ...quiz, items };
@@ -2131,13 +2138,18 @@ export class PlatformApi {
   }
 
   /**
-   * Rename an Agent (CAS on its metadata revision). Only the name is sent:
-   * the server leaves the description alone when it is absent. The answer
-   * carries the name the server kept (it may add "-2" to avoid a clash).
+   * Rename an Agent and/or turn a private Agent public (CAS on its metadata
+   * revision). The description is never sent, so the server leaves it alone.
+   * The answer carries the name the server kept (it may add "-2" to avoid a
+   * clash). Public is final: asking for Private again is 409.
    */
   async updateAgentMetadata(
     agentId: string,
-    body: { name: string; expected_metadata_revision: number },
+    body: {
+      name?: string;
+      visibility?: "public";
+      expected_metadata_revision: number;
+    },
   ): Promise<AgentDetail> {
     return unwrap(
       await this.client.PATCH("/agents/{agent_id}", {

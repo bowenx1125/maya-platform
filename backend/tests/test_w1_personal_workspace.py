@@ -239,9 +239,11 @@ def test_private_group_names_are_owner_scoped_and_public_editor_cannot_probe_the
     assert rename.status_code == 200, rename.text
 
 
-def test_agent_visibility_is_chosen_at_creation_and_never_changes(
+def test_public_agent_never_goes_back_to_private(
     client: TestClient,
 ) -> None:
+    """Owner 2026-11-08: Private may become Public (see
+    test_agent_make_public.py); Public is final."""
     _owner, owner_csrf = login(client, "bowen")
     agents: dict[str, tuple[str, str]] = {}
     for visibility in ("private", "public"):
@@ -253,15 +255,15 @@ def test_agent_visibility_is_chosen_at_creation_and_never_changes(
         assert created.status_code == 201, created.text
         agents[visibility] = (created.json()["id"], created.json()["versions"][0]["id"])
 
-    for visibility, flipped in (("private", "public"), ("public", "private")):
+    refused = client.patch(
+        f"/api/v1/agents/{agents['public'][0]}",
+        headers=_headers(owner_csrf),
+        json={"expected_metadata_revision": 0, "visibility": "private"},
+    )
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["code"] == "agent_public_is_final"
+    for visibility in ("private", "public"):
         agent_id, _version = agents[visibility]
-        refused = client.patch(
-            f"/api/v1/agents/{agent_id}",
-            headers=_headers(owner_csrf),
-            json={"expected_metadata_revision": 0, "visibility": flipped},
-        )
-        assert refused.status_code == 409, refused.text
-        assert refused.json()["code"] == "agent_visibility_locked"
         # The same choice stays accepted, so a description edit still saves.
         kept = client.patch(
             f"/api/v1/agents/{agent_id}",
@@ -281,7 +283,7 @@ def test_agent_visibility_is_chosen_at_creation_and_never_changes(
     assert joined.status_code == 200, joined.text
     private_id, private_version = agents["private"]
     public_id, public_version = agents["public"]
-    # The entered teacher can edit both. Visibility stays the creator's choice.
+    # The entered teacher can edit both. Only the creator turns it public.
     assert client.get(f"/api/v1/agent-versions/{private_version}").status_code == 200
     assert client.get(f"/api/v1/agent-versions/{public_version}").status_code == 200
     assert client.get(f"/api/v1/agents/{public_id}").json()["visibility"] == "public"

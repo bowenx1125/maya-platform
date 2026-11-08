@@ -193,7 +193,7 @@ def test_groupmate_cannot_touch_private_agent_over_http(client):
     assert patched.status_code == 404
 
 
-def test_visibility_cannot_change_for_anyone(client):
+def test_public_stays_public_for_anyone(client):
     _, bowen_csrf = login(client, "bowen")
     agent = _create(client, bowen_csrf, "Locked", "public")
     response = client.patch(
@@ -202,7 +202,7 @@ def test_visibility_cannot_change_for_anyone(client):
         json={"expected_metadata_revision": 0, "visibility": "private"},
     )
     assert response.status_code == 409
-    assert response.json()["code"] == "agent_visibility_locked"
+    assert response.json()["code"] == "agent_public_is_final"
 
 
 def test_after_stale_conflict_refresh_reloads_latest_and_save_succeeds(client):

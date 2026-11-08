@@ -47,7 +47,6 @@ from app.core.read_memo import request_read_memo
 from app.core.sqlutil import begin_immediate
 from app.core.version_label import agent_version_label
 from app.modules.agents.persona import (
-    agent_name_from_markdown,
     raw_agent_md_hash,
 )
 from app.modules.agents.schemas import (
@@ -339,42 +338,72 @@ def _reclaim_abandoned_agent_name(
     db.flush()
 
 
-def _sync_markdown_name(
-    db: Session,
-    agent: Agent,
-    markdown: str,
-    *,
-    actor_user_id: str,
-) -> None:
-    name = agent_name_from_markdown(markdown)
-    if name is None or name == agent.name:
-        return
+def _make_agent_public(db: Session, agent: Agent, *, actor_user_id: str) -> None:
+    """Turn a private Agent public in place, as if it were copied to Public.
+
+    Owner decision (2026-11-08): it behaves like an identical public copy
+    that replaces the private one. Its RAG files go public with it (the
+    owner's private files bound to its draft or published version), its
+    Voice and AGENT.md stay, and its name moves to the public namespace
+    (``Name-2`` on a clash, as on create). Done then publishes a new public
+    version; until then the old private version stays private. Kept in place
+    rather than copied, so chats, Teams and Debates that use it carry on.
+    """
+
     _lock_agent_name_namespace(
         db,
-        group_id=agent.group_id,
-        owner_user_id=actor_user_id,
-        course_id=agent.course_id,
-        visibility=agent.visibility,
+        group_id=agent.group_id if agent.ownership_scope == "group" else None,
+        owner_user_id=agent.owner_user_id,
+        course_id=agent.course_id if agent.ownership_scope != "group" else None,
+        visibility="public",
     )
-    # A taken heading gets a numeric suffix instead of rejecting the upload;
-    # the Markdown always saves.
-    name = _available_agent_name(
+    agent.name = _available_agent_name(
         db,
-        name,
-        group_id=agent.group_id,
-        owner_user_id=actor_user_id,
-        course_id=agent.course_id,
-        visibility=agent.visibility,
+        agent.name,
+        group_id=agent.group_id if agent.ownership_scope == "group" else None,
+        owner_user_id=agent.owner_user_id,
+        course_id=agent.course_id if agent.ownership_scope != "group" else None,
+        visibility="public",
         current=agent,
+        # Same name, new namespace: it must be checked against public names.
+        recheck_namespace=True,
     )
-    if name == agent.name:
+    agent.visibility = "public"
+    version_ids = [
+        version_id
+        for version_id in (
+            db.scalar(
+                select(AgentVersion.id).where(
+                    AgentVersion.agent_id == agent.id, AgentVersion.state == "draft"
+                )
+            ),
+            agent.current_published_version_id,
+        )
+        if version_id
+    ]
+    if not version_ids:
         return
+    timestamp = _time()
+    documents = db.scalars(
+        select(KnowledgeDocument)
+        .join(AgentVersionDocument, AgentVersionDocument.document_id == KnowledgeDocument.id)
+        .where(
+            AgentVersionDocument.agent_version_id.in_(version_ids),
+            AgentVersionDocument.enabled.is_(True),
+            KnowledgeDocument.owner_user_id == actor_user_id,
+            KnowledgeDocument.visibility == "private",
+        )
+        .with_for_update()
+    ).all()
+    for document in {document.id: document for document in documents}.values():
+        document.visibility = "public"
+        document.authorization_epoch += 1
+        document.updated_at = timestamp
     db.execute(
-        update(Agent)
-        .where(Agent.id == agent.id)
-        .values(name=name, metadata_revision=Agent.metadata_revision + 1, updated_at=_time())
+        update(AgentVersion)
+        .where(AgentVersion.agent_id == agent.id, AgentVersion.state == "draft")
+        .values(draft_visibility="public", updated_at=timestamp)
     )
-    db.refresh(agent)
 
 
 def _summary_with_metadata(
@@ -1264,14 +1293,16 @@ def update_agent_metadata(
             )
         if "visibility" in payload.model_fields_set and current.owner_user_id != context.user.id:
             raise not_found()
-        # Like a Team, an Agent is Private or Public from the day it is made:
-        # its RAG and Brainform listing follow that choice and never move.
+        # Private can become Public (owner only, above); Public is final, so
+        # the group never loses an Agent it was given.
         if payload.visibility is not None and payload.visibility != current.visibility:
-            db.rollback()
-            raise conflict(
-                "agent_visibility_locked",
-                "Private or Public is chosen when the Agent is created.",
-            )
+            if current.visibility == "public":
+                db.rollback()
+                raise conflict(
+                    "agent_public_is_final",
+                    "A public Agent stays public.",
+                )
+            _make_agent_public(db, current, actor_user_id=context.user.id)
         if new_name is not None:
             _lock_agent_name_namespace(
                 db,
@@ -1699,13 +1730,6 @@ def update_agent_draft(
             select(AgentVersion.revision).where(AgentVersion.id == scoped.version.id)
         )
         raise stale_revision(current_revision)
-    if "agent_md" in payload.model_fields_set:
-        _sync_markdown_name(
-            db,
-            scoped.agent,
-            normalized_agent_md,
-            actor_user_id=context.user.id,
-        )
     _touch_last_editor(db, scoped.agent.id, context.user.id)
     db.refresh(scoped.version)
     db.flush()
@@ -1777,12 +1801,6 @@ async def upload_agent_md(
             select(AgentVersion.revision).where(AgentVersion.id == scoped.version.id)
         )
         raise stale_revision(current_revision)
-    _sync_markdown_name(
-        db,
-        scoped.agent,
-        document.normalized,
-        actor_user_id=context.user.id,
-    )
     _touch_last_editor(db, scoped.agent.id, context.user.id)
     db.refresh(scoped.version)
     db.flush()

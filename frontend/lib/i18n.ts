@@ -79,6 +79,9 @@ const enMessages = {
   agentVisibility: "Visibility",
   privateOption: "Private",
   publicOption: "Public",
+  agentMakePublicConfirm:
+    "Make this Agent public? Its RAG becomes public too, Done publishes it for your group, and it cannot go back to Private.",
+  agentPublicIsFinal: "A public Agent stays public.",
   makeAgentPublic: "Make Agent public",
   makeAgentPrivate: "Make Agent private",
   privateVisibilityLede:
@@ -513,6 +516,7 @@ const enMessages = {
   currentPassword: "Current password",
   newPassword: "New password",
   draftSavedNotice: "Draft saved. Revision advanced safely.",
+  agentRenamedNotice: "Name saved.",
   agentMdUploadedNotice:
     "AGENT.md uploaded and saved as the next draft revision.",
   evidenceUpdatedNotice: "Enabled evidence set updated.",
@@ -557,8 +561,8 @@ const enMessages = {
   errorNotFound: "This item was deleted or is no longer available to you.",
   errorNetwork:
     "Maya could not be reached. Check your connection and try again.",
-  errorAgentVisibilityLocked:
-    "Private or Public is chosen when the Agent is created and does not change.",
+  errorAgentPublicIsFinal:
+    "A public Agent stays public. Private can only become Public.",
   errorRagFollowsAgent:
     "RAG added to an Agent is Private or Public like the Agent.",
   errorTeamMemberSourceUnavailable:
@@ -1099,6 +1103,7 @@ const enMessages = {
   quizCorrect: "Correct",
   quizIncorrect: "Incorrect",
   quizNeedsGrading: "Needs grading",
+  quizGradingInvalid: "AI grading settings are invalid.",
   quizGraded: "Graded",
   quizNotGraded: "Not graded yet",
   quizGradePointsFor: "Points for question {n}",
@@ -1226,7 +1231,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   agent_not_current: "errorAgentNotCurrent",
   agent_name_conflict: "errorAgentNameConflict",
   agent_archived: "errorAgentArchived",
-  agent_visibility_locked: "errorAgentVisibilityLocked",
+  agent_public_is_final: "errorAgentPublicIsFinal",
   document_visibility_follows_agent: "errorRagFollowsAgent",
   team_member_source_unavailable: "errorTeamMemberSourceUnavailable",
   cross_group_reference: "errorCrossGroupReference",
@@ -1319,6 +1324,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   quiz_taking_already_closed: "quizTakingAlreadyClosed",
   quiz_taking_closed: "quizTakingClosed",
   quiz_attempt_exists: "quizAttemptExists",
+  quiz_grading_invalid: "quizGradingInvalid",
 };
 
 type ErrorCopyCatalog = {

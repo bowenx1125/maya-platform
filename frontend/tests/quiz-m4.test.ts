@@ -80,6 +80,12 @@ describe("sanitizeStudentQuiz", () => {
         choices: [],
         points: 2,
         answer: { rubric: "graded by hand" },
+        grading: {
+          mode: "ai",
+          score_min: 0,
+          score_max: 2,
+          rules: "secret rules",
+        },
       },
     ],
   } as unknown as StudentQuizDto;
@@ -89,6 +95,7 @@ describe("sanitizeStudentQuiz", () => {
     for (const item of safe.items) {
       expect(item).not.toHaveProperty("answer");
       expect(item).not.toHaveProperty("rubric");
+      expect(item).not.toHaveProperty("grading");
     }
     expect(safe.items[0]?.choices).toEqual([
       { id: "a", label: "Alpha" },

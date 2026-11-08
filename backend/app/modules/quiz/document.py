@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from typing import Any
 
 from app.core.errors import unprocessable
@@ -32,6 +33,46 @@ def loads_document(raw: str) -> dict[str, Any]:
 
 def content_hash_for(document_json: str) -> str:
     return hashlib.sha256(document_json.encode("utf-8")).hexdigest()
+
+
+def _validate_item_grading(item: QuizItemTeacher) -> None:
+    grading = item.grading
+    if grading is None or grading.mode == "manual":
+        return
+    if item.type not in ("short_text", "long_text"):
+        raise unprocessable(
+            "quiz_grading_invalid",
+            f"Item {item.id} AI grading is only allowed on short_text or long_text.",
+            {"item_id": item.id},
+        )
+    rules = (grading.rules or "").strip()
+    score_min = grading.score_min
+    score_max = grading.score_max
+    if (
+        not rules
+        or len(rules) < 20
+        or score_min is None
+        or score_max is None
+        or not isinstance(score_min, (int, float))
+        or not isinstance(score_max, (int, float))
+        or not math.isfinite(float(score_min))
+        or not math.isfinite(float(score_max))
+    ):
+        raise unprocessable(
+            "quiz_grading_invalid",
+            f"Item {item.id} AI grading requires finite score_min, score_max, "
+            "and rules of at least 20 characters.",
+            {"item_id": item.id},
+        )
+    lo = float(score_min)
+    hi = float(score_max)
+    points = float(item.points)
+    if not (0 <= lo <= hi <= points):
+        raise unprocessable(
+            "quiz_grading_invalid",
+            f"Item {item.id} AI grading range must satisfy 0 <= score_min <= score_max <= points.",
+            {"item_id": item.id},
+        )
 
 
 def validate_teacher_items(items: list[QuizItemTeacher]) -> None:
@@ -71,12 +112,13 @@ def validate_teacher_items(items: list[QuizItemTeacher]) -> None:
                     f"Item {item.id} answer references unknown choices.",
                 )
         else:
-            # Subjective: answer.rubric optional in v1 (AI grading out).
+            # Subjective: answer.rubric optional; AI grading is opt-in via grading.mode.
             if item.choices:
                 raise unprocessable(
                     "quiz_item_choices_invalid",
                     f"Item {item.id} text items must not include choices.",
                 )
+        _validate_item_grading(item)
 
 
 def build_document_dict(
@@ -122,7 +164,9 @@ def strip_answers(document: dict[str, Any]) -> dict[str, Any]:
     for item in document.get("items") or []:
         if not isinstance(item, dict):
             continue
-        cleaned = {key: value for key, value in item.items() if key not in ("answer", "rubric")}
+        cleaned = {
+            key: value for key, value in item.items() if key not in ("answer", "rubric", "grading")
+        }
         # Nested rubric under answer already removed with answer; belt-and-suspenders:
         if "answer" in cleaned:
             del cleaned["answer"]
@@ -161,14 +205,28 @@ def assert_no_answer_keys(payload: dict[str, Any]) -> None:
     for item in payload.get("items") or []:
         if not isinstance(item, dict):
             continue
-        if "answer" in item or "rubric" in item:
+        if "answer" in item or "rubric" in item or "grading" in item:
             raise unprocessable(
                 "quiz_answer_leak",
-                "Student quiz projection must not include answer or rubric.",
+                "Student quiz projection must not include answer, rubric, or grading.",
             )
         nested = item.get("answer")
         if isinstance(nested, dict) and "rubric" in nested:
             raise unprocessable(
                 "quiz_answer_leak",
-                "Student quiz projection must not include answer or rubric.",
+                "Student quiz projection must not include answer, rubric, or grading.",
             )
+
+
+def document_has_ai_grading(document: dict[str, Any]) -> bool:
+    """True when any text item requests asynchronous AI grading."""
+
+    for item in document.get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") not in ("short_text", "long_text"):
+            continue
+        grading = item.get("grading") or {}
+        if isinstance(grading, dict) and grading.get("mode") == "ai":
+            return True
+    return False

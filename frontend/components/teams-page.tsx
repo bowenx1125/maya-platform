@@ -197,7 +197,6 @@ export function TeamsPage({
               name="new"
               placement="page"
               href={newHref}
-              className="bg-[#FF4D8D]"
               guide="workspace.new"
             />
           ) : null}

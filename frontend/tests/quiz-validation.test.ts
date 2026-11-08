@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   canPublish,
+  isFiniteScore,
   isPublishedLocked,
   quizDraftProblems,
+  quizItemGradingProblems,
+  withAiGrading,
 } from "../components/quizzes/quiz-validation";
 import type { QuizItemTeacher } from "../lib/api/quiz";
 
@@ -105,5 +108,76 @@ describe("isPublishedLocked", () => {
 
   it("does not lock a draft quiz", () => {
     expect(isPublishedLocked("draft")).toBe(false);
+  });
+});
+
+describe("AI grading validation", () => {
+  const rubric = "Mentions decoupling producers from consumers.";
+
+  it("needs nothing extra when AI grading is off", () => {
+    expect(quizItemGradingProblems(validText)).toEqual([]);
+    const manual = { ...validText, grading: { mode: "manual" as const } };
+    expect(quizItemGradingProblems(manual)).toEqual([]);
+    expect(quizDraftProblems("Quiz", [validSingle, manual])).toEqual([]);
+    expect(canPublish("Quiz", [validSingle, manual])).toBe(true);
+  });
+
+  it("grades by the rubric: an empty or short rubric blocks Done", () => {
+    for (const text of ["", "  ", "Cite one source."]) {
+      const item = {
+        ...validText,
+        points: 5,
+        answer: { rubric: text },
+        grading: { mode: "ai" as const },
+      };
+      expect(quizItemGradingProblems(item).join(" ")).toMatch(/rubric.*20/);
+      expect(canPublish("Quiz", [validSingle, item])).toBe(false);
+    }
+  });
+
+  it("accepts AI grading with a real rubric and no range to fill in", () => {
+    const item = {
+      ...validText,
+      points: 5,
+      answer: { rubric },
+      grading: { mode: "ai" as const },
+    };
+    expect(quizItemGradingProblems(item)).toEqual([]);
+    expect(canPublish("Quiz", [validSingle, item])).toBe(true);
+  });
+
+  it("reads stored rules when an older quiz has no rubric", () => {
+    const item = {
+      ...validText,
+      points: 5,
+      grading: { mode: "ai" as const, rules: rubric },
+    };
+    expect(quizItemGradingProblems(item)).toEqual([]);
+  });
+
+  it("sends the backend its rules and 0..points range from the rubric", () => {
+    const item = {
+      ...validText,
+      points: 4,
+      answer: { rubric: `  ${rubric}  ` },
+      grading: { mode: "ai" as const },
+    };
+    expect(withAiGrading(item).grading).toEqual({
+      mode: "ai",
+      score_min: 0,
+      score_max: 4,
+      rules: rubric,
+    });
+    expect(withAiGrading(validText)).toEqual(validText);
+    expect(
+      withAiGrading({ ...validSingle, grading: { mode: "ai" } }).grading,
+    ).toBeUndefined();
+  });
+
+  it("never invents a score", () => {
+    expect(isFiniteScore(undefined)).toBe(false);
+    expect(isFiniteScore(null)).toBe(false);
+    expect(isFiniteScore(Number.NaN)).toBe(false);
+    expect(isFiniteScore(0)).toBe(true);
   });
 });

@@ -21,8 +21,9 @@ import {
   canPublish,
   isPublishedLocked,
   quizDraftProblems,
+  withAiGrading,
 } from "./quiz-validation";
-import { LoadingCard, ErrorNotice } from "../ui";
+import { LoadingCard, ErrorNotice, Notice } from "../ui";
 import { ICON_MOTION } from "../ui/button";
 import { IconLock } from "../quiet-icons";
 import { WorkspaceIcon } from "../workspace-icon";
@@ -148,7 +149,12 @@ export function QuizEditor({
             ...item,
             required: item.required ?? true,
             points: item.points ?? 1,
-            answer: item.answer ?? null,
+            answer:
+              item.grading?.mode === "ai" &&
+              !item.answer?.rubric &&
+              item.grading.rules
+                ? { ...item.answer, rubric: item.grading.rules }
+                : (item.answer ?? null),
           })),
         );
       })
@@ -204,7 +210,11 @@ export function QuizEditor({
 
   const save = useCallback(async (): Promise<string> => {
     if (!courseId) throw new Error("No teacher course.");
-    const payload = { title: title.trim(), items, settings: DEFAULT_SETTINGS };
+    const payload = {
+      title: title.trim(),
+      items: items.map(withAiGrading),
+      settings: DEFAULT_SETTINGS,
+    };
     if (quizId) {
       await quizApi.patchQuiz(courseId, quizId, payload);
       return quizId;
@@ -334,12 +344,6 @@ export function QuizEditor({
         actionsClassName="min-w-0 flex-[0_1_auto] flex-wrap justify-end"
       >
         <QuizStatus state={state} label={stateLabel} />
-        <PageAction
-          name="back"
-          href="/teacher/quizzes"
-          placement="page"
-          className="relative"
-        />
         {locked ? (
           takingOpen ? (
             <QuizKey
@@ -359,15 +363,6 @@ export function QuizEditor({
               {t("quizStartEvaluation")}
             </QuizKey>
           )
-        ) : view === "paper" ? (
-          <PageAction
-            name="done"
-            onClick={onDone}
-            disabled={busy}
-            busy={busy}
-            placement="page"
-            className="relative"
-          />
         ) : null}
         {hasRecord ? (
           <QuizKey
@@ -380,6 +375,32 @@ export function QuizEditor({
             {t("download")}
           </QuizKey>
         ) : null}
+        <PageAction
+          name="back"
+          href="/teacher/quizzes"
+          placement="page"
+          className="relative"
+        />
+        {/* Every quiz page keeps the Back + Done pair. A draft's Done
+            publishes it; a published quiz has nothing to save, so Done
+            finishes and returns to the list. */}
+        {locked ? (
+          <PageAction
+            name="done"
+            href="/teacher/quizzes"
+            placement="page"
+            className="relative"
+          />
+        ) : (
+          <PageAction
+            name="done"
+            onClick={onDone}
+            disabled={busy}
+            busy={busy}
+            placement="page"
+            className="relative"
+          />
+        )}
       </PageBanner>
 
       <QuizTabs<QuizPageTab>
@@ -400,8 +421,12 @@ export function QuizEditor({
       />
 
       {error ? <ErrorNotice error={error} /> : null}
+      {/* Local checks are plain sentences: show them as written (an
+          ErrorNotice would swap a non-API error for the generic copy). */}
       {problems.map((problem, i) => (
-        <ErrorNotice key={i} error={problem} />
+        <Notice key={i} tone="error" kind="field">
+          {problem}
+        </Notice>
       ))}
 
       {view === "submissions" && quizId ? (
@@ -458,9 +483,16 @@ export function QuizEditor({
                   })}
                 </ul>
               ) : (
-                <p className="m-0 rounded-arc border-2 border-dashed border-border bg-[#FAF5FF] px-3.5 py-3 font-body text-sm text-ink">
-                  <b>Grading rubric</b> · {item.answer?.rubric ?? ""}
-                </p>
+                <div className="grid gap-2">
+                  <p className="m-0 rounded-arc border-2 border-dashed border-border bg-[#FAF5FF] px-3.5 py-3 font-body text-sm text-ink">
+                    <b>Grading rubric</b> · {item.answer?.rubric ?? ""}
+                  </p>
+                  {item.grading?.mode === "ai" ? (
+                    <span className="self-start rounded-full border-2 border-border bg-[#EDE9FE] px-3 py-1 font-body text-xs font-extrabold text-ink">
+                      AI grading
+                    </span>
+                  ) : null}
+                </div>
               )}
             </QuestionCard>
           ))}
@@ -513,6 +545,22 @@ export function QuizEditor({
                   />
                   Required
                 </label>
+                {isChoice(item) ? null : (
+                  <label className="flex items-center gap-2 font-body text-sm font-extrabold text-ink">
+                    <input
+                      type="checkbox"
+                      className="size-5 accent-[#FF4D8D]"
+                      checked={item.grading?.mode === "ai"}
+                      disabled={busy}
+                      onChange={(e) =>
+                        patchItem(index, {
+                          grading: { mode: e.target.checked ? "ai" : "manual" },
+                        })
+                      }
+                    />
+                    AI grading
+                  </label>
+                )}
               </div>
 
               {isChoice(item) ? (

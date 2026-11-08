@@ -168,6 +168,7 @@ export function QuizSubmissions({
                 </span>
                 <span className="text-xs font-bold text-arc-muted">{meta}</span>
                 <span
+                  data-testid="quiz-record-grading-status"
                   className={`shrink-0 rounded-full border-2 border-border px-3 py-1 text-xs font-extrabold ${graded ? "bg-[#ECFCCB]" : "bg-warn-bg"}`}
                 >
                   {graded ? t("quizGraded") : t("quizNeedsGrading")}

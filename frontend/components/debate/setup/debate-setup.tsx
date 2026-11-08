@@ -51,7 +51,6 @@ import {
   CREATE_SEG_BUTTON,
   CREATE_TEXTAREA,
   DEBATE_PAGE,
-  DEBATE_PRIMARY,
   DEBATE_ROW_BUTTON,
   DEBATE_ROW_DANGER_BUTTON,
   DEBATE_TITLE,
@@ -60,7 +59,7 @@ import {
 import { EndRunningDebatePrompt } from "../../debate-beta/stage/end-running-debate-prompt";
 import { WorkspaceIcon } from "../../workspace-icon";
 
-import { EmptyCard, ErrorNotice, LoadingCard, PageIntro } from "../../ui";
+import { EmptyCard, ErrorNotice, LoadingCard } from "../../ui";
 import {
   ChecklistBadge,
   CreateChecklist,
@@ -75,7 +74,7 @@ import {
   mergeIssues,
   readinessIssues,
 } from "../../../lib/agent-readiness";
-import { PageAction } from "../../page-action";
+import { PageAction, pageActionClass } from "../../page-action";
 import { celebrate } from "../../../lib/confetti";
 
 export type { DebateDetail, DebateDraftRequest, DebateSummary };
@@ -226,12 +225,12 @@ export function TeacherDebateList({
           <NewButton
             href="/teacher/debates/new"
             label={t("newDebate")}
-            className={DEBATE_PRIMARY}
+            className={pageActionClass("new")}
           />
         ) : (
           <Button
             type="button"
-            className={DEBATE_PRIMARY}
+            className={pageActionClass("new")}
             disabled
             aria-label={t("newDebate")}
           >
@@ -785,10 +784,35 @@ export function TeacherDebateCreate({
 
   return (
     <div className={cn(DEBATE_PAGE, "flex flex-col")}>
-      <PageIntro title={copy(t, "newDebateTitle")} />
-      {!rulesEditing ? (
-        <PageAction name="back" href="/teacher/debates" disabled={busy} />
-      ) : null}
+      {/* The same title row as the Debates list, with Back and Done at its
+        right like every other page's own keys. */}
+      <div className="mb-[22px] flex flex-wrap items-center gap-3">
+        <h1 className={DEBATE_TITLE}>{copy(t, "newDebateTitle")}</h1>
+        <span
+          className="relative h-0 min-w-6 flex-1 border-t-[3px] border-dotted border-[#111]"
+          aria-hidden="true"
+        />
+        {/* Creating mid-edit would freeze rules other than the ones on
+          screen, so Back and Done wait until the ruleset edit is saved or
+          discarded. */}
+        {!rulesEditing ? (
+          <>
+            <PageAction
+              name="back"
+              placement="page"
+              href="/teacher/debates"
+              disabled={busy}
+            />
+            <PageAction
+              name="done"
+              placement="page"
+              form="create-debate-form"
+              disabled={busy || candidates.length === 0}
+              busy={busy}
+            />
+          </>
+        ) : null}
+      </div>
       <CreateChecklist
         title={t(mustFix ? "debateFixBeforeCreate" : "debateAgentsHints")}
         entries={entries}
@@ -1076,18 +1100,6 @@ export function TeacherDebateCreate({
               );
             }}
           />
-        ) : null}
-        {/* Creating mid-edit would freeze rules other than the ones on
-          screen, so Done waits until the ruleset edit is saved or discarded. */}
-        {!rulesEditing ? (
-          <div className="button-row">
-            <PageAction
-              name="done"
-              form="create-debate-form"
-              disabled={busy || candidates.length === 0}
-              busy={busy}
-            />
-          </div>
         ) : null}
       </form>
     </div>

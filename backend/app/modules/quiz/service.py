@@ -20,6 +20,7 @@ from .document import (
     assert_no_answer_keys,
     build_document_dict,
     content_hash_for,
+    document_has_ai_grading,
     dumps_document,
     loads_document,
     settings_from_document,
@@ -559,11 +560,73 @@ def _manual_max(items: list[Any]) -> float:
     return float(sum(float(item.points) for item in items if item.type in TEXT_TYPES))
 
 
-def _grading_status(items: list[Any], grades: dict[str, dict[str, Any]]) -> str:
-    """complete once every text item has a teacher grade (or there are none)."""
+def _answers_by_id(attempt: ClassroomQuizAttempt) -> dict[str, dict[str, Any]]:
+    raw = json.loads(attempt.answers_json)
+    if not isinstance(raw, list):
+        return {}
+    return {
+        str(row.get("item_id")): row
+        for row in raw
+        if isinstance(row, dict) and row.get("item_id") is not None
+    }
 
-    text_ids = [item.id for item in items if item.type in TEXT_TYPES]
-    if all(item_id in grades for item_id in text_ids):
+
+def _item_grading_mode(item: Any) -> str:
+    grading = getattr(item, "grading", None)
+    if grading is None:
+        return "manual"
+    if isinstance(grading, dict):
+        return str(grading.get("mode") or "manual")
+    return str(getattr(grading, "mode", None) or "manual")
+
+
+def _text_item_graded(
+    item: Any, grades: dict[str, dict[str, Any]], answers: dict[str, dict[str, Any]]
+) -> bool:
+    if item.id in grades:
+        return True
+    if _item_grading_mode(item) == "ai":
+        return (answers.get(item.id) or {}).get("ai_score") is not None
+    return False
+
+
+def _compute_score_manual(
+    items: list[Any], grades: dict[str, dict[str, Any]], answers: dict[str, dict[str, Any]]
+) -> float:
+    total = 0.0
+    for item in items:
+        if item.type not in TEXT_TYPES:
+            continue
+        if item.id in grades:
+            total += float(grades[item.id].get("points_awarded") or 0)
+            continue
+        ai_score = (answers.get(item.id) or {}).get("ai_score")
+        if ai_score is not None:
+            total += float(ai_score)
+    return total
+
+
+def _compute_score_ai(answers: dict[str, dict[str, Any]]) -> float | None:
+    """Sum of written ai_score values; None when none have been scored yet."""
+
+    scores = [
+        float(row["ai_score"])
+        for row in answers.values()
+        if isinstance(row, dict) and row.get("ai_score") is not None
+    ]
+    return sum(scores) if scores else None
+
+
+def _grading_status(
+    items: list[Any],
+    grades: dict[str, dict[str, Any]],
+    answers: dict[str, dict[str, Any]] | None = None,
+) -> str:
+    """complete once every text item is teacher-graded or AI-scored."""
+
+    answers = answers or {}
+    text_items = [item for item in items if item.type in TEXT_TYPES]
+    if all(_text_item_graded(item, grades, answers) for item in text_items):
         return "complete"
     return "mixed" if any(item.type in CHOICE_TYPES for item in items) else "pending"
 
@@ -582,6 +645,7 @@ def _quiz_record_row(db: Session, attempt: ClassroomQuizAttempt) -> RecordAttemp
         score_objective=attempt.score_objective,
         score_max_objective=attempt.score_max_objective,
         grading_status=attempt.grading_status,  # type: ignore[arg-type]
+        score_ai=_compute_score_ai(_answers_by_id(attempt)),
         quiz_id=UUID(attempt.quiz_id),
         # Totals cover text items too, so an ungraded paper never reads as a
         # full score over its choice questions alone.
@@ -615,12 +679,7 @@ def _attempt_detail(
 ) -> TeacherQuizAttemptDetailDTO | StudentQuizAttemptDetailDTO:
     items = _snapshot_items(attempt)
     grades = _manual_grades(attempt)
-    answers_raw = json.loads(attempt.answers_json)
-    answers = {
-        str(row.get("item_id")): row
-        for row in (answers_raw if isinstance(answers_raw, list) else [])
-        if isinstance(row, dict)
-    }
+    answers = _answers_by_id(attempt)
     item_cls = QuizAttemptItemTeacher if teacher else QuizAttemptItemStudent
     rows: list[Any] = []
     for item in items:
@@ -641,12 +700,22 @@ def _attempt_detail(
             entry["graded"] = True
         else:
             entry["response_text"] = str(answer.get("text") or "")
-            entry["graded"] = grade is not None
+            if answer.get("ai_score") is not None:
+                entry["ai_score"] = float(answer["ai_score"])
             if grade is not None:
+                entry["graded"] = True
                 entry["points_awarded"] = float(grade.get("points_awarded") or 0)
                 entry["feedback"] = str(grade.get("feedback") or "")
+            elif answer.get("ai_score") is not None:
+                entry["graded"] = True
+                entry["points_awarded"] = float(answer["ai_score"])
+                feedback = answer.get("ai_feedback")
+                entry["feedback"] = None if feedback is None else str(feedback)
+            else:
+                entry["graded"] = False
         if teacher:
             entry["answer"] = item.answer
+            entry["ai_grading"] = item.type in TEXT_TYPES and _item_grading_mode(item) == "ai"
         rows.append(item_cls(**entry))
     known = {item.id for item in items}
     for item_id, answer in answers.items():
@@ -677,6 +746,7 @@ def _attempt_detail(
         "score_max_objective": attempt.score_max_objective,
         "score_manual": attempt.score_manual,
         "score_max_manual": score_max_manual,
+        "score_ai": _compute_score_ai(answers),
         "points_awarded": attempt.score_objective + attempt.score_manual,
         "points_total": attempt.score_max_objective + score_max_manual,
         "submitted_at": attempt.submitted_at,
@@ -761,16 +831,23 @@ def grade_attempt(
             "graded_by_user_id": str(actor.user.id),
             "graded_at": now.isoformat(),
         }
+    answers = _answers_by_id(attempt)
+    snapshot_items = list(items.values())
     attempt.manual_grades_json = json.dumps(grades, ensure_ascii=False, separators=(",", ":"))
-    attempt.score_manual = float(
-        sum(
-            float(value.get("points_awarded") or 0) for key, value in grades.items() if key in items
-        )
-    )
-    attempt.grading_status = _grading_status(list(items.values()), grades)
+    attempt.score_manual = _compute_score_manual(snapshot_items, grades, answers)
+    attempt.grading_status = _grading_status(snapshot_items, grades, answers)
     attempt.graded_at = now
     db.commit()
     db.refresh(attempt)
     detail = _attempt_detail(db, attempt, teacher=True)
     assert isinstance(detail, TeacherQuizAttemptDetailDTO)
     return detail
+
+
+def attempt_needs_ai_grade(db: Session, attempt_id: str) -> bool:
+    """True when the frozen paper has text items marked for AI grading."""
+
+    attempt = db.get(ClassroomQuizAttempt, attempt_id)
+    if attempt is None:
+        return False
+    return document_has_ai_grading(loads_document(attempt.document_snapshot_json))

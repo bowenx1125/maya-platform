@@ -592,9 +592,180 @@ describe("W1 teacher personal workspace", () => {
       screen.queryByRole("button", { name: /Make source private/ }),
     ).toBeNull();
     expect(screen.queryByText("Ready")).toBeNull();
-    expect(screen.queryByRole("group", { name: "Visibility" })).toBeNull();
+    // The RAG list has no per-file visibility control. (The Agent's own
+    // Private / Public switch lives on its Name card, outside this list.)
+    const ragList = screen
+      .getByRole("checkbox", { name: "private-notes.md" })
+      .closest("ul, ol, fieldset, section") as HTMLElement;
+    expect(
+      within(ragList).queryByRole("group", { name: "Visibility" }),
+    ).toBeNull();
+    expect(screen.getAllByRole("group", { name: "Visibility" })).toHaveLength(
+      1,
+    );
     expect(
       screen.queryByText("Shareable; students need an explicit grant"),
     ).toBeNull();
+  });
+});
+
+// Owner 2026-11-08: the Name card owns the name and the one-way Private →
+// Public switch; AGENT.md no longer renames the Agent.
+describe("Agent Name card", () => {
+  function editorApi(agentOverrides: Partial<AgentDetail> = {}) {
+    let agent = personalAgent(agentOverrides);
+    const document = privateDocument();
+    const currentDraft = draft(document);
+    const api = {
+      version: vi.fn().mockImplementation(async () => currentDraft),
+      agent: vi.fn().mockImplementation(async () => agent),
+      workspaceDocuments: vi.fn().mockImplementation(async () => [document]),
+      knowledgeSets: vi.fn().mockResolvedValue([]),
+      agentKnowledgeSets: vi.fn().mockImplementation(async () => ({
+        agent_id: agent.id,
+        agent_metadata_revision: agent.metadata_revision,
+        sets: [],
+      })),
+      voiceProfiles: vi.fn().mockResolvedValue([]),
+      ragPreview: vi.fn().mockResolvedValue({
+        version_id: versionId,
+        total_char_count: document.char_count,
+        limit: null,
+        document_count: 1,
+        index_status: "ready",
+        combined_markdown: "# Private notes",
+      }),
+      avatarTemplates: vi.fn().mockResolvedValue([]),
+      updateAgentMetadata: vi.fn(async (_id: string, body: object) => {
+        agent = {
+          ...agent,
+          ...body,
+          metadata_revision: agent.metadata_revision + 1,
+        } as AgentDetail;
+        return agent;
+      }),
+      publish: vi.fn(async () => ({ ...currentDraft, state: "published" })),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(
+      <AgentWorkbench
+        key="teacher-scope"
+        actorScopeKey="teacher-user:teacher-course:2"
+        backHref="/teacher"
+        versionId={versionId}
+      />,
+    );
+    return api;
+  }
+
+  it("makes a private Agent public once, after a confirm", async () => {
+    const api = editorApi({ is_creator: true, visibility: "private" });
+    const group = await screen.findByRole("group", { name: "Visibility" });
+    const makePublic = within(group).getByRole("button", { name: "Public" });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
+    fireEvent.click(makePublic);
+    expect(api.updateAgentMetadata).not.toHaveBeenCalled();
+    confirm.mockReturnValueOnce(true);
+    fireEvent.click(makePublic);
+    await waitFor(() =>
+      expect(api.updateAgentMetadata).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ visibility: "public" }),
+      ),
+    );
+    // Then Done's publish makes the new public version.
+    await waitFor(() => expect(api.publish).toHaveBeenCalled());
+    expect(api.updateAgentMetadata.mock.invocationCallOrder[0]).toBeLessThan(
+      api.publish.mock.invocationCallOrder[0],
+    );
+    confirm.mockRestore();
+  });
+
+  it("keeps a public Agent public and lets only its creator flip a private one", async () => {
+    editorApi({ is_creator: true, visibility: "public" });
+    const shared = await screen.findByRole("group", { name: "Visibility" });
+    const back = within(shared).getByRole("button", {
+      name: "Private",
+    }) as HTMLButtonElement;
+    expect(back.disabled).toBe(true);
+    expect(back.title).toBe("A public Agent stays public.");
+    cleanup();
+    editorApi({ is_creator: false, visibility: "private" });
+    const group = await screen.findByRole("group", { name: "Visibility" });
+    expect(
+      (
+        within(group).getByRole("button", {
+          name: "Public",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("shows the Agent's name on its card for renaming", async () => {
+    editorApi({ name: "Laozi" });
+    const name = (await screen.findByRole("textbox", {
+      name: "Name",
+    })) as HTMLInputElement;
+    expect(name.value).toBe("Laozi");
+    fireEvent.change(name, { target: { value: "Laozi 2" } });
+    expect(name.value).toBe("Laozi 2");
+  });
+});
+
+describe("Agent Name card · rename alone", () => {
+  it("lets Done save a new name without publishing a version", async () => {
+    const agent = personalAgent({ name: "Laozi", is_creator: true });
+    const document = privateDocument();
+    const currentDraft = draft(document);
+    const api = {
+      version: vi.fn().mockResolvedValue(currentDraft),
+      agent: vi.fn().mockResolvedValue(agent),
+      workspaceDocuments: vi.fn().mockResolvedValue([document]),
+      knowledgeSets: vi.fn().mockResolvedValue([]),
+      agentKnowledgeSets: vi.fn().mockResolvedValue({
+        agent_id: agent.id,
+        agent_metadata_revision: agent.metadata_revision,
+        sets: [],
+      }),
+      voiceProfiles: vi.fn().mockResolvedValue([]),
+      ragPreview: vi.fn().mockResolvedValue({
+        version_id: versionId,
+        total_char_count: document.char_count,
+        limit: null,
+        document_count: 1,
+        index_status: "ready",
+        combined_markdown: "# Private notes",
+      }),
+      avatarTemplates: vi.fn().mockResolvedValue([]),
+      updateAgentMetadata: vi.fn(async () => ({
+        ...agent,
+        name: "Laozi Elder",
+      })),
+      publish: vi.fn(),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(
+      <AgentWorkbench
+        key="teacher-scope"
+        actorScopeKey="teacher-user:teacher-course:2"
+        backHref="/teacher"
+        versionId={versionId}
+      />,
+    );
+    const name = await screen.findByRole("textbox", { name: "Name" });
+    fireEvent.change(name, { target: { value: "Laozi Elder" } });
+    const done = screen.getByRole("button", {
+      name: "Done",
+    }) as HTMLButtonElement;
+    await waitFor(() => expect(done.disabled).toBe(false));
+    fireEvent.click(done);
+    await waitFor(() =>
+      expect(api.updateAgentMetadata).toHaveBeenCalledWith(
+        agent.id,
+        expect.objectContaining({ name: "Laozi Elder" }),
+      ),
+    );
+    expect(await screen.findByText("Name saved.")).toBeTruthy();
+    expect(api.publish).not.toHaveBeenCalled();
   });
 });

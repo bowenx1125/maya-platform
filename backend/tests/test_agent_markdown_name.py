@@ -1,10 +1,8 @@
-"""A draft name heading updates its Agent without rewriting saved lessons."""
+"""Renaming an Agent is its own action; AGENT.md never renames it."""
 
 from uuid import uuid4
 
-import pytest
 from app.core.models import Agent, AgentVersion
-from app.modules.agents.persona import agent_name_from_markdown
 from app.modules.debates.models import DebateParticipant
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -15,25 +13,9 @@ from tests.test_wave1_agents_knowledge import _make_agent
 from tests.test_wave2_playback import COURSE_ID, GROUP_DEMO_ID, _headers, _insert_published_agent
 
 
-@pytest.mark.parametrize(
-    ("markdown", "expected"),
-    [
-        ("# 新名字\n\nAuthored context", "新名字"),
-        ("\ufeff\n# **Renamed Agent** ##\nBody", "Renamed Agent"),
-        ("# Who I am\nI am Maya.", None),
-        ("# 我是谁\n我是玛雅。", None),
-        ("## Background\nContext", None),
-        ("No name heading", None),
-        ("# [Name](https://example.com)", None),
-        ("# <b>Name</b>", None),
-        ("# ", None),
-    ],
-)
-def test_name_heading_uses_visible_text_without_confusing_identity_sections(markdown, expected):
-    assert agent_name_from_markdown(markdown) == expected
-
-
-def test_draft_save_and_upload_sync_name_only_after_successful_revision(client):
+def test_agent_md_heading_is_only_content_now(client):
+    """Owner 2026-11-08: renaming happens on the Name card; AGENT.md's first
+    heading no longer renames the Agent, on save or upload."""
     _, csrf = login(client, "bowen")
     agent, version_id = _make_agent(client, csrf)
     url = f"/api/v1/agent-versions/{version_id}"
@@ -42,13 +24,8 @@ def test_draft_save_and_upload_sync_name_only_after_successful_revision(client):
     )
     assert saved.status_code == 200, saved.text
     detail = client.get(f"/api/v1/agents/{agent['id']}").json()
-    assert detail["name"] == "新名字"
-    assert detail["metadata_revision"] == 1
-    stale = client.patch(
-        url, headers=_headers(csrf), json={"expected_revision": 0, "agent_md": "# Stale name"}
-    )
-    assert stale.status_code == 409
-    assert client.get(f"/api/v1/agents/{agent['id']}").json()["name"] == "新名字"
+    assert detail["name"] == agent["name"]
+    assert detail["metadata_revision"] == agent["metadata_revision"]
     uploaded = client.post(
         f"{url}/agent-md/upload",
         headers=_headers(csrf),
@@ -56,7 +33,7 @@ def test_draft_save_and_upload_sync_name_only_after_successful_revision(client):
         files={"file": ("AGENT.md", b"# Uploaded name\nBody", "text/markdown")},
     )
     assert uploaded.status_code == 200, uploaded.text
-    assert client.get(f"/api/v1/agents/{agent['id']}").json()["name"] == "Uploaded name"
+    assert client.get(f"/api/v1/agents/{agent['id']}").json()["name"] == agent["name"]
 
 
 def test_renaming_next_draft_keeps_published_source_and_debate_participant_name(app_factory):
@@ -106,13 +83,11 @@ def test_renaming_next_draft_keeps_published_source_and_debate_participant_name(
                 headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
             )
             assert draft.status_code == 201, draft.text
+            metadata = client.get(f"/api/v1/agents/{agents[0]}").json()["metadata_revision"]
             renamed = client.patch(
-                f"/api/v1/agent-versions/{draft.json()['id']}",
+                f"/api/v1/agents/{agents[0]}",
                 headers=_headers(csrf),
-                json={
-                    "expected_revision": draft.json()["revision"],
-                    "agent_md": "# Current name\nNew context",
-                },
+                json={"expected_metadata_revision": metadata, "name": "Current name"},
             )
             assert renamed.status_code == 200, renamed.text
             assert client.get(f"/api/v1/agents/{agents[0]}").json()["name"] == "Current name"
