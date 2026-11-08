@@ -564,15 +564,6 @@ export function AppShell({
     });
     trackTeacherLeave(job);
   }, [api, refresh, visitedGroupIds]);
-  useEffect(() => {
-    if (!visitingGroup) return;
-    return actionRegistry.register(
-      "back",
-      "group-visit",
-      { href: "/teacher/roster" },
-      -1,
-    );
-  }, [actionRegistry, visitingGroup]);
   // A visit lasts 2 hours on the server; a teacher still inside renews it
   // (every 20 min, and on coming back to the tab after a sleep), so a long
   // lesson is never cut off. Only a refused renewal ends the visit, and then
