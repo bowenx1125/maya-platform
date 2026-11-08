@@ -273,10 +273,13 @@ describe("teacher Quiz Records", () => {
 
   it("grades a text question by hand and shows the key", async () => {
     render(<QuizRecords />);
-    fireEvent.click(await screen.findByRole("button", { name: /Week 3 Quiz/ }));
+    const row = await screen.findByRole("button", { name: /Week 3 Quiz/ });
+    // The row carries the grading state; the opened paper does not repeat it.
+    expect(row.textContent).toContain("Needs grading");
+    fireEvent.click(row);
     const sheet = await screen.findByTestId("quiz-attempt-detail");
     expect(within(sheet).getByText("Mentions decoupling.")).toBeTruthy();
-    expect(within(sheet).getByText("Needs grading")).toBeTruthy();
+    expect(within(sheet).queryByText("Needs grading")).toBeNull();
     fireEvent.change(
       within(sheet).getByRole("spinbutton", { name: "Points for question 2" }),
       { target: { value: "2" } },
@@ -316,10 +319,13 @@ describe("teacher Quiz Records", () => {
     );
   });
 
-  it("scoped to one quiz shows no chat Record board", async () => {
+  it("scoped to one quiz names the quiz on the board and shows no chat Record", async () => {
     state.search = "quiz_id=quiz-1";
     render(<QuizRecords />);
-    await screen.findByRole("button", { name: /Week 3 Quiz/ });
+    const row = await screen.findByRole("button", { name: /^Ada/ });
+    expect(row.textContent).toContain("Round 2");
+    expect(row.textContent).toContain("Needs grading");
+    expect(screen.getByRole("heading", { name: "Week 3 Quiz" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Record" })).toBeNull();
   });
 });
@@ -339,7 +345,7 @@ describe("student Quiz Records", () => {
       within(sheet).queryByRole("columnheader", { name: "Key" }),
     ).toBeNull();
     expect(within(sheet).getByText("Not graded yet")).toBeTruthy();
-    expect(within(sheet).getByText("(Correct)")).toBeTruthy();
+    expect(within(sheet).getByText("Correct")).toBeTruthy();
     expect(within(sheet).queryByRole("button", { name: /Hide/ })).toBeNull();
     expect(screen.getByRole("heading", { name: "Record" })).toBeTruthy();
     expect(

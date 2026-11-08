@@ -259,6 +259,30 @@ English copy for Quiz codes lives in `frontend/lib/i18n.ts`
 press-motion hit layer: its hover overlay covered the grading controls in a
 real browser.
 
+## Teacher page look (owner pick, 2026-11-08)
+
+Option A from the design comparison, with two parts of B:
+
+- **Quizzes list:** binder cards whose offset shadow shows the state (lime
+  accepting, cyan published, grey draft). One status pill with a dot. While
+  accepting, B's blinking LIVE lamp (still under reduced motion).
+- **Editor:** a worksheet layout. Each question card is numbered `#01` in mono
+  with a type pill and ruled paper. Points is a − n + stepper. The correct
+  choice is a lime key; the real radio or checkbox keeps "Mark as correct
+  answer". New questions come from B's dashed "Add question" slot in A's
+  colours.
+- **Published (locked) editor:** a read-only paper with the
+  `quizPublishedLocked` notice, the status pill and the LIVE lamp.
+- **Records:** quiz submissions sit on the Record clipboard board. Scoped to
+  one quiz, the board is titled with the quiz and rows lead with the student.
+  Each row has a Graded / Needs grading chip and a score ring.
+- **Opened attempt:** a "marked paper" with a red margin, a red total, lime
+  rows for right answers and red-tint rows for wrong ones.
+- **Empty states:** sticker cards (icon tile plus the existing one-line copy).
+- **Keys:** arcade keys with a symbol and a word (`QuizKey` in
+  `frontend/components/quizzes/quiz-chrome.tsx`), using the shared press and
+  busy motion.
+
 ## Record placement
 
 Owner decision (2026-11-08): the formal chat-assessment Record moved out of

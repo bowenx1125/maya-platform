@@ -170,6 +170,14 @@
       background-position: -150% 0;
     }
   }
+  /* A Quiz that is accepting submissions blinks its LIVE lamp (owner pick,
+     2026-11-08); callers pair it with motion-reduce:animate-none. */
+  --animate-quiz-live: quiz-live 1s steps(2, start) infinite;
+  @keyframes quiz-live {
+    to {
+      background-color: #fde68a;
+    }
+  }
   /* Card-table room fade (entrance). */
   --animate-room-in: room-in 520ms ease-out both;
   --animate-room-out: room-out 280ms ease-in both;

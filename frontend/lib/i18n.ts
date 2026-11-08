@@ -1099,6 +1099,7 @@ const enMessages = {
   quizCorrect: "Correct",
   quizIncorrect: "Incorrect",
   quizNeedsGrading: "Needs grading",
+  quizGraded: "Graded",
   quizNotGraded: "Not graded yet",
   quizGradePointsFor: "Points for question {n}",
   quizGradeFeedbackFor: "Feedback for question {n}",

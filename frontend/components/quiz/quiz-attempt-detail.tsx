@@ -10,11 +10,13 @@ import {
 import { useT } from "../../lib/i18n";
 import { useSession } from "../session-provider";
 import { ErrorNotice, LoadingCard } from "../ui";
-import { Button } from "../ui/button";
+import { WorkspaceIcon } from "../workspace-icon";
+import { QuizKey } from "../quizzes/quiz-chrome";
 
 const CELL =
-  "overflow-wrap-anywhere border-b border-[#EBE5DF] px-2.5 py-2 align-top";
-const HEAD = "bg-[#F7F2EA] px-2.5 py-2 text-left font-semibold text-[#625E59]";
+  "overflow-wrap-anywhere border-b-2 border-[#E5E7EB] px-2.5 py-3 align-top";
+const HEAD =
+  "border-b-[3px] border-[#111] px-2.5 py-2 text-left text-xs font-extrabold text-[#4B5563]";
 
 type Draft = Record<string, { points: string; feedback: string }>;
 
@@ -144,20 +146,21 @@ export function QuizAttemptDetailView({
 
   const gradable = teacher && detail.items.some(isText);
   return (
-    <div className="grid gap-2" data-testid="quiz-attempt-detail">
-      <div className="flex flex-wrap items-center gap-2 font-body text-xs font-bold text-[#555]">
-        <span>{t("quizRound", { n: detail.taking_epoch })}</span>
-        <span>
-          · {detail.points_awarded} / {detail.points_total}
-        </span>
-        {detail.grading_status !== "complete" ? (
-          <span className="rounded-full border-2 border-black bg-[#FDE68A] px-2 py-px text-black">
-            {t("quizNeedsGrading")}
-          </span>
-        ) : null}
-      </div>
-      <div className="overflow-x-auto rounded-[10px] border border-[#EBE5DF] bg-[#FFFDF8]">
-        <table className="w-full min-w-[560px] border-collapse font-body text-xs">
+    // A's "marked paper" (owner pick 2026-11-08): ruled paper with a red
+    // margin, right/wrong rows marked like a teacher's pen.
+    <div
+      className="relative grid gap-3 rounded-[4px_4px_16px_16px] border-[3px] border-[#111] bg-white bg-[linear-gradient(90deg,transparent_38px,#FCA5A5_38px,#FCA5A5_40px,transparent_40px)] pt-14 pb-5 pr-[clamp(12px,3vw,28px)] pl-[52px] shadow-[6px_6px_0_#111] max-[520px]:pl-[48px]"
+      data-testid="quiz-attempt-detail"
+    >
+      {/* Round and grading state are already on the Records row above. */}
+      <span
+        className="absolute top-3 right-5 inline-block -rotate-3 font-display text-[34px] leading-none font-extrabold text-[#DC2626]"
+        aria-label={`${detail.points_awarded} / ${detail.points_total}`}
+      >
+        {detail.points_awarded} / {detail.points_total}
+      </span>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[620px] border-collapse font-body text-sm text-[#111]">
           <thead>
             <tr>
               <th scope="col" className={HEAD}>
@@ -190,28 +193,41 @@ export function QuizAttemptDetailView({
                 ? item.response_text?.trim() || t("overviewNotAnswered")
                 : choiceLabels(item, item.response_choice_ids) ||
                   t("overviewNotAnswered");
+              const tint =
+                !text && item.correct === true
+                  ? "bg-[#ECFCCB]"
+                  : !text && item.correct === false
+                    ? "bg-[#FFE4E4]"
+                    : "";
               return (
-                <tr key={item.id}>
-                  <td className={`${CELL} w-[2ch] text-[#625E59]`}>{n}</td>
+                <tr key={item.id} className={tint}>
+                  <td className={`${CELL} w-[2ch] font-mono font-bold`}>{n}</td>
                   <td className={CELL}>{item.prompt}</td>
-                  <td className={CELL}>
+                  <td className={`${CELL} font-semibold`}>
                     {answer}
                     {!text && item.correct != null ? (
-                      <span className="ml-1.5 font-extrabold">
-                        ({item.correct ? t("quizCorrect") : t("quizIncorrect")})
+                      <span
+                        className={`ml-2 inline-flex items-center gap-1 font-display font-extrabold whitespace-nowrap ${item.correct ? "text-[#15803D]" : "text-[#B91C1C]"}`}
+                      >
+                        <WorkspaceIcon
+                          name={item.correct ? "done" : "close"}
+                          size={16}
+                          stroke={3.2}
+                        />
+                        {item.correct ? t("quizCorrect") : t("quizIncorrect")}
                       </span>
                     ) : null}
                   </td>
                   {teacher ? (
-                    <td className={CELL}>
+                    <td className={`${CELL} text-[#4B5563]`}>
                       {text
                         ? (item.answer?.rubric ?? "")
                         : choiceLabels(item, item.answer?.choice_ids)}
                     </td>
                   ) : null}
-                  <td className={CELL}>
+                  <td className={`${CELL} font-mono font-bold`}>
                     {text && teacher ? (
-                      <span className="inline-flex items-center gap-1">
+                      <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                         <input
                           type="number"
                           inputMode="decimal"
@@ -219,7 +235,7 @@ export function QuizAttemptDetailView({
                           max={item.points}
                           step="any"
                           aria-label={t("quizGradePointsFor", { n })}
-                          className="w-16 rounded-md border-2 border-black bg-white px-1.5 py-1"
+                          className="min-h-11 w-16 rounded-[10px] border-[3px] border-[#111] bg-white px-2 font-mono text-base font-bold focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#FF4D8D]"
                           value={draft[item.id]?.points ?? ""}
                           onChange={(event) =>
                             setDraft((current) => ({
@@ -234,7 +250,9 @@ export function QuizAttemptDetailView({
                         / {item.points}
                       </span>
                     ) : text && !item.graded ? (
-                      t("quizNotGraded")
+                      <span className="font-body font-semibold text-[#4B5563]">
+                        {t("quizNotGraded")}
+                      </span>
                     ) : (
                       `${item.points_awarded ?? 0} / ${item.points}`
                     )}
@@ -243,7 +261,7 @@ export function QuizAttemptDetailView({
                     {text && teacher ? (
                       <textarea
                         aria-label={t("quizGradeFeedbackFor", { n })}
-                        className="min-h-14 w-full min-w-40 rounded-md border-2 border-black bg-white px-1.5 py-1"
+                        className="min-h-16 w-full min-w-44 rounded-[10px] border-[3px] border-[#111] bg-white px-2.5 py-2 font-body text-sm focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#FF4D8D]"
                         maxLength={4000}
                         value={draft[item.id]?.feedback ?? ""}
                         onChange={(event) =>
@@ -269,36 +287,34 @@ export function QuizAttemptDetailView({
       {error ? <ErrorNotice inline error={error} /> : null}
       {saved ? (
         <p
-          className="m-0 font-body text-xs font-bold text-[#16A34A]"
+          className="m-0 font-body text-sm font-extrabold text-[#15803D]"
           role="status"
         >
           {t("quizGradesSaved")}
         </p>
       ) : null}
       {teacher ? (
-        <div className="flex flex-wrap justify-end gap-2">
-          {gradable ? (
-            <Button
-              type="button"
-              disabled={saving}
-              busy={saving}
-              onClick={() => void save()}
-            >
-              {t("quizSaveGrades")}
-            </Button>
-          ) : null}
-          <Button
-            type="button"
-            variant="neutral"
-            disabled={hiding}
+        <div className="flex flex-wrap justify-end gap-3">
+          <QuizKey
+            icon="eyeOff"
             busy={hiding}
-            aria-label={t("quizHideAttemptNamed", {
+            ariaLabel={t("quizHideAttemptNamed", {
               name: detail.student_name,
             })}
             onClick={() => void hide()}
           >
             {t("quizHideAttempt")}
-          </Button>
+          </QuizKey>
+          {gradable ? (
+            <QuizKey
+              icon="done"
+              tone="primary"
+              busy={saving}
+              onClick={() => void save()}
+            >
+              {t("quizSaveGrades")}
+            </QuizKey>
+          ) : null}
         </div>
       ) : null}
     </div>

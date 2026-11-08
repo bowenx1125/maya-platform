@@ -16,12 +16,10 @@ import { useSession } from "../session-provider";
 import { useT } from "@/lib/i18n";
 import { PageBanner } from "../page-banner";
 import { PageAction } from "../page-action";
-import { EmptyCard, ErrorNotice, LoadingCard } from "../ui";
-import { BUSY_MOTION, PRESS_MOTION } from "../ui/button";
-import { IconDownload } from "../quiet-icons";
-import { cn } from "../../lib/utils";
+import { ErrorNotice, LoadingCard } from "../ui";
 import { AssessmentRecordPanel } from "../knowledge/assessment-record";
 import { QuizAttemptDetailView } from "../quiz/quiz-attempt-detail";
+import { ClipboardBoard, QuizEmpty, QuizKey } from "./quiz-chrome";
 
 function triggerBlobDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
@@ -32,9 +30,6 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
-
-/** Match PageAction banner chrome (WorkspaceActionName has no download yet). */
-const BANNER_DOWNLOAD = `inline-flex h-auto min-h-11 w-auto shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] bg-white px-4 py-[7px] font-body text-sm [line-height:normal] font-extrabold text-[#111] no-underline disabled:cursor-not-allowed disabled:opacity-50 disabled:aria-busy:opacity-100 [&_svg]:size-4 ${PRESS_MOTION} ${BUSY_MOTION}`;
 
 export default function QuizRecords() {
   const t = useT();
@@ -96,13 +91,16 @@ export default function QuizRecords() {
   }, [courseId, quizApi, quizIdFilter]);
 
   if (!courseId) {
-    return <EmptyCard title={t("quizRecords")}>{t("quizNoCourse")}</EmptyCard>;
+    return <QuizEmpty title={t("quizNoCourse")} kind="course" />;
   }
 
   const showDownload = shouldShowExportDownload(quizIdFilter);
+  const boardTitle = quizIdFilter
+    ? (rows?.[0]?.title ?? t("quizRecords"))
+    : t("quizSubmissions");
 
   return (
-    <div>
+    <div className="space-y-10">
       <PageBanner title={t("quizRecords")}>
         <PageAction
           name="back"
@@ -111,118 +109,113 @@ export default function QuizRecords() {
           className="relative"
         />
         {showDownload ? (
-          <button
-            type="button"
-            className={cn(BANNER_DOWNLOAD, "relative")}
-            disabled={exportBusy}
-            aria-busy={exportBusy || undefined}
+          <QuizKey
+            icon="download"
+            busy={exportBusy}
             onClick={() => void onExport()}
-            data-testid="quiz-export-download"
-            data-ui-guide="quiz.exportDownload"
+            testId="quiz-export-download"
+            guide="quiz.exportDownload"
           >
-            {exportBusy ? (
-              <span className="spinner" aria-hidden="true" />
-            ) : (
-              <IconDownload size={16} />
-            )}
-            <span>{t("download")}</span>
-          </button>
+            {t("download")}
+          </QuizKey>
         ) : null}
       </PageBanner>
-      {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       {exportError ? (
         <ErrorNotice error={exportError} onRetry={() => void onExport()} />
       ) : null}
-      {rows === null && !error ? <LoadingCard /> : null}
-      {rows && rows.length === 0 && !error ? (
-        <EmptyCard
-          title={quizIdFilter ? t("quizNoRecords") : t("quizNoSubmissions")}
-        />
-      ) : null}
-      {rows && rows.length > 0 ? (
-        <ul className="m-0 grid list-none gap-4 p-0">
-          {rows.map((row, index) => {
-            const expanded = openId === row.attempt_id;
-            return (
-              <li
-                key={row.attempt_id}
-                // No press motion: its hover hit layer covers the row and would swallow
-                // clicks on the grading inputs and buttons inside the opened attempt.
-                className="relative flex flex-wrap items-center gap-3.5 rounded-[14px] border-[3px] border-border bg-white px-[18px] py-4 shadow-[6px_6px_0_#67E8F9]"
-              >
-                <span
-                  aria-hidden="true"
-                  className="w-7 shrink-0 font-mono text-sm font-extrabold text-[#9CA3AF]"
+      <ClipboardBoard title={boardTitle} stamp="CLASS ROSTER">
+        {error ? (
+          <ErrorNotice inline error={error} onRetry={() => void load()} />
+        ) : rows === null ? (
+          <LoadingCard />
+        ) : rows.length === 0 ? (
+          <QuizEmpty
+            title={quizIdFilter ? t("quizNoRecords") : t("quizNoSubmissions")}
+            kind="records"
+          />
+        ) : (
+          <ul className="m-0 grid list-none gap-4 p-0">
+            {rows.map((row, index) => {
+              const expanded = openId === row.attempt_id;
+              const graded = row.grading_status === "complete";
+              const when = row.submitted_at
+                ? new Date(row.submitted_at).toLocaleString("en", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "";
+              const meta = [
+                quizIdFilter ? null : row.student_name,
+                row.taking_epoch
+                  ? t("quizRound", { n: row.taking_epoch })
+                  : null,
+                when,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <li
+                  key={row.attempt_id}
+                  // No press motion: its hover hit layer covers the row and would swallow
+                  // clicks on the grading inputs and buttons inside the opened attempt.
+                  className="relative flex flex-wrap items-center gap-3.5 rounded-[14px] border-[3px] border-[#111] bg-white px-[18px] py-4 shadow-[6px_6px_0_#67E8F9]"
                 >
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <button
-                  type="button"
-                  className="relative flex min-w-0 flex-1 cursor-pointer items-center gap-3.5 border-0 bg-transparent p-0 text-left font-body text-inherit"
-                  aria-expanded={expanded}
-                  onClick={() =>
-                    setOpenId((current) =>
-                      current === row.attempt_id ? null : row.attempt_id,
-                    )
-                  }
-                >
-                  <span className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="text-[17px] font-extrabold text-ink">
-                      {row.title}
-                    </span>
-                    <span className="text-xs font-medium text-[#555]">
-                      {row.student_name}
-                      {row.taking_epoch
-                        ? ` · ${t("quizRound", { n: row.taking_epoch })}`
-                        : ""}
-                      {row.submitted_at
-                        ? ` · ${new Date(row.submitted_at).toLocaleString(
-                            "en",
-                            {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            },
-                          )}`
-                        : ""}
-                    </span>
-                  </span>
                   <span
-                    className={`shrink-0 rounded-full border-2 border-border px-3 py-1 font-body text-[10px] leading-none font-extrabold tracking-[0.08em] uppercase ${
-                      row.source === "quiz"
-                        ? "bg-main text-main-fg"
-                        : "bg-surface text-ink"
-                    }`}
+                    aria-hidden="true"
+                    className="w-7 shrink-0 font-mono text-sm font-extrabold text-[#9CA3AF]"
                   >
-                    {row.source}
+                    {String(index + 1).padStart(2, "0")}
                   </span>
-                  <ScoreRing ratio={recordRatio(row)} />
-                </button>
-                {expanded && row.quiz_id ? (
-                  <div className="basis-full pt-3">
-                    <QuizAttemptDetailView
-                      courseId={courseId}
-                      quizId={row.quiz_id}
-                      attemptId={row.attempt_id}
-                      teacher
-                      onChanged={() => void load()}
-                      onHidden={() => {
-                        setOpenId(null);
-                        void load();
-                      }}
-                    />
-                  </div>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
+                  <button
+                    type="button"
+                    className="relative flex min-w-0 flex-1 cursor-pointer flex-wrap items-center gap-3.5 border-0 bg-transparent p-0 text-left font-body text-inherit"
+                    aria-expanded={expanded}
+                    onClick={() =>
+                      setOpenId((current) =>
+                        current === row.attempt_id ? null : row.attempt_id,
+                      )
+                    }
+                  >
+                    <span className="flex min-w-[180px] flex-1 flex-col gap-1">
+                      <span className="text-[17px] font-extrabold text-[#111]">
+                        {quizIdFilter ? row.student_name : row.title}
+                      </span>
+                      <span className="text-xs font-semibold text-[#4B5563]">
+                        {meta}
+                      </span>
+                    </span>
+                    <span
+                      className={`shrink-0 rounded-full border-2 border-[#111] px-3 py-1 text-xs font-extrabold text-[#111] ${graded ? "bg-[#D9F99D]" : "bg-[#FDE68A]"}`}
+                    >
+                      {graded ? t("quizGraded") : t("quizNeedsGrading")}
+                    </span>
+                    <ScoreRing ratio={recordRatio(row)} />
+                  </button>
+                  {expanded && row.quiz_id ? (
+                    <div className="basis-full pt-3">
+                      <QuizAttemptDetailView
+                        courseId={courseId}
+                        quizId={row.quiz_id}
+                        attemptId={row.attempt_id}
+                        teacher
+                        onChanged={() => void load()}
+                        onHidden={() => {
+                          setOpenId(null);
+                          void load();
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </ClipboardBoard>
       {quizIdFilter ? null : (
-        <div className="mt-8">
-          <AssessmentRecordPanel courseId={courseId} scope="course" />
-        </div>
+        <AssessmentRecordPanel courseId={courseId} scope="course" />
       )}
     </div>
   );
