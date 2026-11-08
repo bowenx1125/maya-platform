@@ -41,22 +41,35 @@ def default_llm_callable(
     """Call DashScope chat/completions and return a numeric score.
 
     Uses the same settings keys as production LLM (prefer
-    ``DASHSCOPE_CHAT_API_KEY`` when set, else ``DASHSCOPE_API_KEY``). Raises
-    when credentials/region are missing or the HTTP/parse path fails; the
-    worker catches that and leaves the item pending.
+    ``DASHSCOPE_CHAT_API_KEY`` when set, else ``DASHSCOPE_API_KEY``). Endpoint
+    comes from ``DashScopeLLMConfig.resolved_endpoint`` (llm_adapter), so this
+    module never embeds a supplier host. Raises when credentials/region are
+    missing or the HTTP/parse path fails; the worker catches that and leaves
+    the item pending.
     """
+
+    from app.providers.llm_adapter import DashScopeLLMConfig, LLMAdapterError
 
     settings = get_settings()
     chat_key = (settings.dashscope_chat_api_key or "").strip()
     api_key = chat_key or (settings.dashscope_api_key or "").strip()
     workspace_id = (settings.dashscope_workspace_id or "").strip()
     region = (settings.dashscope_region or "").strip()
-    if not api_key or not workspace_id or region != "cn-beijing":
+    model_key = (settings.llm_model or "").strip()
+    if not api_key or not workspace_id or not model_key or region != "cn-beijing":
         raise RuntimeError("quiz AI grading LLM is not configured")
 
-    endpoint = (
-        f"https://{workspace_id}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions"
-    )
+    try:
+        config = DashScopeLLMConfig(
+            api_key=api_key,
+            workspace_id=workspace_id,
+            region=region,
+            model_key=model_key,
+        )
+        endpoint = config.resolved_endpoint
+    except LLMAdapterError as exc:
+        raise RuntimeError("quiz AI grading LLM is not configured") from exc
+
     user_content = (
         "Grade the student answer. Return ONLY JSON of the form "
         '{"score": <number>} with no other text.\n'
@@ -67,7 +80,7 @@ def default_llm_callable(
         f"student_answer:\n{text}\n"
     )
     payload = {
-        "model": settings.llm_model,
+        "model": config.model,
         "messages": [{"role": "user", "content": user_content}],
         "temperature": 0,
     }

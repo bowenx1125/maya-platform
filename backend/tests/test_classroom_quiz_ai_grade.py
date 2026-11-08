@@ -445,8 +445,14 @@ def test_default_llm_callable_parses_score_from_chat_completion(
         score_max=5,
     )
     assert score == 3.5
-    assert captured["url"] == (
-        "https://ws-demo.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions"
-    )
+    from app.providers.llm_adapter import DashScopeLLMConfig
+
+    expected_url = DashScopeLLMConfig(
+        api_key="chat-key",
+        workspace_id="ws-demo",
+        region="cn-beijing",
+        model_key="qwen-plus",
+    ).resolved_endpoint
+    assert captured["url"] == expected_url
     assert captured["headers"]["Authorization"] == "Bearer chat-key"
     assert captured["json"]["model"] == "qwen-plus"
