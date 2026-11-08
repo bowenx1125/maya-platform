@@ -20,6 +20,15 @@ export interface QuizAnswerKey {
   rubric?: string | null;
 }
 
+export type QuizGradingMode = "ai" | "manual";
+
+export interface QuizItemGrading {
+  mode: QuizGradingMode;
+  score_min?: number;
+  score_max?: number;
+  rules?: string;
+}
+
 export interface QuizItemTeacher {
   id: string;
   type: QuizItemType;
@@ -28,6 +37,8 @@ export interface QuizItemTeacher {
   choices: QuizChoice[];
   answer?: QuizAnswerKey | null;
   points?: number;
+  /** Absent ≡ manual (compat with older quizzes). */
+  grading?: QuizItemGrading | null;
 }
 
 export interface QuizSettings {
@@ -80,6 +91,8 @@ export interface QuizAttemptItem {
   feedback?: string | null;
   /** Teacher view only; a student's detail never carries the key. */
   answer?: QuizAnswerKey | null;
+  /** Present after the AI worker writes a score; omit/null while pending. */
+  ai_score?: number | null;
 }
 
 export interface QuizAttemptDetail {
@@ -98,6 +111,8 @@ export interface QuizAttemptDetail {
   score_max_objective: number;
   score_manual: number;
   score_max_manual: number;
+  /** Optional aggregate of AI item scores when the API sends it. */
+  score_ai?: number | null;
   points_awarded: number;
   points_total: number;
   submitted_at: string;
