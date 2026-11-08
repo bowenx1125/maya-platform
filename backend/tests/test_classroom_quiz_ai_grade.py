@@ -352,3 +352,80 @@ def test_worker_clamps_scores_to_configured_range(
         assert attempt is not None
         entry = next(row for row in json.loads(attempt.answers_json) if row["item_id"] == "q_ai")
         assert entry["ai_score"] == 1.0
+
+
+def test_default_llm_callable_raises_when_keys_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from app.modules.quiz import ai_grade
+
+    monkeypatch.setattr(
+        ai_grade,
+        "get_settings",
+        lambda: SimpleNamespace(
+            dashscope_chat_api_key=None,
+            dashscope_api_key=None,
+            dashscope_workspace_id=None,
+            dashscope_region=None,
+            llm_model="qwen-plus",
+        ),
+    )
+    with pytest.raises(RuntimeError, match="not configured"):
+        ai_grade.default_llm_callable(
+            prompt="p",
+            rules="r",
+            text="t",
+            score_min=0,
+            score_max=5,
+        )
+
+
+def test_default_llm_callable_parses_score_from_chat_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from app.modules.quiz import ai_grade
+
+    monkeypatch.setattr(
+        ai_grade,
+        "get_settings",
+        lambda: SimpleNamespace(
+            dashscope_chat_api_key="chat-key",
+            dashscope_api_key="shared-key",
+            dashscope_workspace_id="ws-demo",
+            dashscope_region="cn-beijing",
+            llm_model="qwen-plus",
+        ),
+    )
+
+    class _FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, Any]:
+            return {"choices": [{"message": {"content": '{"score": 3.5}'}}]}
+
+    captured: dict[str, Any] = {}
+
+    def fake_post(url: str, *, headers: dict[str, str], json: dict[str, Any], timeout: float):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["json"] = json
+        captured["timeout"] = timeout
+        return _FakeResponse()
+
+    monkeypatch.setattr(ai_grade.httpx, "post", fake_post)
+    score = ai_grade.default_llm_callable(
+        prompt="Name one reason",
+        rules="Mention decoupling",
+        text="Decouple producers",
+        score_min=0,
+        score_max=5,
+    )
+    assert score == 3.5
+    assert captured["url"] == (
+        "https://ws-demo.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions"
+    )
+    assert captured["headers"]["Authorization"] == "Bearer chat-key"
+    assert captured["json"]["model"] == "qwen-plus"
