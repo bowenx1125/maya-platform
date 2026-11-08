@@ -6,7 +6,11 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from uuid import uuid4
+
 from app.core.db import Database
+from app.core.models import Course, CourseMember
 from app.modules.quiz.models import ClassroomQuiz, ClassroomQuizAttempt
 from app.seed import COURSE_ID
 from sqlalchemy import func, select
@@ -78,6 +82,48 @@ def test_a_draft_deletes_too(teacher: Actor) -> None:
     )
     assert created.status_code == 201, created.text
     assert _delete(teacher, created.json()["id"]).status_code == 204
+
+
+def test_other_course_cannot_delete_this_quiz(
+    teacher: Actor, student: Actor, database: Database
+) -> None:
+    quiz_id = _create_publish_open(teacher)
+    other_course = str(uuid4())
+    now = datetime.now(UTC)
+    with database.session() as session:
+        session.add(
+            Course(
+                id=other_course,
+                code=f"other-{other_course[:8]}",
+                name="Other Course",
+                created_at=now,
+            )
+        )
+        membership = session.get(CourseMember, {"course_id": COURSE_ID, "user_id": student.id})
+        assert membership is not None
+        session.delete(membership)
+        session.add(
+            CourseMember(
+                course_id=other_course,
+                user_id=student.id,
+                role="teacher",
+                created_at=now,
+            )
+        )
+        session.commit()
+
+    # A teacher of another course cannot delete this quiz from either course id.
+    assert _delete(student, quiz_id).status_code in {403, 404}
+    other = student.client.delete(
+        f"/api/v1/courses/{other_course}/quizzes/{quiz_id}",
+        headers=student.headers,
+    )
+    assert other.status_code in {403, 404}
+    assert teacher.client.delete(
+        f"/api/v1/courses/{other_course}/quizzes/{quiz_id}",
+        headers=teacher.headers,
+    ).status_code in {403, 404}
+    assert teacher.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}").status_code == 200
 
 
 def test_students_cannot_delete_a_quiz(teacher: Actor, student: Actor) -> None:

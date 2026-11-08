@@ -10,13 +10,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PlatformApi } from "../lib/api/platform";
 
-// Owner pick (2026-11-08, second round): option A "one page per quiz". The
-// list rows carry no keys; a quiz page has Paper | Submissions. B's LIVE lamp
-// and dashed "Add question" slot stay.
+// Owner pick (2026-11-08, second round): option A "one page per quiz".
+// A quiz page has Paper | Submissions. Delete quiz is a list-row key.
+// B's LIVE lamp and dashed "Add question" slot stay.
 const state = vi.hoisted(() => ({
   push: vi.fn(),
   api: {} as unknown,
-  routes: [] as Array<{ match: RegExp; body: unknown }>,
+  routes: [] as Array<{
+    match: RegExp;
+    body: unknown;
+    status?: number;
+    method?: string;
+  }>,
 }));
 
 vi.mock("../components/session-provider", () => ({
@@ -53,11 +58,14 @@ beforeEach(() => {
   state.routes = [];
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      const route = state.routes.find((r) => r.match.test(url));
+      const method = init?.method ?? "GET";
+      const route = state.routes.find(
+        (r) => r.match.test(url) && (r.method == null || r.method === method),
+      );
       return new Response(JSON.stringify(route ? route.body : {}), {
-        status: route ? 200 : 404,
+        status: route ? (route.status ?? 200) : 404,
         headers: { "Content-Type": "application/json" },
       });
     }),
@@ -70,7 +78,7 @@ afterEach(() => {
 });
 
 describe("teacher Quizzes list", () => {
-  it("shows one state chip per row, the LIVE lamp only while accepting, and no row keys", async () => {
+  it("shows one state chip per row and the LIVE lamp only while accepting", async () => {
     state.routes.push({
       match: /\/quizzes$/,
       body: [
@@ -104,10 +112,17 @@ describe("teacher Quizzes list", () => {
     expect(rows).toHaveLength(3);
     const [live, paused, draft] = rows;
 
-    // Rows are links to the quiz page and hold no keys of their own.
+    // The row link opens the quiz. Delete quiz is a sibling key, not inside it.
     for (const row of rows) {
       expect(within(row).queryByRole("button")).toBeNull();
       expect(within(row).queryByRole("link")).toBeNull();
+      const item = row.closest("li");
+      expect(item).toBeTruthy();
+      expect(
+        within(item as HTMLElement).getByRole("button", {
+          name: "Delete quiz",
+        }),
+      ).toBeTruthy();
     }
     expect(live.getAttribute("href")).toBe("/teacher/quizzes/q-live");
     expect(draft.getAttribute("href")).toBe("/teacher/quizzes/q-draft");
@@ -228,18 +243,45 @@ describe("teacher Quiz editor", () => {
 });
 
 describe("teacher Quiz delete", () => {
-  it("deletes the quiz and its Record for good, only after a confirm", async () => {
+  const listBody = [
+    {
+      ...base,
+      id: "q-live",
+      title: "Week 9",
+      status: "published",
+      taking_open: true,
+      attempt_count: 2,
+    },
+    {
+      ...base,
+      id: "q-draft",
+      title: "Week 10",
+      status: "draft",
+      attempt_count: 0,
+    },
+  ];
+
+  function deleteButton(title: string): HTMLElement {
+    const row = screen.getByRole("link", { name: new RegExp(title) });
+    const item = row.closest("li");
+    if (!item) throw new Error(`no row for ${title}`);
+    const button = within(item).getByRole("button", { name: "Delete quiz" });
+    expect(button.closest("a")).toBeNull();
+    return button;
+  }
+
+  it("is on each list row and absent from the quiz page", async () => {
+    state.routes.push({ match: /\/quizzes$/, body: listBody });
+    const list = render(<QuizzesList />);
+    expect(await screen.findAllByTestId("quiz-delete")).toHaveLength(2);
+    list.unmount();
+
     state.routes.push(
       { match: /record-attempts/, body: [] },
       {
         match: /\/quizzes\/q-live$/,
         body: {
-          ...base,
-          id: "q-live",
-          title: "Week 9",
-          status: "published",
-          taking_open: true,
-          attempt_count: 2,
+          ...listBody[0],
           settings: {},
           items: [],
         },
@@ -247,10 +289,25 @@ describe("teacher Quiz delete", () => {
     );
     render(<QuizEditor quizId="q-live" />);
     const tabs = await screen.findByRole("tablist", { name: "Quiz" });
-    // Delete sits at the foot of the Paper, not on Submissions.
-    expect(screen.queryByTestId("quiz-delete")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete quiz" })).toBeNull();
     fireEvent.click(within(tabs).getByRole("tab", { name: "Paper" }));
-    const remove = screen.getByRole("button", { name: "Delete quiz" });
+    expect(screen.queryByRole("button", { name: "Delete quiz" })).toBeNull();
+    expect(screen.queryByTestId("quiz-delete")).toBeNull();
+  });
+
+  it("deletes one row only after confirm, and leaves it when cancelled or refused", async () => {
+    state.routes.push(
+      { match: /\/quizzes$/, body: listBody },
+      {
+        match: /\/quizzes\/q-live$/,
+        method: "DELETE",
+        status: 200,
+        body: {},
+      },
+    );
+    render(<QuizzesList />);
+    await screen.findByText("Week 9");
+    const remove = deleteButton("Week 9");
     const fetchMock = vi.mocked(globalThis.fetch);
     const deletes = () =>
       fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE");
@@ -258,15 +315,69 @@ describe("teacher Quiz delete", () => {
     fireEvent.click(remove);
     expect(confirm.mock.calls[0][0]).toContain("Week 9");
     expect(deletes()).toHaveLength(0);
+    expect(screen.getByText("Week 9")).toBeTruthy();
+    expect(state.push).not.toHaveBeenCalled();
+
     confirm.mockReturnValueOnce(true);
     fireEvent.click(remove);
     await waitFor(() => expect(deletes()).toHaveLength(1));
     expect(String(deletes()[0][0])).toMatch(
       /\/courses\/course-1\/quizzes\/q-live$/,
     );
-    await waitFor(() =>
-      expect(state.push).toHaveBeenCalledWith("/teacher/quizzes"),
+    await waitFor(() => expect(screen.queryByText("Week 9")).toBeNull());
+    expect(screen.getByText("Week 10")).toBeTruthy();
+    expect(state.push).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+
+  it("keeps the row when the delete is refused, and ignores a second click", async () => {
+    state.routes.push({ match: /\/quizzes$/, body: listBody });
+    let started = 0;
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        if (method === "DELETE") {
+          started += 1;
+          await gate;
+          return new Response(
+            JSON.stringify({ message: "Could not delete." }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+        const route = state.routes.find((r) => r.match.test(url));
+        return new Response(JSON.stringify(route ? route.body : {}), {
+          status: route ? 200 : 404,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
     );
+    render(<QuizzesList />);
+    await screen.findByText("Week 9");
+    const remove = deleteButton("Week 9");
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(remove);
+    fireEvent.click(remove);
+    expect(started).toBe(1);
+    release?.();
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "Something went wrong on the server. Please try again.",
+        ),
+      ).toBeTruthy(),
+    );
+    expect(screen.getByText("Week 9")).toBeTruthy();
+    expect(screen.getByText("Week 10")).toBeTruthy();
+    expect(state.push).not.toHaveBeenCalled();
     confirm.mockRestore();
   });
 });

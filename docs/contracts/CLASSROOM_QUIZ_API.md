@@ -43,6 +43,7 @@ All paths are under `/api/v1`. Every mutation needs a signed-in session and an
 | POST   | `/courses/{course_id}/quizzes`                                        | `createCourseQuiz`         | course teacher                    |
 | GET    | `/courses/{course_id}/quizzes/{quiz_id}`                              | `getCourseQuiz`            | course member                     |
 | PATCH  | `/courses/{course_id}/quizzes/{quiz_id}`                              | `patchCourseQuiz`          | course teacher, draft only        |
+| DELETE | `/courses/{course_id}/quizzes/{quiz_id}`                              | `deleteCourseQuiz`         | course teacher                    |
 | POST   | `/courses/{course_id}/quizzes/{quiz_id}/publish`                      | `publishCourseQuiz`        | course teacher                    |
 | POST   | `/courses/{course_id}/quizzes/{quiz_id}/unpublish`                    | `unpublishCourseQuiz`      | course teacher                    |
 | POST   | `/courses/{course_id}/quizzes/{quiz_id}/start-taking`                 | `startCourseQuizTaking`    | course teacher                    |
@@ -55,7 +56,8 @@ All paths are under `/api/v1`. Every mutation needs a signed-in session and an
 | GET    | `/courses/{course_id}/my-record-attempts`                             | `listMyRecordAttempts`     | course member (own rows)          |
 | GET    | `/courses/{course_id}/record-attempts`                                | `listCourseRecordAttempts` | course teacher                    |
 
-There is no delete-quiz route (`DELETE …/quizzes/{quiz_id}` returns 405).
+`DELETE …/quizzes/{quiz_id}` removes that quiz. It is a different route from
+hiding one attempt.
 `/attempts/export` is declared before `/attempts/{attempt_id}` so "export" is
 never parsed as an attempt id.
 
@@ -63,7 +65,7 @@ never parsed as an attempt id.
 
 - Not an active member of the course: **404** on every operation.
 - Teacher-only operations reached by a student (create, patch, publish,
-  unpublish, start/pause, export, hide, grade, `record-attempts`): **404**
+  unpublish, delete, start/pause, export, hide, grade, `record-attempts`): **404**
   (`workspace.access.course_member(teacher=True)` raises `not_found`). Tests
   accept 403 or 404; the observed status is 404.
 - A course teacher submitting an attempt: **403**.
@@ -234,8 +236,9 @@ operation `deleteCourseQuiz`) deletes the quiz for good in any state, with
 every attempt taken on it (answers, grades, AI scores) in the same
 transaction. It leaves the teacher list, both Records, counts and the
 export; a later submit or a second delete is **404**. There is no undo. The
-quiz page shows "Delete quiz" at the foot of its Paper tab, after a confirm
-that names the quiz.
+teacher list shows "Delete quiz" on each quiz row, after a confirm that
+names the quiz. The quiz page does not. Cancelling the confirm leaves the
+row. A failed delete leaves the row and shows the error.
 
 ## Hiding an attempt
 
@@ -269,17 +272,17 @@ A non-integer `taking_epoch` is **400**.
 
 ## Teacher and student controls
 
-| Page                                      | Control (English copy)                                                         | Calls / rule                                                                             |
-| ----------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| List `/teacher/quizzes`                   | New; one row per quiz: LIVE / Paused / Draft chip, `{count} attempts`; no keys | `QuizSummaryDTO`; the row opens `/teacher/quizzes/{id}`                                  |
-| Quiz page `/teacher/quizzes/new`, `/{id}` | Tabs Paper \| Submissions (`?tab=paper\|submissions`)                          | Submissions is locked until the quiz is published or has attempts                        |
-| Paper tab (draft)                         | title typed in the banner, Done                                                | create or patch, then publish; in-flight lock (`beginDoneLock`); then back to the list   |
-| Paper tab (published)                     | read-only paper, lock notice with Unpublish                                    | `unpublish`; until then Done and the edit controls are hidden (`isPublishedLocked`)      |
-| Quiz page banner (published)              | Start evaluation / Pause evaluation, Download                                  | `start-taking` / `pause-taking`; `attempts/export` (Download also when a draft has rows) |
-| Submissions tab                           | All rounds / Round N / Needs grading · N filters; rows by student              | `record-attempts?quiz_id=` (also filtered client-side); a published quiz opens here      |
-| Submissions row                           | opens the attempt: Key column, points/feedback inputs, Save grades, Hide       | attempt detail, `grades`, hide (after a confirm)                                         |
-| Student `/student/quiz`                   | one list: Start rows, own results (Round N, Graded / Not graded yet), Not open | Start only when `taking_open === true` and no result for the open round                  |
-| Student result row                        | opens own marked paper (no Key)                                                | `my-record-attempts` quiz rows, attempt detail                                           |
+| Page                                      | Control (English copy)                                                             | Calls / rule                                                                                                                           |
+| ----------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| List `/teacher/quizzes`                   | New; one row per quiz: LIVE / Paused / Draft chip, `{count} attempts`; Delete quiz | `QuizSummaryDTO`; the row opens `/teacher/quizzes/{id}`; Delete quiz confirms, then `DELETE …/quizzes/{id}`, and does not open the row |
+| Quiz page `/teacher/quizzes/new`, `/{id}` | Tabs Paper \| Submissions (`?tab=paper\|submissions`)                              | Submissions is locked until the quiz is published or has attempts                                                                      |
+| Paper tab (draft)                         | title typed in the banner, Done                                                    | create or patch, then publish; in-flight lock (`beginDoneLock`); then back to the list                                                 |
+| Paper tab (published)                     | read-only paper, lock notice with Unpublish                                        | `unpublish`; until then Done and the edit controls are hidden (`isPublishedLocked`)                                                    |
+| Quiz page banner (published)              | Start evaluation / Pause evaluation, Download                                      | `start-taking` / `pause-taking`; `attempts/export` (Download also when a draft has rows)                                               |
+| Submissions tab                           | All rounds / Round N / Needs grading · N filters; rows by student                  | `record-attempts?quiz_id=` (also filtered client-side); a published quiz opens here                                                    |
+| Submissions row                           | opens the attempt: Key column, points/feedback inputs, Save grades, Hide           | attempt detail, `grades`, hide (after a confirm)                                                                                       |
+| Student `/student/quiz`                   | one list: Start rows, own results (Round N, Graded / Not graded yet), Not open     | Start only when `taking_open === true` and no result for the open round                                                                |
+| Student result row                        | opens own marked paper (no Key)                                                    | `my-record-attempts` quiz rows, attempt detail                                                                                         |
 
 Empty states appear only when the request succeeded with no rows. Student
 pages call through `PlatformApi`; teacher pages and the attempt detail call
@@ -341,7 +344,7 @@ removed.
    enforce `required` or the `settings` flags.
 4. The export's `quiz.json` is the current paper, not each attempt's frozen
    snapshot (the attempt detail does use the snapshot).
-5. No delete-quiz and no unhide route.
+5. No unhide route.
 
 Closed on 2026-11-08: the three unclassified route-surface operations, the
 teacher error copy (raw JSON), the missing attempt detail/hide/grading, the
@@ -404,7 +407,8 @@ This is not a production acceptance; nothing was deployed.
   Record moved from Brainform to Quiz Records.
 - 2026-11-08 (#383/#384 with review fixes): opt-in AI grading of text items;
   no row lock or request thread held during the model call.
-- 2026-11-08: real quiz delete, which takes its attempts with it.
+- 2026-11-08: real quiz delete, which takes its attempts with it. The
+  Delete quiz key then moved from the Paper tab onto each list row.
 - 2026-11-08 (second round): owner picked layout A, one page per quiz with
   Paper | Submissions and a single student list; the Chat tests board was
   removed from the UI (endpoints and data kept). Browser E2E on the new pages:

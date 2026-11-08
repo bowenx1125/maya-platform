@@ -15,14 +15,15 @@ import {
   QUIZ_ROW,
   QuizChip,
   QuizEmpty,
+  QuizKey,
   QuizStatus,
   quizState,
 } from "./quiz-chrome";
 
 /**
  * Teacher Quizzes (option A, 2026-11-08): one row per quiz with its state
- * chip and counts. Rows carry no keys; a row opens the quiz page, where
- * Start/Pause, Unpublish, Download and grading live.
+ * chip and counts. The row opens the quiz page. Delete quiz sits on the
+ * row, beside that link, and uses the same confirm as the old Paper key.
  */
 export function QuizzesList() {
   const t = useT();
@@ -35,7 +36,12 @@ export function QuizzesList() {
   const [quizzes, setQuizzes] = useState<QuizSummaryDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
+  const [deleteError, setDeleteError] = useState<unknown>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const loadSequence = useRef(0);
+  // Set before the request, so a second click cannot send another delete
+  // while the first confirm has already been accepted.
+  const deletingRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     const sequence = ++loadSequence.current;
@@ -64,6 +70,31 @@ export function QuizzesList() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  const onDelete = async (quiz: QuizSummaryDTO) => {
+    if (!courseId || deletingRef.current) return;
+    if (
+      !window.confirm(
+        t("quizDeleteConfirm", {
+          title: quiz.title.trim() || t("quizEditorNew"),
+        }),
+      )
+    ) {
+      return;
+    }
+    deletingRef.current = quiz.id;
+    setDeletingId(quiz.id);
+    setDeleteError(null);
+    try {
+      await quizApi.deleteQuiz(courseId, quiz.id);
+      setQuizzes((prev) => prev.filter((row) => row.id !== quiz.id));
+    } catch (cause) {
+      setDeleteError(cause);
+    } finally {
+      deletingRef.current = null;
+      setDeletingId(null);
+    }
+  };
+
   if (!courseId) {
     return <QuizEmpty title={t("quizNoCourse")} kind="course" />;
   }
@@ -80,6 +111,7 @@ export function QuizzesList() {
       </PageBanner>
       {loading ? <LoadingCard /> : null}
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
+      {deleteError ? <ErrorNotice error={deleteError} /> : null}
       {!loading && !error ? (
         quizzes.length === 0 ? (
           <QuizEmpty title={t("noQuizzes")} kind="quiz" />
@@ -94,9 +126,9 @@ export function QuizzesList() {
                     ? t("quizPaused")
                     : t("quizDraft");
               return (
-                <li key={quiz.id}>
+                <li key={quiz.id} className={`${QUIZ_ROW} ${LIST_CARD_LIFT}`}>
                   <Link
-                    className={`${QUIZ_ROW} text-ink no-underline ${LIST_CARD_LIFT}`}
+                    className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3.5 gap-y-2.5 text-ink no-underline"
                     data-testid="quiz-row"
                     href={`/teacher/quizzes/${quiz.id}`}
                   >
@@ -113,6 +145,19 @@ export function QuizzesList() {
                       <WorkspaceIcon name="chevronRight" size={20} stroke={3} />
                     </span>
                   </Link>
+                  <QuizKey
+                    icon="trash"
+                    busy={deletingId === quiz.id}
+                    disabled={deletingId !== null}
+                    testId="quiz-delete"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void onDelete(quiz);
+                    }}
+                  >
+                    {t("quizDelete")}
+                  </QuizKey>
                 </li>
               );
             })}
