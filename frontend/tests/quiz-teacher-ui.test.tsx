@@ -3,6 +3,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +14,7 @@ import { PlatformApi } from "../lib/api/platform";
 // list rows carry no keys; a quiz page has Paper | Submissions. B's LIVE lamp
 // and dashed "Add question" slot stay.
 const state = vi.hoisted(() => ({
+  push: vi.fn(),
   api: {} as unknown,
   routes: [] as Array<{ match: RegExp; body: unknown }>,
 }));
@@ -29,7 +31,7 @@ vi.mock("../components/session-provider", () => ({
   }),
 }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: state.push }),
   usePathname: () => "/teacher/quizzes",
   useSearchParams: () => new URLSearchParams(),
 }));
@@ -222,5 +224,49 @@ describe("teacher Quiz editor", () => {
     expect(screen.queryByLabelText("Title")).toBeNull();
     expect(screen.getByText("Which layer handles auth?")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Unpublish" })).toBeTruthy();
+  });
+});
+
+describe("teacher Quiz delete", () => {
+  it("deletes the quiz and its Record for good, only after a confirm", async () => {
+    state.routes.push(
+      { match: /record-attempts/, body: [] },
+      {
+        match: /\/quizzes\/q-live$/,
+        body: {
+          ...base,
+          id: "q-live",
+          title: "Week 9",
+          status: "published",
+          taking_open: true,
+          attempt_count: 2,
+          settings: {},
+          items: [],
+        },
+      },
+    );
+    render(<QuizEditor quizId="q-live" />);
+    const tabs = await screen.findByRole("tablist", { name: "Quiz" });
+    // Delete sits at the foot of the Paper, not on Submissions.
+    expect(screen.queryByTestId("quiz-delete")).toBeNull();
+    fireEvent.click(within(tabs).getByRole("tab", { name: "Paper" }));
+    const remove = screen.getByRole("button", { name: "Delete quiz" });
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const deletes = () =>
+      fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE");
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
+    fireEvent.click(remove);
+    expect(confirm.mock.calls[0][0]).toContain("Week 9");
+    expect(deletes()).toHaveLength(0);
+    confirm.mockReturnValueOnce(true);
+    fireEvent.click(remove);
+    await waitFor(() => expect(deletes()).toHaveLength(1));
+    expect(String(deletes()[0][0])).toMatch(
+      /\/courses\/course-1\/quizzes\/q-live$/,
+    );
+    await waitFor(() =>
+      expect(state.push).toHaveBeenCalledWith("/teacher/quizzes"),
+    );
+    confirm.mockRestore();
   });
 });

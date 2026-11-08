@@ -34,7 +34,8 @@ export type WorkspaceIconName =
   | "eyeOff"
   | "minus"
   | "close"
-  | "download";
+  | "download"
+  | "trash";
 
 const paths: Record<WorkspaceIconName, string> = {
   home: "M3 10 12 3l9 7M5 9v11h5v-6h4v6h5V9",
@@ -80,6 +81,7 @@ const paths: Record<WorkspaceIconName, string> = {
   minus: "M5 12h14",
   close: "M6 6l12 12M18 6 6 18",
   download: "M12 4v11M7 10l5 5 5-5M5 20h14",
+  trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6",
 };
 
 export function WorkspaceIcon({

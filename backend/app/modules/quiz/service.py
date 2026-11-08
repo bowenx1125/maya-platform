@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import conflict, forbidden, not_found, unprocessable
@@ -311,6 +311,28 @@ def unpublish_quiz(db: Session, actor: AuthContext, course_id: str, quiz_id: str
     db.commit()
     db.refresh(quiz)
     return _teacher_dto(db, quiz)
+
+
+def delete_quiz(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> None:
+    """Delete a quiz for good, with every attempt (Record) taken on it.
+
+    Owner decision 2026-11-08: a real delete in any state, draft or published,
+    open or paused. Attempts go first in the same transaction (the foreign
+    key also cascades), so no submission, grade or AI score outlives its
+    quiz. An AI grading job still queued finds no attempt and stops.
+    """
+
+    _require_teacher(db, actor, course_id)
+    quiz = db.scalar(
+        select(ClassroomQuiz)
+        .where(ClassroomQuiz.id == quiz_id, ClassroomQuiz.course_id == course_id)
+        .with_for_update()
+    )
+    if quiz is None:
+        raise not_found()
+    db.execute(delete(ClassroomQuizAttempt).where(ClassroomQuizAttempt.quiz_id == quiz_id))
+    db.delete(quiz)
+    db.commit()
 
 
 def start_taking(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:

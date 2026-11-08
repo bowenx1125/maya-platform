@@ -124,6 +124,28 @@ def publish_course_quiz(
     return service.publish_quiz(db, actor, str(course_id), str(quiz_id))
 
 
+@router.delete(
+    "/courses/{course_id}/quizzes/{quiz_id}",
+    status_code=204,
+    operation_id="deleteCourseQuiz",
+    responses={
+        204: {"description": "Quiz and all of its attempts deleted."},
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+    },
+)
+def delete_course_quiz(
+    course_id: UUID,
+    quiz_id: UUID,
+    _csrf: CsrfHeader,
+    actor: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> Response:
+    service.delete_quiz(db, actor, str(course_id), str(quiz_id))
+    return Response(status_code=204)
+
+
 @router.post(
     "/courses/{course_id}/quizzes/{quiz_id}/unpublish",
     response_model=TeacherQuizDTO,

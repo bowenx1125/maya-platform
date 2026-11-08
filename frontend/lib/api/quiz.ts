@@ -257,6 +257,14 @@ export class QuizApi {
     );
   }
 
+  /** Teacher only: deletes the quiz for good, with every attempt on it. */
+  deleteQuiz(courseId: string, quizId: string): Promise<void> {
+    return this.request<void>(
+      "DELETE",
+      `/api/v1/courses/${courseId}/quizzes/${quizId}`,
+    );
+  }
+
   unpublishQuiz(courseId: string, quizId: string): Promise<TeacherQuizDTO> {
     return this.request<TeacherQuizDTO>(
       "POST",

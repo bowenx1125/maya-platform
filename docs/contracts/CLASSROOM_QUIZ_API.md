@@ -227,6 +227,16 @@ within 0..points, so the editor sends `rules` = rubric, `score_min` = 0 and
   paper shows "AI n / points" or "AI score pending" under the editable
   points of AI items only. Rows keep Graded / Needs grading.
 
+## Deleting a quiz
+
+`DELETE /courses/{course_id}/quizzes/{quiz_id}` (**204**, course teacher,
+operation `deleteCourseQuiz`) deletes the quiz for good in any state, with
+every attempt taken on it (answers, grades, AI scores) in the same
+transaction. It leaves the teacher list, both Records, counts and the
+export; a later submit or a second delete is **404**. There is no undo. The
+quiz page shows "Delete quiz" at the foot of its Paper tab, after a confirm
+that names the quiz.
+
 ## Hiding an attempt
 
 `DELETE …/attempts/{attempt_id}` (**204**) sets `teacher_hidden_at`. The
@@ -394,6 +404,7 @@ This is not a production acceptance; nothing was deployed.
   Record moved from Brainform to Quiz Records.
 - 2026-11-08 (#383/#384 with review fixes): opt-in AI grading of text items;
   no row lock or request thread held during the model call.
+- 2026-11-08: real quiz delete, which takes its attempts with it.
 - 2026-11-08 (second round): owner picked layout A, one page per quiz with
   Paper | Submissions and a single student list; the Chat tests board was
   removed from the UI (endpoints and data kept). Browser E2E on the new pages:
