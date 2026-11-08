@@ -9,7 +9,6 @@ import { useT } from "@/lib/i18n";
 import { ErrorNotice, LoadingCard } from "../ui";
 import { QuizAttemptDetailView } from "../quiz/quiz-attempt-detail";
 import { QUIZ_ROW_SHELL, QuizEmpty } from "./quiz-chrome";
-import { isFiniteScore, quizGradingStatusLabel } from "./quiz-validation";
 
 type Filter = "all" | "to-grade" | number;
 
@@ -133,9 +132,6 @@ export function QuizSubmissions({
         {shown.map((row) => {
           const expanded = openId === row.attempt_id;
           const graded = row.grading_status === "complete";
-          const statusLabel =
-            quizGradingStatusLabel(row.grading_status) ||
-            (graded ? t("quizGraded") : t("quizNeedsGrading"));
           const when = row.submitted_at
             ? new Date(row.submitted_at).toLocaleString("en", {
                 month: "short",
@@ -175,16 +171,8 @@ export function QuizSubmissions({
                   data-testid="quiz-record-grading-status"
                   className={`shrink-0 rounded-full border-2 border-border px-3 py-1 text-xs font-extrabold ${graded ? "bg-[#ECFCCB]" : "bg-warn-bg"}`}
                 >
-                  {statusLabel}
+                  {graded ? t("quizGraded") : t("quizNeedsGrading")}
                 </span>
-                {isFiniteScore(row.score_ai) ? (
-                  <span
-                    data-testid="quiz-record-score-ai"
-                    className="shrink-0 font-body text-xs font-extrabold"
-                  >
-                    AI {row.score_ai}
-                  </span>
-                ) : null}
                 <Score row={row} />
               </button>
               {expanded && row.quiz_id ? (

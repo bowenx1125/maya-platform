@@ -14,7 +14,7 @@ from app.modules.auth.service import AuthContext
 
 from . import export as quiz_export
 from . import service
-from .ai_grade import run_quiz_ai_grade
+from .ai_grade import enqueue_quiz_ai_grade
 from .schemas import (
     CreateQuizRequest,
     GradeQuizAttemptRequest,
@@ -212,7 +212,7 @@ def submit_course_quiz_attempt(
     dto = service.submit_attempt(db, actor, str(course_id), str(quiz_id), body)
     if service.attempt_needs_ai_grade(db, str(dto.id)):
         background.add_task(
-            run_quiz_ai_grade,
+            enqueue_quiz_ai_grade,
             str(dto.id),
             session_factory=request.app.state.database.session_factory,
         )

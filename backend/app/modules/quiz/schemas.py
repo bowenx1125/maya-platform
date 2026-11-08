@@ -240,6 +240,9 @@ class QuizAttemptItemStudent(BaseModel):
 
 class QuizAttemptItemTeacher(QuizAttemptItemStudent):
     answer: QuizAnswerKey | None = None
+    # True when the teacher turned AI grading on for this text item, so the
+    # page can say "AI grading" only where an AI score is actually expected.
+    ai_grading: bool = False
 
 
 class StudentQuizAttemptDetailDTO(BaseModel):

@@ -275,7 +275,7 @@ describe("teacher Quiz Submissions tab", () => {
     renderTab();
     const row = await screen.findByRole("button", { name: /^Ada/ });
     expect(row.textContent).toContain("Round 2");
-    expect(row.textContent).toContain("Mixed");
+    expect(row.textContent).toContain("Needs grading");
     expect(row.textContent).toContain("3 / 6");
     expect(screen.getByRole("button", { name: /^Ben/ })).toBeTruthy();
     expect(screen.queryByText("Keynotes")).toBeNull();
@@ -343,63 +343,59 @@ describe("teacher Quiz Submissions tab", () => {
     );
   });
 
-  it("shows pending instead of a fake AI score until one arrives", async () => {
+  it("marks only AI-graded items, pending until a score arrives", async () => {
     routes[1] = {
       method: "GET",
       match: /attempts\/att-1$/,
       reply: () =>
         json({
           ...detail("teacher"),
-          grading_status: "pending",
           items: detail("teacher").items.map((item) =>
             item.id === "q3"
-              ? { ...item, graded: false, ai_score: null }
+              ? { ...item, graded: false, ai_score: null, ai_grading: true }
               : item,
           ),
         }),
     };
     renderTab();
     const row = await screen.findByRole("button", { name: /^Ada/ });
-    expect(
-      within(row).getByTestId("quiz-record-grading-status").textContent,
-    ).toBe("Mixed");
+    // One status on the row; no AI totals or extra status chips.
+    expect(row.textContent).toContain("Needs grading");
+    expect(row.textContent).not.toMatch(/AI|Mixed|Pending/);
     fireEvent.click(row);
     const sheet = await screen.findByTestId("quiz-attempt-detail");
-    expect(within(sheet).getByTestId("quiz-grading-status").textContent).toBe(
-      "Pending",
+    expect(within(sheet).getByTestId("quiz-item-ai-q3").textContent).toBe(
+      "AI score pending",
     );
-    expect(
-      within(sheet).getByTestId("quiz-item-ai-pending-q3").textContent,
-    ).toBe("Pending");
-    expect(within(sheet).queryByText(/AI score:/)).toBeNull();
+    expect(within(sheet).queryByTestId("quiz-item-ai-q1")).toBeNull();
+    expect(within(sheet).queryByText(/Mixed|Complete/)).toBeNull();
   });
 
-  it("shows the AI score after grading completes", async () => {
+  it("shows the AI score beside the editable points once it arrives", async () => {
     routes[1] = {
       method: "GET",
       match: /attempts\/att-1$/,
       reply: () =>
         json({
           ...detail("teacher", true),
-          grading_status: "complete",
           score_ai: 2,
           items: detail("teacher", true).items.map((item) =>
-            item.id === "q3" ? { ...item, ai_score: 2 } : item,
+            item.id === "q3"
+              ? { ...item, ai_score: 2, ai_grading: true }
+              : item,
           ),
         }),
     };
     renderTab();
     fireEvent.click(await screen.findByRole("button", { name: /^Ada/ }));
     const sheet = await screen.findByTestId("quiz-attempt-detail");
-    expect(within(sheet).getByTestId("quiz-grading-status").textContent).toBe(
-      "Complete",
+    expect(within(sheet).getByTestId("quiz-item-ai-q3").textContent).toBe(
+      "AI 2 / 3",
     );
-    expect(within(sheet).getByTestId("quiz-score-ai").textContent).toBe(
-      "AI score: 2",
-    );
-    expect(within(sheet).getByTestId("quiz-item-ai-score-q3").textContent).toBe(
-      "AI score: 2",
-    );
+    // The teacher can still overrule it.
+    expect(
+      within(sheet).getByRole("spinbutton", { name: "Points for question 2" }),
+    ).toBeTruthy();
   });
 });
 

@@ -60,7 +60,8 @@ def _validate_item_grading(item: QuizItemTeacher) -> None:
     ):
         raise unprocessable(
             "quiz_grading_invalid",
-            f"Item {item.id} AI grading requires finite score_min, score_max, and rules of at least 20 characters.",
+            f"Item {item.id} AI grading requires finite score_min, score_max, "
+            "and rules of at least 20 characters.",
             {"item_id": item.id},
         )
     lo = float(score_min)

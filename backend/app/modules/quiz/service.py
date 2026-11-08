@@ -715,6 +715,7 @@ def _attempt_detail(
                 entry["graded"] = False
         if teacher:
             entry["answer"] = item.answer
+            entry["ai_grading"] = item.type in TEXT_TYPES and _item_grading_mode(item) == "ai"
         rows.append(item_cls(**entry))
     known = {item.id for item in items}
     for item_id, answer in answers.items():

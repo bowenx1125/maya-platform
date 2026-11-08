@@ -14,6 +14,7 @@ from app.core.db import Database
 from app.modules.quiz.ai_grade import run_quiz_ai_grade
 from app.modules.quiz.models import ClassroomQuizAttempt
 from app.seed import COURSE_ID
+from sqlalchemy import select
 
 from tests.test_classroom_quiz_api import (  # noqa: F401
     Actor,
@@ -453,3 +454,106 @@ def test_default_llm_callable_parses_score_from_chat_completion(
     assert captured["url"] == expected_url
     assert captured["headers"]["Authorization"] == "Bearer chat-key"
     assert captured["json"]["model"] == "qwen-plus"
+
+
+def _submit_ai(teacher: Actor, student: Actor) -> tuple[str, str]:
+    quiz_id = _create_publish_open(teacher, [_ai_item()])
+    submitted = student.post(
+        f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts",
+        {"answers": [{"item_id": "q_ai", "text": "Decouple producers"}]},
+    )
+    assert submitted.status_code == 201, submitted.text
+    return quiz_id, submitted.json()["id"]
+
+
+def test_worker_holds_no_row_lock_while_the_llm_answers(
+    teacher: Actor, student: Actor, database: Database
+) -> None:
+    """A teacher can still save while the LLM is slow; nothing waits on it."""
+
+    _quiz_id, attempt_id = _submit_ai(teacher, student)
+
+    def llm_checks_lock(**_kwargs: Any) -> float:
+        with database.session() as db:
+            # NOWAIT raises at once if the worker still held the row.
+            db.execute(
+                select(ClassroomQuizAttempt)
+                .where(ClassroomQuizAttempt.id == attempt_id)
+                .with_for_update(nowait=True)
+            ).scalar_one()
+            db.rollback()
+        return 3.0
+
+    run_quiz_ai_grade(
+        attempt_id, llm_callable=llm_checks_lock, session_factory=database.session_factory
+    )
+    with database.session() as db:
+        attempt = db.get(ClassroomQuizAttempt, attempt_id)
+        assert attempt is not None
+        assert attempt.grading_status == "complete"
+
+
+def test_teacher_grade_made_during_ai_call_is_kept(
+    teacher: Actor, student: Actor, database: Database
+) -> None:
+    quiz_id, attempt_id = _submit_ai(teacher, student)
+
+    def llm_while_teacher_grades(**_kwargs: Any) -> float:
+        saved = teacher.client.put(
+            f"/api/v1/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/{attempt_id}/grades",
+            json={"grades": [{"item_id": "q_ai", "points_awarded": 1, "feedback": "Thin."}]},
+            headers=teacher.headers,
+        )
+        assert saved.status_code == 200, saved.text
+        return 5.0
+
+    run_quiz_ai_grade(
+        attempt_id,
+        llm_callable=llm_while_teacher_grades,
+        session_factory=database.session_factory,
+    )
+    detail = teacher.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/{attempt_id}")
+    assert detail.status_code == 200, detail.text
+    item = detail.json()["items"][0]
+    # The teacher's grade wins; the AI score is shown beside it, not in place.
+    assert item["points_awarded"] == 1
+    assert item["feedback"] == "Thin."
+    assert detail.json()["points_awarded"] == 1
+
+
+def test_enqueue_skips_without_an_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.modules.quiz import ai_grade
+
+    submitted: list[Any] = []
+    monkeypatch.setattr(ai_grade, "llm_configured", lambda: False)
+    monkeypatch.setattr(ai_grade._POOL, "submit", lambda *args: submitted.append(args))
+    ai_grade.enqueue_quiz_ai_grade("a1", session_factory=lambda: None)  # type: ignore[arg-type, return-value]
+    assert submitted == []
+    monkeypatch.setattr(ai_grade, "llm_configured", lambda: True)
+    ai_grade.enqueue_quiz_ai_grade("a1", session_factory=lambda: None)  # type: ignore[arg-type, return-value]
+    assert len(submitted) == 1
+
+
+def test_teacher_detail_marks_ai_items_only(teacher: Actor, student: Actor) -> None:
+    quiz_id = _create_publish_open(teacher, [_ai_item(), _manual_text_item()])
+    submitted = student.post(
+        f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts",
+        {
+            "answers": [
+                {"item_id": "q_ai", "text": "Decouple producers"},
+                {"item_id": "q_manual", "text": "Retry safely"},
+            ]
+        },
+    )
+    attempt_id = submitted.json()["id"]
+    teacher_items = teacher.get(
+        f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/{attempt_id}"
+    ).json()["items"]
+    assert {row["id"]: row["ai_grading"] for row in teacher_items} == {
+        "q_ai": True,
+        "q_manual": False,
+    }
+    student_items = student.get(
+        f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/{attempt_id}"
+    ).json()["items"]
+    assert all("ai_grading" not in row for row in student_items)

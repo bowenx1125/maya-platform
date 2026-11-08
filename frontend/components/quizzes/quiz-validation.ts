@@ -16,39 +16,42 @@ export function isFiniteScore(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-export function quizGradingStatusLabel(
-  status: string | null | undefined,
-): string {
-  if (status === "pending") return "Pending";
-  if (status === "mixed") return "Mixed";
-  if (status === "complete") return "Complete";
-  return "";
-}
-
+/**
+ * AI grading scores against the item's rubric within 0..points (the editor
+ * fills the contract's rules and range from them), so the only thing a
+ * teacher can get wrong is a rubric too short to grade by.
+ */
 export function quizItemGradingProblems(item: QuizItemTeacher): string[] {
   if (!isTextItem(item) || item.grading?.mode !== "ai") {
     return [];
   }
-  const problems: string[] = [];
-  const rules = (item.grading.rules ?? "").trim();
-  if (!rules) {
-    problems.push("AI grading requires rules.");
-  } else if (rules.length < AI_RULES_MIN_LENGTH) {
-    problems.push("AI grading rules must be at least 20 characters.");
+  const rubric = (item.answer?.rubric ?? item.grading.rules ?? "").trim();
+  if (rubric.length < AI_RULES_MIN_LENGTH) {
+    return [
+      `AI grading needs a grading rubric of at least ${AI_RULES_MIN_LENGTH} characters.`,
+    ];
   }
-  const min = item.grading.score_min;
-  const max = item.grading.score_max;
-  const points = item.points ?? 0;
-  const minOk = isFiniteScore(min);
-  const maxOk = isFiniteScore(max);
-  if (!minOk || !maxOk) {
-    problems.push("AI grading requires score min and score max.");
-  } else if (min > max) {
-    problems.push("Score min must be less than or equal to score max.");
-  } else if (min < 0 || max > points) {
-    problems.push("Score min and score max must be between 0 and points.");
+  return [];
+}
+
+/**
+ * AI grading reads the rubric the teacher already wrote and scores within
+ * 0..points, so the editor asks for one switch, not a second rules box and
+ * a range (the backend contract still receives all three).
+ */
+export function withAiGrading(item: QuizItemTeacher): QuizItemTeacher {
+  if (isChoiceItem(item) || item.grading?.mode !== "ai") {
+    return isChoiceItem(item) ? { ...item, grading: undefined } : item;
   }
-  return problems;
+  return {
+    ...item,
+    grading: {
+      mode: "ai",
+      score_min: 0,
+      score_max: item.points ?? 1,
+      rules: (item.answer?.rubric ?? "").trim(),
+    },
+  };
 }
 
 function itemProblems(item: QuizItemTeacher): string[] {

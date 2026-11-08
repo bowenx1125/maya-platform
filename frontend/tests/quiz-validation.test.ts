@@ -4,8 +4,8 @@ import {
   isFiniteScore,
   isPublishedLocked,
   quizDraftProblems,
-  quizGradingStatusLabel,
   quizItemGradingProblems,
+  withAiGrading,
 } from "../components/quizzes/quiz-validation";
 import type { QuizItemTeacher } from "../lib/api/quiz";
 
@@ -112,126 +112,72 @@ describe("isPublishedLocked", () => {
 });
 
 describe("AI grading validation", () => {
-  const longRules = "Cite at least one source.";
+  const rubric = "Mentions decoupling producers from consumers.";
 
-  it("does not require range or rules when AI grading is off", () => {
+  it("needs nothing extra when AI grading is off", () => {
     expect(quizItemGradingProblems(validText)).toEqual([]);
-    expect(
-      quizItemGradingProblems({
+    const manual = { ...validText, grading: { mode: "manual" as const } };
+    expect(quizItemGradingProblems(manual)).toEqual([]);
+    expect(quizDraftProblems("Quiz", [validSingle, manual])).toEqual([]);
+    expect(canPublish("Quiz", [validSingle, manual])).toBe(true);
+  });
+
+  it("grades by the rubric: an empty or short rubric blocks Done", () => {
+    for (const text of ["", "  ", "Cite one source."]) {
+      const item = {
         ...validText,
-        grading: { mode: "manual" },
-      }),
-    ).toEqual([]);
-    expect(
-      quizDraftProblems("Quiz", [
-        validSingle,
-        { ...validText, grading: { mode: "manual" } },
-      ]),
-    ).toEqual([]);
-    expect(
-      canPublish("Quiz", [
-        validSingle,
-        { ...validText, grading: { mode: "manual" } },
-      ]),
-    ).toBe(true);
+        points: 5,
+        answer: { rubric: text },
+        grading: { mode: "ai" as const },
+      };
+      expect(quizItemGradingProblems(item).join(" ")).toMatch(/rubric.*20/);
+      expect(canPublish("Quiz", [validSingle, item])).toBe(false);
+    }
   });
 
-  it("blocks empty rules when AI grading is on", () => {
+  it("accepts AI grading with a real rubric and no range to fill in", () => {
     const item = {
       ...validText,
       points: 5,
-      grading: { mode: "ai" as const, score_min: 0, score_max: 5, rules: "  " },
+      answer: { rubric },
+      grading: { mode: "ai" as const },
     };
-    expect(quizItemGradingProblems(item).join(" ")).toMatch(/rules/i);
-    expect(canPublish("Quiz", [validSingle, item])).toBe(false);
+    expect(quizItemGradingProblems(item)).toEqual([]);
+    expect(canPublish("Quiz", [validSingle, item])).toBe(true);
   });
 
-  it("blocks rules shorter than 20 characters when AI grading is on", () => {
+  it("reads stored rules when an older quiz has no rubric", () => {
     const item = {
       ...validText,
       points: 5,
-      grading: {
-        mode: "ai" as const,
-        score_min: 0,
-        score_max: 5,
-        rules: "Cite one source.",
-      },
+      grading: { mode: "ai" as const, rules: rubric },
     };
-    expect(quizItemGradingProblems(item).join(" ")).toMatch(/20/);
-    expect(canPublish("Quiz", [validSingle, item])).toBe(false);
+    expect(quizItemGradingProblems(item)).toEqual([]);
   });
 
-  it("blocks missing or invalid score range when AI grading is on", () => {
-    const base = {
+  it("sends the backend its rules and 0..points range from the rubric", () => {
+    const item = {
       ...validText,
-      points: 5,
-      grading: {
-        mode: "ai" as const,
-        score_min: 0,
-        score_max: 5,
-        rules: longRules,
-      },
+      points: 4,
+      answer: { rubric: `  ${rubric}  ` },
+      grading: { mode: "ai" as const },
     };
-    expect(quizItemGradingProblems(base)).toEqual([]);
+    expect(withAiGrading(item).grading).toEqual({
+      mode: "ai",
+      score_min: 0,
+      score_max: 4,
+      rules: rubric,
+    });
+    expect(withAiGrading(validText)).toEqual(validText);
     expect(
-      quizItemGradingProblems({
-        ...base,
-        grading: { mode: "ai", rules: longRules },
-      }),
-    ).not.toEqual([]);
-    expect(
-      quizItemGradingProblems({
-        ...base,
-        grading: {
-          mode: "ai",
-          score_min: 4,
-          score_max: 1,
-          rules: longRules,
-        },
-      }).join(" "),
-    ).toMatch(/score min/i);
-    expect(
-      quizItemGradingProblems({
-        ...base,
-        grading: {
-          mode: "ai",
-          score_min: -1,
-          score_max: 5,
-          rules: longRules,
-        },
-      }).join(" "),
-    ).toMatch(/points/i);
-    expect(
-      quizItemGradingProblems({
-        ...base,
-        grading: {
-          mode: "ai",
-          score_min: 0,
-          score_max: 9,
-          rules: longRules,
-        },
-      }).join(" "),
-    ).toMatch(/points/i);
-    expect(
-      quizItemGradingProblems({
-        ...base,
-        grading: {
-          mode: "ai",
-          score_min: Number.NaN,
-          score_max: 5,
-          rules: longRules,
-        },
-      }),
-    ).not.toEqual([]);
+      withAiGrading({ ...validSingle, grading: { mode: "ai" } }).grading,
+    ).toBeUndefined();
   });
 
-  it("labels grading status without inventing a score", () => {
-    expect(quizGradingStatusLabel("pending")).toBe("Pending");
-    expect(quizGradingStatusLabel("mixed")).toBe("Mixed");
-    expect(quizGradingStatusLabel("complete")).toBe("Complete");
+  it("never invents a score", () => {
     expect(isFiniteScore(undefined)).toBe(false);
     expect(isFiniteScore(null)).toBe(false);
+    expect(isFiniteScore(Number.NaN)).toBe(false);
     expect(isFiniteScore(0)).toBe(true);
-    expect(isFiniteScore(4)).toBe(true);
   });
 });

@@ -93,6 +93,8 @@ export interface QuizAttemptItem {
   answer?: QuizAnswerKey | null;
   /** Present after the AI worker writes a score; omit/null while pending. */
   ai_score?: number | null;
+  /** Teacher view: the teacher turned AI grading on for this item. */
+  ai_grading?: boolean;
 }
 
 export interface QuizAttemptDetail {

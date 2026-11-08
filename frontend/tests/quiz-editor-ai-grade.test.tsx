@@ -23,24 +23,19 @@ afterEach(() => {
 });
 
 describe("quiz editor AI grading", () => {
-  it("shows score min, score max, and rules only when AI grading is on", () => {
+  it("is one switch beside Required on text questions; the rubric is what AI grades by", () => {
     render(<QuizEditor />);
+    fireEvent.click(screen.getByRole("button", { name: /Single choice/ }));
+    expect(screen.queryByRole("checkbox", { name: "AI grading" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Short text/ }));
-
-    expect(screen.getByRole("checkbox", { name: "AI grading" })).toBeTruthy();
+    const toggle = screen.getByRole("checkbox", { name: "AI grading" });
+    expect((toggle as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(toggle);
+    expect((toggle as HTMLInputElement).checked).toBe(true);
+    // No second rules box and no range to fill in.
     expect(screen.queryByRole("spinbutton", { name: "Score min" })).toBeNull();
     expect(screen.queryByRole("spinbutton", { name: "Score max" })).toBeNull();
     expect(screen.queryByRole("textbox", { name: "Rules" })).toBeNull();
-    expect(screen.getByText("Grading rubric")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("checkbox", { name: "AI grading" }));
-    expect(screen.getByRole("spinbutton", { name: "Score min" })).toBeTruthy();
-    expect(screen.getByRole("spinbutton", { name: "Score max" })).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: "Rules" })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("checkbox", { name: "AI grading" }));
-    expect(screen.queryByRole("spinbutton", { name: "Score min" })).toBeNull();
-    expect(screen.queryByRole("spinbutton", { name: "Score max" })).toBeNull();
-    expect(screen.queryByRole("textbox", { name: "Rules" })).toBeNull();
+    expect(screen.getAllByText("Grading rubric")).toHaveLength(1);
   });
 });

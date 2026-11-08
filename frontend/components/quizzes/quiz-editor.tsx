@@ -21,6 +21,7 @@ import {
   canPublish,
   isPublishedLocked,
   quizDraftProblems,
+  withAiGrading,
 } from "./quiz-validation";
 import { LoadingCard, ErrorNotice } from "../ui";
 import { ICON_MOTION } from "../ui/button";
@@ -148,7 +149,12 @@ export function QuizEditor({
             ...item,
             required: item.required ?? true,
             points: item.points ?? 1,
-            answer: item.answer ?? null,
+            answer:
+              item.grading?.mode === "ai" &&
+              !item.answer?.rubric &&
+              item.grading.rules
+                ? { ...item.answer, rubric: item.grading.rules }
+                : (item.answer ?? null),
           })),
         );
       })
@@ -204,7 +210,11 @@ export function QuizEditor({
 
   const save = useCallback(async (): Promise<string> => {
     if (!courseId) throw new Error("No teacher course.");
-    const payload = { title: title.trim(), items, settings: DEFAULT_SETTINGS };
+    const payload = {
+      title: title.trim(),
+      items: items.map(withAiGrading),
+      settings: DEFAULT_SETTINGS,
+    };
     if (quizId) {
       await quizApi.patchQuiz(courseId, quizId, payload);
       return quizId;
@@ -463,15 +473,9 @@ export function QuizEditor({
                     <b>Grading rubric</b> · {item.answer?.rubric ?? ""}
                   </p>
                   {item.grading?.mode === "ai" ? (
-                    <p className="m-0 rounded-arc border-2 border-dashed border-border bg-[#FAF5FF] px-3.5 py-3 font-body text-sm text-ink">
-                      <b>AI grading</b>
-                      {" · Score min "}
-                      {item.grading.score_min ?? ""}
-                      {" · Score max "}
-                      {item.grading.score_max ?? ""}
-                      {" · Rules "}
-                      {item.grading.rules ?? ""}
-                    </p>
+                    <span className="self-start rounded-full border-2 border-border bg-[#EDE9FE] px-3 py-1 font-body text-xs font-extrabold text-ink">
+                      AI grading
+                    </span>
                   ) : null}
                 </div>
               )}
@@ -526,6 +530,22 @@ export function QuizEditor({
                   />
                   Required
                 </label>
+                {isChoice(item) ? null : (
+                  <label className="flex items-center gap-2 font-body text-sm font-extrabold text-ink">
+                    <input
+                      type="checkbox"
+                      className="size-5 accent-[#FF4D8D]"
+                      checked={item.grading?.mode === "ai"}
+                      disabled={busy}
+                      onChange={(e) =>
+                        patchItem(index, {
+                          grading: { mode: e.target.checked ? "ai" : "manual" },
+                        })
+                      }
+                    />
+                    AI grading
+                  </label>
+                )}
               </div>
 
               {isChoice(item) ? (
@@ -614,120 +634,19 @@ export function QuizEditor({
                   </div>
                 </>
               ) : (
-                <>
-                  <label className="flex items-center gap-2 font-body text-sm font-extrabold text-ink">
-                    <input
-                      type="checkbox"
-                      className="size-5 accent-[#FF4D8D]"
-                      checked={item.grading?.mode === "ai"}
-                      disabled={busy}
-                      aria-label="AI grading"
-                      onChange={(e) =>
-                        patchItem(index, {
-                          grading: e.target.checked
-                            ? {
-                                mode: "ai",
-                                score_min: item.grading?.score_min,
-                                score_max: item.grading?.score_max,
-                                rules: item.grading?.rules ?? "",
-                              }
-                            : { mode: "manual" },
-                        })
-                      }
-                    />
-                    AI grading
-                  </label>
-                  {item.grading?.mode === "ai" ? (
-                    <div className="grid gap-3">
-                      <div className="flex flex-wrap items-center gap-5">
-                        <label className="flex items-center gap-2 font-body text-sm font-extrabold text-ink">
-                          Score min
-                          <input
-                            type="number"
-                            aria-label="Score min"
-                            className="min-h-11 w-20 rounded-arc border-[3px] border-border bg-white px-2 font-body text-base font-semibold"
-                            value={
-                              item.grading.score_min === undefined
-                                ? ""
-                                : item.grading.score_min
-                            }
-                            disabled={busy}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              patchItem(index, {
-                                grading: {
-                                  mode: "ai",
-                                  score_min:
-                                    raw === "" ? undefined : Number(raw),
-                                  score_max: item.grading?.score_max,
-                                  rules: item.grading?.rules ?? "",
-                                },
-                              });
-                            }}
-                          />
-                        </label>
-                        <label className="flex items-center gap-2 font-body text-sm font-extrabold text-ink">
-                          Score max
-                          <input
-                            type="number"
-                            aria-label="Score max"
-                            className="min-h-11 w-20 rounded-arc border-[3px] border-border bg-white px-2 font-body text-base font-semibold"
-                            value={
-                              item.grading.score_max === undefined
-                                ? ""
-                                : item.grading.score_max
-                            }
-                            disabled={busy}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              patchItem(index, {
-                                grading: {
-                                  mode: "ai",
-                                  score_min: item.grading?.score_min,
-                                  score_max:
-                                    raw === "" ? undefined : Number(raw),
-                                  rules: item.grading?.rules ?? "",
-                                },
-                              });
-                            }}
-                          />
-                        </label>
-                      </div>
-                      <label className="flex flex-col gap-2 font-body text-sm font-extrabold text-ink">
-                        Rules
-                        <textarea
-                          aria-label="Rules"
-                          className="min-h-[72px] rounded-arc border-[3px] border-border bg-white px-3.5 py-2.5 font-body text-[15px] font-medium"
-                          value={item.grading.rules ?? ""}
-                          disabled={busy}
-                          onChange={(e) =>
-                            patchItem(index, {
-                              grading: {
-                                mode: "ai",
-                                score_min: item.grading?.score_min,
-                                score_max: item.grading?.score_max,
-                                rules: e.target.value,
-                              },
-                            })
-                          }
-                        />
-                      </label>
-                    </div>
-                  ) : null}
-                  <label className="flex flex-col gap-2 font-body text-sm font-extrabold text-ink">
-                    Grading rubric
-                    <textarea
-                      className="min-h-[72px] rounded-arc border-[3px] border-border bg-white px-3.5 py-2.5 font-body text-[15px] font-medium"
-                      value={item.answer?.rubric ?? ""}
-                      disabled={busy}
-                      onChange={(e) =>
-                        patchItem(index, {
-                          answer: { rubric: e.target.value },
-                        })
-                      }
-                    />
-                  </label>
-                </>
+                <label className="flex flex-col gap-2 font-body text-sm font-extrabold text-ink">
+                  Grading rubric
+                  <textarea
+                    className="min-h-[72px] rounded-arc border-[3px] border-border bg-white px-3.5 py-2.5 font-body text-[15px] font-medium"
+                    value={item.answer?.rubric ?? ""}
+                    disabled={busy}
+                    onChange={(e) =>
+                      patchItem(index, {
+                        answer: { rubric: e.target.value },
+                      })
+                    }
+                  />
+                </label>
               )}
             </QuestionCard>
           ))}

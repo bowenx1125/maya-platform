@@ -12,10 +12,7 @@ import { useSession } from "../session-provider";
 import { ErrorNotice, LoadingCard } from "../ui";
 import { WorkspaceIcon } from "../workspace-icon";
 import { KEY_ROW, QuizKey } from "../quizzes/quiz-chrome";
-import {
-  isFiniteScore,
-  quizGradingStatusLabel,
-} from "../quizzes/quiz-validation";
+import { isFiniteScore } from "../quizzes/quiz-validation";
 
 const CELL =
   "overflow-wrap-anywhere border-b-2 border-[#E5E7EB] px-2.5 py-3 align-top";
@@ -156,34 +153,13 @@ export function QuizAttemptDetailView({
       className="relative grid gap-3 rounded-[4px_4px_16px_16px] border-[3px] border-border bg-white bg-[linear-gradient(90deg,transparent_38px,#FCA5A5_38px,#FCA5A5_40px,transparent_40px)] pt-14 pb-5 pr-[clamp(12px,3vw,28px)] pl-[52px] shadow-arc max-[520px]:pl-[48px]"
       data-testid="quiz-attempt-detail"
     >
+      {/* Round and grading state are already on the Submissions row. */}
       <span
         className="absolute top-3 right-5 inline-block -rotate-3 font-display text-[34px] leading-none font-extrabold text-[#DC2626]"
         aria-label={`${detail.points_awarded} / ${detail.points_total}`}
       >
         {detail.points_awarded} / {detail.points_total}
       </span>
-      {teacher ? (
-        <div className="flex flex-wrap items-center gap-2 pr-24">
-          <span
-            data-testid="quiz-grading-status"
-            className={`rounded-full border-2 border-border px-3 py-1 text-xs font-extrabold ${
-              detail.grading_status === "complete"
-                ? "bg-[#ECFCCB]"
-                : "bg-warn-bg"
-            }`}
-          >
-            {quizGradingStatusLabel(detail.grading_status)}
-          </span>
-          {isFiniteScore(detail.score_ai) ? (
-            <span
-              data-testid="quiz-score-ai"
-              className="font-body text-sm font-extrabold"
-            >
-              AI score: {detail.score_ai}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[620px] border-collapse font-body text-sm text-ink">
           <thead>
@@ -277,14 +253,16 @@ export function QuizAttemptDetailView({
                           />
                           / {item.points}
                         </span>
-                        {isFiniteScore(item.ai_score) ? (
-                          <span data-testid={`quiz-item-ai-score-${item.id}`}>
-                            AI score: {item.ai_score}
-                          </span>
-                        ) : detail.grading_status !== "complete" &&
-                          !item.graded ? (
-                          <span data-testid={`quiz-item-ai-pending-${item.id}`}>
-                            Pending
+                        {/* Only AI-graded items say anything about AI;
+                            the teacher's points always win. */}
+                        {item.ai_grading ? (
+                          <span
+                            className="font-body text-xs font-bold text-arc-muted"
+                            data-testid={`quiz-item-ai-${item.id}`}
+                          >
+                            {isFiniteScore(item.ai_score)
+                              ? `AI ${item.ai_score} / ${item.points}`
+                              : "AI score pending"}
                           </span>
                         ) : null}
                       </span>
