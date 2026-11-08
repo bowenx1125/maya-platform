@@ -208,7 +208,7 @@ export function QuizEmpty({
   );
 }
 
-/** A's list row card. Rows carry no keys: the row itself opens its page. */
+/** A's list row card. The row opens its page; Delete quiz sits beside the link. */
 export const QUIZ_ROW_SHELL =
   "relative flex flex-wrap items-center gap-x-3.5 gap-y-2.5 rounded-[14px] border-[3px] border-border bg-white shadow-[4px_4px_0_#111]";
 export const QUIZ_ROW = `${QUIZ_ROW_SHELL} px-[18px] py-4`;
