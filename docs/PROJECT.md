@@ -182,14 +182,14 @@ Voice owners delete in Studyform,Agents fall back; per-sign-in cache then refres
 System:qwen3-tts-flash; clones:voice-enrollment/temp upload,VOICE_CLONE_MODEL defaults
 qwen-audio-3.1-tts-flash (or3.0); retired qwen3-tts-vc-2026-01-22 falls back.
 40/60-student Postgres passed; queued creates hold no connection; ledger6 commits/
-model call (was9).0069 vote/barrage UPDATE … RETURNING:40 parallel submits
+model call.0069 vote/barrage UPDATE … RETURNING:40 parallel submits
 stored1–40,collisions retry.
 
 Oct18:picked @mention adds space; no All picker,@All/bare sends reach everyone.
 Per-sign-in Studyform/Brainform/Chat/Voices cache:6 parallel,10s reuse,429/503 back-off.
 0070 owner-only Chat Team+ files. Phase-memoized Team ACL:812→448 SELECTs/turn.
 Students use teachers' public Agents only in Teams; old chats read-only. Oct19:
-uploaded Voices ready at once (0073);▷ listens only;Team model call12 rows (was16).
+uploaded Voices ready at once (0073);▷ listens only;Team model call12 rows.
 
 ## Oct20–23 releases
 
@@ -305,8 +305,8 @@ volume untouched. Stalled needs backend receipt recovery;safety gates kept.
 
 ## Nov5–8 Classroom Quiz
 
-0083–0085(head):Quiz domain;publish≠taking;start-taking=new epoch,1 attempt/student/epoch;
-ZIP export. Nov8:attempt detail,hand-graded text(no AI,frozen paper),hide,Record
-epochs. Record moved Brainform→Quiz Records(chat data kept;old paths redirect).
-[Contract](contracts/CLASSROOM_QUIZ_API.md). Local:BE131 fails=main's129+2 flakes;FE1155 pass;
-build/contracts/E2E/0084→0085 ok;no deploy.
+0083–0085(head):Quiz domain;publish≠taking;start=new epoch,1 attempt/student/epoch;
+ZIP export. #380:attempt detail,hand grading(no AI),hide,Record epochs;Record moved
+Brainform→Quiz(old URLs redirect). [Contract](contracts/CLASSROOM_QUIZ_API.md).
+Only main's known fails;E2E/0084→0085 ok;no deploy. Agent/Team/Debate/Quiz
+Done/Quiz Submit→confetti. Quiz UI A:1 page/quiz,Paper|Submissions;no Chat tests.

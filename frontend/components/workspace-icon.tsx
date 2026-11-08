@@ -29,7 +29,12 @@ export type WorkspaceIconName =
   | "replay"
   | "interact"
   | "chevronLeft"
-  | "chevronRight";
+  | "chevronRight"
+  | "undo"
+  | "eyeOff"
+  | "minus"
+  | "close"
+  | "download";
 
 const paths: Record<WorkspaceIconName, string> = {
   home: "M3 10 12 3l9 7M5 9v11h5v-6h4v6h5V9",
@@ -69,6 +74,12 @@ const paths: Record<WorkspaceIconName, string> = {
     "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2z",
   chevronLeft: "m15 5-7 7 7 7",
   chevronRight: "m9 5 7 7-7 7",
+  undo: "M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3",
+  eyeOff:
+    "M3 3l18 18M10.6 6.1A9.8 9.8 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-3.2 3.7M6.3 7.6A17 17 0 0 0 3 12s4 6 9 6a9 9 0 0 0 4.1-1",
+  minus: "M5 12h14",
+  close: "M6 6l12 12M18 6 6 18",
+  download: "M12 4v11M7 10l5 5 5-5M5 20h14",
 };
 
 export function WorkspaceIcon({

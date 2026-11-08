@@ -6,12 +6,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QuizApi, type QuizSummaryDTO } from "@/lib/api/quiz";
 import { useSession } from "../session-provider";
 import { useT } from "@/lib/i18n";
-import { Button } from "../ui/button";
-import { EmptyCard, ErrorNotice, LoadingCard } from "../ui";
+import { ErrorNotice, LoadingCard } from "../ui";
 import { PageBanner } from "../page-banner";
 import { PageAction } from "../page-action";
 import { LIST_CARD_LIFT } from "../agent-chrome";
+import { WorkspaceIcon } from "../workspace-icon";
+import {
+  QUIZ_ROW,
+  QuizChip,
+  QuizEmpty,
+  QuizStatus,
+  quizState,
+} from "./quiz-chrome";
 
+/**
+ * Teacher Quizzes (option A, 2026-11-08): one row per quiz with its state
+ * chip and counts. Rows carry no keys; a row opens the quiz page, where
+ * Start/Pause, Unpublish, Download and grading live.
+ */
 export function QuizzesList() {
   const t = useT();
   const { api, user } = useSession();
@@ -23,8 +35,6 @@ export function QuizzesList() {
   const [quizzes, setQuizzes] = useState<QuizSummaryDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
-  const [unpublishingId, setUnpublishingId] = useState<string | null>(null);
-  const [evalBusyId, setEvalBusyId] = useState<string | null>(null);
   const loadSequence = useRef(0);
 
   const load = useCallback(async () => {
@@ -54,43 +64,8 @@ export function QuizzesList() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const unpublish = async (quizId: string) => {
-    if (!courseId) return;
-    setUnpublishingId(quizId);
-    setError(null);
-    try {
-      await quizApi.unpublishQuiz(courseId, quizId);
-      await load();
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setUnpublishingId(null);
-    }
-  };
-
-  const toggleEvaluation = async (
-    quiz: QuizSummaryDTO,
-    next: "start" | "pause",
-  ) => {
-    if (!courseId) return;
-    setEvalBusyId(quiz.id);
-    setError(null);
-    try {
-      if (next === "start") {
-        await quizApi.startTaking(courseId, quiz.id);
-      } else {
-        await quizApi.pauseTaking(courseId, quiz.id);
-      }
-      await load();
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setEvalBusyId(null);
-    }
-  };
-
   if (!courseId) {
-    return <EmptyCard title={t("quizzes")}>{t("quizNoCourse")}</EmptyCard>;
+    return <QuizEmpty title={t("quizNoCourse")} kind="course" />;
   }
 
   return (
@@ -107,110 +82,41 @@ export function QuizzesList() {
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       {!loading && !error ? (
         quizzes.length === 0 ? (
-          <EmptyCard title={t("noQuizzes")} />
+          <QuizEmpty title={t("noQuizzes")} kind="quiz" />
         ) : (
-          <div className="grid gap-3.5">
+          <ul className="m-0 grid list-none gap-3.5 p-0">
             {quizzes.map((quiz) => {
-              const takingOpen = quiz.taking_open === true;
-              const evalBusy = evalBusyId === quiz.id;
+              const state = quizState(quiz);
+              const stateLabel =
+                state === "accepting"
+                  ? t("quizAccepting")
+                  : state === "paused"
+                    ? t("quizPaused")
+                    : t("quizDraft");
               return (
-                <article
-                  className={`relative rounded-[18px] border-2 border-[#111] bg-white p-4 shadow-[0_4px_0_#111] ${LIST_CARD_LIFT}`}
-                  data-testid="quiz-row"
-                  key={quiz.id}
-                >
+                <li key={quiz.id}>
                   <Link
-                    aria-label={quiz.title}
-                    className="absolute inset-0 z-0 rounded-[18px]"
+                    className={`${QUIZ_ROW} text-ink no-underline ${LIST_CARD_LIFT}`}
+                    data-testid="quiz-row"
                     href={`/teacher/quizzes/${quiz.id}`}
-                  />
-                  <div className="relative z-10 flex items-start justify-between gap-3 pointer-events-none">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-display text-lg font-bold text-inherit">
-                        {quiz.title}
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-2 font-body text-xs font-bold [&>span]:rounded-full [&>span]:border-2 [&>span]:border-[#111] [&>span]:bg-white [&>span]:px-2.5 [&>span]:py-px">
-                        <span>
-                          {quiz.status === "published"
-                            ? t("quizPublished")
-                            : t("quizDraft")}
-                        </span>
-                        {quiz.status === "published" ? (
-                          <span>
-                            {takingOpen ? t("quizAccepting") : t("quizPaused")}
-                          </span>
-                        ) : null}
-                        <span>
-                          {new Date(quiz.updated_at).toLocaleDateString()}
-                        </span>
-                        <span>
-                          {t("quizAttempts", {
-                            count: quiz.attempt_count ?? 0,
-                          })}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="pointer-events-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
-                      <Link
-                        className="relative inline-flex h-10 items-center rounded-[var(--radius-base)] border-[3px] border-[var(--border)] bg-white px-3 font-body text-sm font-bold text-ink no-underline shadow-[0_6px_0_#111] transition-[translate,box-shadow] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-0.5 active:translate-y-1.5 active:shadow-none"
-                        href={`/teacher/quizzes/records?quiz_id=${encodeURIComponent(quiz.id)}`}
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        {t("quizViewRecords")}
-                      </Link>
-                      {quiz.status === "published" ? (
-                        <>
-                          {takingOpen ? (
-                            <Button
-                              className="relative"
-                              type="button"
-                              variant="neutral"
-                              disabled={evalBusy}
-                              busy={evalBusy}
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                void toggleEvaluation(quiz, "pause");
-                              }}
-                            >
-                              {t("quizPauseEvaluation")}
-                            </Button>
-                          ) : (
-                            <Button
-                              className="relative"
-                              type="button"
-                              disabled={evalBusy}
-                              busy={evalBusy}
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                void toggleEvaluation(quiz, "start");
-                              }}
-                            >
-                              {t("quizStartEvaluation")}
-                            </Button>
-                          )}
-                          <Button
-                            className="relative"
-                            variant="noShadow"
-                            type="button"
-                            disabled={unpublishingId === quiz.id}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              void unpublish(quiz.id);
-                            }}
-                          >
-                            {t("quizUnpublish")}
-                          </Button>
-                        </>
-                      ) : null}
-                    </div>
-                  </div>
-                </article>
+                  >
+                    <QuizStatus state={state} label={stateLabel} />
+                    <span className="min-w-0 flex-[1_1_240px] font-display text-xl leading-tight font-extrabold break-words">
+                      {quiz.title}
+                    </span>
+                    {state === "draft" && !quiz.attempt_count ? null : (
+                      <QuizChip>
+                        {t("quizAttempts", { count: quiz.attempt_count ?? 0 })}
+                      </QuizChip>
+                    )}
+                    <span aria-hidden="true" className="shrink-0">
+                      <WorkspaceIcon name="chevronRight" size={20} stroke={3} />
+                    </span>
+                  </Link>
+                </li>
               );
             })}
-          </div>
+          </ul>
         )
       ) : null}
     </div>

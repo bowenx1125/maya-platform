@@ -81,6 +81,7 @@ import {
   AGENT_PAGE,
   agentCard,
 } from "./agent-chrome";
+import { celebrate } from "../lib/confetti";
 
 /** Create/Edit (O2, option A) card contents, ported from fin.mjs WB/R2/CMP. */
 const NAME_CARD = cn(
@@ -1336,6 +1337,7 @@ export function AgentWorkbench({
         setRetryAction(null);
         setVersion(next);
         clearAgentDraftStash(stashUserId, activeAgent.id);
+        celebrate();
         setNotice("publishedNotice");
         router.replace(
           activeAgent.group_id
@@ -1500,11 +1502,13 @@ export function AgentWorkbench({
           setError(new Error(t("generationReceiptMissing")));
           return;
         }
+        celebrate();
         router.replace(
           `/teacher/knowledge?agent_id=${encodeURIComponent(currentAgent.id)}&set_id=${encodeURIComponent(receipt.knowledge_set_id)}&job_id=${encodeURIComponent(receipt.job_id)}`,
         );
         return;
       }
+      celebrate();
       setNotice("publishedNotice");
       if (stayAfterPublish.current) {
         // A hint line's Done publishes in place and reads the Agent again.
