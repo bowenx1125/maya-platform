@@ -158,8 +158,9 @@ export function QuizTake({
         <button
           type="button"
           onClick={onExit}
-          className="mt-5 inline-flex min-h-10 cursor-pointer items-center rounded-[10px] border-[3px] border-border bg-surface px-[18px] py-2 font-body text-sm font-bold text-ink shadow-[0_6px_0_#111] transition-[translate,box-shadow] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-0.5 active:translate-y-1.5 active:shadow-none active:duration-[80ms] motion-reduce:transition-colors"
+          className="mt-5 inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-[10px] border-[3px] border-border bg-surface px-[18px] py-2 font-body text-sm font-bold text-ink shadow-[0_6px_0_#111] transition-[translate,box-shadow] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-0.5 active:translate-y-1.5 active:shadow-none active:duration-[80ms] motion-reduce:transition-colors"
         >
+          <WorkspaceIcon name="back" size={16} />
           Back to quizzes
         </button>
       </div>
@@ -225,8 +226,9 @@ export function QuizTake({
         <button
           type="button"
           onClick={onExit}
-          className="inline-flex min-h-10 cursor-pointer items-center rounded-[10px] border-[3px] border-border bg-surface px-[18px] py-2 font-body text-sm font-bold text-ink shadow-[0_6px_0_#111] transition-[translate,box-shadow] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-0.5 active:translate-y-1.5 active:shadow-none active:duration-[80ms] motion-reduce:transition-colors"
+          className="inline-flex gap-1.5 min-h-10 cursor-pointer items-center rounded-[10px] border-[3px] border-border bg-surface px-[18px] py-2 font-body text-sm font-bold text-ink shadow-[0_6px_0_#111] transition-[translate,box-shadow] duration-150 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-0.5 active:translate-y-1.5 active:shadow-none active:duration-[80ms] motion-reduce:transition-colors"
         >
+          <WorkspaceIcon name="back" size={16} />
           Back
         </button>
         <button

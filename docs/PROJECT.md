@@ -307,6 +307,6 @@ volume untouched. Stalled needs backend receipt recovery;safety gates kept.
 
 0083–0085(head):Quiz domain;publish≠taking;start=new epoch,1 attempt/student/epoch;
 ZIP export. #380:attempt detail,hand grading(no AI),hide,Record epochs;Record moved
-Brainform→Quiz Records(old URLs redirect). [Contract](contracts/CLASSROOM_QUIZ_API.md).
+Brainform→Quiz(old URLs redirect). [Contract](contracts/CLASSROOM_QUIZ_API.md).
 Only main's known fails;E2E/0084→0085 ok;no deploy. Agent/Team/Debate/Quiz
-Done/Quiz Submit→confetti(not reduced motion). Quiz UI:A+B LIVE/Add slot.
+Done/Quiz Submit→confetti. Quiz UI A:1 page/quiz,Paper|Submissions;no Chat tests.

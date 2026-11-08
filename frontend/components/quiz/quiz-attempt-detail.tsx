@@ -11,12 +11,12 @@ import { useT } from "../../lib/i18n";
 import { useSession } from "../session-provider";
 import { ErrorNotice, LoadingCard } from "../ui";
 import { WorkspaceIcon } from "../workspace-icon";
-import { QuizKey } from "../quizzes/quiz-chrome";
+import { KEY_ROW, QuizKey } from "../quizzes/quiz-chrome";
 
 const CELL =
   "overflow-wrap-anywhere border-b-2 border-[#E5E7EB] px-2.5 py-3 align-top";
 const HEAD =
-  "border-b-[3px] border-[#111] px-2.5 py-2 text-left text-xs font-extrabold text-[#4B5563]";
+  "border-b-[3px] border-border px-2.5 py-2 text-left text-xs font-extrabold text-arc-muted";
 
 type Draft = Record<string, { points: string; feedback: string }>;
 
@@ -149,7 +149,7 @@ export function QuizAttemptDetailView({
     // A's "marked paper" (owner pick 2026-11-08): ruled paper with a red
     // margin, right/wrong rows marked like a teacher's pen.
     <div
-      className="relative grid gap-3 rounded-[4px_4px_16px_16px] border-[3px] border-[#111] bg-white bg-[linear-gradient(90deg,transparent_38px,#FCA5A5_38px,#FCA5A5_40px,transparent_40px)] pt-14 pb-5 pr-[clamp(12px,3vw,28px)] pl-[52px] shadow-[6px_6px_0_#111] max-[520px]:pl-[48px]"
+      className="relative grid gap-3 rounded-[4px_4px_16px_16px] border-[3px] border-border bg-white bg-[linear-gradient(90deg,transparent_38px,#FCA5A5_38px,#FCA5A5_40px,transparent_40px)] pt-14 pb-5 pr-[clamp(12px,3vw,28px)] pl-[52px] shadow-arc max-[520px]:pl-[48px]"
       data-testid="quiz-attempt-detail"
     >
       {/* Round and grading state are already on the Records row above. */}
@@ -160,7 +160,7 @@ export function QuizAttemptDetailView({
         {detail.points_awarded} / {detail.points_total}
       </span>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[620px] border-collapse font-body text-sm text-[#111]">
+        <table className="w-full min-w-[620px] border-collapse font-body text-sm text-ink">
           <thead>
             <tr>
               <th scope="col" className={HEAD}>
@@ -197,7 +197,7 @@ export function QuizAttemptDetailView({
                 !text && item.correct === true
                   ? "bg-[#ECFCCB]"
                   : !text && item.correct === false
-                    ? "bg-[#FFE4E4]"
+                    ? "bg-err-bg"
                     : "";
               return (
                 <tr key={item.id} className={tint}>
@@ -207,7 +207,7 @@ export function QuizAttemptDetailView({
                     {answer}
                     {!text && item.correct != null ? (
                       <span
-                        className={`ml-2 inline-flex items-center gap-1 font-display font-extrabold whitespace-nowrap ${item.correct ? "text-[#15803D]" : "text-[#B91C1C]"}`}
+                        className={`ml-2 inline-flex items-center gap-1 font-display font-extrabold whitespace-nowrap ${item.correct ? "text-[#15803D]" : "text-err-text"}`}
                       >
                         <WorkspaceIcon
                           name={item.correct ? "done" : "close"}
@@ -219,13 +219,15 @@ export function QuizAttemptDetailView({
                     ) : null}
                   </td>
                   {teacher ? (
-                    <td className={`${CELL} text-[#4B5563]`}>
+                    <td className={`${CELL} text-arc-muted`}>
                       {text
                         ? (item.answer?.rubric ?? "")
                         : choiceLabels(item, item.answer?.choice_ids)}
                     </td>
                   ) : null}
-                  <td className={`${CELL} font-mono font-bold`}>
+                  <td
+                    className={`${CELL} font-mono font-bold whitespace-nowrap`}
+                  >
                     {text && teacher ? (
                       <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                         <input
@@ -235,7 +237,7 @@ export function QuizAttemptDetailView({
                           max={item.points}
                           step="any"
                           aria-label={t("quizGradePointsFor", { n })}
-                          className="min-h-11 w-16 rounded-[10px] border-[3px] border-[#111] bg-white px-2 font-mono text-base font-bold focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#FF4D8D]"
+                          className="min-h-11 w-16 rounded-arc border-[3px] border-border bg-white px-2 font-mono text-base font-bold focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-main"
                           value={draft[item.id]?.points ?? ""}
                           onChange={(event) =>
                             setDraft((current) => ({
@@ -250,7 +252,7 @@ export function QuizAttemptDetailView({
                         / {item.points}
                       </span>
                     ) : text && !item.graded ? (
-                      <span className="font-body font-semibold text-[#4B5563]">
+                      <span className="font-body font-semibold text-arc-muted">
                         {t("quizNotGraded")}
                       </span>
                     ) : (
@@ -261,7 +263,7 @@ export function QuizAttemptDetailView({
                     {text && teacher ? (
                       <textarea
                         aria-label={t("quizGradeFeedbackFor", { n })}
-                        className="min-h-16 w-full min-w-44 rounded-[10px] border-[3px] border-[#111] bg-white px-2.5 py-2 font-body text-sm focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#FF4D8D]"
+                        className="min-h-16 w-full min-w-44 rounded-arc border-[3px] border-border bg-white px-2.5 py-2 font-body text-sm focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-main"
                         maxLength={4000}
                         value={draft[item.id]?.feedback ?? ""}
                         onChange={(event) =>
@@ -294,17 +296,9 @@ export function QuizAttemptDetailView({
         </p>
       ) : null}
       {teacher ? (
-        <div className="flex flex-wrap justify-end gap-3">
-          <QuizKey
-            icon="eyeOff"
-            busy={hiding}
-            ariaLabel={t("quizHideAttemptNamed", {
-              name: detail.student_name,
-            })}
-            onClick={() => void hide()}
-          >
-            {t("quizHideAttempt")}
-          </QuizKey>
+        // Save comes first in the DOM so Tab runs Grade → Comment → Save
+        // (handoff §5); row-reverse keeps Save on the right.
+        <div className={`flex-row-reverse justify-start ${KEY_ROW}`}>
           {gradable ? (
             <QuizKey
               icon="done"
@@ -315,6 +309,16 @@ export function QuizAttemptDetailView({
               {t("quizSaveGrades")}
             </QuizKey>
           ) : null}
+          <QuizKey
+            icon="eyeOff"
+            busy={hiding}
+            ariaLabel={t("quizHideAttemptNamed", {
+              name: detail.student_name,
+            })}
+            onClick={() => void hide()}
+          >
+            {t("quizHideAttempt")}
+          </QuizKey>
         </div>
       ) : null}
     </div>

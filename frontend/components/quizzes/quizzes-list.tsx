@@ -10,16 +10,20 @@ import { ErrorNotice, LoadingCard } from "../ui";
 import { PageBanner } from "../page-banner";
 import { PageAction } from "../page-action";
 import { LIST_CARD_LIFT } from "../agent-chrome";
+import { WorkspaceIcon } from "../workspace-icon";
 import {
-  LiveLamp,
+  QUIZ_ROW,
   QuizChip,
   QuizEmpty,
-  QuizKey,
   QuizStatus,
-  STATE_SHADOW,
   quizState,
 } from "./quiz-chrome";
 
+/**
+ * Teacher Quizzes (option A, 2026-11-08): one row per quiz with its state
+ * chip and counts. Rows carry no keys; a row opens the quiz page, where
+ * Start/Pause, Unpublish, Download and grading live.
+ */
 export function QuizzesList() {
   const t = useT();
   const { api, user } = useSession();
@@ -31,8 +35,6 @@ export function QuizzesList() {
   const [quizzes, setQuizzes] = useState<QuizSummaryDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
-  const [unpublishingId, setUnpublishingId] = useState<string | null>(null);
-  const [evalBusyId, setEvalBusyId] = useState<string | null>(null);
   const loadSequence = useRef(0);
 
   const load = useCallback(async () => {
@@ -62,41 +64,6 @@ export function QuizzesList() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const unpublish = async (quizId: string) => {
-    if (!courseId) return;
-    setUnpublishingId(quizId);
-    setError(null);
-    try {
-      await quizApi.unpublishQuiz(courseId, quizId);
-      await load();
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setUnpublishingId(null);
-    }
-  };
-
-  const toggleEvaluation = async (
-    quiz: QuizSummaryDTO,
-    next: "start" | "pause",
-  ) => {
-    if (!courseId) return;
-    setEvalBusyId(quiz.id);
-    setError(null);
-    try {
-      if (next === "start") {
-        await quizApi.startTaking(courseId, quiz.id);
-      } else {
-        await quizApi.pauseTaking(courseId, quiz.id);
-      }
-      await load();
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setEvalBusyId(null);
-    }
-  };
-
   if (!courseId) {
     return <QuizEmpty title={t("quizNoCourse")} kind="course" />;
   }
@@ -117,100 +84,39 @@ export function QuizzesList() {
         quizzes.length === 0 ? (
           <QuizEmpty title={t("noQuizzes")} kind="quiz" />
         ) : (
-          <div className="grid gap-5">
+          <ul className="m-0 grid list-none gap-3.5 p-0">
             {quizzes.map((quiz) => {
               const state = quizState(quiz);
-              const published = quiz.status === "published";
-              const evalBusy = evalBusyId === quiz.id;
               const stateLabel =
                 state === "accepting"
                   ? t("quizAccepting")
                   : state === "paused"
-                    ? `${t("quizPublished")} · ${t("quizPaused")}`
+                    ? t("quizPaused")
                     : t("quizDraft");
               return (
-                <article
-                  className={`relative flex flex-wrap items-center gap-4 rounded-[18px] border-[3px] border-[#111] bg-white px-[22px] py-5 ${STATE_SHADOW[state]} ${LIST_CARD_LIFT}`}
-                  data-testid="quiz-row"
-                  key={quiz.id}
-                >
+                <li key={quiz.id}>
                   <Link
-                    aria-label={quiz.title}
-                    className="absolute inset-0 z-0 rounded-[18px]"
+                    className={`${QUIZ_ROW} text-ink no-underline ${LIST_CARD_LIFT}`}
+                    data-testid="quiz-row"
                     href={`/teacher/quizzes/${quiz.id}`}
-                  />
-                  <div className="pointer-events-none relative z-10 flex min-w-0 flex-[999_1_320px] flex-col gap-2.5">
-                    <h2 className="m-0 font-display text-2xl leading-tight font-extrabold text-[#111]">
+                  >
+                    <QuizStatus state={state} label={stateLabel} />
+                    <span className="min-w-0 flex-[1_1_240px] font-display text-xl leading-tight font-extrabold break-words">
                       {quiz.title}
-                    </h2>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <QuizStatus state={state} label={stateLabel} />
-                      {state === "accepting" ? <LiveLamp /> : null}
-                      <QuizChip>
-                        {new Date(quiz.updated_at).toLocaleDateString("en", {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </QuizChip>
+                    </span>
+                    {state === "draft" && !quiz.attempt_count ? null : (
                       <QuizChip>
                         {t("quizAttempts", { count: quiz.attempt_count ?? 0 })}
                       </QuizChip>
-                    </div>
-                  </div>
-                  <div className="relative z-10 flex flex-[1_1_auto] flex-wrap justify-end gap-2.5">
-                    <QuizKey
-                      icon="clock"
-                      href={`/teacher/quizzes/records?quiz_id=${encodeURIComponent(quiz.id)}`}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {t("quizViewRecords")}
-                    </QuizKey>
-                    {published ? (
-                      <>
-                        {state === "accepting" ? (
-                          <QuizKey
-                            icon="pause"
-                            busy={evalBusy}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              void toggleEvaluation(quiz, "pause");
-                            }}
-                          >
-                            {t("quizPauseEvaluation")}
-                          </QuizKey>
-                        ) : (
-                          <QuizKey
-                            icon="play"
-                            tone="primary"
-                            busy={evalBusy}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              void toggleEvaluation(quiz, "start");
-                            }}
-                          >
-                            {t("quizStartEvaluation")}
-                          </QuizKey>
-                        )}
-                        <QuizKey
-                          icon="undo"
-                          busy={unpublishingId === quiz.id}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            void unpublish(quiz.id);
-                          }}
-                        >
-                          {t("quizUnpublish")}
-                        </QuizKey>
-                      </>
-                    ) : null}
-                  </div>
-                </article>
+                    )}
+                    <span aria-hidden="true" className="shrink-0">
+                      <WorkspaceIcon name="chevronRight" size={20} stroke={3} />
+                    </span>
+                  </Link>
+                </li>
               );
             })}
-          </div>
+          </ul>
         )
       ) : null}
     </div>

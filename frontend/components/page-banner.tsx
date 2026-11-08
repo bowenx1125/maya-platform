@@ -15,6 +15,7 @@ export function PageBanner({
   children,
   className,
   titleClassName,
+  actionsClassName,
 }: {
   title: ReactNode;
   titleId?: string;
@@ -22,6 +23,8 @@ export function PageBanner({
   children?: ReactNode;
   className?: string;
   titleClassName?: string;
+  /** Lets a page with several keys wrap them instead of overflowing. */
+  actionsClassName?: string;
 }) {
   return (
     <header className={cn(AGENT_BANNER, "mb-5 justify-between", className)}>
@@ -32,7 +35,12 @@ export function PageBanner({
         {title}
       </h1>
       {children ? (
-        <div className="ml-auto flex shrink-0 items-center gap-3">
+        <div
+          className={cn(
+            "ml-auto flex shrink-0 items-center gap-3",
+            actionsClassName,
+          )}
+        >
           {children}
         </div>
       ) : null}
