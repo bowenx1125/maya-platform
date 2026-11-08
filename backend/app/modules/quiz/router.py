@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.errors import Error
@@ -14,6 +14,7 @@ from app.modules.auth.service import AuthContext
 
 from . import export as quiz_export
 from . import service
+from .ai_grade import run_quiz_ai_grade
 from .schemas import (
     CreateQuizRequest,
     GradeQuizAttemptRequest,
@@ -203,10 +204,19 @@ def submit_course_quiz_attempt(
     quiz_id: UUID,
     body: SubmitQuizAttemptRequest,
     _csrf: CsrfHeader,
+    background: BackgroundTasks,
+    request: Request,
     actor: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> QuizAttemptDTO:
-    return service.submit_attempt(db, actor, str(course_id), str(quiz_id), body)
+    dto = service.submit_attempt(db, actor, str(course_id), str(quiz_id), body)
+    if service.attempt_needs_ai_grade(db, str(dto.id)):
+        background.add_task(
+            run_quiz_ai_grade,
+            str(dto.id),
+            session_factory=request.app.state.database.session_factory,
+        )
+    return dto
 
 
 @router.get(
