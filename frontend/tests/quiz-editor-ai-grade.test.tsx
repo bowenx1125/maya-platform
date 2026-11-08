@@ -38,4 +38,28 @@ describe("quiz editor AI grading", () => {
     expect(screen.queryByRole("textbox", { name: "Rules" })).toBeNull();
     expect(screen.getAllByText("Grading rubric")).toHaveLength(1);
   });
+
+  it("says why Done is blocked in plain words", () => {
+    render(<QuizEditor />);
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Week 12" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Short text/ }));
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Why does Raft need a leader?" },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "AI grading" }));
+    fireEvent.change(screen.getByLabelText("Grading rubric"), {
+      target: { value: "Short" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(
+      screen.getByText(
+        "AI grading needs a grading rubric of at least 20 characters.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("The platform request could not be completed."),
+    ).toBeNull();
+  });
 });

@@ -711,3 +711,61 @@ describe("Agent Name card", () => {
     expect(name.value).toBe("Laozi 2");
   });
 });
+
+describe("Agent Name card · rename alone", () => {
+  it("lets Done save a new name without publishing a version", async () => {
+    const agent = personalAgent({ name: "Laozi", is_creator: true });
+    const document = privateDocument();
+    const currentDraft = draft(document);
+    const api = {
+      version: vi.fn().mockResolvedValue(currentDraft),
+      agent: vi.fn().mockResolvedValue(agent),
+      workspaceDocuments: vi.fn().mockResolvedValue([document]),
+      knowledgeSets: vi.fn().mockResolvedValue([]),
+      agentKnowledgeSets: vi.fn().mockResolvedValue({
+        agent_id: agent.id,
+        agent_metadata_revision: agent.metadata_revision,
+        sets: [],
+      }),
+      voiceProfiles: vi.fn().mockResolvedValue([]),
+      ragPreview: vi.fn().mockResolvedValue({
+        version_id: versionId,
+        total_char_count: document.char_count,
+        limit: null,
+        document_count: 1,
+        index_status: "ready",
+        combined_markdown: "# Private notes",
+      }),
+      avatarTemplates: vi.fn().mockResolvedValue([]),
+      updateAgentMetadata: vi.fn(async () => ({
+        ...agent,
+        name: "Laozi Elder",
+      })),
+      publish: vi.fn(),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(
+      <AgentWorkbench
+        key="teacher-scope"
+        actorScopeKey="teacher-user:teacher-course:2"
+        backHref="/teacher"
+        versionId={versionId}
+      />,
+    );
+    const name = await screen.findByRole("textbox", { name: "Name" });
+    fireEvent.change(name, { target: { value: "Laozi Elder" } });
+    const done = screen.getByRole("button", {
+      name: "Done",
+    }) as HTMLButtonElement;
+    await waitFor(() => expect(done.disabled).toBe(false));
+    fireEvent.click(done);
+    await waitFor(() =>
+      expect(api.updateAgentMetadata).toHaveBeenCalledWith(
+        agent.id,
+        expect.objectContaining({ name: "Laozi Elder" }),
+      ),
+    );
+    expect(await screen.findByText("Name saved.")).toBeTruthy();
+    expect(api.publish).not.toHaveBeenCalled();
+  });
+});

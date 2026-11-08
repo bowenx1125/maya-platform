@@ -802,6 +802,10 @@ export function AgentWorkbench({
           agentKnowledge.sets.map((set) => set.id),
         ))),
   );
+  // A typed name alone is a change Done can save (no new version needed).
+  const nameDirty = Boolean(
+    agent && renameDraft !== null && renameDraft.trim() !== agent.name,
+  );
   const blockers = version?.publish_blockers ?? [];
 
   if (loading) return <LoadingCard size="sm" />;
@@ -1411,6 +1415,11 @@ export function AgentWorkbench({
       if (!isCurrentScope(requestScope)) return;
       setAgent((current) => (current ? { ...current, ...renamed } : current));
       setRenameDraft(null);
+      // Only the name changed: it is saved, and there is nothing to publish.
+      if (!localDirty && !generationFlow && retryAction !== "publish") {
+        setNotice("agentRenamedNotice");
+        return;
+      }
     }
     // The server only knows the last saved revision.  Never publish it while
     // the browser still holds newer AGENT/avatar/voice values.
@@ -1701,10 +1710,12 @@ export function AgentWorkbench({
                 !unsavedCreate &&
                 !generationFlow &&
                 !localDirty &&
+                !nameDirty &&
                 retryAction !== "publish") ||
               (!publishOnDone &&
                 !unsavedCreate &&
                 !localDirty &&
+                !nameDirty &&
                 blockers.length > 0)
             }
             onClick={() => void publish()}

@@ -23,7 +23,7 @@ import {
   quizDraftProblems,
   withAiGrading,
 } from "./quiz-validation";
-import { LoadingCard, ErrorNotice } from "../ui";
+import { LoadingCard, ErrorNotice, Notice } from "../ui";
 import { ICON_MOTION } from "../ui/button";
 import { IconLock } from "../quiet-icons";
 import { WorkspaceIcon } from "../workspace-icon";
@@ -421,8 +421,12 @@ export function QuizEditor({
       />
 
       {error ? <ErrorNotice error={error} /> : null}
+      {/* Local checks are plain sentences: show them as written (an
+          ErrorNotice would swap a non-API error for the generic copy). */}
       {problems.map((problem, i) => (
-        <ErrorNotice key={i} error={problem} />
+        <Notice key={i} tone="error" kind="field">
+          {problem}
+        </Notice>
       ))}
 
       {view === "submissions" && quizId ? (

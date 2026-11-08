@@ -516,6 +516,7 @@ const enMessages = {
   currentPassword: "Current password",
   newPassword: "New password",
   draftSavedNotice: "Draft saved. Revision advanced safely.",
+  agentRenamedNotice: "Name saved.",
   agentMdUploadedNotice:
     "AGENT.md uploaded and saved as the next draft revision.",
   evidenceUpdatedNotice: "Enabled evidence set updated.",
