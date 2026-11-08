@@ -1115,6 +1115,9 @@ const enMessages = {
   quizSubmissionsLockedReason: "Submissions open after Done.",
   quizAllRounds: "All rounds",
   quizFilterSubmissions: "Filter submissions",
+  quizDelete: "Delete quiz",
+  quizDeleteConfirm:
+    "Delete “{title}” for good? Its paper and every submission, grade and AI score go with it, for students too. This cannot be undone.",
   quizHideAttempt: "Hide",
   quizHideAttemptNamed: "Hide {name}'s attempt",
   quizHideConfirm:

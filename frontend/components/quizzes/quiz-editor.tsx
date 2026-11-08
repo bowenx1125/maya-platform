@@ -128,6 +128,7 @@ export function QuizEditor({
   const [tab, setTab] = useState<QuizPageTab | null>(initialTab ?? null);
   const [attemptCount, setAttemptCount] = useState(0);
   const [exportBusy, setExportBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const locked = isPublishedLocked(status);
 
@@ -283,6 +284,26 @@ export function QuizEditor({
       setError(err);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const onDelete = async () => {
+    if (!quizId || !courseId) return;
+    if (
+      !window.confirm(
+        t("quizDeleteConfirm", { title: title.trim() || t("quizEditorNew") }),
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    setError(null);
+    try {
+      await quizApi.deleteQuiz(courseId, quizId);
+      router.push("/teacher/quizzes");
+    } catch (err) {
+      setError(err);
+      setDeleting(false);
     }
   };
 
@@ -697,6 +718,21 @@ export function QuizEditor({
           </section>
         </>
       )}
+      {/* Real delete: the paper and every submission go together. Kept at
+          the foot of the Paper, away from the banner's everyday keys. */}
+      {quizId && view === "paper" ? (
+        <div className="flex justify-end pt-2">
+          <QuizKey
+            icon="trash"
+            busy={deleting}
+            disabled={busy}
+            testId="quiz-delete"
+            onClick={() => void onDelete()}
+          >
+            {t("quizDelete")}
+          </QuizKey>
+        </div>
+      ) : null}
     </div>
   );
 }

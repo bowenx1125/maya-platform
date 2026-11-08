@@ -68,6 +68,10 @@
       "owner": "T2-QUIZ-M1M3",
       "reason": "Classroom Quiz attempt detail: teacher any visible attempt, student own without the key"
     },
+    "deleteCourseQuiz": {
+      "owner": "T2-QUIZ-M1M3",
+      "reason": "Classroom Quiz teacher real delete of a quiz with all of its attempts"
+    },
     "hideCourseQuizAttempt": {
       "owner": "T2-QUIZ-M1M3",
       "reason": "Classroom Quiz teacher hide of one attempt from Record, counts and export"
