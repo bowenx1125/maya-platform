@@ -45,6 +45,9 @@ export const BUSY_MOTION =
 export const BUSY_MOTION_PRIMARY =
   "aria-busy:cursor-progress aria-busy:translate-x-[3px] aria-busy:translate-y-1 aria-busy:border-[#111] aria-busy:text-[#111] aria-busy:shadow-[0_0_0_#111] aria-busy:bg-[linear-gradient(90deg,#FF4D8D_var(--p,0%),#FFD1E1_0)] aria-busy:animate-debate-fill aria-busy:opacity-100 aria-busy:hover:translate-x-[3px] aria-busy:hover:translate-y-1 aria-busy:active:translate-x-[3px] aria-busy:active:translate-y-1 aria-busy:active:shadow-[0_0_0_#111] disabled:aria-busy:opacity-100 motion-reduce:aria-busy:animate-none motion-reduce:aria-busy:[&_.spinner]:animate-none motion-reduce:aria-busy:[&_svg.animate-spin]:animate-none";
 
+export const WORKSPACE_ACTION_SIZE =
+  "!gap-[6px] !h-[44px] !py-0 !px-[18px] !border-[3px] !rounded-[10px] ![font:800_15px_var(--font-lexend,'Lexend')]";
+
 export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius-base)] text-sm font-[700] font-[family-name:var(--arc-font-body)] cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
   {

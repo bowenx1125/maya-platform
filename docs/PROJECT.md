@@ -309,7 +309,9 @@ Integrated 3081da2 (base b6c2047b1549c5d28e84b52c5323a1e655bb596f) onto
 Class scope covers teacher pages; registration keeps group join/create.
 0086 retains group choice; 0087 preserves contributors' work after erasure.
 Hard delete removes student-owned work and grades, including Quiz attempts.
-1187 frontend passed/13 skipped; build passed. Local preview upgraded 0082→0087.
-Class creation/registration checked in browser; group move/ACL checked via API.
-Full local run at 535d227: 3073 passed/139 failed/1 skipped. Clean main reproduced
-135 failures; the other four were fixed. Final focused run: 82 passed.
+PR #390 merged. Local upgrade 0082→0087; build, 1187 UI tests, 82 focused passed.
+Full run at 535d227: 3073 pass/139 fail/1 skip. Main reproduced 135; four fixed.
+
+Nov10 local: original class Maya1002, second Maya1001, stable IDs and student data.
+Teacher scopes corrected. Shared RAG action style; RAG follows the class bar.
+47 PG and 1188 UI tests passed. Browser matched button style and class switching.

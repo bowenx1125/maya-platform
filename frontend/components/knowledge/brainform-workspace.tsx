@@ -497,8 +497,9 @@ export function BrainformWorkspace({
         .map((membership) => membership.course_id),
     [effectiveRole, user?.courses],
   );
+  const usePageCourse = effectiveRole === "student" || Boolean(initialGroupId);
   const defaultCourseId =
-    (initialCourseId && roleCourseIds.includes(initialCourseId)
+    (usePageCourse && initialCourseId && roleCourseIds.includes(initialCourseId)
       ? initialCourseId
       : undefined) ?? roleCourseIds[0];
   const [selectedCourseId, setSelectedCourseId] = useState(
@@ -508,7 +509,9 @@ export function BrainformWorkspace({
     useState(!initialGroupId);
   const [groupContextError, setGroupContextError] = useState<unknown>(null);
   const courseId =
-    selectedCourseId && roleCourseIds.includes(selectedCourseId)
+    usePageCourse &&
+    selectedCourseId &&
+    roleCourseIds.includes(selectedCourseId)
       ? selectedCourseId
       : (defaultCourseId ?? "");
 
@@ -600,7 +603,7 @@ export function BrainformWorkspace({
       ragDraftScope={JSON.stringify([
         user?.id ?? null,
         effectiveRole,
-        selectedCourseId,
+        courseId,
       ])}
     />
   );
@@ -2479,7 +2482,7 @@ function BrainformWorkspaceBody({
           }
         />
       ) : null}
-      {courseIds.length > 1 && !initialGroupId ? (
+      {role === "student" && courseIds.length > 1 && !initialGroupId ? (
         <header className={styles.pageHeader}>
           <label className={styles.coursePicker}>
             <span>{t("selectCourse")}</span>

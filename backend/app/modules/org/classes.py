@@ -11,10 +11,16 @@ from app.core.errors import conflict, forbidden, unprocessable
 from app.core.identity import normalize_group_name
 from app.core.models import Course, CourseMember, Group, GroupMember, User
 from app.core.sqlutil import begin_immediate
-from app.seed import COURSE_ID, GROUP_DEMO_ID, seed_uuid
+from app.seed import COURSE_ID, COURSE_NAME, GROUP_DEMO_ID, seed_uuid
 
+# These keys are persisted identities from the first rollout.
 SECOND_CLASS_ID = seed_uuid("class-maya1002")
 SECOND_CLASS_GROUP_ID = seed_uuid("class-maya1002-students")
+SECOND_CLASS_NAME = "Maya1001"
+CLASS_TEACHER_COURSE_IDS = {
+    COURSE_NAME.casefold(): COURSE_ID,
+    SECOND_CLASS_NAME.casefold(): SECOND_CLASS_ID,
+}
 
 
 def registration_classes(db: Session) -> list[Course]:
@@ -100,12 +106,14 @@ def ensure_classes(db: Session) -> None:
     first = db.get(Course, COURSE_ID)
     if first is None:
         raise RuntimeError("Class provisioning requires the original course")
-    if first.name == "Maya Cultural Exchange Demo":
-        first.name = "Maya1001"
+    first.name = COURSE_NAME
     now = datetime.now(UTC)
-    if db.get(Course, SECOND_CLASS_ID) is None:
-        db.add(Course(id=SECOND_CLASS_ID, code="maya1002", name="Maya1002", created_at=now))
+    second = db.get(Course, SECOND_CLASS_ID)
+    if second is None:
+        db.add(Course(id=SECOND_CLASS_ID, code="maya1002", name=SECOND_CLASS_NAME, created_at=now))
         db.flush()
+    else:
+        second.name = SECOND_CLASS_NAME
     if db.get(Group, SECOND_CLASS_GROUP_ID) is None:
         db.add(
             Group(

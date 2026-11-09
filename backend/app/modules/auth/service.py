@@ -317,10 +317,16 @@ def _sync_graph_in_session(
             if row.course_id == course.id
         }
         default_course = course
-        from app.modules.org.classes import default_class_group, registration_classes
+        from app.modules.org.classes import (
+            CLASS_TEACHER_COURSE_IDS,
+            default_class_group,
+            registration_classes,
+        )
 
-        courses_by_code = {row.code.casefold(): row for row in registration_classes(session)}
-        class_ids = {row.id for row in courses_by_code.values()}
+        classes = registration_classes(session)
+        courses_by_code = {row.code.casefold(): row for row in classes}
+        class_ids = {row.id for row in classes}
+        teacher_classes = {row.id: row for row in classes}
 
         users = session.scalars(select(User).order_by(User.id)).all()
         bindings = session.scalars(
@@ -381,7 +387,11 @@ def _sync_graph_in_session(
             existing_groups = group_members_by_user.get(user.id, [])
             course = default_course
             if account.role == "teacher":
-                course = courses_by_code.get(username_key(account.username), default_course)
+                key = username_key(account.username)
+                if key in CLASS_TEACHER_COURSE_IDS:
+                    course = teacher_classes[CLASS_TEACHER_COURSE_IDS[key]]
+                else:
+                    course = courses_by_code.get(key, default_course)
             elif (
                 account.role == "student"
                 and not material_changed
