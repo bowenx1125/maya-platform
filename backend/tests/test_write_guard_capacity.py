@@ -12,7 +12,11 @@ import pytest
 from app.core import adaptive_admission as aa
 from app.core import write_guard as wg
 from app.core.config import Settings
-from app.core.db import POSTGRES_MAX_OVERFLOW, POSTGRES_POOL_SIZE
+from app.core.db import (
+    POSTGRES_MAX_OVERFLOW,
+    POSTGRES_POOL_SIZE,
+    resolve_pool_config,
+)
 from app.core.errors import PlatformError
 from app.core.llm_admission import llm_admission_slot
 from app.core.write_guard import write_guard_slot
@@ -45,8 +49,10 @@ def test_capacity_defaults_and_untouched_limits() -> None:
     assert s.llm_admission_limit == 8
     # M3 moved the default to 2 (memory protection ≈ CPU cores).
     assert s.auth_hash_concurrency == 2
+    # Defaults when env unset (module constants). Env may override at engine build.
     assert (POSTGRES_POOL_SIZE, POSTGRES_MAX_OVERFLOW) == (15, 25)
     assert 2 * (POSTGRES_POOL_SIZE + POSTGRES_MAX_OVERFLOW) <= 200 - 100
+    assert resolve_pool_config() == (15, 25, 30.0)
 
 
 def _settings(**overrides: object) -> Settings:
@@ -245,3 +251,25 @@ def test_fixed_write_cap_can_be_restored_from_the_environment(
         thread.start()
         thread.join(5)
     assert failure == ["write_pressure"]
+
+
+def test_postgres_pool_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """POSTGRES_POOL_* env overrides defaults; empty/unset keeps module defaults."""
+
+    monkeypatch.delenv("POSTGRES_POOL_SIZE", raising=False)
+    monkeypatch.delenv("POSTGRES_MAX_OVERFLOW", raising=False)
+    monkeypatch.delenv("POSTGRES_POOL_TIMEOUT", raising=False)
+    assert resolve_pool_config() == (POSTGRES_POOL_SIZE, POSTGRES_MAX_OVERFLOW, 30.0)
+
+    monkeypatch.setenv("POSTGRES_POOL_SIZE", "100")
+    monkeypatch.setenv("POSTGRES_MAX_OVERFLOW", "100")
+    monkeypatch.setenv("POSTGRES_POOL_TIMEOUT", "10")
+    assert resolve_pool_config() == (100, 100, 10.0)
+
+    # Explicit kwargs win over env (used by tests that pin a pool).
+    assert resolve_pool_config(pool_size=10, max_overflow=50, pool_timeout=5.0) == (
+        10,
+        50,
+        5.0,
+    )
+

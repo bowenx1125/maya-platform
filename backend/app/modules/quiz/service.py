@@ -395,6 +395,16 @@ def submit_attempt(
     quiz_id: str,
     body: SubmitQuizAttemptRequest,
 ) -> QuizAttemptDTO:
+    """Submit one attempt for the current taking epoch.
+
+    Hot-path notes (concurrency ladder):
+    - Duplicate detection relies on the unique index + IntegrityError → 409;
+      no pre-insert existence SELECT (avoids an extra round-trip under load).
+    - ``document_snapshot_json`` reuses ``quiz.document_json`` as-is (no
+      re-serialize). Document is parsed once for objective grading only.
+    - Skip ``db.refresh`` after commit; expire_on_commit=False keeps fields.
+    """
+
     role = _require_member(db, actor, course_id)
     if role == "teacher":
         raise forbidden("Teachers cannot submit quiz attempts.")
@@ -407,29 +417,24 @@ def submit_attempt(
             "The quiz is not open for taking right now.",
         )
     epoch = int(quiz.taking_epoch)
-    existing = db.scalar(
-        select(ClassroomQuizAttempt).where(
-            ClassroomQuizAttempt.quiz_id == quiz.id,
-            ClassroomQuizAttempt.actor_user_id == str(actor.user.id),
-            ClassroomQuizAttempt.taking_epoch == epoch,
-        )
-    )
-    if existing is not None:
-        raise conflict("quiz_attempt_exists", "This quiz has already been submitted.")
-
-    document = loads_document(quiz.document_json)
+    # Reuse the stored JSON string for the snapshot; parse once for grading.
+    document_json = quiz.document_json
+    document = loads_document(document_json)
     items = teacher_items_from_document(document)
     score, score_max, grading_status, normalized = grade_objective(items, body.answers)
+    answers_json = json.dumps(normalized, ensure_ascii=False, separators=(",", ":"))
     now = _now()
+    attempt_id = str(uuid4())
+    actor_user_id = str(actor.user.id)
     attempt = ClassroomQuizAttempt(
-        id=str(uuid4()),
+        id=attempt_id,
         quiz_id=quiz.id,
         course_id=course_id,
-        actor_user_id=str(actor.user.id),
+        actor_user_id=actor_user_id,
         content_revision=quiz.content_revision,
         taking_epoch=epoch,
-        document_snapshot_json=quiz.document_json,
-        answers_json=json.dumps(normalized, ensure_ascii=False, separators=(",", ":")),
+        document_snapshot_json=document_json,
+        answers_json=answers_json,
         score_objective=score,
         score_max_objective=score_max,
         grading_status=grading_status,
@@ -448,20 +453,19 @@ def submit_attempt(
                 "This quiz has already been submitted.",
             ) from exc
         raise
-    db.refresh(attempt)
     return QuizAttemptDTO(
-        id=UUID(attempt.id),
-        quiz_id=UUID(attempt.quiz_id),
-        course_id=UUID(attempt.course_id),
-        actor_user_id=UUID(attempt.actor_user_id),
-        content_revision=attempt.content_revision,
-        taking_epoch=attempt.taking_epoch,
+        id=UUID(attempt_id),
+        quiz_id=UUID(quiz.id),
+        course_id=UUID(course_id),
+        actor_user_id=UUID(actor_user_id),
+        content_revision=quiz.content_revision,
+        taking_epoch=epoch,
         status="submitted",
-        grading_status=attempt.grading_status,  # type: ignore[arg-type]
-        score_objective=attempt.score_objective,
-        score_max_objective=attempt.score_max_objective,
+        grading_status=grading_status,  # type: ignore[arg-type]
+        score_objective=score,
+        score_max_objective=score_max,
         answers=normalized,
-        submitted_at=attempt.submitted_at,
+        submitted_at=now,
     )
 
 
