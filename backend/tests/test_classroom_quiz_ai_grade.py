@@ -524,14 +524,50 @@ def test_teacher_grade_made_during_ai_call_is_kept(
 def test_enqueue_skips_without_an_llm(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.modules.quiz import ai_grade
 
-    submitted: list[Any] = []
+    ai_grade.reset_queue_for_tests()
     monkeypatch.setattr(ai_grade, "llm_configured", lambda: False)
-    monkeypatch.setattr(ai_grade._POOL, "submit", lambda *args: submitted.append(args))
-    ai_grade.enqueue_quiz_ai_grade("a1", session_factory=lambda: None)  # type: ignore[arg-type, return-value]
-    assert submitted == []
+    assert (
+        ai_grade.enqueue_quiz_ai_grade("a1", session_factory=lambda: None)  # type: ignore[arg-type, return-value]
+        is False
+    )
+    assert ai_grade.queue_stats()["accepted"] == 0
+
+    monkeypatch.setattr(ai_grade, "_ensure_workers", lambda: None)
     monkeypatch.setattr(ai_grade, "llm_configured", lambda: True)
-    ai_grade.enqueue_quiz_ai_grade("a1", session_factory=lambda: None)  # type: ignore[arg-type, return-value]
-    assert len(submitted) == 1
+    assert (
+        ai_grade.enqueue_quiz_ai_grade("a1", session_factory=lambda: None)  # type: ignore[arg-type, return-value]
+        is True
+    )
+    assert ai_grade.queue_stats()["accepted"] == 1
+    assert ai_grade.queue_stats()["depth"] == 1
+    ai_grade.reset_queue_for_tests()
+
+
+def test_enqueue_rejects_when_queue_full(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.modules.quiz import ai_grade
+
+    ai_grade.reset_queue_for_tests()
+    monkeypatch.setattr(ai_grade, "llm_configured", lambda: True)
+    monkeypatch.setattr(ai_grade, "_ensure_workers", lambda: None)
+    for index in range(ai_grade.QUEUE_MAXDEPTH):
+        assert (
+            ai_grade.enqueue_quiz_ai_grade(
+                f"a{index}",
+                session_factory=lambda: None,  # type: ignore[arg-type, return-value]
+            )
+            is True
+        )
+    assert (
+        ai_grade.enqueue_quiz_ai_grade("overflow", session_factory=lambda: None)  # type: ignore[arg-type, return-value]
+        is False
+    )
+    stats = ai_grade.queue_stats()
+    assert stats["depth"] == ai_grade.QUEUE_MAXDEPTH
+    assert stats["maxdepth"] == 256
+    assert stats["workers"] == 2
+    assert stats["rejected_full"] == 1
+    assert stats["accepted"] == ai_grade.QUEUE_MAXDEPTH
+    ai_grade.reset_queue_for_tests()
 
 
 def test_teacher_detail_marks_ai_items_only(teacher: Actor, student: Actor) -> None:

@@ -3,10 +3,26 @@
 PostgreSQL is the only database: production, local development and tests.
 SQLite support was removed (PR B, 2026-10-24) and its one-off copy script
 retired once production had moved (2026-11-03; it is in git history).
+
+Pool capacity (per process)
+---------------------------
+``POSTGRES_POOL_SIZE`` + ``POSTGRES_MAX_OVERFLOW`` is the max checked-out
+connections **per uvicorn/gunicorn worker process**. Total app DB connections
+≈ ``workers × (pool_size + max_overflow)``. Keep that under Postgres
+``max_connections`` with headroom for admin/migrations/replicas.
+
+Defaults (15 + 25 = 40) suit two small replicas under a 200-connection
+server. For concurrency ladders (e.g. L2=1500 simultaneous submits), raise
+the env vars so ``workers × (size + overflow)`` covers the concurrency
+without silently lowering client count. Example: 8 workers × (100 + 100) =
+1600 slots needs ``max_connections`` ≥ ~1700. Also size write/admission
+gates (``WRITE_GUARD_LIMIT``, adaptive admission) for the same load test;
+do not disable production safety by default.
 """
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -22,10 +38,62 @@ from app.core.logging import configure_application_logging
 from app.core.models import Base
 from app.core.postgres_compat import ensure_postgres_compat
 
-# Per backend: 15 + 25 = 40, so two replicas hold at most 80 of PostgreSQL's
-# 200 connections; 48 admitted requests rarely hold a connection at once.
+# Module-level defaults. Tests may monkeypatch these before Database().
+# build_engine prefers env when set (POSTGRES_POOL_SIZE / POSTGRES_MAX_OVERFLOW
+# / POSTGRES_POOL_TIMEOUT), otherwise these constants.
 POSTGRES_POOL_SIZE = 15
 POSTGRES_MAX_OVERFLOW = 25
+POSTGRES_POOL_TIMEOUT = 30.0
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    return int(raw)
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    return float(raw)
+
+
+def resolve_pool_config(
+    *,
+    pool_size: int | None = None,
+    max_overflow: int | None = None,
+    pool_timeout: float | None = None,
+) -> tuple[int, int, float]:
+    """Resolve pool kwargs: explicit args > env > module defaults.
+
+    Capacity formula: per_process = pool_size + max_overflow;
+    total ≈ uvicorn_workers × per_process (must stay under max_connections).
+    """
+
+    size = (
+        pool_size
+        if pool_size is not None
+        else _env_int("POSTGRES_POOL_SIZE", POSTGRES_POOL_SIZE)
+    )
+    overflow = (
+        max_overflow
+        if max_overflow is not None
+        else _env_int("POSTGRES_MAX_OVERFLOW", POSTGRES_MAX_OVERFLOW)
+    )
+    timeout = (
+        pool_timeout
+        if pool_timeout is not None
+        else _env_float("POSTGRES_POOL_TIMEOUT", POSTGRES_POOL_TIMEOUT)
+    )
+    if size < 1:
+        raise ValueError("POSTGRES_POOL_SIZE must be >= 1")
+    if overflow < 0:
+        raise ValueError("POSTGRES_MAX_OVERFLOW must be >= 0")
+    if timeout <= 0:
+        raise ValueError("POSTGRES_POOL_TIMEOUT must be > 0")
+    return size, overflow, timeout
 
 ALEMBIC_HEAD = "0085_quiz_manual_grading"
 # The oldest revision this checkout has (migrations squashed 2026-10-25).
@@ -52,13 +120,14 @@ def build_engine(database_url: str) -> Engine:
     if backend == "sqlite":
         raise RuntimeError("SQLite is no longer supported. Set DATABASE_URL to PostgreSQL.")
     if backend == "postgresql":
+        pool_size, max_overflow, pool_timeout = resolve_pool_config()
         engine = create_engine(
             database_url,
             future=True,
             pool_pre_ping=True,
-            pool_size=POSTGRES_POOL_SIZE,
-            max_overflow=POSTGRES_MAX_OVERFLOW,
-            pool_timeout=30,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
         )
         # No connection here: building an app (or a script's Database) must
         # not need the server. The JSON helpers are installed with the schema.

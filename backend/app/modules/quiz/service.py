@@ -8,6 +8,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import conflict, forbidden, not_found, unprocessable
@@ -335,11 +336,24 @@ def delete_quiz(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -
     db.commit()
 
 
+def _get_quiz_for_update(db: Session, course_id: str, quiz_id: str) -> ClassroomQuiz:
+    """Load the quiz row with a write lock for taking open/close RMW."""
+
+    quiz = db.scalar(
+        select(ClassroomQuiz)
+        .where(ClassroomQuiz.id == quiz_id, ClassroomQuiz.course_id == course_id)
+        .with_for_update()
+    )
+    if quiz is None:
+        raise not_found()
+    return quiz
+
+
 def start_taking(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:
     """Open the published paper for taking; first open starts a new epoch."""
 
     _require_teacher(db, actor, course_id)
-    quiz = _get_quiz(db, course_id, quiz_id)
+    quiz = _get_quiz_for_update(db, course_id, quiz_id)
     if quiz.status != "published":
         raise conflict("quiz_not_published", "The quiz is not published.")
     if quiz.taking_open:
@@ -359,7 +373,7 @@ def pause_taking(db: Session, actor: AuthContext, course_id: str, quiz_id: str) 
     """Close taking without touching the epoch; re-opening keeps the epoch."""
 
     _require_teacher(db, actor, course_id)
-    quiz = _get_quiz(db, course_id, quiz_id)
+    quiz = _get_quiz_for_update(db, course_id, quiz_id)
     if quiz.status != "published":
         raise conflict("quiz_not_published", "The quiz is not published.")
     if not quiz.taking_open:
@@ -381,6 +395,16 @@ def submit_attempt(
     quiz_id: str,
     body: SubmitQuizAttemptRequest,
 ) -> QuizAttemptDTO:
+    """Submit one attempt for the current taking epoch.
+
+    Hot-path notes (concurrency ladder):
+    - Duplicate detection relies on the unique index + IntegrityError → 409;
+      no pre-insert existence SELECT (avoids an extra round-trip under load).
+    - ``document_snapshot_json`` reuses ``quiz.document_json`` as-is (no
+      re-serialize). Document is parsed once for objective grading only.
+    - Skip ``db.refresh`` after commit; expire_on_commit=False keeps fields.
+    """
+
     role = _require_member(db, actor, course_id)
     if role == "teacher":
         raise forbidden("Teachers cannot submit quiz attempts.")
@@ -393,29 +417,24 @@ def submit_attempt(
             "The quiz is not open for taking right now.",
         )
     epoch = int(quiz.taking_epoch)
-    existing = db.scalar(
-        select(ClassroomQuizAttempt).where(
-            ClassroomQuizAttempt.quiz_id == quiz.id,
-            ClassroomQuizAttempt.actor_user_id == str(actor.user.id),
-            ClassroomQuizAttempt.taking_epoch == epoch,
-        )
-    )
-    if existing is not None:
-        raise conflict("quiz_attempt_exists", "This quiz has already been submitted.")
-
-    document = loads_document(quiz.document_json)
+    # Reuse the stored JSON string for the snapshot; parse once for grading.
+    document_json = quiz.document_json
+    document = loads_document(document_json)
     items = teacher_items_from_document(document)
     score, score_max, grading_status, normalized = grade_objective(items, body.answers)
+    answers_json = json.dumps(normalized, ensure_ascii=False, separators=(",", ":"))
     now = _now()
+    attempt_id = str(uuid4())
+    actor_user_id = str(actor.user.id)
     attempt = ClassroomQuizAttempt(
-        id=str(uuid4()),
+        id=attempt_id,
         quiz_id=quiz.id,
         course_id=course_id,
-        actor_user_id=str(actor.user.id),
+        actor_user_id=actor_user_id,
         content_revision=quiz.content_revision,
         taking_epoch=epoch,
-        document_snapshot_json=quiz.document_json,
-        answers_json=json.dumps(normalized, ensure_ascii=False, separators=(",", ":")),
+        document_snapshot_json=document_json,
+        answers_json=answers_json,
         score_objective=score,
         score_max_objective=score_max,
         grading_status=grading_status,
@@ -424,21 +443,29 @@ def submit_attempt(
         teacher_hidden_at=None,
     )
     db.add(attempt)
-    db.commit()
-    db.refresh(attempt)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if _is_quiz_attempt_unique_integrity(exc):
+            raise conflict(
+                "quiz_attempt_exists",
+                "This quiz has already been submitted.",
+            ) from exc
+        raise
     return QuizAttemptDTO(
-        id=UUID(attempt.id),
-        quiz_id=UUID(attempt.quiz_id),
-        course_id=UUID(attempt.course_id),
-        actor_user_id=UUID(attempt.actor_user_id),
-        content_revision=attempt.content_revision,
-        taking_epoch=attempt.taking_epoch,
+        id=UUID(attempt_id),
+        quiz_id=UUID(quiz.id),
+        course_id=UUID(course_id),
+        actor_user_id=UUID(actor_user_id),
+        content_revision=quiz.content_revision,
+        taking_epoch=epoch,
         status="submitted",
-        grading_status=attempt.grading_status,  # type: ignore[arg-type]
-        score_objective=attempt.score_objective,
-        score_max_objective=attempt.score_max_objective,
+        grading_status=grading_status,  # type: ignore[arg-type]
+        score_objective=score,
+        score_max_objective=score_max,
         answers=normalized,
-        submitted_at=attempt.submitted_at,
+        submitted_at=now,
     )
 
 
@@ -864,6 +891,32 @@ def grade_attempt(
     detail = _attempt_detail(db, attempt, teacher=True)
     assert isinstance(detail, TeacherQuizAttemptDetailDTO)
     return detail
+
+
+def _integrity_detail(exc: IntegrityError) -> str:
+    orig = exc.orig
+    parts = [str(orig)]
+    diag = getattr(orig, "diag", None)
+    constraint_name = getattr(diag, "constraint_name", None) if diag is not None else None
+    if constraint_name:
+        parts.append(str(constraint_name))
+    return " ".join(parts).lower()
+
+
+def _is_quiz_attempt_unique_integrity(exc: IntegrityError) -> bool:
+    """True when the loser of a concurrent submit hit the epoch unique index."""
+
+    detail = _integrity_detail(exc)
+    if "ux_classroom_quiz_attempts_quiz_actor_epoch" in detail:
+        return True
+    # SQLite / generic drivers often omit the constraint name and only name columns.
+    return (
+        "classroom_quiz_attempts" in detail.replace("-", "_")
+        and "unique" in detail
+        and "quiz_id" in detail
+        and "actor_user_id" in detail
+        and "taking_epoch" in detail
+    )
 
 
 def attempt_needs_ai_grade(db: Session, attempt_id: str) -> bool:

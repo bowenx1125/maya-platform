@@ -1,7 +1,8 @@
 """Asynchronous AI grading for classroom quiz text items.
 
-Submit never calls an LLM. Work is enqueued after commit and runs under a
-process-wide semaphore so at most two attempts are graded at once.
+Submit never calls an LLM. Work is handed to a process-local bounded queue
+(maxdepth 256) drained by at most two worker threads. When the queue is full,
+enqueue fails observably and no extra thread is started.
 """
 
 from __future__ import annotations
@@ -9,9 +10,10 @@ from __future__ import annotations
 import json
 import logging
 import math
+import queue
 import re
+import threading
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any
 
@@ -26,10 +28,19 @@ from .models import ClassroomQuizAttempt
 
 TEXT_TYPES = ("short_text", "long_text")
 
-# At most two gradings at once on a 2-core server; the queue holds the rest.
-_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="quiz-ai-grade")
+QUEUE_MAXDEPTH = 256
+WORKER_LIMIT = 2
+
 _LOG = logging.getLogger("maya.quiz.ai_grade")
 _grade_fn: Callable[..., float] | None = None
+
+_Job = tuple[str, Callable[[], Session]]
+_queue: queue.Queue[_Job | None] = queue.Queue(maxsize=QUEUE_MAXDEPTH)
+_stats_lock = threading.Lock()
+_rejected_full = 0
+_accepted = 0
+_workers_started = False
+_worker_threads: list[threading.Thread] = []
 
 _SCORE_NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
 
@@ -143,31 +154,105 @@ def llm_configured() -> bool:
     )
 
 
+def queue_stats() -> dict[str, int]:
+    """Snapshot of the in-process AI grade queue (for tests / ops)."""
+
+    with _stats_lock:
+        return {
+            "depth": _queue.qsize(),
+            "maxdepth": QUEUE_MAXDEPTH,
+            "workers": WORKER_LIMIT,
+            "rejected_full": _rejected_full,
+            "accepted": _accepted,
+        }
+
+
+def reset_queue_for_tests() -> None:
+    """Drain the queue and zero counters (tests only)."""
+
+    global _rejected_full, _accepted
+    while True:
+        try:
+            _queue.get_nowait()
+        except queue.Empty:
+            break
+        else:
+            _queue.task_done()
+    with _stats_lock:
+        _rejected_full = 0
+        _accepted = 0
+
+
 def enqueue_quiz_ai_grade(
     attempt_id: str,
     *,
     session_factory: Callable[[], Session] | None = None,
-) -> None:
-    """Hand one attempt to the grading pool and return at once.
+) -> bool:
+    """Offer one attempt to the bounded grading queue and return at once.
 
-    Runs as a request background task. It must not wait on the pool: request
+    Runs as a request background task. It must not wait on the queue: request
     handlers share the server's worker threads, and a class submitting
-    together would otherwise park them all behind two slow LLM calls. The
-    pool runs at most two gradings; the rest wait in its in-memory queue. A
-    restart drops that queue and the items stay pending, which the teacher
-    can still grade by hand.
+    together would otherwise park them all behind slow LLM calls. At most
+    ``WORKER_LIMIT`` workers drain the queue; depth never exceeds
+    ``QUEUE_MAXDEPTH``. When full, the offer fails, a counter increments, and
+    no extra thread is started. A restart drops the queue; items stay pending
+    for hand grading.
     """
+
+    global _rejected_full, _accepted
 
     if session_factory is None or (_grade_fn is None and not llm_configured()):
         # No LLM in this environment (tests, mock demo): stay pending.
-        return
-    _POOL.submit(_run_logged, attempt_id, session_factory)
+        return False
+    _ensure_workers()
+    try:
+        _queue.put_nowait((attempt_id, session_factory))
+    except queue.Full:
+        with _stats_lock:
+            _rejected_full += 1
+        _LOG.warning(
+            "quiz AI grade queue full (maxdepth=%s); attempt %s not enqueued",
+            QUEUE_MAXDEPTH,
+            attempt_id,
+        )
+        return False
+    with _stats_lock:
+        _accepted += 1
+    return True
+
+
+def _ensure_workers() -> None:
+    global _workers_started
+    with _stats_lock:
+        if _workers_started:
+            return
+        for index in range(WORKER_LIMIT):
+            thread = threading.Thread(
+                target=_worker_loop,
+                name=f"quiz-ai-grade-{index}",
+                daemon=True,
+            )
+            thread.start()
+            _worker_threads.append(thread)
+        _workers_started = True
+
+
+def _worker_loop() -> None:
+    while True:
+        job = _queue.get()
+        try:
+            if job is None:
+                return
+            attempt_id, session_factory = job
+            _run_logged(attempt_id, session_factory)
+        finally:
+            _queue.task_done()
 
 
 def _run_logged(attempt_id: str, session_factory: Callable[[], Session]) -> None:
     try:
         run_quiz_ai_grade(attempt_id, session_factory=session_factory)
-    except Exception:  # pragma: no cover - keep the pool thread alive
+    except Exception:  # pragma: no cover - keep the worker thread alive
         _LOG.exception("quiz AI grading failed for attempt %s", attempt_id)
 
 
