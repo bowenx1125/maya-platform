@@ -21,7 +21,7 @@ from app.modules.auth.registration import (
     lock_password_identity,
     validate_password,
 )
-from app.modules.auth.service import revoke_user_sessions
+from app.modules.auth.service import lock_user_profile, revoke_user_sessions
 from app.modules.org.roster import move_to_group
 
 AVATAR_CHOICES = (
@@ -75,16 +75,8 @@ def change_group(db: Session, user: User, raw: str) -> None:
     the student from Accounts.
     """
 
-    managed = db.scalar(
-        select(DemoAccountBinding.user_id).where(
-            DemoAccountBinding.user_id == user.id, DemoAccountBinding.active.is_(True)
-        )
-    )
-    if managed is not None:
-        raise conflict(
-            "group_managed",
-            "This account's group comes from the course's account list; ask your teacher.",
-        )
+    lock_user_profile(db, user.id)
+    db.scalar(select(User).where(User.id == user.id).with_for_update())
     course_ids = db.scalars(
         select(CourseMember.course_id).where(
             CourseMember.user_id == user.id, CourseMember.role == "student"
@@ -104,6 +96,13 @@ def change_group(db: Session, user: User, raw: str) -> None:
         raise unprocessable("group_not_found", "Choose one of the course's groups.")
     group = groups[0]
     move_to_group(db, group.course_id, user, group.name)
+    binding = db.scalar(
+        select(DemoAccountBinding).where(
+            DemoAccountBinding.user_id == user.id, DemoAccountBinding.active.is_(True)
+        )
+    )
+    if binding is not None:
+        binding.selected_group_id = group.id
 
 
 def _password_matches(hash_value: str, password: str) -> bool:

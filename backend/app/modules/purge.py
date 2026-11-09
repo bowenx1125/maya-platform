@@ -37,6 +37,74 @@ Rule = Literal["delete", "null", "protect"]
 
 # Keyed "child.col_a,col_b->parent" with the child's columns sorted.
 REFERENCE_RULES: dict[str, Rule] = {
+    (
+        "assessment_course_report_revisions.activity_id,course_id,r"
+        "eport_id->assessment_course_reports"
+    ): "delete",
+    "assessment_course_report_mutations.report_id->assessment_course_reports": "delete",
+    (
+        "assessment_course_report_evidence.report_revision_id->assessment_course_report_revisions"
+    ): "delete",
+    (
+        "assessment_course_report_mutations.report_id,revision_id->"
+        "assessment_course_report_revisions"
+    ): "delete",
+    "chat_provider_consent_bindings.standing_grant_id->chat_provider_standing_grants": "null",
+    "file_operations.idempotency_record_id->idempotency_records": "null",
+    "voice_provider_operations.idempotency_record_id->idempotency_records": "null",
+    "classroom_interaction_windows.course_id,finalized_by->course_members": "protect",
+    "classroom_interaction_windows.course_id,opened_by->course_members": "protect",
+    "agent_account_memories.owner_user_id->users": "delete",
+    "agent_conversations.team_owner_user_id->users": "null",
+    "agent_conversations.user_id->users": "delete",
+    "agent_knowledge_sets.created_by_user_id->users": "null",
+    "agents.owner_user_id->users": "delete",
+    "assessment_activities.publisher_user_id->users": "protect",
+    "assessment_attempt_events.actor_user_id->users": "delete",
+    "assessment_attempts.actor_user_id->users": "delete",
+    "assessment_course_report_mutations.actor_user_id->users": "protect",
+    "assessment_course_report_revisions.actor_user_id->users": "protect",
+    "assessment_course_reports.owner_user_id->users": "protect",
+    "card_rooms.host_user_id->users": "delete",
+    "chat_memory_entry_actions.actor_user_id->users": "delete",
+    "chat_provider_consent_bindings.actor_user_id->users": "delete",
+    "chat_provider_consent_bindings.confirmed_by_user_id->users": "delete",
+    "chat_provider_standing_grants.confirmed_by_user_id->users": "delete",
+    "chat_reports.owner_user_id->users": "delete",
+    "classroom_quiz_attempts.actor_user_id->users": "delete",
+    "classroom_quizzes.created_by_user_id->users": "protect",
+    "conversation_attachments.owner_user_id->users": "delete",
+    "course_members.user_id->users": "delete",
+    "course_team_publications.publisher_user_id->users": "protect",
+    "debates.created_by->users": "protect",
+    "demo_account_bindings.user_id->users": "delete",
+    "group_members.user_id->users": "delete",
+    "idempotency_records.actor_user_id->users": "delete",
+    "knowledge_asset_versions.created_by_user_id->users": "null",
+    "knowledge_assets.created_by_user_id->users": "null",
+    "knowledge_document_versions.created_by_user_id->users": "null",
+    "knowledge_documents.owner_user_id->users": "delete",
+    "knowledge_generation_runs.owner_user_id->users": "delete",
+    "knowledge_set_markdown_versions.created_by_user_id->users": "null",
+    "knowledge_set_sources.created_by_user_id->users": "null",
+    "knowledge_sets.owner_user_id->users": "delete",
+    "learning_assessment_mutations.actor_user_id->users": "delete",
+    "learning_assessment_resource_grants.owner_user_id->users": "delete",
+    "learning_assessment_revisions.actor_user_id->users": "delete",
+    "learning_assessments.owner_user_id->users": "delete",
+    "learning_boundaries.owner_user_id->users": "delete",
+    "learning_boundary_revisions.actor_user_id->users": "delete",
+    "learning_records.actor_user_id->users": "delete",
+    "runtime_tool_receipts.actor_user_id->users": "delete",
+    "sessions.user_id->users": "delete",
+    "teacher_group_access.user_id->users": "delete",
+    "team_provider_consent_bindings.actor_user_id->users": "delete",
+    "team_provider_consent_bindings.confirmer_user_id->users": "delete",
+    "team_provider_standing_grants.publisher_user_id->users": "protect",
+    "team_versions.created_by_user_id->users": "null",
+    "teams.owner_user_id->users": "delete",
+    "user_credentials.user_id->users": "delete",
+    "voice_profiles.consent_actor_user_id->users": "null",
     "agent_account_memories.agent_id->agents": "delete",
     "agent_conversation_turns.conversation_id->agent_conversations": "delete",
     "agent_conversations.agent_version_id->agent_versions": "null",
@@ -215,6 +283,8 @@ CLEANUP_ROOTS = (
     "stored_files",
 )
 RECORD_ROOTS = ("assessment_attempts", "learning_assessments")
+# Only the explicitly authorized account operation starts from users.
+ACCOUNT_ROOTS = ("users", "assessment_course_reports")
 
 _CHUNK = 500
 

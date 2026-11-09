@@ -2813,7 +2813,7 @@ def _full_version_dto(
         version_seq=version.version_seq if expose_version_seq else None,
         content=payload,
         content_hash=version.content_hash,
-        created_by_user_id=_uid(version.created_by_user_id),
+        created_by_user_id=_uid(version.created_by_user_id) if version.created_by_user_id else None,
         created_at=version.created_at,
     )
 
@@ -2843,7 +2843,7 @@ def _student_version_dto(version: KnowledgeAssetVersion) -> AssetVersionStudentD
         # Do not expose a digest of a Question's hidden Rubric. This hash
         # fingerprints only the typed student-visible projection.
         content_hash=_sha256(projected_json),
-        created_by_user_id=_uid(version.created_by_user_id),
+        created_by_user_id=_uid(version.created_by_user_id) if version.created_by_user_id else None,
         created_at=version.created_at,
     )
 

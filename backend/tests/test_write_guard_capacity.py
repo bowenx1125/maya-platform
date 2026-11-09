@@ -272,4 +272,3 @@ def test_postgres_pool_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
         50,
         5.0,
     )
-

@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -32,6 +33,24 @@ function options(): RegistrationOptions {
       { name: "Team Aurora", member_count: 2 },
       { name: "Team Borealis", member_count: 1 },
       { name: "星辰队", member_count: 3 },
+    ],
+    classes: [
+      {
+        course_id: courseId,
+        course_name: "Maya1001",
+        group_name: "Students",
+        groups: [
+          { name: "Team Aurora", member_count: 2 },
+          { name: "Team Borealis", member_count: 1 },
+          { name: "星辰队", member_count: 3 },
+        ],
+      },
+      {
+        course_id: "course-two",
+        course_name: "Maya1002",
+        group_name: "Students",
+        groups: [{ name: "Second class team", member_count: 1 }],
+      },
     ],
   } as RegistrationOptions;
 }
@@ -68,6 +87,9 @@ async function toGroupStep(
     target: { value: password },
   });
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  const choice = await screen.findByLabelText("Class");
+  if ((choice as HTMLSelectElement).options.length > 1)
+    fireEvent.change(choice, { target: { value: courseId } });
   return screen.findByLabelText("Group name");
 }
 
@@ -85,7 +107,7 @@ describe("student self-registration form", () => {
     // student's cursor.
     expect(await screen.findByLabelText("Username")).toBeTruthy();
     expect(screen.queryByLabelText("Group name")).toBeNull();
-    expect(screen.queryByRole("option")).toBeNull();
+    expect(screen.queryByRole("listbox")).toBeNull();
     expect(screen.getByText(/Step 1 of 2/)).toBeTruthy();
 
     await toGroupStep();
@@ -112,13 +134,15 @@ describe("student self-registration form", () => {
 
     // An untouched field answers a question nobody asked: the student came
     // here to write one name, and the whole course dropped over it buries it.
-    expect(screen.queryByRole("option")).toBeNull();
+    expect(screen.queryByRole("listbox")).toBeNull();
     expect(group.getAttribute("aria-expanded")).toBe("false");
 
     fireEvent.change(group, { target: { value: "team" } });
     await waitFor(() =>
       expect(
-        screen.getAllByRole("option").map((option) => option.textContent),
+        within(screen.getByRole("listbox"))
+          .getAllByRole("option")
+          .map((option) => option.textContent),
       ).toEqual(["Team Aurora2 member(s)", "Team Borealis1 member(s)"]),
     );
   });
@@ -130,35 +154,53 @@ describe("student self-registration form", () => {
     // A substring, not a prefix: "aurora" still finds "Team Aurora".
     fireEvent.change(group, { target: { value: "aurora" } });
 
-    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(1));
-    expect(screen.getByRole("option").textContent).toContain("Team Aurora");
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("listbox")).getAllByRole("option"),
+      ).toHaveLength(1),
+    );
+    expect(
+      within(screen.getByRole("listbox")).getByRole("option").textContent,
+    ).toContain("Team Aurora");
   });
 
   it("closes the list on Escape and reopens it on the next keystroke", async () => {
     mount();
     const group = await toGroupStep();
     fireEvent.change(group, { target: { value: "team" } });
-    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(2));
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("listbox")).getAllByRole("option"),
+      ).toHaveLength(2),
+    );
 
     fireEvent.keyDown(group, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("option")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
     expect(group.getAttribute("aria-expanded")).toBe("false");
 
     fireEvent.change(group, { target: { value: "team " } });
-    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(2));
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("listbox")).getAllByRole("option"),
+      ).toHaveLength(2),
+    );
   });
 
   it("walks the list with the arrow keys and takes the highlighted name", async () => {
     mount();
     const group = (await toGroupStep()) as HTMLInputElement;
     fireEvent.change(group, { target: { value: "team" } });
-    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(2));
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("listbox")).getAllByRole("option"),
+      ).toHaveLength(2),
+    );
 
     fireEvent.keyDown(group, { key: "ArrowDown" });
     fireEvent.keyDown(group, { key: "ArrowDown" });
     await waitFor(() =>
       expect(group.getAttribute("aria-activedescendant")).toBe(
-        screen.getAllByRole("option")[1].id,
+        within(screen.getByRole("listbox")).getAllByRole("option")[1].id,
       ),
     );
 
@@ -166,7 +208,7 @@ describe("student self-registration form", () => {
     // underneath it, which would have created a group by accident.
     fireEvent.keyDown(group, { key: "Enter" });
     await waitFor(() => expect(group.value).toBe("Team Borealis"));
-    expect(screen.queryByRole("option")).toBeNull();
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 
   it("says whether a typed name joins an existing group or creates one", async () => {
@@ -188,7 +230,7 @@ describe("student self-registration form", () => {
     fireEvent.change(group, { target: { value: "星" } });
     fireEvent.click(await screen.findByRole("option", { name: /星辰队/ }));
     expect(group.value).toBe("星辰队");
-    expect(screen.queryByRole("option")).toBeNull();
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 
   it("registers with the chosen course and no display name", async () => {
@@ -235,27 +277,65 @@ describe("student self-registration form", () => {
     expect(screen.getByRole("alert")).toBeTruthy();
   });
 
-  it("still submits when the options request fails", async () => {
-    const api = {
-      registrationOptions: vi.fn().mockRejectedValue(new Error("offline")),
-    };
-    const register = vi.fn().mockResolvedValue({ csrf_token: "csrf" });
-    mockedUseSession.mockReturnValue({ api, register } as never);
-    render(
-      <>
-        <RegisterForm />
-      </>,
-    );
-
+  it("cannot register without loaded class options", async () => {
+    const register = vi.fn();
+    mockedUseSession.mockReturnValue({
+      api: {
+        registrationOptions: vi.fn().mockRejectedValue(new Error("offline")),
+      },
+      register,
+    } as never);
+    render(<RegisterForm />);
     const group = await toGroupStep("solo");
-    fireEvent.change(group, { target: { value: "Brand New Group" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    expect(group).toHaveProperty("disabled", true);
+    expect(
+      screen.getByRole("button", { name: "Create account" }),
+    ).toHaveProperty("disabled", true);
+    expect(register).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toBeTruthy();
+  });
 
+  it("changes suggestions with the class and clears the previous group", async () => {
+    const { register } = mount();
+    const group = await toGroupStep();
+    fireEvent.change(group, { target: { value: "Team Aurora" } });
+    fireEvent.change(screen.getByLabelText("Class"), {
+      target: { value: "course-two" },
+    });
+    expect(group).toHaveProperty("value", "");
+    fireEvent.change(group, { target: { value: "team" } });
+    expect(
+      within(await screen.findByRole("listbox"))
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["Second class team1 member(s)"]);
+    fireEvent.click(screen.getByRole("option", { name: /Second class team/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
     await waitFor(() =>
       expect(register).toHaveBeenCalledWith({
-        username: "solo",
+        username: "new-student",
         password: "correct-horse-1",
-        group_name: "Brand New Group",
+        course_id: "course-two",
+        group_name: "Second class team",
+      }),
+    );
+  });
+
+  it("creates a named group inside the selected class", async () => {
+    const { register } = mount();
+    const group = await toGroupStep();
+    fireEvent.change(screen.getByLabelText("Class"), {
+      target: { value: "course-two" },
+    });
+    fireEvent.change(group, { target: { value: "My new group" } });
+    expect(await screen.findByText(/you will create it/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await waitFor(() =>
+      expect(register).toHaveBeenCalledWith({
+        username: "new-student",
+        password: "correct-horse-1",
+        course_id: "course-two",
+        group_name: "My new group",
       }),
     );
   });

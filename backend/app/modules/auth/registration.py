@@ -6,10 +6,8 @@ requested username/password, creates the public :class:`User` row, stores the
 hash in :class:`UserCredential`, enrols the account in a course and attaches
 it to a group.
 
-A group is addressed by *name* rather than by id.  That is what makes
-"students who pick the same group land in the same group" true without a
-teacher pre-provisioning anything: the first student to use a name creates
-the group, everyone after that joins the existing row.
+Students choose a provisioned class, then join or create a group inside it.
+Only teachers can create classes.
 """
 
 from __future__ import annotations
@@ -39,7 +37,6 @@ from app.core.sqlutil import begin_immediate
 from app.modules.auth.credentials import CredentialFileError, active_catalog_snapshot
 from app.modules.auth.models import UserCredential
 from app.modules.auth.service import revoke_user_sessions
-from app.modules.org.names import resolve_named_group
 
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$")
 USERNAME_MIN = 3
@@ -110,6 +107,8 @@ def _catalog_usernames(settings: Settings) -> frozenset[str]:
 
 def username_is_available(db: Session, settings: Settings, username: str) -> bool:
     folded = username_key(username)
+    if folded in {"maya1001", "maya1002"}:
+        return False
     if folded in _catalog_usernames(settings):
         return False
     taken = db.scalar(select(User.id).where(User.username_key == folded))
@@ -117,12 +116,14 @@ def username_is_available(db: Session, settings: Settings, username: str) -> boo
 
 
 def resolve_course(db: Session, course_id: str | None) -> Course:
+    from app.modules.org.classes import registration_classes
+
+    courses = registration_classes(db)
     if course_id is not None:
-        course = db.get(Course, course_id)
+        course = next((item for item in courses if item.id == course_id), None)
         if course is None:
             raise _invalid("The selected course does not exist.")
         return course
-    courses = db.scalars(select(Course).order_by(Course.code)).all()
     if not courses:
         raise unprocessable(
             "registration_unavailable",
@@ -134,10 +135,19 @@ def resolve_course(db: Session, course_id: str | None) -> Course:
 
 
 def attach_to_group(db: Session, course: Course, user: User, group_name: str) -> Group:
-    """Join the course group with this name, creating it on first use."""
+    """Join or create a group inside the selected class's registration transaction."""
 
     now = datetime.now(UTC)
-    group = resolve_named_group(db, course.id, group_name)
+    group = db.scalar(
+        select(Group).where(
+            Group.course_id == course.id,
+            Group.name_key == canonical_group_name(group_name).casefold(),
+        )
+    )
+    if group is None:
+        group = Group(id=str(uuid4()), course_id=course.id, name=group_name, created_at=now)
+        db.add(group)
+        db.flush()
     existing = db.scalar(
         select(GroupMember).where(
             GroupMember.group_id == group.id,

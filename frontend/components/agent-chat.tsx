@@ -1037,10 +1037,16 @@ function AgentChatScope({
           setVersionId("");
           return;
         }
+        const classHistory = allHistory.filter(
+          (item) =>
+            (isTeamSession(item)
+              ? item.team.course_id
+              : item.agent.course_id) === courseId,
+        );
         const history =
-          listKind === "team" ? [] : allHistory.filter(isAgentSession);
+          listKind === "team" ? [] : classHistory.filter(isAgentSession);
         setTeamSessions(
-          listKind === "agent" ? [] : allHistory.filter(isTeamSession),
+          listKind === "agent" ? [] : classHistory.filter(isTeamSession),
         );
         const settled = getSettledChatSession(scopeKey);
         let nextHistory = history;

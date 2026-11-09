@@ -89,7 +89,7 @@ USERS = (
 )
 
 COURSE_CODE = "demo-course-001"
-COURSE_NAME = "Maya Cultural Exchange Demo"
+COURSE_NAME = "Maya1001"
 GROUP_SPECS = ((GROUP_DEMO_ID, "Demo Group"),)
 
 

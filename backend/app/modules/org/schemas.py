@@ -1,9 +1,8 @@
 """Organization DTOs.
 
-The course and group projections are read-only.  The roster adds the one
-teacher-facing write surface: it carries the account facts an edit depends
-on, including which source provisions the account and therefore whether an
-edit would survive the next restart.
+Teachers create classes and manage the roster. The roster carries the account
+facts an edit depends on, including which source provisions the account and
+therefore whether an edit would survive the next restart.
 """
 
 from __future__ import annotations
@@ -35,6 +34,10 @@ class CourseDetail(Course):
     # The frozen allOf contract leaves members optional, while the route still
     # always supplies it in current responses.
     members: list[Member] = Field(default_factory=list)
+
+
+class CreateClassRequest(BaseModel):
+    name: str = Field(max_length=200)
 
 
 class Group(BaseModel):

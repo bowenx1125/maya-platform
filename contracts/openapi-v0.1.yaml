@@ -1435,6 +1435,31 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Course'
+    post:
+      tags:
+      - Organization
+      operationId: createClass
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClassRequest'
+      responses:
+        '201':
+          description: Class created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Course'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
   /courses/{course_id}:
     parameters:
     - $ref: '#/components/parameters/CourseId'
@@ -1532,7 +1557,7 @@ paths:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
         '204':
-          description: The account and its private work are deleted.
+          description: The account, its work and grades are permanently deleted.
         '403':
           $ref: '#/components/responses/Error'
         '404':
@@ -6698,6 +6723,27 @@ components:
         member_count:
           type: integer
           minimum: 0
+    CreateClassRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+    RegistrationClass:
+      type: object
+      required: [course_id, course_name, group_name]
+      properties:
+        course_id:
+          $ref: '#/components/schemas/Uuid'
+        course_name:
+          type: string
+        group_name:
+          type: string
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegistrationGroup'
     RegistrationOptions:
       type: object
       required:
@@ -6713,6 +6759,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RegistrationGroup'
+        classes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegistrationClass'
     AuthSession:
       type: object
       required:
@@ -10250,9 +10300,11 @@ components:
           title: Created At
           type: string
         created_by_user_id:
-          format: uuid
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
           title: Created By User Id
-          type: string
         id:
           format: uuid
           title: Id
@@ -10300,9 +10352,11 @@ components:
           title: Created At
           type: string
         created_by_user_id:
-          format: uuid
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
           title: Created By User Id
-          type: string
         id:
           format: uuid
           title: Id
@@ -11847,6 +11901,12 @@ components:
           type:
           - string
           - 'null'
+        course_id:
+          title: Course Id
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
       title: UpdateCurrentUserRequest
       type: object
     PasswordChangeRequest:

@@ -1356,6 +1356,15 @@ export class PlatformApi {
     );
   }
 
+  async createClass(name: string): Promise<Course> {
+    return unwrap(
+      await this.client.POST("/courses", {
+        params: { header: { "X-CSRF-Token": this.csrfToken ?? "" } },
+        body: { name },
+      }),
+    );
+  }
+
   chatAgents(courseId: string): Promise<ChatAgent[]> {
     return this.readWithTimeout((signal) =>
       this.getJson(`courses/${courseId}/chat-agents`, signal),
@@ -1975,7 +1984,7 @@ export class PlatformApi {
     );
   }
 
-  /** Delete a self-registered member's account and their private work. */
+  /** Permanently erase a student account, its work and grades. */
   async deleteCourseMember(courseId: string, userId: string): Promise<void> {
     await unwrap<void>(
       await this.client.DELETE("/courses/{course_id}/members/{user_id}", {
@@ -1985,6 +1994,7 @@ export class PlatformApi {
         },
       }),
     );
+    invalidateRequestCache(this);
   }
 
   async updateCourseMember(

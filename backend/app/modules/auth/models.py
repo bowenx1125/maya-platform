@@ -29,6 +29,11 @@ class DemoAccountBinding(Base):
     )
     material_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    selected_group_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("groups.id", name="fk_demo_accounts_selected_group", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

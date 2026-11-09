@@ -97,8 +97,8 @@ class KnowledgeSetSource(Base):
     source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_by_user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -169,8 +169,8 @@ class KnowledgeAsset(Base):
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     generation_lineage_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     current_version_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_by_user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -207,8 +207,8 @@ class KnowledgeAssetVersion(Base):
     dependency_authorization_epoch: Mapped[int | None] = mapped_column(Integer, nullable=True)
     set_authorization_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
     origin: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")
-    created_by_user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     )
     generator_agent_version_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("agent_versions.id", ondelete="SET NULL"), nullable=True
@@ -293,8 +293,8 @@ class AgentKnowledgeSet(Base):
         String(36), ForeignKey("knowledge_sets.id", ondelete="RESTRICT"), primary_key=True
     )
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_by_user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -401,8 +401,8 @@ class KnowledgeSetMarkdownVersion(Base):
     )
     generation_intent_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     source_manifest_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    created_by_user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     )
     generator_agent_version_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("agent_versions.id", ondelete="SET NULL"), nullable=True

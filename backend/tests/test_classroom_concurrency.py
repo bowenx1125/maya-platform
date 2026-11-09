@@ -64,7 +64,12 @@ def _student(
     registered = _retrying(
         lambda: client.post(
             "/api/v1/auth/register",
-            json={"username": username, "password": PASSWORD, "group_name": group},
+            json={
+                "username": username,
+                "password": PASSWORD,
+                "group_name": group,
+                "course_id": COURSE_ID,
+            },
         )
     )
     assert registered.status_code in (200, 201), registered.text

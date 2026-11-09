@@ -93,20 +93,30 @@ def test_a_new_group_name_is_refused_and_creates_nothing(app_factory: Any) -> No
         assert [row["group_id"] for row in me["user"]["groups"]] == [aurora]
 
 
-def test_catalog_accounts_keep_the_group_the_account_list_gives_them(
-    client: TestClient,
-) -> None:
-    for username in ("bowen", "maya"):
-        payload, csrf = login(client, username)
-        refused = client.patch(
-            "/api/v1/auth/me",
-            json={"group_name": "Demo Group"},
-            headers=_headers(csrf),
+def test_catalog_student_can_choose_an_existing_group_but_teacher_cannot(app_factory: Any) -> None:
+    from app.main import _bootstrap_accounts
+
+    app, database, settings = app_factory()
+    with TestClient(app) as client:
+        registration = register(client, username="another-student", group_name="Team Borealis")
+        assert registration.status_code == 201
+        _, csrf = login(client, "bowen")
+        moved = client.patch(
+            "/api/v1/auth/me", json={"group_name": "Team Borealis"}, headers=_headers(csrf)
         )
-        assert refused.status_code == 409, refused.text
-        assert refused.json()["code"] == "group_managed"
-        me = client.get("/api/v1/auth/me").json()
-        assert me["user"]["groups"] == payload["user"]["groups"]
+        assert moved.status_code == 200, moved.text
+        expected = _group_id(database, "Team Borealis")
+        assert [row["group_id"] for row in moved.json()["user"]["groups"]] == [expected]
+        _bootstrap_accounts(database, settings)
+        current = client.get("/api/v1/auth/me")
+        assert current.status_code == 200
+        assert [row["group_id"] for row in current.json()["user"]["groups"]] == [expected]
+        _, teacher_csrf = login(client, "maya")
+        denied = client.patch(
+            "/api/v1/auth/me", json={"group_name": "Team Borealis"}, headers=_headers(teacher_csrf)
+        )
+        assert denied.status_code == 409
+        assert denied.json()["code"] == "group_change_forbidden"
 
 
 def test_only_students_choose_their_own_group(app_factory: Any) -> None:

@@ -30,7 +30,12 @@ def _clean_gates() -> Any:
 
 
 def _body(name: str) -> dict[str, str]:
-    return {"username": name, "password": "correct-horse-1", "group_name": "Team Aurora"}
+    return {
+        "username": name,
+        "password": "correct-horse-1",
+        "group_name": "Team Aurora",
+        "course_id": "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b",
+    }
 
 
 def test_registration_is_admitted_through_the_login_class(client: TestClient) -> None:

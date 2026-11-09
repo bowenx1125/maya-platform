@@ -5,6 +5,8 @@ from typing import Any
 from uuid import uuid4
 
 from app.core.models import Course, CourseMember, User
+from app.modules.org.classes import SECOND_CLASS_ID
+from app.seed import COURSE_ID
 from fastapi.testclient import TestClient
 from sqlalchemy import event, func, select
 
@@ -48,7 +50,10 @@ def test_teacher_sees_active_student_count(client: TestClient, database: Any) ->
     assert courses
     for course in courses:
         assert course["student_count"] == _expected(database, course["id"])
-        assert course["student_count"] > 0
+    counts = {course["id"]: course["student_count"] for course in courses}
+    assert set(counts) == {COURSE_ID, SECOND_CLASS_ID}
+    assert counts[COURSE_ID] > 0
+    assert counts[SECOND_CLASS_ID] == 0
 
 
 def test_inactive_students_are_not_counted(client: TestClient, database: Any) -> None:

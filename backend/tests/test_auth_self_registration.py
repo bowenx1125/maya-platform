@@ -25,6 +25,7 @@ def register(
         "username": username,
         "password": password,
         "group_name": group_name,
+        "course_id": COURSE_ID,
     }
     body.update(extra)
     return client.post("/api/v1/auth/register", json=body)

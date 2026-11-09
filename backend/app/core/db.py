@@ -73,9 +73,7 @@ def resolve_pool_config(
     """
 
     size = (
-        pool_size
-        if pool_size is not None
-        else _env_int("POSTGRES_POOL_SIZE", POSTGRES_POOL_SIZE)
+        pool_size if pool_size is not None else _env_int("POSTGRES_POOL_SIZE", POSTGRES_POOL_SIZE)
     )
     overflow = (
         max_overflow
@@ -95,7 +93,8 @@ def resolve_pool_config(
         raise ValueError("POSTGRES_POOL_TIMEOUT must be > 0")
     return size, overflow, timeout
 
-ALEMBIC_HEAD = "0085_quiz_manual_grading"
+
+ALEMBIC_HEAD = "0087_account_author_links"
 # The oldest revision this checkout has (migrations squashed 2026-10-25).
 MIGRATION_BASELINE = "0080_drop_playback_rate"
 

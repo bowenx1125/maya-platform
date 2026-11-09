@@ -42,7 +42,7 @@ import {
   visitRenewalDue,
 } from "../lib/teacher-visit";
 import { PlatformApiError } from "../lib/api/platform";
-import { Notice } from "./ui";
+import { LoadingCard, Notice } from "./ui";
 import { useSession } from "./session-provider";
 import { OnboardingTour } from "./onboarding-tour";
 import {
@@ -58,6 +58,7 @@ import {
 } from "./ui/button";
 import { NoticeTraySlot } from "./ui/error-kit";
 import { MusicKey } from "./music-key";
+import { TeacherClassBar } from "./teacher-class-bar";
 
 type ActionRegistration = {
   owner: string;
@@ -228,7 +229,8 @@ export function AppShell({
   role: "student" | "teacher";
 }) {
   const t = useT();
-  const { api, user, logout, refresh, identityGeneration } = useSession();
+  const { api, user, logout, refresh, identityGeneration, status } =
+    useSession();
   const router = useRouter();
   const pathname = usePathname();
   const [locationHash, setLocationHash] = useState("");
@@ -1408,7 +1410,16 @@ export function AppShell({
               })}
             </div>
           ) : null}
-          <ViewTransition>{children}</ViewTransition>
+          {teacherSurface ? <TeacherClassBar key={user?.id} /> : null}
+          {status === "loading" ? (
+            <LoadingCard />
+          ) : (
+            <ViewTransition
+              key={`${user?.id}:${teacherSurface ? user?.courses.find((item) => item.role === "teacher")?.course_id : identityGeneration}`}
+            >
+              {children}
+            </ViewTransition>
+          )}
           {visitEnded && visitEnded === visitGroupId ? (
             <Notice
               tone="warning"

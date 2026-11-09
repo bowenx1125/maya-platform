@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import pytest
 from alembic import command
-from app.core.db import ALEMBIC_HEAD, Database
+from app.core.db import Database
 from app.modules.workspace.models import Conversation
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect, text
@@ -169,7 +169,7 @@ def test_backfill_classifies_bound_chats_and_downgrades(
     with database.engine.begin() as connection:
         for row in _classified_rows():
             _insert(connection, **row)
-    database.upgrade_schema()
+    command.upgrade(database._alembic_config(), "0081_conversation_chat_type")  # type: ignore[arg-type]
     # Alembic's fileConfig writes this line itself; it does not propagate
     # into the pytest log handler.
     assert "agent_conversations chat_type unclassified: 0" in capsys.readouterr().err
@@ -190,7 +190,7 @@ def test_backfill_classifies_bound_chats_and_downgrades(
     with database.engine.connect() as connection:
         assert (
             connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-            == ALEMBIC_HEAD
+            == "0081_conversation_chat_type"
         )
 
     command.downgrade(database._alembic_config(), "0080_drop_playback_rate")  # type: ignore[attr-defined]
@@ -203,7 +203,7 @@ def test_backfill_classifies_bound_chats_and_downgrades(
             == "0080_drop_playback_rate"
         )
 
-    database.upgrade_schema()
+    command.upgrade(database._alembic_config(), "0081_conversation_chat_type")  # type: ignore[arg-type]
     assert _types(database)["maya-live"] == "team"
     assert _types(database)["agent-removed"] == "agent"
     assert _chat_type_column(database)["nullable"] is False  # type: ignore[index]
@@ -239,7 +239,7 @@ def test_backfill_leaves_unclassified_rows_nullable_and_logs(
             origin="single_agent",
             note="unknown",
         )
-    database.upgrade_schema()
+    command.upgrade(database._alembic_config(), "0081_conversation_chat_type")  # type: ignore[arg-type]
     assert "agent_conversations chat_type unclassified: 2" in capsys.readouterr().err
     assert _types(database) == {
         "agent-live": "agent",

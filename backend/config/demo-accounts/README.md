@@ -24,3 +24,42 @@ platform User UUID.
 The surrounding deployment must ignore this directory's private file in both
 Git and Docker build context. Do not put real passwords in this example or in
 source control.
+
+## Classes
+
+`Maya1001` and `Maya1002` are class teachers: add their accounts to the private
+catalog with role `teacher` and an empty group. Set passwords only in that private
+file. The existing `Maya` teacher can view every class from Accounts.
+
+The original course and its existing student memberships are retained as
+Maya1001. A second course and its student group are provisioned idempotently at
+startup; no learner work is copied. In Accounts, teachers can use Add class to
+create a named class. It appears in the registration class selector immediately.
+Its creator and Maya can manage it; other class teachers gain no access. These
+teacher memberships survive catalog synchronization. Class names are unique
+after whitespace and case normalization.
+
+Self-registration selects a class, then joins an existing group or creates a new
+one inside that class. Group suggestions and counts belong only to the selected
+class; the same group name in another class creates a separate group. Students
+can change class in Profile; their previous work remains in
+its original class and becomes inaccessible. A teacher cannot self-enrol into a
+different class. A catalog student's class and explicitly chosen group survive normal startup
+synchronization. Students may choose any existing group in their current class.
+
+## Account erasure
+
+Delete physically removes a self-registered student account, credentials,
+sessions, memberships, owned public/private Agents, Teams, RAG, Knowledge,
+chats and grades. Cached class reports containing the learner's grades are
+invalidated; other learners' source records remain. Contributor references on
+other people's material become null instead of deleting that material.
+
+The caller must teach every affected class. Self, catalog and teacher accounts
+remain protected. Unknown or protected references roll the entire request back;
+files unlink only after commit. Supplier cleanup retains its reconciliation
+records until voice deletion settles. Migrations never delete existing accounts.
+
+Teachers share one selected class across pages. Switching opens the new class's
+module list, clears old detail/group context and caches, and preserves server
+membership checks. Public resources are class-bound, not global to a teacher.

@@ -38,8 +38,7 @@ download SSRF stays.
 
 0026:Topic/Background separate; editable frozen Rulesets:
 `backend/app/modules/debates/default_rules/{zh,en}.md`,no hidden Chat instructions.
-Keep legacy IDs/data,full Report Markdown/sources,colleagues' Classes/3D.0029:single-
-course registration,normalized/collision-checked usernames/groups. Teacher Enter
+Keep legacy IDs/data,full Report Markdown/sources,colleagues' Classes/3D.0029:normalized/collision-checked usernames/groups; classes below. Teacher Enter
 keeps role/ACL,catalog syncs memberships. Password change:keep current session,
 revoke others. Voices creator/course-teacher managed; classroom access grants no generation/control.
 徐伯闻:teaching; 古月:3D/Voice/TTS; Kaikai:accounts/student UI.
@@ -52,13 +51,13 @@ charge≠success,no silent billed retries. Real RAG/classroom load/voice quality
 
 ## Preserved v1.4 work
 
-W0:Agno3.0.11/public SDK (ADR-009),Team `additional_input` restores assistant history.
-W1(0035):owner-first drafts,publication/ACL,frozen names/identities. W2a:replay/history/
-usage/CAS/refund/SSE/GET recovery; W2b(0034):above batches/caps. No Toolkit approval/
-fixed Agent.md chapters. K1:immutable Set/Asset/Version,actual Sources,Question Rubric,
-visual-only Graph,one store. K2a/b:durable jobs/claims/exact Provider stages;
-K2b2/K3-A materialization/publication committed.
-[Knowledge contract](contracts/KNOWLEDGE_GENERATION_CONTRACT.md) governs generation/head.
+W0:Agno3.0.11/public SDK (ADR-009); Team additional_input restores history.
+W1/0035:owner-first drafts/publication/ACL/frozen names/identities.
+W2a:replay/history/usage/CAS/refund/SSE/GET recovery; W2b/0034:above caps/batches.
+No Toolkit approval/fixed Agent.md chapters. K1:immutable Set/Asset/Version,
+actual Sources,Question Rubric,visual-only Graph,one store. K2a/b:durable jobs/
+claims/exact Provider stages; K2b2/K3-A materialization/publication committed.
+[Knowledge contract](contracts/KNOWLEDGE_GENERATION_CONTRACT.md):generation/head.
 
 ## Oct7 MayaForm
 
@@ -193,9 +192,9 @@ uploaded Voices ready at once (0073);▷ listens only;Team model call12 rows.
 
 ## Oct20–23 releases
 
-#225–#239/0076:answer guard,public Agent edits/audit,independent Record,cascade recovery
-(no auto-retry),login fences,stale_base_version,constant history SELECTs. 50-user Mock
-p95≤7.85s;PG polling REPEATABLE READ.
+#225–#239/0076:answer guard,public editing/audit,Chat-independent Record,cascade
+recovery/no auto-retry,login fences,stale_base_version,constant history SELECTs,
+PG poll REPEATABLE READ.50-user Mock:p95≤7.85s. Details:Git history.
 
 ## Oct24 Team chats and junk (#241)
 
@@ -205,14 +204,12 @@ kept (unless charged or holding a supplier id); empty Agents are swept after 1h.
 
 ## Oct24 true deletion (#242, supersedes #233)
 
-Voices/RAG/Knowledge/Agents/Teams/chats hard-deleted
-with storage; history FKs SET NULL with snapshot names, so Records/grades stay open.
-Deleting a chat keeps answers; deleting an Agent/Team ends its chats and abandons
-unfinished attempts. Debates own copies of AGENT.md, RAG/Knowledge and the voice
-(recording + supplier voice ID in debate_voice_clones); the sweeper deletes a supplier
-voice once nothing holds it (per-voice advisory lock). Prune keeps current+previous
-AGENT.md and versions still in use. Scripts (dry-run default, --confirm-production):
-backfill_debate_snapshots, backfill_debate_voice_clones, cleanup_soft_deleted.
+0080:work hard-deletes with storage; null history FKs/name snapshots preserve
+Records. Agent/Team deletion ends chats and abandons unfinished attempts.
+Debates own AGENT.md/RAG/Knowledge and voice ID/sample copies; supplier cleanup
+waits for no holders under a per-voice lock. Prune keeps head+previous/in-use.
+Scripts:backfill_debate_snapshots,backfill_debate_voice_clones,cleanup_soft_deleted
+(dry-run default,--confirm-production).
 
 ## Oct24 Debate Next and errors
 
@@ -223,12 +220,11 @@ Team errors name the Agent;agent_in_team names own Teams;unknown codes show the 
 
 ## Oct24 cleanup and Record hotfix
 
-Prod cleanup rolled back on an unruled FK and had unlinked 841 files. Hard deletes now
-run through app/modules/purge.py: one rule (delete/null/protect) per FK into every
-deleted table from the live catalog (a test fails on an unruled FK); records, answers,
-Debate copies and ledgers only get null; files unlink after the outermost commit.
-Teacher Record reads attempts by course+student; teacher delete is real (chat kept).
-Prod-shaped 0076→0078 run: dry-run→apply→second apply 0, snapshots unchanged.
+Prod rollback had unlinked841 files. app/modules/purge.py rules every live
+FK delete/null/protect; unknown refs retain parents; unlink after outer commit.
+Records/answers/Debate copies/ledgers keep null links except account erasure
+below. Teacher Record deletion is real,Chat kept.0076→0078 dry-run→apply→second
+apply0,snapshots unchanged.
 
 ## Oct24 Agent hints and Debate create
 
@@ -257,10 +253,9 @@ Keys:fixed hit area;sidebar:active wait/query context. Sheets/mockups removed: c
 
 ## Nov2 Chatform lists
 
-0081_conversation_chat_type adds chat_type agent|team beside entry_kind.
-Backfill requires the entry check (binding agrees); leftovers stay null, counted
-in the migration log, and typed lists skip them. maya_team is team. Chat with
-Agent and Chat with Team are separate histories; no kind stays the Agent list.
+0081 adds chat_type agent|team; maya_team=team. Backfill needs entry-kind/binding
+agreement; leftover NULLs logged,typed lists skip them. Separate Agent/Team
+histories; no kind selects Agent history.
 
 ## Nov2 Accounts group visit
 
@@ -289,12 +284,9 @@ answer together (≤3; assessment Teams one at a time); history is one read. 390
 
 ## Nov5 Agent Chat identity
 
-A Tesla Agent greeted a teacher as 教学助手: Agent Chat sent a fixed "educational Agent"
-opening, teacher-tools text and 13/8 assessment Tools. Now "You are <name>", own AGENT.md/
-Knowledge/RAG only, no assessment Tools (Agent Chats hold no attempt; Teams unchanged).
-Check RAG → documents, then Details (owner-only GET …/turns/{id}/model-input from stored
-request bytes): system prompt, AGENT.md, Knowledge, attachments, Tools/results. Scoring/
-summary calls stay hidden (Rubric). Team/Debate audited clean. Not yet deployed.
+#337/#338: Agent Chats send the Agent name, AGENT.md, Knowledge and RAG.
+No assessment Tools or attempt; Teams unchanged. Owner-only RAG Details
+shows stored model input; scoring/summary Rubrics remain hidden.
 
 ## Nov6 recovery
 
@@ -309,3 +301,15 @@ volume untouched. Stalled needs backend receipt recovery;safety gates kept.
 detail,hand grading,hide;Record→Quiz. #383/4:opt-in AI grading. UI A:1 page/quiz,
 Paper|Submissions,no Chat tests;New/Back/Done 1 style. [Contract](contracts/CLASSROOM_QUIZ_API.md)
 Agent name card;Private→Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)).
+
+## Nov9 local classes and accounts (in progress)
+
+Integrated 3081da2 (base b6c2047b1549c5d28e84b52c5323a1e655bb596f) onto
+535d2272a9b337e9daec819e89df889d100789a8, then 28b8bf8e8f8ef6169bbe876a281bb93dd031d3ac.
+Class scope covers teacher pages; registration keeps group join/create.
+0086 retains group choice; 0087 preserves contributors' work after erasure.
+Hard delete removes student-owned work and grades, including Quiz attempts.
+1187 frontend passed/13 skipped; build passed. Local preview upgraded 0082→0087.
+Class creation/registration checked in browser; group move/ACL checked via API.
+Full local run at 535d227: 3073 passed/139 failed/1 skipped. Clean main reproduced
+135 failures; the other four were fixed. Final focused run: 82 passed.

@@ -1,9 +1,9 @@
 "use client";
 
 import { LIST_CARD_LIFT } from "./agent-chrome";
-import { PRESS_MOTION } from "./ui/button";
+import { Button, PRESS_MOTION } from "./ui/button";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   type Group,
   type RosterEntry,
@@ -26,8 +26,11 @@ import {
 } from "./quiet-icons";
 import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
-import { ErrorNotice, LoadingCard, PageIntro } from "./ui";
+import { ErrorNotice, LoadingCard } from "./ui";
 import styles from "./roster-workspace.module.css";
+import { PageBanner } from "./page-banner";
+import { Input } from "./ui/input";
+import { Card } from "./ui/card";
 
 type Draft = { display_name: string; group_name: string };
 
@@ -37,6 +40,100 @@ type IssuedPassword = { user_id: string; username: string; password: string };
 const POLAROID_COLORS = ["#FFE14D", "#A3E635", "#67E8F9"] as const;
 
 export function RosterWorkspace() {
+  const t = useT();
+  const { api, user, refresh, selectTeacherCourse } = useSession();
+  const [adding, setAdding] = useState(false);
+  const [className, setClassName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<unknown>(null);
+  const teacherIds = (user?.courses ?? [])
+    .filter((item) => item.role === "teacher")
+    .map((item) => item.course_id)
+    .join(",");
+  const courseId = teacherIds.split(",")[0] || undefined;
+  async function addClass(event: FormEvent) {
+    event.preventDefault();
+    if (creating || !className.trim()) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const created = await api.createClass(className.trim());
+      await refresh();
+      await selectTeacherCourse(created.id);
+      setAdding(false);
+      setClassName("");
+    } catch (cause) {
+      setCreateError(cause);
+    } finally {
+      setCreating(false);
+    }
+  }
+  return (
+    <div className={`account-layout ${styles.layout}`}>
+      <PageBanner title={t("accounts")}>
+        <Button
+          variant="neutral"
+          className="rounded-[10px] border-[3px] font-body"
+          disabled={creating}
+          onClick={() => {
+            setAdding(true);
+            setCreateError(null);
+          }}
+        >
+          Add class
+        </Button>
+      </PageBanner>
+      {adding ? (
+        <Card className="px-5">
+          <form
+            className="stack-form"
+            onSubmit={(event) => void addClass(event)}
+          >
+            <label>
+              <span>Class name</span>
+              <Input
+                value={className}
+                onChange={(event) => setClassName(event.target.value)}
+                maxLength={200}
+                disabled={creating}
+                required
+                autoFocus
+              />
+            </label>
+            {createError ? <ErrorNotice error={createError} /> : null}
+            <div className="button-row">
+              <Button
+                type="submit"
+                busy={creating}
+                disabled={!className.trim()}
+                className="rounded-[10px] font-body"
+              >
+                {creating ? (
+                  <span className="spinner" aria-hidden="true" />
+                ) : null}
+                {creating ? "Creating…" : "Create class"}
+              </Button>
+              <Button
+                variant="neutral"
+                disabled={creating}
+                onClick={() => setAdding(false)}
+                className="rounded-[10px] border-[3px] font-body"
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Card>
+      ) : null}
+      <ClassRosterWorkspace
+        key={`${user?.id}:${courseId}`}
+        courseId={courseId}
+      />
+    </div>
+  );
+}
+
+function ClassRosterWorkspace({ courseId }: { courseId: string | undefined }) {
   const t = useT();
   const router = useRouter();
   const { api, refresh, user } = useSession();
@@ -52,11 +149,6 @@ export function RosterWorkspace() {
   const [busy, setBusy] = useState<string | null>(null);
   const [issued, setIssued] = useState<IssuedPassword | null>(null);
   const [filter, setFilter] = useState("");
-
-  const courseId = useMemo(
-    () => user?.courses.find((item) => item.role === "teacher")?.course_id,
-    [user],
-  );
 
   const load = useCallback(
     async (gate = true) => {
@@ -411,8 +503,7 @@ export function RosterWorkspace() {
   );
 
   return (
-    <div className={`account-layout ${styles.layout}`}>
-      <PageIntro title={t("accounts")} />
+    <>
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
 
       <div className={styles.grid}>
@@ -552,6 +643,6 @@ export function RosterWorkspace() {
           )}
         </section>
       </div>
-    </div>
+    </>
   );
 }

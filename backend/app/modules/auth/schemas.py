@@ -73,6 +73,7 @@ class UpdateCurrentUserRequest(BaseModel):
     avatar: str | None = Field(default=None, max_length=64)
     display_name: str | None = Field(default=None, max_length=200)
     group_name: str | None = Field(default=None, max_length=200)
+    course_id: UUID | None = None
 
 
 class PasswordChangeRequest(BaseModel):
@@ -100,12 +101,20 @@ class RegistrationGroup(BaseModel):
     member_count: int = Field(ge=0)
 
 
+class RegistrationClass(BaseModel):
+    course_id: UUID
+    course_name: str
+    group_name: str
+    groups: list[RegistrationGroup] = Field(default_factory=list)
+
+
 class RegistrationOptions(BaseModel):
     """Server-decided options a registration form may present."""
 
     course_id: UUID
     course_name: str
     groups: list[RegistrationGroup]
+    classes: list[RegistrationClass] = Field(default_factory=list)
 
 
 class PasswordResetRequest(BaseModel):
