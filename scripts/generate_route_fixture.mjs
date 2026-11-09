@@ -25,6 +25,7 @@ const implemented = new Set([
   "resetStudentPassword",
   "logout",
   "listCourses",
+  "createClass",
   "getCourse",
   "listCourseGroups",
   "getGroup",

@@ -26,9 +26,8 @@ import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
 
-from sqlalchemy import delete, select
+from sqlalchemy import or_, select, union_all
 from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError, conflict, not_found, unprocessable
@@ -39,12 +38,10 @@ from app.core.models import (
     Group,
     GroupMember,
     KnowledgeDocument,
-    SessionRecord,
-    TeacherGroupAccess,
     User,
 )
-from app.modules.auth.models import DemoAccountBinding, UserCredential
-from app.modules.auth.service import revoke_user_sessions
+from app.modules.auth.models import DemoAccountBinding
+from app.modules.auth.service import lock_user_profile, revoke_user_sessions
 from app.modules.org.access import WorkspaceMember
 from app.modules.org.names import resolve_named_group
 
@@ -228,6 +225,8 @@ def update_member(
     if display_name is None and group_name is None and status is None:
         raise _invalid("An edit must change at least one field.")
 
+    lock_user_profile(db, user_id)
+    db.scalar(select(User).where(User.id == user_id).with_for_update())
     row = _roster_row(db, course_id, user_id)
     if status is not None and row.user.id == actor.id:
         # Checked before the source rule so the answer names the reason that
@@ -267,27 +266,36 @@ def delete_member(
     user_id: str,
     data_root: Path | None,
 ) -> list[str]:
-    """Delete a self-registered member's account and their private work.
+    """Remove a student account, its public/private work and grades atomically.
 
-    The person is gone: credentials, sessions and memberships are deleted and
-    the username is freed. Their private chats, Teams, Agents and RAG files
-    go with them, and their voices are withdrawn. Work the group shares
-    (public Agents, Teams and RAG) stays for classmates, and grades, answers
-    and records stay for the teacher under the anonymized row, which only
-    anchors them. Returns the group ids whose voices were withdrawn, for the
-    supplier delete after commit.
+    Unknown references abort the transaction. A class teacher cannot erase
+    work from another class or the historical records belonging to others.
     """
-
+    from app.core.db import registered_metadata
+    from app.core.locks import xact_lock
+    from app.core.models import VoiceProfile
+    from app.modules.auth.registration import lock_password_identity
+    from app.modules.knowledge_sets.models import KnowledgeSet
+    from app.modules.learning.models import (
+        AssessmentAttempt,
+        AssessmentCourseReport,
+        AssessmentCourseReportEvidence,
+        AssessmentCourseReportRevision,
+    )
+    from app.modules.purge import purge_ids
     from app.modules.real_delete import (
         hard_delete_agent,
         hard_delete_conversation,
         hard_delete_document,
+        hard_delete_knowledge_set,
         hard_delete_team,
     )
     from app.modules.teams.models import Team
     from app.modules.voices.withdrawal import withdraw_group_voices
     from app.modules.workspace.models import Conversation
 
+    lock_user_profile(db, user_id)
+    db.scalar(select(User).where(User.id == user_id).with_for_update())
     row = _roster_row(db, course_id, user_id)
     if row.user.id == actor.id:
         raise conflict("self_delete_forbidden", "You cannot delete your own account.")
@@ -297,67 +305,139 @@ def delete_member(
             "This account is provisioned at startup and cannot be edited here.",
             {"source": row.source},
         )
-    user = row.user
-    now = datetime.now(UTC)
-    for conversation in db.scalars(select(Conversation).where(Conversation.user_id == user.id)):
+    if (
+        row.role != "student"
+        or db.scalar(
+            select(CourseMember.user_id)
+            .where(CourseMember.user_id == user_id, CourseMember.role == "teacher")
+            .limit(1)
+        )
+        is not None
+    ):
+        raise conflict("teacher_delete_forbidden", "Teacher accounts cannot be deleted here.")
+    lock_password_identity(db, user_id)
+    taught = set(
+        db.scalars(
+            select(CourseMember.course_id).where(
+                CourseMember.user_id == actor.id, CourseMember.role == "teacher"
+            )
+        )
+    )
+    scoped_rows = []
+    for table in registered_metadata().tables.values():
+        user_columns = [
+            column
+            for fk in table.foreign_key_constraints
+            if fk.referred_table.name == "users"
+            for column in fk.columns
+        ]
+        if not user_columns:
+            continue
+        owned = or_(*(column == user_id for column in user_columns))
+        if "course_id" in table.c:
+            scoped_rows.append(select(table.c.course_id).where(owned))
+        elif "group_id" in table.c:
+            scoped_rows.append(
+                select(Group.course_id).join(table, table.c.group_id == Group.id).where(owned)
+            )
+        if "course_id" not in table.c:
+            for parent_name, foreign_column in [
+                ("assessment_activities", "activity_id"),
+                ("knowledge_sets", "knowledge_set_id"),
+                ("knowledge_documents", "document_id"),
+                ("teams", "team_id"),
+                ("agents", "agent_id"),
+                ("learning_assessments", "assessment_id"),
+                ("agent_conversations", "conversation_id"),
+            ]:
+                if foreign_column in table.c:
+                    parent = registered_metadata().tables[parent_name]
+                    scoped_rows.append(
+                        select(parent.c.course_id)
+                        .join(table, table.c[foreign_column] == parent.c.id)
+                        .where(owned)
+                    )
+        if "asset_id" in table.c:
+            metadata = registered_metadata()
+            assets = metadata.tables["knowledge_assets"]
+            sets = metadata.tables["knowledge_sets"]
+            scoped_rows.append(
+                select(sets.c.course_id)
+                .select_from(
+                    sets.join(assets, assets.c.knowledge_set_id == sets.c.id).join(
+                        table, table.c.asset_id == assets.c.id
+                    )
+                )
+                .where(owned)
+            )
+    report_evidence = (
+        select(AssessmentCourseReportEvidence.report_revision_id)
+        .join(AssessmentAttempt, AssessmentAttempt.id == AssessmentCourseReportEvidence.attempt_id)
+        .where(AssessmentAttempt.actor_user_id == user_id)
+    )
+    related_reports = select(AssessmentCourseReportRevision.report_id).where(
+        or_(
+            AssessmentCourseReportRevision.report_json.contains(user_id),
+            AssessmentCourseReportRevision.id.in_(report_evidence),
+        )
+    )
+    affected = {value for value in db.scalars(union_all(*scoped_rows)) if value is not None}
+    affected.update(
+        db.scalars(
+            select(AssessmentCourseReport.course_id).where(
+                AssessmentCourseReport.id.in_(related_reports)
+            )
+        )
+    )
+    if not affected.issubset(taught):
+        raise conflict(
+            "account_delete_scope_forbidden",
+            "A teacher who manages all this account's classes must delete it.",
+        )
+    for affected_course in sorted(affected):
+        xact_lock(db, f"account-grade-erasure:{affected_course}")
+    report_ids = list(
+        db.scalars(
+            select(AssessmentCourseReport.id).where(
+                AssessmentCourseReport.id.in_(related_reports),
+                AssessmentCourseReport.course_id.in_(affected),
+            )
+        )
+    )
+    # Cached class summaries include individual grades; invalidate those copies,
+    # while leaving every other learner's source records intact.
+    if set(report_ids) != purge_ids(db, "assessment_course_reports", report_ids):
+        raise conflict(
+            "account_delete_blocked",
+            "This account still has protected references. Nothing was deleted.",
+        )
+    profiles = list(
+        db.scalars(select(VoiceProfile).where(VoiceProfile.consent_actor_user_id == user_id))
+    )
+    profile_ids = [profile.id for profile in profiles]
+    withdraw_group_voices(
+        db, user_id, [profile.group_id for profile in profiles if profile.group_id]
+    )
+    for conversation in list(
+        db.scalars(select(Conversation).where(Conversation.user_id == user_id))
+    ):
         hard_delete_conversation(db, conversation, data_root)
-    # Private Teams first: a private Agent can only sit in its owner's Teams.
-    for team in db.scalars(
-        select(Team).where(
-            Team.owner_user_id == user.id,
-            Team.visibility == "private",
-            Team.deleted_at.is_(None),
-        )
-    ):
+    for team in list(db.scalars(select(Team).where(Team.owner_user_id == user_id))):
         hard_delete_team(db, team)
-    for agent in db.scalars(
-        select(Agent).where(
-            Agent.owner_user_id == user.id,
-            Agent.visibility == "private",
-            Agent.deleted_at.is_(None),
-        )
-    ):
+    for agent in list(db.scalars(select(Agent).where(Agent.owner_user_id == user_id))):
         hard_delete_agent(db, agent, data_root)
-    for document in db.scalars(
-        select(KnowledgeDocument).where(
-            KnowledgeDocument.owner_user_id == user.id,
-            KnowledgeDocument.visibility == "private",
-        )
+    for document in list(
+        db.scalars(select(KnowledgeDocument).where(KnowledgeDocument.owner_user_id == user_id))
     ):
         hard_delete_document(db, document, data_root)
-    group_ids = list(
-        db.scalars(
-            select(GroupMember.group_id)
-            .join(Group, Group.id == GroupMember.group_id)
-            .where(Group.course_id == course_id, GroupMember.user_id == user.id)
+    for knowledge_set in list(
+        db.scalars(select(KnowledgeSet).where(KnowledgeSet.owner_user_id == user_id))
+    ):
+        hard_delete_knowledge_set(db, knowledge_set, data_root)
+    if user_id not in purge_ids(db, "users", [user_id]):
+        raise conflict(
+            "account_delete_blocked",
+            "This account still has protected references. Nothing was deleted.",
         )
-    )
-    withdraw_group_voices(db, user.id, group_ids)
-    revoke_user_sessions(db, user.id, now)
-    db.execute(delete(SessionRecord).where(SessionRecord.user_id == user.id))
-    db.execute(delete(UserCredential).where(UserCredential.user_id == user.id))
-    db.execute(delete(DemoAccountBinding).where(DemoAccountBinding.user_id == user.id))
-    db.execute(delete(TeacherGroupAccess).where(TeacherGroupAccess.user_id == user.id))
-    db.execute(
-        delete(GroupMember).where(
-            GroupMember.user_id == user.id, GroupMember.group_id.in_(group_ids or [""])
-        )
-    )
-    db.execute(
-        delete(CourseMember).where(
-            CourseMember.user_id == user.id, CourseMember.course_id == course_id
-        )
-    )
-    still_enrolled = db.scalar(
-        select(CourseMember.course_id).where(CourseMember.user_id == user.id)
-    )
-    if still_enrolled is None:
-        # Nothing names the person any more; the row only anchors records.
-        placeholder = f"deleted-{uuid4().hex[:16]}"
-        user.username = placeholder
-        user.username_key = placeholder
-        user.display_name = "Deleted account"
-        user.avatar = None
-        user.status = INACTIVE
     db.flush()
-    return group_ids
+    return profile_ids

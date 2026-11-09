@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.identity import username_key
+from app.core.locks import xact_lock
 from app.core.models import Course, CourseMember, Group, GroupMember, SessionRecord, User
 from app.core.sqlutil import begin_immediate
 from app.modules.auth.credentials import (
@@ -163,6 +164,11 @@ def _resolve_group(
     return candidate.id
 
 
+def lock_user_profile(db: Session, user_id: str) -> None:
+    """Serialize explicit membership choices with startup projection and erasure."""
+    xact_lock(db, f"user-profile:{user_id}")
+
+
 def revoke_user_sessions(
     session: Session,
     user_id: str,
@@ -298,13 +304,23 @@ def _sync_graph_in_session(
         if course is None:
             raise AccountSyncError("demo account catalog requires a seeded course")
 
-        group_rows = session.scalars(select(Group).where(Group.course_id == course.id)).all()
+        profile_ids = set(session.scalars(select(DemoAccountBinding.user_id)))
+        profile_ids.update(account.user_id for account in graph.accounts)
+        for user_id in sorted(profile_ids):
+            lock_user_profile(session, user_id)
+
+        group_rows = session.scalars(select(Group)).all()
         groups = {row.id: row for row in group_rows}
-        groups_by_name = {_normalise_group_label(row.name): row for row in group_rows}
-        desired_groups = {
-            account.account_key: _resolve_group(account, groups, groups_by_name, course.id)
-            for account in graph.accounts
+        groups_by_name = {
+            _normalise_group_label(row.name): row
+            for row in group_rows
+            if row.course_id == course.id
         }
+        default_course = course
+        from app.modules.org.classes import default_class_group, registration_classes
+
+        courses_by_code = {row.code.casefold(): row for row in registration_classes(session)}
+        class_ids = {row.id for row in courses_by_code.values()}
 
         users = session.scalars(select(User).order_by(User.id)).all()
         bindings = session.scalars(
@@ -361,9 +377,48 @@ def _sync_graph_in_session(
             user.display_name = account.display_name
             user.status = "active"
 
-            desired_group_id = desired_groups[account.account_key]
             existing_courses = course_members_by_user.get(user.id, [])
             existing_groups = group_members_by_user.get(user.id, [])
+            course = default_course
+            if account.role == "teacher":
+                course = courses_by_code.get(username_key(account.username), default_course)
+            elif (
+                account.role == "student"
+                and not material_changed
+                and len(existing_courses) == 1
+                and existing_courses[0].role == "student"
+                and existing_courses[0].course_id in class_ids
+            ):
+                course = session.get(Course, existing_courses[0].course_id) or default_course
+            if account.role == "teacher":
+                desired_group_id = ""
+            elif course.id != default_course.id:
+                desired_group_id = default_class_group(session, course.id).id
+            else:
+                desired_group_id = _resolve_group(account, groups, groups_by_name, course.id)
+            if binding is not None and binding.selected_group_id is not None:
+                selected_group = groups.get(binding.selected_group_id)
+                if (
+                    not material_changed
+                    and account.role == "student"
+                    and selected_group is not None
+                    and selected_group.course_id == course.id
+                ):
+                    desired_group_id = selected_group.id
+                else:
+                    binding.selected_group_id = None
+            desired_courses = {course.id}
+            if account.role == "teacher":
+                created_class_ids = {
+                    item.id for item in courses_by_code.values() if item.code.startswith("class-")
+                }
+                desired_courses.update(
+                    row.course_id
+                    for row in existing_courses
+                    if row.role == "teacher" and row.course_id in created_class_ids
+                )
+            if account.role == "teacher" and username_key(account.username) == "maya":
+                desired_courses = {item.id for item in courses_by_code.values()}
             kept_course = next(
                 (
                     row
@@ -376,7 +431,9 @@ def _sync_graph_in_session(
                 (row for row in existing_groups if row.group_id == desired_group_id),
                 None,
             )
-            if len(existing_courses) != 1 or kept_course is None:
+            if {
+                row.course_id for row in existing_courses if row.role == account.role
+            } != desired_courses or any(row.role != account.role for row in existing_courses):
                 material_changed = True
             if account.role == "teacher":
                 if existing_groups:
@@ -387,7 +444,7 @@ def _sync_graph_in_session(
             # Enforce the complete desired course/group graph. Existing seed
             # leader membership is preserved when the desired group remains.
             for course_row in existing_courses:
-                if course_row is not kept_course:
+                if course_row.course_id not in desired_courses or course_row.role != account.role:
                     session.delete(course_row)
             if kept_course is None:
                 session.add(
@@ -398,6 +455,20 @@ def _sync_graph_in_session(
                         created_at=timestamp,
                     )
                 )
+
+            for extra_course_id in desired_courses - {course.id}:
+                if not any(
+                    row.course_id == extra_course_id and row.role == account.role
+                    for row in existing_courses
+                ):
+                    session.add(
+                        CourseMember(
+                            course_id=extra_course_id,
+                            user_id=user.id,
+                            role=account.role,
+                            created_at=timestamp,
+                        )
+                    )
 
             for group_row in existing_groups:
                 if not desired_group_id or group_row is not prior_group:

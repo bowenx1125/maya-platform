@@ -929,10 +929,10 @@ const enMessages = {
   removedMembers: "Removed",
   deleteAccount: "Delete",
   deleteConfirm:
-    "Delete {name}'s account? They are signed out and cannot sign in again, and their private chats, Agents, Teams and RAG are deleted. Work shared with the group, grades and records stay. This cannot be undone.",
+    "Permanently delete {name}'s account, public and private work, grades and records? They will be signed out. This cannot be undone.",
   cleanupRemoved: "Delete all removed",
   cleanupConfirm:
-    "Delete all {count} removed accounts and their private work? This cannot be undone.",
+    "Permanently delete all {count} removed accounts, their work, grades and records? This cannot be undone.",
   filterMembers: "Filter by name, username or group",
   noMembersMatch: "No members match.",
   resetPassword: "Reset",

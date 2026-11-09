@@ -94,6 +94,7 @@ def finish_withdrawn_voices(
     user_id: str,
     *,
     provider: VoiceCloneProvider | None = None,
+    profile_ids: list[str] | None = None,
 ) -> None:
     """After the move commits: remove withdrawn voices at the supplier, best effort."""
 
@@ -104,7 +105,9 @@ def finish_withdrawn_voices(
         select(VoiceProfile, VoiceProviderOperation)
         .join(VoiceProviderOperation, VoiceProviderOperation.profile_id == VoiceProfile.id)
         .where(
-            VoiceProfile.consent_actor_user_id == user_id,
+            (VoiceProfile.consent_actor_user_id == user_id)
+            if profile_ids is None
+            else VoiceProfile.id.in_(profile_ids),
             VoiceProfile.scope == "group",
             VoiceProfile.status == "deleted",
             VoiceProviderOperation.operation_type == "delete",
@@ -122,6 +125,17 @@ def finish_withdrawn_voices(
         try:
             expire_profile_previews(db, settings.resolved_data_root, profile.id)
             db.commit()
+            if profile_ids is not None:
+                from app.modules.debates.voice_clones import debates_hold_supplier_voice
+                from app.modules.real_delete import hard_delete_voice
+                from app.modules.voices.deletion import _delete_is_settled
+
+                if debates_hold_supplier_voice(db, profile, settings):
+                    _finish_operation(db, operation, state="succeeded")
+                    if _delete_is_settled(db, profile):
+                        hard_delete_voice(db, profile, settings.resolved_data_root)
+                    db.commit()
+                    continue
             try:
                 voice_ids, complete = _remote_voice_ids(db, profile, provider, settings)
             except VoiceProviderError:
@@ -147,6 +161,13 @@ def finish_withdrawn_voices(
                 )
             else:
                 _finish_operation(db, operation, state="succeeded")
+                if profile_ids is not None:
+                    from app.modules.real_delete import hard_delete_voice
+                    from app.modules.voices.deletion import _delete_is_settled
+
+                    if _delete_is_settled(db, profile):
+                        hard_delete_voice(db, profile, settings.resolved_data_root)
+                        db.commit()
         except Exception:
             # The move itself already committed; never fail it over cleanup.
             db.rollback()

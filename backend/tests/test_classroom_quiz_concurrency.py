@@ -38,7 +38,7 @@ def test_integrity_helper_recognizes_unique_constraint() -> None:
         "INSERT",
         {},
         _FakeOrig(
-            'duplicate key value violates unique constraint '
+            "duplicate key value violates unique constraint "
             '"ux_classroom_quiz_attempts_quiz_actor_epoch"',
             constraint_name="ux_classroom_quiz_attempts_quiz_actor_epoch",
         ),
@@ -46,9 +46,7 @@ def test_integrity_helper_recognizes_unique_constraint() -> None:
     assert quiz_service._is_quiz_attempt_unique_integrity(exc) is True
 
 
-def test_concurrent_double_submit_one_created_rest_409(
-    teacher: Actor, student: Actor
-) -> None:
+def test_concurrent_double_submit_one_created_rest_409(teacher: Actor, student: Actor) -> None:
     quiz_id = _create_publish_open(teacher)
     barrier = Barrier(2)
     results: list[int] = []

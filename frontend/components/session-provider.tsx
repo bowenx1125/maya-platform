@@ -68,6 +68,7 @@ type SessionContextValue = {
   /** A sign-out is under way: guarded pages wait instead of asking to sign in. */
   signingOut: boolean;
   switchIdentity: (userId: string) => Promise<AuthSession>;
+  selectTeacherCourse: (courseId: string) => Promise<void>;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -97,7 +98,40 @@ function identityKey(session: AuthSession): string {
   const courses = session.user.courses
     .map((course) => `${course.course_id}:${course.role}`)
     .sort();
-  return JSON.stringify([session.user.id, activeCourseId, courses]);
+  const groups = (session.user.groups ?? [])
+    .map((group) => `${group.group_id}:${group.role}`)
+    .sort();
+  return JSON.stringify([session.user.id, activeCourseId, courses, groups]);
+}
+
+function teacherCoursePreference(
+  next: AuthSession,
+  preferred: string | null,
+): AuthSession {
+  let selected: string | null = preferred;
+  try {
+    selected ??= window.sessionStorage.getItem(
+      `maya.teacher-class:${next.user.id}`,
+    );
+  } catch {
+    /* The current page still keeps its selected class. */
+  }
+  if (
+    !next.user.courses.some(
+      (item) => item.course_id === selected && item.role === "teacher",
+    )
+  )
+    return next;
+  return {
+    ...next,
+    user: {
+      ...next.user,
+      courses: [
+        ...next.user.courses.filter((item) => item.course_id === selected),
+        ...next.user.courses.filter((item) => item.course_id !== selected),
+      ],
+    },
+  };
 }
 
 export function SessionProvider({
@@ -117,6 +151,10 @@ export function SessionProvider({
   const sessionOperationEpoch = useRef(0);
   const sessionMutationTail = useRef<Promise<void>>(Promise.resolve());
   const currentSession = useRef<AuthSession | null>(null);
+  const preferredTeacherCourse = useRef<{
+    userId: string;
+    courseId: string;
+  } | null>(null);
   const committedIdentityKey = useRef<string | null>(null);
   const identityGenerationRef = useRef(0);
   const committedCsrfToken = useRef<string | undefined>(readApiCsrfToken(api));
@@ -153,6 +191,12 @@ export function SessionProvider({
         restoreCommittedCsrf();
         return;
       }
+      next = teacherCoursePreference(
+        next,
+        preferredTeacherCourse.current?.userId === next.user.id
+          ? preferredTeacherCourse.current.courseId
+          : null,
+      );
       const nextIdentityKey = identityKey(next);
       if (committedIdentityKey.current !== nextIdentityKey) {
         committedIdentityKey.current = nextIdentityKey;
@@ -184,6 +228,7 @@ export function SessionProvider({
       committedCsrfToken.current = undefined;
       writeApiCsrfToken(api, undefined);
       currentSession.current = null;
+      preferredTeacherCourse.current = null;
       setSession(null);
       setStatus("anonymous");
       setError(nextError);
@@ -385,6 +430,75 @@ export function SessionProvider({
     ],
   );
 
+  const selectTeacherCourse = useCallback(
+    (courseId: string) =>
+      enqueueSessionMutation(async () => {
+        let current = currentSession.current;
+        if (
+          !current?.user.courses.some(
+            (item) => item.course_id === courseId && item.role === "teacher",
+          )
+        ) {
+          throw new Error("This class is unavailable.");
+        }
+        const epoch = beginSessionOperation();
+        if ((current.user.groups ?? []).length > 0) {
+          for (const group of current.user.groups) {
+            try {
+              await api.leaveGroupAsTeacher(group.group_id);
+            } catch (cause) {
+              if (!(
+                cause instanceof Error &&
+                "status" in cause &&
+                cause.status === 404
+              ))
+                throw cause;
+            }
+          }
+          endTeacherEnter();
+          current = await api.me();
+          if (
+            !current.user.courses.some(
+              (item) => item.course_id === courseId && item.role === "teacher",
+            )
+          ) {
+            commitAuthenticatedSession(epoch, current);
+            throw new Error("This class is unavailable.");
+          }
+        }
+        preferredTeacherCourse.current = { userId: current.user.id, courseId };
+        try {
+          window.sessionStorage.setItem(
+            `maya.teacher-class:${current.user.id}`,
+            courseId,
+          );
+        } catch {
+          /* Storage may be disabled. */
+        }
+        const next = {
+          ...current,
+          user: {
+            ...current.user,
+            courses: [
+              ...current.user.courses.filter(
+                (item) => item.course_id === courseId,
+              ),
+              ...current.user.courses.filter(
+                (item) => item.course_id !== courseId,
+              ),
+            ],
+          },
+        };
+        commitAuthenticatedSession(epoch, next);
+      }),
+    [
+      api,
+      beginSessionOperation,
+      commitAuthenticatedSession,
+      enqueueSessionMutation,
+    ],
+  );
+
   // Leaving the page the sign-out started on ends the wait, so a later
   // expired session on another page still gets the sign-in prompt.
   const signOutPath = useRef<string | null>(null);
@@ -412,6 +526,7 @@ export function SessionProvider({
       logout,
       signingOut,
       switchIdentity,
+      selectTeacherCourse,
     }),
     [
       api,
@@ -426,6 +541,7 @@ export function SessionProvider({
       signingOut,
       status,
       switchIdentity,
+      selectTeacherCourse,
     ],
   );
 

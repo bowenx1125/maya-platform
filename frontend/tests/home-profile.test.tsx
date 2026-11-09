@@ -183,6 +183,63 @@ describe("profile group", () => {
   });
 });
 
+describe("profile class", () => {
+  it("confirms the move and refreshes the session with the selected class", async () => {
+    session.user = {
+      id: "me",
+      display_name: "Kaikai",
+      avatar: null,
+      courses: [{ course_id: "first", role: "student" }],
+    };
+    session.api.registrationOptions.mockResolvedValue({
+      course_id: "first",
+      groups: [],
+      classes: [
+        { course_id: "first", course_name: "Maya1001" },
+        { course_id: "second", course_name: "Maya1002" },
+      ],
+    });
+    session.api.updateCurrentUser.mockResolvedValue(undefined);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      inEnglish(<AccountSettings />);
+      const picker = (await screen.findByLabelText(
+        "Class",
+      )) as HTMLSelectElement;
+      expect(picker.value).toBe("first");
+      fireEvent.change(picker, { target: { value: "second" } });
+      const save = screen.getAllByRole("button", { name: "Save" })[0];
+      fireEvent.click(save);
+      expect(confirm).toHaveBeenCalledWith(
+        "Change class? Your existing work stays in the previous class.",
+      );
+      expect(session.api.updateCurrentUser).not.toHaveBeenCalled();
+      confirm.mockReturnValue(true);
+      fireEvent.click(save);
+      await waitFor(() =>
+        expect(session.api.updateCurrentUser).toHaveBeenCalledWith({
+          course_id: "second",
+        }),
+      );
+      await waitFor(() => expect(session.refresh).toHaveBeenCalled());
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
+  it("does not offer teachers a class change", () => {
+    session.user = {
+      id: "teacher",
+      display_name: "Maya",
+      avatar: null,
+      courses: [{ course_id: "first", role: "teacher" }],
+    };
+    inEnglish(<AccountSettings />);
+    expect(screen.queryByLabelText("Class")).toBeNull();
+    expect(session.api.registrationOptions).not.toHaveBeenCalled();
+  });
+});
+
 describe("profile avatar", () => {
   it("saves a scholar the moment it is picked", async () => {
     session.api.updateCurrentUser.mockResolvedValue(undefined);

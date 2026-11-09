@@ -12,7 +12,7 @@ import type { CourseRoster, Group, RosterEntry } from "../lib/api";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, replace: push }),
   usePathname: () => "/teacher/roster",
 }));
 
@@ -82,6 +82,7 @@ function apiForTeacher() {
       },
     ]),
     courseRoster: vi.fn().mockResolvedValue(roster()),
+    createClass: vi.fn(),
     groups: vi.fn().mockResolvedValue([
       { id: groupId, course_id: courseId, name: "Team Aurora" },
       { id: "other-group", course_id: courseId, name: "Team Borealis" },
@@ -100,24 +101,34 @@ function apiForTeacher() {
   };
 }
 
-function mount(api: ReturnType<typeof apiForTeacher>) {
+function mount(api: ReturnType<typeof apiForTeacher>, courseIds = [courseId]) {
   const refresh = vi.fn().mockResolvedValue(null);
-  mockedUseSession.mockReturnValue({
+  const context = {
     api,
     refresh,
+    identityGeneration: 0,
     user: {
       id: teacherId,
-      courses: [{ course_id: courseId, role: "teacher" }],
+      courses: courseIds.map((id) => ({ course_id: id, role: "teacher" })),
       groups: [],
     },
-  } as never);
-  return render(
-    <>
-      <AppShell role="teacher">
-        <RosterWorkspace />
-      </AppShell>
-    </>,
+    selectTeacherCourse: vi.fn(async (id: string) => {
+      context.user.courses = [
+        ...context.user.courses.filter((item) => item.course_id === id),
+        ...context.user.courses.filter((item) => item.course_id !== id),
+      ];
+      context.identityGeneration += 1;
+      view.rerender(content());
+    }),
+  };
+  mockedUseSession.mockReturnValue(context as never);
+  const content = () => (
+    <AppShell role="teacher">
+      <RosterWorkspace />
+    </AppShell>
   );
+  const view = render(content());
+  return view;
 }
 
 describe("teacher account management", () => {
@@ -126,6 +137,129 @@ describe("teacher account management", () => {
     cleanup();
     vi.restoreAllMocks();
     push.mockReset();
+  });
+
+  it("creates a named class, refreshes access and opens its account list", async () => {
+    const api = apiForTeacher();
+    const created = {
+      id: "new-class",
+      code: "class-new",
+      name: "History 2026",
+      current_audio_debate_id: null,
+    };
+    api.createClass.mockResolvedValue(created);
+    api.courseRoster.mockImplementation(async (id: string) =>
+      id === created.id ? { course_id: id, entries: [] } : roster(),
+    );
+    mount(api);
+    const session = mockedUseSession.mock.results.at(-1)!.value;
+    vi.mocked(session.refresh).mockImplementation(async () => {
+      session.user!.courses.push({ course_id: created.id, role: "teacher" });
+      api.courses.mockResolvedValue([
+        {
+          id: courseId,
+          code: "maya1001",
+          name: "Maya1001",
+          current_audio_debate_id: null,
+        },
+        created,
+      ]);
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Add class" }));
+    fireEvent.change(screen.getByLabelText("Class name"), {
+      target: { value: "History 2026" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create class" }));
+    await waitFor(() =>
+      expect(api.createClass).toHaveBeenCalledWith("History 2026"),
+    );
+    expect(
+      await screen.findByRole("button", { name: "History 2026" }),
+    ).toHaveProperty("ariaPressed", "true");
+    await waitFor(() =>
+      expect(api.courseRoster).toHaveBeenCalledWith(created.id),
+    );
+    expect(session.refresh).toHaveBeenCalled();
+    expect(screen.queryByLabelText("Class name")).toBeNull();
+  });
+
+  it("keeps the class name and current roster when creation fails", async () => {
+    const api = apiForTeacher();
+    api.createClass.mockRejectedValue(new Error("unavailable"));
+    mount(api);
+    expect(await screen.findByText("New Student")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Add class" }));
+    fireEvent.change(screen.getByLabelText("Class name"), {
+      target: { value: "History 2026" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create class" }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByLabelText("Class name")).toHaveProperty(
+      "value",
+      "History 2026",
+    );
+    expect(screen.getByText("New Student")).toBeTruthy();
+  });
+
+  it("switches the account list using the class buttons", async () => {
+    const api = apiForTeacher();
+    api.courses.mockResolvedValue([
+      {
+        id: courseId,
+        code: "maya1001",
+        name: "Maya1001",
+        current_audio_debate_id: null,
+      },
+      {
+        id: "second-class",
+        code: "maya1002",
+        name: "Maya1002",
+        current_audio_debate_id: null,
+      },
+    ]);
+    api.courseRoster.mockImplementation(async (id: string) => ({
+      course_id: id,
+      entries: [
+        entry({
+          display_name:
+            id === courseId ? "First class student" : "Second class student",
+        }),
+      ],
+    }));
+    mount(api, [courseId, "second-class"]);
+    expect(await screen.findByText("First class student")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Maya1002" }));
+    expect(screen.queryByText("First class student")).toBeNull();
+    expect(await screen.findByText("Second class student")).toBeTruthy();
+    expect(api.courseRoster).toHaveBeenLastCalledWith("second-class");
+    expect(
+      screen
+        .getByRole("button", { name: "Maya1002" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("only exposes classes the teacher belongs to", async () => {
+    const api = apiForTeacher();
+    api.courses.mockResolvedValue([
+      {
+        id: courseId,
+        code: "maya1001",
+        name: "Maya1001",
+        current_audio_debate_id: null,
+      },
+      {
+        id: "second-class",
+        code: "maya1002",
+        name: "Maya1002",
+        current_audio_debate_id: null,
+      },
+    ]);
+    mount(api);
+    expect(
+      await screen.findByRole("button", { name: "Maya1001" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Maya1002" })).toBeNull();
   });
 
   it("keeps Back and Done beside the member form while editing", async () => {
@@ -175,9 +309,11 @@ describe("teacher account management", () => {
     expect(within(account).getByText("New Student").tagName).toBe("STRONG");
     expect(screen.queryByText("Self-registered")).toBeNull();
     expect(screen.queryByText("Student view")).toBeNull();
-    expect(screen.getByRole("heading", { name: "Accounts" }).className).toBe(
-      "sr-only",
-    );
+    expect(
+      screen
+        .getByRole("heading", { name: "Accounts", level: 1 })
+        .closest("header"),
+    ).not.toBeNull();
     // Removing source labels must not give catalog identities edit controls.
     expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
     expect(screen.queryByText("Demo catalog")).toBeNull();

@@ -336,26 +336,8 @@ def test_visit_expiry_migration_keeps_rows_and_downgrades(tmp_path: Any) -> None
             )
         )
         db.commit()
-    with database.engine.begin() as connection:
-        connection.execute(text("DROP INDEX IF EXISTS ix_teacher_group_access_expires_at"))
-        connection.execute(text("ALTER TABLE teacher_group_access DROP COLUMN expires_at"))
-        # The models already include chat_type. Replaying from 0080 runs 0081,
-        # which adds that column, so the stamped copy has to look like 0080.
-        connection.execute(
-            text(
-                "ALTER TABLE agent_conversations "
-                "DROP CONSTRAINT IF EXISTS ck_conversations_chat_type"
-            )
-        )
-        connection.execute(text("ALTER TABLE agent_conversations DROP COLUMN IF EXISTS chat_type"))
-        # Models already include the tables 0083 creates. Replaying from 0080
-        # runs that CREATE, so the stamped copy must not still have them.
-        connection.execute(text("DROP TABLE IF EXISTS classroom_quiz_attempts"))
-        connection.execute(text("DROP TABLE IF EXISTS classroom_quizzes"))
-        connection.execute(
-            text("UPDATE alembic_version SET version_num = :version"),
-            {"version": MIGRATION_BASELINE},
-        )
+    config = database._alembic_config()
+    command.downgrade(config, MIGRATION_BASELINE)  # type: ignore[arg-type]
     database.upgrade_schema()
     with database.engine.connect() as connection:
         version = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
@@ -377,7 +359,6 @@ def test_visit_expiry_migration_keeps_rows_and_downgrades(tmp_path: Any) -> None
             column["name"] for column in inspect(connection).get_columns("teacher_group_access")
         }
         assert "expires_at" in columns
-    config = database._alembic_config()
     command.downgrade(config, MIGRATION_BASELINE)  # type: ignore[arg-type]
     with database.engine.connect() as connection:
         columns = {

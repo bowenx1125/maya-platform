@@ -461,7 +461,7 @@ export interface paths {
         };
         get: operations["listCourses"];
         put?: never;
-        post?: never;
+        post: operations["createClass"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2646,10 +2646,20 @@ export interface components {
             name: string;
             member_count: number;
         };
+        CreateClassRequest: {
+            name: string;
+        };
+        RegistrationClass: {
+            course_id: components["schemas"]["Uuid"];
+            course_name: string;
+            group_name: string;
+            groups?: components["schemas"]["RegistrationGroup"][];
+        };
         RegistrationOptions: {
             course_id: components["schemas"]["Uuid"];
             course_name: string;
             groups: components["schemas"]["RegistrationGroup"][];
+            classes?: components["schemas"]["RegistrationClass"][];
         };
         AuthSession: {
             user: components["schemas"]["CurrentUser"];
@@ -4083,11 +4093,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-            /**
-             * Created By User Id
-             * Format: uuid
-             */
-            created_by_user_id: string;
+            /** Created By User Id */
+            created_by_user_id: string | null;
             /**
              * Id
              * Format: uuid
@@ -4112,11 +4119,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-            /**
-             * Created By User Id
-             * Format: uuid
-             */
-            created_by_user_id: string;
+            /** Created By User Id */
+            created_by_user_id: string | null;
             /**
              * Id
              * Format: uuid
@@ -5022,6 +5026,8 @@ export interface components {
             display_name?: string | null;
             /** Group Name */
             group_name?: string | null;
+            /** Course Id */
+            course_id?: string | null;
         };
         /** PasswordChangeRequest */
         PasswordChangeRequest: {
@@ -7373,6 +7379,36 @@ export interface operations {
             };
         };
     };
+    createClass: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateClassRequest"];
+            };
+        };
+        responses: {
+            /** @description Class created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Course"];
+                };
+            };
+            403: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
     getCourse: {
         parameters: {
             query?: never;
@@ -7458,7 +7494,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The account and its private work are deleted. */
+            /** @description The account, its work and grades are permanently deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;

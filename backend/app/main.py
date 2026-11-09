@@ -205,17 +205,21 @@ def _production_teacher_auth_available(database: Database, settings: Settings) -
 def _bootstrap_accounts(database: Database, settings: Settings) -> None:
     """Seed and synchronize accounts once, while the startup lock is held."""
 
+    from app.modules.org.classes import ensure_classes
+
     if settings.demo_mode or settings.production_account_catalog_available:
 
         def seed_if_empty(session: Any) -> None:
             if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
                 seed_demo_data(session)
+            ensure_classes(session)
 
         bootstrap_demo_accounts(database, settings, seed_if_empty)
         return
     with database.session() as session:
         if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
             seed_demo_data(session)
+        ensure_classes(session)
 
 
 async def _orphan_chat_sweeper(database: Any) -> None:

@@ -15,7 +15,7 @@ from app.core.db import Database, registered_metadata
 from app.core.models import StoredFile
 from app.modules import purge as purge_module
 from app.modules.deferred_files import pending_unlinks, unlink_after_commit
-from app.modules.purge import CLEANUP_ROOTS, RECORD_ROOTS, REFERENCE_RULES
+from app.modules.purge import ACCOUNT_ROOTS, CLEANUP_ROOTS, RECORD_ROOTS, REFERENCE_RULES
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select, text
@@ -77,7 +77,7 @@ def test_every_foreign_key_into_a_deleted_table_has_a_rule() -> None:
     incoming = _model_foreign_keys()
     missing = [
         _key(child, columns, table)
-        for table in _closure(CLEANUP_ROOTS + RECORD_ROOTS)
+        for table in _closure(CLEANUP_ROOTS + RECORD_ROOTS + ACCOUNT_ROOTS)
         for child, columns, _nullable in incoming.get(table, [])
         if _key(child, columns, table) not in REFERENCE_RULES
     ]
@@ -377,7 +377,7 @@ def test_postgres_every_foreign_key_in_the_database_has_a_rule(
     try:
         with TestClient(app):
             catalog = purge_module._catalog(database.engine)
-            deleted = set(_closure(CLEANUP_ROOTS + RECORD_ROOTS))
+            deleted = set(_closure(CLEANUP_ROOTS + RECORD_ROOTS + ACCOUNT_ROOTS))
             missing = [
                 foreign_key.key
                 for table in deleted

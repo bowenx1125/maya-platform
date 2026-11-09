@@ -54,6 +54,7 @@ export function RegisterForm({
   const [localError, setLocalError] = useState<MessageKey | null>(null);
   // Bumped on every submit, so a closed message shows again on a repeat.
   const [attempt, setAttempt] = useState(0);
+  const [courseId, setCourseId] = useState("");
   const [groupName, setGroupName] = useState("");
   const [options, setOptions] = useState<RegistrationOptions | null>(null);
   const [busy, setBusy] = useState(false);
@@ -81,17 +82,20 @@ export function RegisterForm({
       .then((next) => {
         if (active) setOptions(next);
       })
-      .catch(() => {
-        // The form still works without suggestions: a typed name either joins
-        // an existing group or creates one, and the server decides which.
-        if (active) setOptions(null);
+      .catch((cause) => {
+        if (active) setError(cause);
       });
     return () => {
       active = false;
     };
   }, [api]);
 
-  const groups = useMemo(() => options?.groups ?? [], [options]);
+  const groups = useMemo(
+    () =>
+      options?.classes?.find((item) => item.course_id === courseId)?.groups ??
+      [],
+    [options, courseId],
+  );
 
   // Nothing is offered until something is typed: an untouched field that drops
   // the whole course on the reader is answering a question they have not asked
@@ -165,7 +169,7 @@ export function RegisterForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAttempt((value) => value + 1);
-    // The group step is the last one; the first only advances the form.
+    // The class and group step is the last one; the first only advances the form.
     if (step === 1) {
       // Checked here rather than through the server so the student is told
       // about a short or mistyped password before they pick a group.
@@ -181,6 +185,11 @@ export function RegisterForm({
       setStep(2);
       return;
     }
+    if (
+      !options?.classes?.some((item) => item.course_id === courseId) ||
+      !groupName.trim()
+    )
+      return;
     setBusy(true);
     setError(null);
     try {
@@ -190,7 +199,7 @@ export function RegisterForm({
         username: username.trim(),
         password,
         group_name: groupName,
-        ...(options ? { course_id: options.course_id } : {}),
+        course_id: courseId,
       });
       // A new account is shown round its home once, on arrival.
       markTourPending(session.user.id);
@@ -241,7 +250,7 @@ export function RegisterForm({
         </div>
         <p className="academy-step" aria-live="polite">
           {t("registerStepOf", { current: step, total: TOTAL_STEPS })} ·{" "}
-          {step === 1 ? t("registerStepAccount") : t("registerStepGroup")}
+          {step === 1 ? t("registerStepAccount") : "Class & group"}
         </p>
       </div>
       {localError ? (
@@ -341,6 +350,30 @@ export function RegisterForm({
           </>
         ) : (
           <>
+            <label>
+              <span>Class</span>
+              <select
+                value={courseId}
+                onChange={(event) => {
+                  setCourseId(event.target.value);
+                  setGroupName("");
+                  setListOpen(false);
+                  setActiveIndex(-1);
+                }}
+                className="w-full rounded-lg border-2 border-black bg-white px-4 py-3"
+                disabled={busy || !options}
+                required
+              >
+                <option value="" disabled>
+                  Choose your class
+                </option>
+                {(options?.classes ?? []).map((item) => (
+                  <option key={item.course_id} value={item.course_id}>
+                    {item.course_name}
+                  </option>
+                ))}
+              </select>
+            </label>
             {/* A typed field with a list under it rather than a wall of
                 chips: the reader looks for one name among many, and the list
                 floats so growing it never moves the button below. */}
@@ -380,7 +413,7 @@ export function RegisterForm({
                     setMood("idle");
                     setListOpen(false);
                   }}
-                  autoFocus
+                  disabled={busy || !courseId}
                   required
                 />
                 {showGroupList ? (
@@ -438,7 +471,11 @@ export function RegisterForm({
               ) : null}
             </div>
 
-            <button className="primary-action" type="submit" disabled={busy}>
+            <button
+              className="primary-action"
+              type="submit"
+              disabled={busy || !courseId || !groupName.trim() || !options}
+            >
               {busy ? t("registering") : t("registerSubmit")}
             </button>
             <button

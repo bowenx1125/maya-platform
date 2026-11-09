@@ -82,6 +82,27 @@
     "chatReplyFailed": {
       "en": "This reply didn't finish. Send your message again."
     },
+    "classNameInvalid": {
+      "en": "Enter a class name with at most 200 characters."
+    },
+    "classNameTaken": {
+      "en": "A class already uses that name. Choose another name."
+    },
+    "accountDeleteBlocked": {
+      "en": "This account still has protected references. Nothing was deleted."
+    },
+    "accountDeleteScope": {
+      "en": "Ask a teacher who manages all this account's classes to delete it."
+    },
+    "teacherDeleteForbidden": {
+      "en": "Teacher accounts cannot be deleted here."
+    },
+    "classChangeForbidden": {
+      "en": "Only students can change class."
+    },
+    "classNotFound": {
+      "en": "Choose an available class."
+    },
     "classroomUrlUnavailable": {
       "en": "The classroom link isn't set up on this server."
     },
@@ -391,6 +412,13 @@
     "claim_invalid": "aiStepFailed",
     "claim_lost": "aiStepFailed",
     "claim_unavailable": "aiStepFailed",
+    "account_delete_blocked": "accountDeleteBlocked",
+    "account_delete_scope_forbidden": "accountDeleteScope",
+    "teacher_delete_forbidden": "teacherDeleteForbidden",
+    "class_change_forbidden": "classChangeForbidden",
+    "class_not_found": "classNotFound",
+    "class_name_invalid": "classNameInvalid",
+    "class_name_taken": "classNameTaken",
     "classroom_public_url_unavailable": "classroomUrlUnavailable",
     "cleanup_failed": "cleanupFailed",
     "cleanup_journal_invalid": "cleanupFailed",
@@ -495,7 +523,6 @@
     "final_input_unavailable": "debateStepFailed",
     "generation_result_discarded": "aiStepFailed",
     "generation_source_selection_stale": "aiStepFailed",
-    "group_managed": "accountFieldManaged",
     "history_invalid": "debateStepFailed",
     "history_round_barrier": "debateStepFailed",
     "history_speaker_invalid": "debateStepFailed",

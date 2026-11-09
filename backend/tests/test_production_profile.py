@@ -19,6 +19,7 @@ from app.modules.auth.abuse import AuthAbuseLimiter, client_key
 from app.modules.auth.models import UserCredential
 from app.modules.auth.service import session_hash
 from app.modules.interactions.service import _public_origin
+from app.modules.org.classes import SECOND_CLASS_ID
 from app.seed import COURSE_ID, TEACHER_ID, seed_demo_data
 from fastapi import Request
 from fastapi.testclient import TestClient
@@ -305,7 +306,10 @@ def test_production_catalog_provisions_teacher_and_demo_entrypoints_stay_hidden(
     with TestClient(app, base_url=PUBLIC_ORIGIN) as client:
         logged_in = _post_login(client, "maya", PUBLIC_TEACHER_PASSWORD)
         assert logged_in.status_code == 200, logged_in.text
-        assert logged_in.json()["user"]["courses"] == [{"course_id": COURSE_ID, "role": "teacher"}]
+        assert logged_in.json()["user"]["courses"] == [
+            {"course_id": COURSE_ID, "role": "teacher"},
+            {"course_id": SECOND_CLASS_ID, "role": "teacher"},
+        ]
         assert "Secure" in logged_in.headers["set-cookie"]
         for path in ("/api/v1/auth/demo-identities",):
             response = client.get(path)
@@ -372,6 +376,7 @@ def test_production_auth_requires_exact_origin_before_hash_or_session_write(
                     "username": "foreign-origin",
                     "password": "student-password-1",
                     "group_name": "Class A",
+                    "course_id": COURSE_ID,
                 },
                 headers={"Origin": "https://attacker.example", "Host": "attacker.example"},
             ).status_code
@@ -412,6 +417,7 @@ def test_login_failures_preserve_account_not_found_and_password_incorrect_then_l
                 "username": "known-student",
                 "password": "student-password-1",
                 "group_name": "Class A",
+                "course_id": COURSE_ID,
             },
             headers=_origin_headers(),
         )
@@ -455,6 +461,7 @@ def test_successful_logins_from_many_accounts_do_not_consume_shared_client_failu
                     "username": f"classmate-{index:02d}",
                     "password": "student-password-1",
                     "group_name": "Class A",
+                    "course_id": COURSE_ID,
                 },
                 headers=_origin_headers(),
             )
@@ -497,6 +504,7 @@ def test_signup_limit_denial_does_not_create_an_account_or_session(tmp_path: Pat
                 "username": "first-student",
                 "password": "student-password-1",
                 "group_name": "Class A",
+                "course_id": COURSE_ID,
             },
             headers=_origin_headers(),
         )
@@ -507,6 +515,7 @@ def test_signup_limit_denial_does_not_create_an_account_or_session(tmp_path: Pat
                 "username": "second-student",
                 "password": "student-password-1",
                 "group_name": "Class A",
+                "course_id": COURSE_ID,
             },
             headers=_origin_headers(),
         )
@@ -522,7 +531,12 @@ def test_signup_limit_denial_does_not_create_an_account_or_session(tmp_path: Pat
 def _register(client: TestClient, username: str, group_name: str = "Class A") -> Any:
     return client.post(
         "/api/v1/auth/register",
-        json={"username": username, "password": "student-password-1", "group_name": group_name},
+        json={
+            "username": username,
+            "password": "student-password-1",
+            "group_name": group_name,
+            "course_id": COURSE_ID,
+        },
         headers=_origin_headers(),
     )
 

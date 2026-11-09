@@ -50,13 +50,13 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState<
-    "avatar" | "name" | "group" | "password" | null
+    "avatar" | "name" | "group" | "class" | "password" | null
   >(null);
   const [error, setError] = useState<unknown>(null);
   // U3: the confirm field the mismatch error points at, by number.
   const [mismatch, setMismatch] = useState(false);
   const [saved, setSaved] = useState<
-    "avatar" | "name" | "group" | "password" | null
+    "avatar" | "name" | "group" | "class" | "password" | null
   >(null);
   // A student may move to another group the course already has. Teachers
   // visit groups from Accounts instead, so they get no picker.
@@ -86,16 +86,21 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
         if (!active) return;
         // The choices are the course's existing groups; the picker never
         // offers to start a new one.
-        const names = studentCourseIds.split(",").includes(options.course_id)
-          ? options.groups
-              .map((choice) => choice.name)
-              .sort((left, right) =>
-                left.localeCompare(right, undefined, {
-                  numeric: true,
-                  sensitivity: "base",
-                }),
-              )
-          : [];
+        const selectedGroups =
+          options.classes?.find((item) =>
+            studentCourseIds.split(",").includes(item.course_id),
+          )?.groups ??
+          (studentCourseIds.split(",").includes(options.course_id)
+            ? options.groups
+            : []);
+        const names = selectedGroups
+          .map((choice) => choice.name)
+          .sort((left, right) =>
+            left.localeCompare(right, undefined, {
+              numeric: true,
+              sensitivity: "base",
+            }),
+          );
         setGroupNames(names.includes(group.name) ? names : []);
         setCurrentGroup(group.name);
         setGroupChoice(group.name);
@@ -107,6 +112,50 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
       active = false;
     };
   }, [api, currentGroupId, identityGeneration, studentCourseIds, user?.id]);
+  const [classChoices, setClassChoices] = useState<
+    { course_id: string; course_name: string }[]
+  >([]);
+  const [classChoice, setClassChoice] = useState(
+    studentCourseIds.split(",")[0] ?? "",
+  );
+  useEffect(() => {
+    if (!studentCourseIds) return;
+    let active = true;
+    void api
+      .registrationOptions()
+      .then((options) => {
+        if (active) setClassChoices(options.classes ?? []);
+      })
+      .catch(() => {
+        if (active) setClassChoices([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, studentCourseIds]);
+  async function saveClass(event: FormEvent) {
+    event.preventDefault();
+    if (busy !== null || !classChoice || classChoice === studentCourseIds)
+      return;
+    if (
+      !window.confirm(
+        "Change class? Your existing work stays in the previous class.",
+      )
+    )
+      return;
+    setBusy("class");
+    setError(null);
+    setSaved(null);
+    try {
+      await api.updateCurrentUser({ course_id: classChoice });
+      if (!mounted.current) return;
+      await refresh();
+    } catch (cause) {
+      if (mounted.current) setError(cause);
+    } finally {
+      if (mounted.current) setBusy(null);
+    }
+  }
   const groupChanged = groupChoice !== "" && groupChoice !== currentGroup;
 
   // The server collapses runs of spaces the same way, so a name that only
@@ -313,6 +362,37 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
               </span>
             ) : null}
           </form>
+          {studentCourseIds && classChoices.length > 0 ? (
+            <form
+              className="flex items-end gap-3"
+              onSubmit={(event) => void saveClass(event)}
+            >
+              <label className={`${LABEL} flex-1`}>
+                <span>Class</span>
+                <select
+                  className={FIELD}
+                  value={classChoice}
+                  disabled={busy !== null}
+                  onChange={(event) => setClassChoice(event.target.value)}
+                >
+                  {classChoices.map((choice) => (
+                    <option key={choice.course_id} value={choice.course_id}>
+                      {choice.course_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {classChoice !== studentCourseIds ? (
+                <button
+                  type="submit"
+                  className={`primary-action ${PRESS}`}
+                  disabled={busy !== null}
+                >
+                  {t("save")}
+                </button>
+              ) : null}
+            </form>
+          ) : null}
           {groupNames.length > 1 ? (
             <form
               className="flex items-end gap-3"

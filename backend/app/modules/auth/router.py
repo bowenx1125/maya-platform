@@ -6,14 +6,14 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Request, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.adaptive_admission import adaptive_slot
 from app.core.config import Settings, get_settings
 from app.core.errors import Error, PlatformError, forbidden, not_found
-from app.core.models import CourseMember, Group, GroupMember, User
+from app.core.models import Course, CourseMember, Group, GroupMember, User
 from app.modules.auth.abuse import AuthAbuseLimiter, client_key
 from app.modules.auth.admission import (
     login_database_overloaded,
@@ -67,6 +67,7 @@ from app.modules.auth.schemas import (
     PasswordResetRequest,
     PasswordResetResult,
     RegisterRequest,
+    RegistrationClass,
     RegistrationGroup,
     RegistrationOptions,
     UpdateCurrentUserRequest,
@@ -75,10 +76,13 @@ from app.modules.auth.service import (
     SESSION_COOKIE_NAME,
     AuthContext,
     create_rotated_session,
+    lock_user_profile,
     revoke_cookie_session,
 )
 from app.modules.org.access import WorkspaceMember
+from app.modules.org.classes import SECOND_CLASS_ID
 from app.modules.voices.withdrawal import finish_withdrawn_voices
+from app.seed import COURSE_ID
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -121,8 +125,13 @@ def _set_session_cookie(
 def _current_user(db: Session, user: User) -> CurrentUser:
     course_rows = db.execute(
         select(CourseMember.course_id, CourseMember.role)
+        .join(Course, Course.id == CourseMember.course_id)
         .where(CourseMember.user_id == user.id)
-        .order_by(CourseMember.course_id)
+        .order_by(
+            case((Course.id == COURSE_ID, 0), (Course.id == SECOND_CLASS_ID, 1), else_=2),
+            Course.created_at,
+            Course.code,
+        )
     ).all()
     group_rows = db.execute(
         select(WorkspaceMember.group_id, WorkspaceMember.role)
@@ -343,10 +352,17 @@ def update_current_user(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> AuthSession:
+    lock_user_profile(db, context.user.id)
     if "avatar" in payload.model_fields_set:
         update_avatar(context.user, payload.avatar)
     if payload.display_name is not None:
         update_display_name(db, context.user, payload.display_name)
+    if payload.course_id is not None:
+        from app.modules.org.classes import change_class
+
+        if payload.group_name is not None:
+            raise PlatformError("registration_invalid", "Change class and group separately.", 422)
+        change_class(db, context.user, str(payload.course_id))
     if payload.group_name is not None:
         change_group(db, context.user, payload.group_name)
         # The move withdraws this student's old-group voices; commit it, then
@@ -526,18 +542,38 @@ def registration_options(db: Session = Depends(get_db)) -> RegistrationOptions:
     recognise it, not enumerate who is already in it.
     """
 
-    course = resolve_course(db, None)
+    from app.modules.org.classes import default_class_group, registration_classes
+
+    courses = registration_classes(db)
+    course = courses[0] if courses else resolve_course(db, None)
     rows = db.execute(
-        select(Group.name, func.count(GroupMember.user_id))
+        select(Group.course_id, Group.name, func.count(GroupMember.user_id))
         .outerjoin(GroupMember, GroupMember.group_id == Group.id)
-        .where(Group.course_id == course.id)
-        .group_by(Group.id, Group.name)
+        .where(Group.course_id.in_([item.id for item in courses]))
+        .group_by(Group.id, Group.course_id, Group.name)
         .order_by(Group.name)
     ).all()
     return RegistrationOptions(
         course_id=UUID(course.id),
         course_name=course.name,
-        groups=[RegistrationGroup(name=row[0], member_count=row[1]) for row in rows],
+        groups=[
+            RegistrationGroup(name=row[1], member_count=row[2])
+            for row in rows
+            if row[0] == course.id
+        ],
+        classes=[
+            RegistrationClass(
+                course_id=UUID(item.id),
+                course_name=item.name,
+                group_name=default_class_group(db, item.id).name,
+                groups=[
+                    RegistrationGroup(name=row[1], member_count=row[2])
+                    for row in rows
+                    if row[0] == item.id
+                ],
+            )
+            for item in courses
+        ],
     )
 
 

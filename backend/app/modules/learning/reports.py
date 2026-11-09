@@ -552,6 +552,9 @@ def create_assessment_course_report(
     """Persist one idempotent teacher report revision over eligible source evidence."""
 
     activity = _validated_activity(db, actor, course_id=course_id, activity_id=activity_id)
+    from app.core.locks import xact_lock
+
+    xact_lock(db, f"account-grade-erasure:{course_id}")
     request_hash = _hash(
         _canonical(
             {

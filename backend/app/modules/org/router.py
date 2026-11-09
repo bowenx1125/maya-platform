@@ -1,8 +1,7 @@
 """Course and group routes with server-derived scope.
 
-Reads dominate this module. The one mutation is a teacher joining or
-leaving a group: a teacher already sees every group in their course, and
-joining is what lets them sit inside one as a participant.
+Teachers can create a class or join and leave groups in their courses.
+Joining lets a teacher participate in a group they can already view.
 """
 
 from __future__ import annotations
@@ -10,7 +9,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Header, Response, status
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -24,12 +23,14 @@ from app.modules.auth.dependencies import (
 )
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import course_member_role, observes_group
+from app.modules.org.classes import SECOND_CLASS_ID
 from app.modules.org.overview import group_overview
 from app.modules.org.roster import RosterRow, course_roster, delete_member, update_member
 from app.modules.org.schemas import Course as CourseDTO
 from app.modules.org.schemas import (
     CourseDetail,
     CourseRoster,
+    CreateClassRequest,
     GroupDetail,
     GroupOverview,
     GroupRef,
@@ -40,6 +41,7 @@ from app.modules.org.schemas import (
 from app.modules.org.schemas import Group as GroupDTO
 from app.modules.org.teacher_visit import grant_teacher_visit, purge_expired_teacher_visits
 from app.modules.voices.withdrawal import finish_withdrawn_voices
+from app.seed import COURSE_ID
 
 router = APIRouter(tags=["Organization"])
 
@@ -177,7 +179,11 @@ def list_courses(
         select(Course, CourseMember.role)
         .join(CourseMember, CourseMember.course_id == Course.id)
         .where(CourseMember.user_id == context.user.id)
-        .order_by(Course.code)
+        .order_by(
+            case((Course.id == COURSE_ID, 0), (Course.id == SECOND_CLASS_ID, 1), else_=2),
+            Course.created_at,
+            Course.code,
+        )
     ).all()
     taught = [course.id for course, role in rows if role == "teacher"]
     counts = _active_student_counts(db, taught)
@@ -188,6 +194,30 @@ def list_courses(
         )
         for course, role in rows
     ]
+
+
+@router.post(
+    "/courses",
+    response_model=CourseDTO,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="createClass",
+    responses={
+        201: {"model": CourseDTO, "description": "Class created."},
+        403: {"model": Error, "description": "Teacher access required."},
+        409: {"model": Error, "description": "Class name already exists."},
+        422: {"model": Error, "description": "Invalid class name."},
+    },
+)
+def create_class(
+    payload: CreateClassRequest,
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> CourseDTO:
+    from app.modules.org.classes import create_class as provision_class
+
+    course = provision_class(db, context.user, payload.name)
+    db.commit()
+    return _course_dto(course, student_count=0)
 
 
 @router.get(
@@ -474,7 +504,7 @@ def update_course_member(
     status_code=status.HTTP_204_NO_CONTENT,
     operation_id="deleteCourseMember",
     responses={
-        204: {"description": "The account and its private work are deleted."},
+        204: {"description": "The account, its work and grades are permanently deleted."},
         403: {"model": Error, "description": "CSRF failure or the caller is not the teacher."},
         404: {"model": Error, "description": "The course or member is not visible."},
         409: {"model": Error, "description": "The account is read-only or the target is self."},
@@ -491,7 +521,7 @@ def delete_course_member(
     """Delete a self-registered member (see ``roster.delete_member``)."""
 
     _teaching_scope(db, context, str(course_id))
-    delete_member(
+    profile_ids = delete_member(
         db,
         course_id=str(course_id),
         actor=context.user,
@@ -501,5 +531,5 @@ def delete_course_member(
     # The account goes first; the withdrawn voices' supplier delete runs
     # after the commit, best effort, as for a group move.
     db.commit()
-    finish_withdrawn_voices(db, settings, str(user_id))
+    finish_withdrawn_voices(db, settings, str(user_id), profile_ids=profile_ids)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

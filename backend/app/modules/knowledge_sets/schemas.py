@@ -235,7 +235,7 @@ class AssetVersionFullDTO(StrictModel):
     version_seq: int | None = Field(default=None, ge=1)
     content: AssetContent
     content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    created_by_user_id: UUID
+    created_by_user_id: UUID | None
     created_at: datetime
 
 
@@ -245,7 +245,7 @@ class AssetVersionStudentDTO(StrictModel):
     version_seq: int | None = Field(default=None, ge=1)
     content: StudentAssetContent
     content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    created_by_user_id: UUID
+    created_by_user_id: UUID | None
     created_at: datetime
 
 
