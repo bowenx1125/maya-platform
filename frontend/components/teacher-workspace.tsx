@@ -50,7 +50,7 @@ import { ModuleTiles, VersionTile } from "./studyform-layout";
 import { AgentsPage } from "./agents-page";
 import { PageAction } from "./page-action";
 import { TeamsPage } from "./teams-page";
-import { EmptyCard, ErrorNotice, LoadingCard } from "./ui";
+import { ErrorNotice, LoadingCard } from "./ui";
 
 export function TeacherDashboard() {
   const t = useT();
@@ -148,9 +148,9 @@ export function TeacherDashboard() {
         </div>
       </HomeHero>
       {error ? <ErrorNotice error={error} /> : null}
-      {published.length + owned.length === 0 ? (
-        <EmptyCard title={t("noPublishedAgents")} />
-      ) : (
+      {/* An empty class is just the banner. The old light empty card was a
+          leftover under Welcome; creating the first Agent stays on Agents. */}
+      {published.length + owned.length > 0 ? (
         <section
           className="published-section grid min-w-0 gap-[26px] max-[767px]:gap-[23px]"
           aria-labelledby="teacher-agents-title"
@@ -196,7 +196,7 @@ export function TeacherDashboard() {
             ))}
           </HomeAgentRow>
         </section>
-      )}
+      ) : null}
       <AccountSettings onSaved={() => void load()} />
     </div>
   );
