@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -78,5 +81,17 @@ describe("LoadingCard", () => {
   it("accepts an explicit label override", () => {
     render(<LoadingCard label="Please wait" />);
     expect(screen.getByRole("status").textContent).toContain("Please wait");
+  });
+
+  it("keeps a definite floor so a flex or grid track cannot crush the bar", () => {
+    const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
+    const card = css.match(/\.loading-card \{[^}]*\}/)?.[0] ?? "";
+    const track = css.match(/\.ag \.track \{[^}]*\}/)?.[0] ?? "";
+    const bar = css.match(/\.ag \.bar \{[^}]*\}/)?.[0] ?? "";
+    expect(card).toContain("min-width: min(100%, 10rem)");
+    expect(card).toContain("justify-self: stretch");
+    expect(track).toContain("min-width: min(100%, var(--w))");
+    expect(bar).toContain("min-width: min(100%, var(--w))");
+    expect(css).toContain("min-height: min(60vh, 520px)");
   });
 });

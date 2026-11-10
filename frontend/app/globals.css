@@ -323,12 +323,18 @@ textarea {
   background: rgba(255, 255, 255, 0.78);
 }
 
-/* LoadingCard (loading-v3 agent-2): the ghost agent bobs above a pixel bar. */
+/* LoadingCard (loading-v3 agent-2): the ghost agent bobs above a pixel bar.
+   A flex or grid track with min-width: 0 sizes this from the bar's
+   percentage max-width, which cycles to 0 and leaves a sliver. The floor
+   is the loader's own bar, and a narrower screen still wins via 100%. */
 .loading-card {
   display: grid;
   width: 100%;
+  max-width: 100%;
+  min-width: min(100%, 10rem);
   padding: 0;
   place-items: center;
+  justify-self: stretch;
 }
 .loading-card--lg {
   min-height: min(60vh, 520px);
@@ -374,6 +380,7 @@ textarea {
   position: relative;
   width: var(--w);
   max-width: 100%;
+  min-width: min(100%, var(--w));
   height: calc(var(--a) * 1.25);
 }
 .ag.xs .track {
@@ -394,6 +401,7 @@ textarea {
   box-sizing: border-box;
   width: var(--w);
   max-width: 100%;
+  min-width: min(100%, var(--w));
   gap: 3px;
   padding: 3px;
   border: 3px solid #111;
