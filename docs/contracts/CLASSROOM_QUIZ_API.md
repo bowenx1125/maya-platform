@@ -103,9 +103,31 @@ Consequences that tests or a probe confirm:
   double click from creating or publishing twice.
 - Item validation on create, patch and publish (`document.py`): duplicate item
   id → `quiz_item_duplicate`; choice items need ≥2 unique choices
-  (`quiz_item_choices_invalid`) and `answer.choice_ids`
-  (`quiz_answer_required`); `single` needs exactly one, all ids must exist
-  (`quiz_answer_invalid`); text items must not carry choices. All are **422**.
+  (`quiz_item_choices_invalid`); `single` allows zero or one key id after
+  dropping blanks, and all nonblank key ids must exist (`quiz_answer_invalid`);
+  text items must not carry choices. All validation errors are **422**.
+
+### No standard answer
+
+For `single`/`multiple`, missing or null `answer`, or missing, null, empty,
+or non-array `answer.choice_ids` means no standard answer. Whitespace-only strings
+(including empty strings) are ignored, never treated as ids; a key containing only
+such strings also means no standard answer. The teacher UI saves
+`answer: {"choice_ids": []}` for this case. The backend normalizes non-array keys
+to null instead of Pydantic's former schema-layer 422; array entries must still be
+strings, and unknown nonblank ids still produce `quiz_answer_invalid`.
+
+Without a standard answer, a non-empty student selection containing only existing
+choice ids yields `correct: true` and full `points`. No submission, an empty
+selection, or only blank/whitespace strings yields `correct: null` and
+`points_awarded: 0`, including required items. Invalid nonblank selections yield
+`correct: false` and 0 points. No new field is added. Items with a non-empty key
+retain unordered set equality grading and boolean `correct` (true/false).
+
+Existing attempts derive these choice results from their frozen paper on read
+(detail, Record and ZIP export), without changing stored answers or score columns.
+Manual teacher text grades take precedence over AI grades and remain unchanged.
+Student projections continue to omit `answer`, `rubric` and `grading`.
 
 ## Submission and grading
 
@@ -122,7 +144,8 @@ with at least one answer.
   round, with no 500; the service has no explicit mapping for a constraint
   violation that slips past its pre-check.
 - `single`/`multiple`: unordered set equality with the key scores the item's
-  `points`, otherwise 0. Text items are stored with `points_awarded=null`.
+  `points`, otherwise 0 (see [No standard answer](#no-standard-answer)). Text items
+  are stored with `points_awarded=null`.
   `grading_status` is `complete` (no text items), `pending` (text only) or
   `mixed` until a teacher grades every text item by hand (see
   [Hand grading](#hand-grading-no-model-call)).

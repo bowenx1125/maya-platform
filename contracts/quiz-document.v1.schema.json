@@ -50,11 +50,11 @@
           "items": { "$ref": "#/$defs/choice" }
         },
         "answer": {
-          "type": "object",
+          "type": ["object", "null"],
           "additionalProperties": false,
           "properties": {
             "choice_ids": {
-              "type": "array",
+              "type": ["array", "null"],
               "items": { "type": "string" }
             },
             "rubric": { "type": "string" }

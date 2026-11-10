@@ -23,6 +23,14 @@ class QuizAnswerKey(BaseModel):
     choice_ids: list[str] | None = None
     rubric: str | None = None
 
+    @field_validator("choice_ids", mode="before")
+    @classmethod
+    def normalize_choice_ids(cls, value: Any) -> Any:
+        # A missing or malformed teacher key denotes an unkeyed question.
+        if not isinstance(value, list):
+            return None
+        return [entry for entry in value if not isinstance(entry, str) or entry.strip()]
+
 
 class QuizItemGrading(BaseModel):
     mode: Literal["manual", "ai"] = "manual"
