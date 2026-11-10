@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   routerPush: vi.fn(),
   userId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
   groups: [] as Array<{ group_id: string }>,
+  courseIds: ["course-1"],
 }));
 const originalCreateObjectURL = Object.getOwnPropertyDescriptor(
   URL,
@@ -33,7 +34,10 @@ vi.mock("../components/session-provider", () => ({
     identityGeneration: 1,
     user: {
       id: state.userId,
-      courses: [{ course_id: "course-1", role: state.role }],
+      courses: state.courseIds.map((course_id) => ({
+        course_id,
+        role: state.role,
+      })),
       groups: state.groups,
     },
   }),
@@ -150,11 +154,14 @@ const source = {
   created_at: "2026-10-04T00:00:00Z",
 };
 
-function renderWorkspace(role = state.role) {
+function renderWorkspace(
+  role = state.role,
+  options?: Omit<ComponentProps<typeof BrainformWorkspace>, "role">,
+) {
   return render(
     <>
       <ActionsHost>
-        <BrainformWorkspace role={role as "teacher" | "student"} />
+        <BrainformWorkspace role={role as "teacher" | "student"} {...options} />
       </ActionsHost>
     </>,
   );
@@ -173,6 +180,7 @@ beforeEach(() => {
   state.role = "student";
   state.userId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
   state.groups = [];
+  state.courseIds = ["course-1"];
   state.routerPush.mockClear();
   sessionStorage.clear();
   state.api = {
@@ -258,6 +266,21 @@ afterEach(() => {
 });
 
 describe("Brainform workspace actions", () => {
+  it("uses the active teacher class on RAG without a second class selector", async () => {
+    state.role = "teacher";
+    state.courseIds = ["course-1", "course-2"];
+    state.api.courses.mockResolvedValue([
+      { id: "course-1", name: "Maya1002" },
+      { id: "course-2", name: "Maya1001" },
+    ]);
+    renderWorkspace("teacher", { ragPage: true, initialCourseId: "course-2" });
+
+    await screen.findByRole("heading", { name: "RAG" });
+    expect(state.api.workspaceDocuments).toHaveBeenCalledWith("course-1");
+    expect(state.api.workspaceDocuments).not.toHaveBeenCalledWith("course-2");
+    expect(screen.queryByRole("combobox", { name: "Course" })).toBeNull();
+  });
+
   // Owner request (2026-10-19): no sidebar New; RAG and Knowledge each add
   // from the Studyform + at their section's top right.
   it("drops the sidebar New and adds from a + on RAG and Knowledge", async () => {

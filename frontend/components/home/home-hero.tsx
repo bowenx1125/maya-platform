@@ -85,8 +85,9 @@ const HOME_TAPE_BASE =
 export const HOME_TAPE_TITLE = `${HOME_TAPE_BASE} text-[24px]`;
 
 /** The home page: a column of modules on the page's blue. */
-export const HOME_CLASS =
-  "mayaform-home mx-auto grid w-full max-w-[1100px] gap-10 px-14 pt-12 pb-[70px] max-[767px]:gap-7 max-[767px]:px-4 max-[767px]:pt-7 max-[767px]:pb-12";
+export const HOME_FRAME =
+  "mx-auto w-full max-w-[1100px] px-14 max-[767px]:px-4";
+export const HOME_CLASS = `mayaform-home grid gap-10 pt-12 pb-[70px] max-[767px]:gap-7 max-[767px]:pt-7 max-[767px]:pb-12 ${HOME_FRAME}`;
 
 /** A home module: white card, neon ring, hard ink shadow, tape title on top. */
 export const HOME_CARD_CLASS =

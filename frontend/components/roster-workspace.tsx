@@ -1,7 +1,7 @@
 "use client";
 
 import { LIST_CARD_LIFT } from "./agent-chrome";
-import { Button, PRESS_MOTION } from "./ui/button";
+import { Button, PRESS_MOTION, WORKSPACE_ACTION_SIZE } from "./ui/button";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
@@ -73,7 +73,7 @@ export function RosterWorkspace() {
       <PageBanner title={t("accounts")}>
         <Button
           variant="neutral"
-          className="rounded-[10px] border-[3px] font-body"
+          className={WORKSPACE_ACTION_SIZE}
           disabled={creating}
           onClick={() => {
             setAdding(true);
@@ -106,7 +106,7 @@ export function RosterWorkspace() {
                 type="submit"
                 busy={creating}
                 disabled={!className.trim()}
-                className="rounded-[10px] font-body"
+                className={WORKSPACE_ACTION_SIZE}
               >
                 {creating ? (
                   <span className="spinner" aria-hidden="true" />
@@ -117,7 +117,7 @@ export function RosterWorkspace() {
                 variant="neutral"
                 disabled={creating}
                 onClick={() => setAdding(false)}
-                className="rounded-[10px] border-[3px] font-body"
+                className={WORKSPACE_ACTION_SIZE}
               >
                 Cancel
               </Button>

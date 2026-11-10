@@ -31,9 +31,10 @@ source control.
 catalog with role `teacher` and an empty group. Set passwords only in that private
 file. The existing `Maya` teacher can view every class from Accounts.
 
-The original course and its existing student memberships are retained as
-Maya1001. A second course and its student group are provisioned idempotently at
-startup; no learner work is copied. In Accounts, teachers can use Add class to
+The original course and its existing students are Maya1002. The second course
+is Maya1001. Startup corrects both labels and scopes each class teacher to the
+matching course while preserving course IDs, student memberships and learner work.
+In Accounts, teachers can use Add class to
 create a named class. It appears in the registration class selector immediately.
 Its creator and Maya can manage it; other class teachers gain no access. These
 teacher memberships survive catalog synchronization. Class names are unique

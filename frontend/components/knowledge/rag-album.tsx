@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import type { AffectedAgent, KnowledgeDocument } from "../../lib/api/platform";
 import { useT } from "../../lib/i18n";
-import { Button, BUSY_MOTION_PRIMARY, PRESS_MOTION } from "../ui/button";
+import { Button, PRESS_MOTION, WORKSPACE_ACTION_SIZE } from "../ui/button";
 
 const PATHS = {
   doc: "M6 3h9l4 4v14H6zM14 3v5h5",
@@ -55,7 +55,6 @@ export const albumStyles = {
   tape: "w-[70px] h-[22px] bg-[rgb(255_77_141_/_0.55)] border-2 border-solid border-[#111] [transform:rotate(8deg)]",
   sp: "flex-1",
   count: "[font:800_16px_var(--font-lexend,'Lexend')]",
-  pn: `!inline-flex !items-center !gap-[6px] !h-[44px] !py-0 !px-[18px] !bg-[#ff4d8d] !text-[#111] !border-[3px] !border-solid !border-[#111] !rounded-[10px] ![font:800_15px_var(--font-lexend,'Lexend')] hover:!bg-[#ff4d8d] ${PRESS_MOTION} ${BUSY_MOTION_PRIMARY}`,
   grid: "grid grid-cols-[repeat(3,minmax(0,1fr))] gap-y-[34px] gap-x-[30px] m-0 p-0 list-none max-[960px]:grid-cols-[minmax(0,1fr)]",
   card: `relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[14px] shadow-[6px_6px_0_#111] [&:nth-child(3n+1)]:[--r:-1.6deg] [&:nth-child(3n+2)]:[--r:1.2deg] [&:nth-child(3n)]:[--r:-0.6deg] bg-[#67e8f9] ${LIST_CARD_LIFT}`,
   cardFailed: `relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[14px] shadow-[6px_6px_0_#111] [&:nth-child(3n+1)]:[--r:-1.6deg] [&:nth-child(3n+2)]:[--r:1.2deg] [&:nth-child(3n)]:[--r:-0.6deg] bg-[#fca5a5] ${LIST_CARD_LIFT}`,
@@ -140,11 +139,10 @@ export function AlbumPlus({
 }) {
   return (
     <Button
-      variant="noShadow"
-      className={albumStyles.pn}
+      className={WORKSPACE_ACTION_SIZE}
       aria-label={label}
-      aria-busy={busy || undefined}
-      disabled={disabled || busy}
+      busy={busy}
+      disabled={disabled}
       onClick={onClick}
     >
       {busy ? (

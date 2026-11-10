@@ -89,7 +89,7 @@ USERS = (
 )
 
 COURSE_CODE = "demo-course-001"
-COURSE_NAME = "Maya1001"
+COURSE_NAME = "Maya1002"
 GROUP_SPECS = ((GROUP_DEMO_ID, "Demo Group"),)
 
 
@@ -125,10 +125,13 @@ def _ensure_user(session: Session, seed: UserSeed, now: datetime) -> User:
 def _ensure_course(session: Session, now: datetime) -> Course:
     existing = session.get(Course, COURSE_ID)
     if existing is not None:
-        expected = _fingerprint({"code": COURSE_CODE, "name": COURSE_NAME})
-        actual = row_fingerprint(existing, ("code", "name"))
-        if actual != expected:
+        if existing.code != COURSE_CODE or existing.name not in {
+            COURSE_NAME,
+            "Maya1001",
+            "Maya Cultural Exchange Demo",
+        }:
             raise SeedConflict(f"fixed course row conflicts: {COURSE_ID}")
+        existing.name = COURSE_NAME
         return existing
     duplicate = session.scalar(select(Course).where(Course.code == COURSE_CODE))
     if duplicate is not None:

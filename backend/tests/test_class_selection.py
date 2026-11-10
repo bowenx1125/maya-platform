@@ -63,8 +63,8 @@ def test_teachers_are_scoped_and_existing_students_stay_in_first_class(class_app
     client, database, _ = class_app
     for teacher, expected in [
         ("Maya", {COURSE_ID, SECOND_CLASS_ID}),
-        ("Maya1001", {COURSE_ID}),
-        ("Maya1002", {SECOND_CLASS_ID}),
+        ("Maya1002", {COURSE_ID}),
+        ("Maya1001", {SECOND_CLASS_ID}),
     ]:
         session, _ = sign_in(client, teacher)
         assert {item["course_id"] for item in session["user"]["courses"]} == expected
@@ -87,10 +87,54 @@ def test_teachers_are_scoped_and_existing_students_stay_in_first_class(class_app
         )
 
 
+def test_existing_reversed_labels_are_corrected_without_moving_students_or_work(
+    class_app: Any,
+) -> None:
+    client, database, settings = class_app
+    maya1001, _ = sign_in(client, "Maya1001")
+    maya1002, _ = sign_in(client, "Maya1002")
+    student, _ = sign_in(client, "bowen")
+    user_id = student["user"]["id"]
+    group_id = student["user"]["groups"][0]["group_id"]
+    agent_id, _ = _make_agent_version(
+        database, owner_id=user_id, name="Existing work", group_id=group_id, visibility="public"
+    )
+    now = datetime.now(UTC)
+    with database.session() as db:
+        db.get(Course, COURSE_ID).name = "Maya1001"
+        db.get(Course, SECOND_CLASS_ID).name = "Maya1002"
+        for teacher, correct, old in [
+            (maya1001, SECOND_CLASS_ID, COURSE_ID),
+            (maya1002, COURSE_ID, SECOND_CLASS_ID),
+        ]:
+            teacher_id = teacher["user"]["id"]
+            db.delete(db.get(CourseMember, (correct, teacher_id)))
+            db.add(CourseMember(course_id=old, user_id=teacher_id, role="teacher", created_at=now))
+        db.commit()
+    _bootstrap_accounts(database, settings)
+    _bootstrap_accounts(database, settings)
+    corrected, _ = sign_in(client, "Maya1002")
+    assert corrected["user"]["courses"] == [{"course_id": COURSE_ID, "role": "teacher"}]
+    assert "bowen" in client.get(f"/api/v1/courses/{COURSE_ID}/roster").text
+    assert client.get(f"/api/v1/courses/{SECOND_CLASS_ID}/roster").status_code == 404
+    corrected, _ = sign_in(client, "Maya1001")
+    assert corrected["user"]["courses"] == [{"course_id": SECOND_CLASS_ID, "role": "teacher"}]
+    assert client.get(f"/api/v1/courses/{COURSE_ID}/roster").status_code == 404
+    with database.session() as db:
+        assert db.get(Course, COURSE_ID).name == "Maya1002"
+        assert db.get(Course, SECOND_CLASS_ID).name == "Maya1001"
+        assert db.get(CourseMember, (COURSE_ID, user_id)).role == "student"
+        assert db.get(Group, group_id).course_id == COURSE_ID
+        assert db.get(Agent, agent_id).course_id == COURSE_ID
+
+
 def test_registration_chooses_class_and_rejects_invalid_groups(class_app: Any) -> None:
     client, database, _ = class_app
     options = client.get("/api/v1/auth/registration-options").json()
-    assert {item["course_name"] for item in options["classes"]} == {"Maya1001", "Maya1002"}
+    assert [(item["course_id"], item["course_name"]) for item in options["classes"]] == [
+        (COURSE_ID, "Maya1002"),
+        (SECOND_CLASS_ID, "Maya1001"),
+    ]
     chosen = next(item for item in options["classes"] if item["course_id"] == SECOND_CLASS_ID)
     body = {
         "username": "new-class-two",
@@ -114,9 +158,9 @@ def test_registration_chooses_class_and_rejects_invalid_groups(class_app: Any) -
     assert response.status_code == 201, response.text
     assert response.json()["user"]["courses"] == [{"course_id": SECOND_CLASS_ID, "role": "student"}]
     assert client.get(f"/api/v1/courses/{COURSE_ID}").status_code == 404
-    _, _ = sign_in(client, "Maya1001")
+    _, _ = sign_in(client, "Maya1002")
     assert "new-class-two" not in client.get(f"/api/v1/courses/{COURSE_ID}/roster").text
-    sign_in(client, "Maya1002")
+    sign_in(client, "Maya1001")
     assert "new-class-two" in client.get(f"/api/v1/courses/{SECOND_CLASS_ID}/roster").text
 
 
@@ -143,7 +187,7 @@ def test_profile_switch_is_immediate_and_survives_catalog_restart(class_app: Any
 
 def test_class_teacher_cannot_move_themselves(class_app: Any) -> None:
     client, _, _ = class_app
-    _, headers = sign_in(client, "Maya1001")
+    _, headers = sign_in(client, "Maya1002")
     response = client.patch("/api/v1/auth/me", headers=headers, json={"course_id": SECOND_CLASS_ID})
     assert response.status_code == 409, response.text
     assert client.get("/api/v1/auth/me").json()["user"]["courses"] == [
@@ -189,7 +233,7 @@ def test_registration_creates_or_joins_group_only_in_chosen_class(class_app: Any
 
 def test_teacher_creates_named_class_visible_at_registration_and_restart(class_app: Any) -> None:
     client, database, settings = class_app
-    _, headers = sign_in(client, "Maya1001")
+    _, headers = sign_in(client, "Maya1002")
     created = client.post("/api/v1/courses", headers=headers, json={"name": "  History   2026 "})
     assert created.status_code == 201, created.text
     course = created.json()
@@ -224,8 +268,8 @@ def test_teacher_creates_named_class_visible_at_registration_and_restart(class_a
         assert db.get(Group, moved.json()["user"]["groups"][0]["group_id"]).name == "Students"
     _bootstrap_accounts(database, settings)
     for teacher, expected in [
-        ("Maya1001", {COURSE_ID, course_id}),
-        ("Maya1002", {SECOND_CLASS_ID}),
+        ("Maya1002", {COURSE_ID, course_id}),
+        ("Maya1001", {SECOND_CLASS_ID}),
         ("Maya", {COURSE_ID, SECOND_CLASS_ID, course_id}),
     ]:
         current, _ = sign_in(client, teacher)
@@ -233,7 +277,7 @@ def test_teacher_creates_named_class_visible_at_registration_and_restart(class_a
         assert client.get(f"/api/v1/courses/{course_id}/roster").status_code == (
             200 if course_id in expected else 404
         )
-    sign_in(client, "Maya1001")
+    sign_in(client, "Maya1002")
     assert "history-student" in client.get(f"/api/v1/courses/{course_id}/roster").text
 
 
@@ -356,10 +400,10 @@ def test_registered_students_work_and_password_survive_class_change(class_app: A
 def test_class_resources_cannot_be_read_by_other_class_teacher(class_app: Any, suffix: str) -> None:
     client, _, _ = class_app
     path = f"/api/v1/courses/{COURSE_ID}/{suffix}"
-    sign_in(client, "Maya1001")
+    sign_in(client, "Maya1002")
     allowed = client.get(path)
     assert allowed.status_code == 200, allowed.text
-    sign_in(client, "Maya1002")
+    sign_in(client, "Maya1001")
     denied = client.get(path)
     assert denied.status_code == 404, denied.text
 
@@ -417,7 +461,7 @@ def test_class_teacher_cannot_erase_another_class_history(class_app: Any) -> Non
         json={"course_id": SECOND_CLASS_ID},
     )
     assert moved.status_code == 200, moved.text
-    _, headers = sign_in(client, "Maya1002")
+    _, headers = sign_in(client, "Maya1001")
     path = f"/api/v1/courses/{SECOND_CLASS_ID}/members/{user_id}"
     denied = client.delete(path, headers=headers)
     assert denied.status_code == 409, denied.text

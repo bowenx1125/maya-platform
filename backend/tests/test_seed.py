@@ -73,7 +73,7 @@ def test_seed_is_exact_and_idempotent(tmp_path: Path) -> None:
         *STUDENT_IDS,
         *STUDENT_IDS,
     }
-    assert before["courses"] == [(COURSE_ID, "demo-course-001", "Maya1001")]
+    assert before["courses"] == [(COURSE_ID, "demo-course-001", "Maya1002")]
     assert {row[0] for row in before["groups"]} == {GROUP_DEMO_ID, GROUP_DEMO_ID}
 
 
