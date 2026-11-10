@@ -121,7 +121,8 @@ Components 所有用户 UI 删除成果保持，注册工具/Provider配置在�
 `GET /api/v1/courses/{course_id}/chat-agents` returns `ChatAgent` cards with
 three optional, nullable fields: `group_name` resolves the Agent's group name
 (null for personal Agents, missing groups or empty names); `last_edited_by_name`
-resolves the audit editor's current `User.display_name` (null without an audit
-or when the editor is missing); `last_edited_at` is the same audit row's
-`last_edited_at` timestamp (null without an audit). No creator fallback applies.
-Group names, edit audits and editor names are fetched in batches.
+resolves the audit editor's current `User.display_name`, and when there is no
+edit audit it is the creator's display name, the same as AgentSummary (null
+when that user is missing); `last_edited_at` is the audit row's timestamp and
+stays null without an audit. Group names, edit audits and names are fetched
+in batches.

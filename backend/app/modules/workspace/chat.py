@@ -1492,15 +1492,21 @@ def _chat_agents(db: Session, context: AuthContext, course_id: str) -> list[Chat
         view = agent_view(version, agent, course_id, available=_version_sources_usable(db, version))
         view.group_name = group_names.get(agent.group_id) or None
         audit = prefetched(db, "edit_audit", agent.id, partial(db.get, AgentEditAudit, agent.id))
+        # Same rule as AgentSummary: before an edit is recorded, the named
+        # person is the creator. The timestamp stays empty until an audit exists.
+        editor_id = (
+            audit.last_edited_by_user_id
+            if audit is not None and audit.last_edited_by_user_id
+            else agent.owner_user_id
+        )
+        if editor_id:
+            view.last_edited_by_name = prefetched(
+                db,
+                "user_display_name",
+                editor_id,
+                partial(db.scalar, select(User.display_name).where(User.id == editor_id)),
+            )
         if audit is not None:
-            editor_id = audit.last_edited_by_user_id
-            if editor_id:
-                view.last_edited_by_name = prefetched(
-                    db,
-                    "user_display_name",
-                    editor_id,
-                    partial(db.scalar, select(User.display_name).where(User.id == editor_id)),
-                )
             view.last_edited_at = audit.last_edited_at
         result.append(view)
     return result

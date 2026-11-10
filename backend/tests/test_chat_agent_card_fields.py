@@ -40,15 +40,15 @@ def test_group_and_personal_cards_with_and_without_audit(client: TestClient, dat
     personal_id = _agent(database, group=False, audit=False)
     with database.session() as db:
         group_name = db.get(Group, GROUP_ID).name
-        editor_name = db.get(User, MAYA_ID).display_name
+        maya_name = db.get(User, MAYA_ID).display_name
     response = client.get(URL)
     assert response.status_code == 200
     cards = {card["agent_id"]: card for card in response.json()}
     assert cards[group_id]["group_name"] == group_name
-    assert cards[group_id]["last_edited_by_name"] == editor_name
+    assert cards[group_id]["last_edited_by_name"] == maya_name
     assert datetime.fromisoformat(cards[group_id]["last_edited_at"]) == EDITED_AT
     assert cards[personal_id]["group_name"] is None
-    assert cards[personal_id]["last_edited_by_name"] is None
+    assert cards[personal_id]["last_edited_by_name"] == maya_name
     assert cards[personal_id]["last_edited_at"] is None
 
 
