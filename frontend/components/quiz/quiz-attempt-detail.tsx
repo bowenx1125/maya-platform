@@ -12,7 +12,12 @@ import { useSession } from "../session-provider";
 import { ErrorNotice, LoadingCard } from "../ui";
 import { WorkspaceIcon } from "../workspace-icon";
 import { KEY_ROW, QuizKey } from "../quizzes/quiz-chrome";
-import { isFiniteScore } from "../quizzes/quiz-validation";
+import {
+  choiceAnswerKeyMissing,
+  choiceResultMark,
+  isFiniteScore,
+  type ChoiceResultMark,
+} from "../quizzes/quiz-validation";
 
 const CELL =
   "overflow-wrap-anywhere border-b-2 border-[#E5E7EB] px-2.5 py-3 align-top";
@@ -28,6 +33,30 @@ function isText(item: QuizAttemptItem): boolean {
 function choiceLabels(item: QuizAttemptItem, ids: string[] | null | undefined) {
   const byId = new Map(item.choices.map((choice) => [choice.id, choice.label]));
   return (ids ?? []).map((id) => byId.get(id) ?? id).join(" / ");
+}
+
+function rowMark(item: QuizAttemptItem, teacher: boolean): ChoiceResultMark {
+  if (isText(item)) return "neutral";
+  return choiceResultMark({
+    // Students never receive `answer`; only a teacher row can see an empty key.
+    answerKnown: teacher,
+    answer: item.answer,
+    correct: item.correct,
+    responseChoiceIds: item.response_choice_ids,
+  });
+}
+
+/** Points to show. An open key awards full points for any selection. */
+function rowAwarded(item: QuizAttemptItem, teacher: boolean): number | null {
+  if (isText(item)) return item.points_awarded ?? null;
+  if (
+    teacher &&
+    choiceAnswerKeyMissing(item.answer) &&
+    rowMark(item, teacher) === "correct"
+  ) {
+    return item.points;
+  }
+  return item.points_awarded ?? 0;
 }
 
 function draftFrom(detail: QuizAttemptDetail): Draft {
@@ -146,6 +175,12 @@ export function QuizAttemptDetailView({
   }
 
   const gradable = teacher && detail.items.some(isText);
+  // Objective points the server stored as wrong, when the paper has no key.
+  const openKeyDelta = detail.items.reduce((sum, item) => {
+    if (isText(item)) return sum;
+    return sum + (rowAwarded(item, teacher) ?? 0) - (item.points_awarded ?? 0);
+  }, 0);
+  const headerAwarded = detail.points_awarded + openKeyDelta;
   return (
     // A's "marked paper" (owner pick 2026-11-08): ruled paper with a red
     // margin, right/wrong rows marked like a teacher's pen.
@@ -156,9 +191,9 @@ export function QuizAttemptDetailView({
       {/* Round and grading state are already on the Submissions row. */}
       <span
         className="absolute top-3 right-5 inline-block -rotate-3 font-display text-[34px] leading-none font-extrabold text-[#DC2626]"
-        aria-label={`${detail.points_awarded} / ${detail.points_total}`}
+        aria-label={`${headerAwarded} / ${detail.points_total}`}
       >
-        {detail.points_awarded} / {detail.points_total}
+        {headerAwarded} / {detail.points_total}
       </span>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[620px] border-collapse font-body text-sm text-ink">
@@ -194,10 +229,11 @@ export function QuizAttemptDetailView({
                 ? item.response_text?.trim() || t("overviewNotAnswered")
                 : choiceLabels(item, item.response_choice_ids) ||
                   t("overviewNotAnswered");
+              const mark = rowMark(item, teacher);
               const tint =
-                !text && item.correct === true
+                mark === "correct"
                   ? "bg-[#ECFCCB]"
-                  : !text && item.correct === false
+                  : mark === "incorrect"
                     ? "bg-err-bg"
                     : "";
               return (
@@ -206,16 +242,18 @@ export function QuizAttemptDetailView({
                   <td className={CELL}>{item.prompt}</td>
                   <td className={`${CELL} font-semibold`}>
                     {answer}
-                    {!text && item.correct != null ? (
+                    {!text && mark !== "neutral" ? (
                       <span
-                        className={`ml-2 inline-flex items-center gap-1 font-display font-extrabold whitespace-nowrap ${item.correct ? "text-[#15803D]" : "text-err-text"}`}
+                        className={`ml-2 inline-flex items-center gap-1 font-display font-extrabold whitespace-nowrap ${mark === "correct" ? "text-[#15803D]" : "text-err-text"}`}
                       >
                         <WorkspaceIcon
-                          name={item.correct ? "done" : "close"}
+                          name={mark === "correct" ? "done" : "close"}
                           size={16}
                           stroke={3.2}
                         />
-                        {item.correct ? t("quizCorrect") : t("quizIncorrect")}
+                        {mark === "correct"
+                          ? t("quizCorrect")
+                          : t("quizIncorrect")}
                       </span>
                     ) : null}
                   </td>
@@ -271,7 +309,7 @@ export function QuizAttemptDetailView({
                         {t("quizNotGraded")}
                       </span>
                     ) : (
-                      `${item.points_awarded ?? 0} / ${item.points}`
+                      `${rowAwarded(item, teacher) ?? 0} / ${item.points}`
                     )}
                   </td>
                   <td className={CELL}>

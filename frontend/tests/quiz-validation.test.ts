@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   canPublish,
+  choiceAnswerKeyMissing,
+  choiceResultMark,
   isFiniteScore,
   isPublishedLocked,
   quizDraftProblems,
@@ -83,15 +85,24 @@ describe("canPublish", () => {
     expect(canPublish("Quiz", [])).toBe(false);
   });
 
-  it("is false when a choice item has empty choice_ids in its answer", () => {
-    const noAnswer = makeItem({
-      id: "na1",
-      type: "multiple",
-      prompt: "Pick",
-      choices: [choice("c1", "A"), choice("c2", "B")],
-      answer: { choice_ids: [] },
-    });
-    expect(canPublish("Quiz", [validText, noAnswer])).toBe(false);
+  it("is true when a choice item has no standard answer", () => {
+    const answers: Array<QuizItemTeacher["answer"] | undefined> = [
+      { choice_ids: [] },
+      { choice_ids: null },
+      { choice_ids: ["", "  "] },
+      null,
+      undefined,
+    ];
+    for (const answer of answers) {
+      const noAnswer = makeItem({
+        id: "na1",
+        type: "multiple",
+        prompt: "Pick",
+        choices: [choice("c1", "A"), choice("c2", "B")],
+        answer,
+      });
+      expect(canPublish("Quiz", [validText, noAnswer])).toBe(true);
+    }
   });
 
   it("is true when single/multiple items have answers and text items are fine", () => {
@@ -173,7 +184,74 @@ describe("AI grading validation", () => {
       withAiGrading({ ...validSingle, grading: { mode: "ai" } }).grading,
     ).toBeUndefined();
   });
+});
 
+describe("choice answer key", () => {
+  it("treats a missing or blank choice_ids list as no standard answer", () => {
+    expect(choiceAnswerKeyMissing(undefined)).toBe(true);
+    expect(choiceAnswerKeyMissing(null)).toBe(true);
+    expect(choiceAnswerKeyMissing({})).toBe(true);
+    expect(choiceAnswerKeyMissing({ choice_ids: null })).toBe(true);
+    expect(choiceAnswerKeyMissing({ choice_ids: [] })).toBe(true);
+    expect(choiceAnswerKeyMissing({ choice_ids: ["", "  "] })).toBe(true);
+    expect(choiceAnswerKeyMissing({ choice_ids: ["a"] })).toBe(false);
+    expect(choiceAnswerKeyMissing({ choice_ids: ["a", ""] })).toBe(false);
+  });
+
+  it("marks any selection correct when the teacher can see there is no key", () => {
+    expect(
+      choiceResultMark({
+        answerKnown: true,
+        answer: { choice_ids: [] },
+        correct: false,
+        responseChoiceIds: ["b"],
+      }),
+    ).toBe("correct");
+    expect(
+      choiceResultMark({
+        answerKnown: true,
+        answer: null,
+        correct: false,
+        responseChoiceIds: [],
+      }),
+    ).toBe("neutral");
+    expect(
+      choiceResultMark({
+        answerKnown: true,
+        answer: { choice_ids: ["a"] },
+        correct: false,
+        responseChoiceIds: ["b"],
+      }),
+    ).toBe("incorrect");
+  });
+
+  it("follows the server mark when the payload has no answer key", () => {
+    // Student attempt items omit `answer`. A missing field is not "no key".
+    expect(
+      choiceResultMark({
+        answerKnown: false,
+        correct: false,
+        responseChoiceIds: ["a"],
+      }),
+    ).toBe("incorrect");
+    expect(
+      choiceResultMark({
+        answerKnown: false,
+        correct: true,
+        responseChoiceIds: ["a"],
+      }),
+    ).toBe("correct");
+    expect(
+      choiceResultMark({
+        answerKnown: false,
+        correct: null,
+        responseChoiceIds: ["a"],
+      }),
+    ).toBe("neutral");
+  });
+});
+
+describe("isFiniteScore", () => {
   it("never invents a score", () => {
     expect(isFiniteScore(undefined)).toBe(false);
     expect(isFiniteScore(null)).toBe(false);
