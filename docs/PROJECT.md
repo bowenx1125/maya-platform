@@ -314,4 +314,4 @@ Full run at 535d227: 3073 pass/139 fail/1 skip. Main reproduced 135; four fixed.
 
 Nov10 local: original class Maya1002, second Maya1001, stable IDs and student data.
 Teacher scopes corrected. Shared RAG action style; RAG follows the class bar.
-47 PG and 1188 UI tests passed. Browser matched button style and class switching.
+47 PG and 1188 UI tests passed. Chat pick card omits missing group and editor.
