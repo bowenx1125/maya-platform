@@ -328,6 +328,10 @@ describe("W1 teacher personal workspace", () => {
     );
     expect(screen.queryByText("Personal Agents · 0")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Guide" })).toBeNull();
+    // Both agent lists are empty. That is not a card: the legacy empty
+    // state ("No Agents yet." with the diamond mark) does not belong here.
+    expect(screen.queryByText("No Agents yet.")).toBeNull();
+    expect(document.querySelector(".empty-card")).toBeNull();
   });
 
   it("creates a course-scoped Agent with Private as the default visibility", async () => {
