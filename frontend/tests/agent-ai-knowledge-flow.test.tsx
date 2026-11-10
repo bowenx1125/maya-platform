@@ -8,6 +8,8 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { ComponentProps } from "react";
+
 import { AgentWorkbench } from "../components/agent-workspace";
 import { AppShell } from "../components/app-shell";
 import { useSession } from "../components/session-provider";
@@ -186,6 +188,7 @@ function deferred<T>() {
 function renderWorkbench(
   api: ReturnType<typeof makeApi>,
   generationFlow: boolean,
+  props: Partial<ComponentProps<typeof AgentWorkbench>> = {},
 ) {
   vi.mocked(useSession).mockReturnValue({
     api,
@@ -199,7 +202,11 @@ function renderWorkbench(
   return render(
     <>
       <AppShell role="teacher">
-        <AgentWorkbench versionId="version-1" generationFlow={generationFlow} />
+        <AgentWorkbench
+          versionId="version-1"
+          generationFlow={generationFlow}
+          {...props}
+        />
       </AppShell>
     </>,
   );
@@ -274,21 +281,97 @@ describe("explicit AI Knowledge Agent flow", () => {
     expect(api.publish.mock.calls[0]?.[2]).not.toHaveProperty("generation");
   });
 
-  it("selects a Knowledge set from the Agent editor", async () => {
+  it("has no Knowledge checkbox and Done does not replace Knowledge bindings", async () => {
     const api = makeApi();
     api.knowledgeSets.mockResolvedValue([generatedSet as KnowledgeSetSummary]);
     renderWorkbench(api, false);
 
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /Generated Knowledge/ }),
+    await screen.findByRole("heading", { name: "RAG" });
+    expect(screen.getByRole("heading", { name: "RAG" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Brainform" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Knowledge" })).toBeNull();
+    expect(
+      screen.queryByRole("checkbox", { name: /Generated Knowledge/ }),
+    ).toBeNull();
+    expect(screen.queryByText("No Knowledge yet.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(1));
+    expect(api.replaceAgentKnowledgeSets).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    "keeps existing bound Knowledge on Done (publishOnDone=%s)",
+    async (publishOnDone) => {
+      const api = makeApi([source]);
+      api.agentKnowledgeSets.mockResolvedValue({
+        agent_id: agent.id,
+        agent_metadata_revision: 0,
+        sets: [generatedSet],
+      });
+      renderWorkbench(api, publishOnDone, { publishOnDone });
+
+      fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+      await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(1));
+      expect(api.agentKnowledgeSets).toHaveBeenCalledWith(agent.id);
+      expect(
+        screen.queryByRole("checkbox", { name: /Generated Knowledge/ }),
+      ).toBeNull();
+      expect(api.replaceAgentKnowledgeSets).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps bound Knowledge while saving other Agent edits", async () => {
+    const api = makeApi();
+    api.agentKnowledgeSets.mockResolvedValue({
+      agent_id: agent.id,
+      agent_metadata_revision: 0,
+      sets: [generatedSet],
+    });
+    renderWorkbench(api, false, { publishOnDone: true });
+    fireEvent.change(
+      await screen.findByRole("textbox", { name: "AGENT.md editor" }),
+      {
+        target: { value: "# Updated Agent" },
+      },
     );
-    await waitFor(() =>
-      expect(api.replaceAgentKnowledgeSets).toHaveBeenCalledWith(
-        "agent-1",
-        expect.objectContaining({ set_ids: ["set-1"] }),
-        expect.anything(),
-      ),
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(1));
+    expect(api.updateDraft).toHaveBeenCalledWith(
+      "version-1",
+      expect.objectContaining({ agent_md: "# Updated Agent" }),
     );
+    expect(api.replaceAgentKnowledgeSets).not.toHaveBeenCalled();
+  });
+
+  it("shows the same RAG panel in unsaved create and Done never replaces Knowledge bindings", async () => {
+    const api = makeApi();
+    api.agentKnowledgeSets.mockResolvedValue({
+      agent_id: agent.id,
+      agent_metadata_revision: 0,
+      sets: [generatedSet],
+    });
+    const create = vi.fn(async () => agent);
+    renderWorkbench(api, false, {
+      versionId: undefined,
+      publishOnDone: true,
+      unsavedCreate: { courseId: "course-1", create },
+    });
+    fireEvent.change(await screen.findByRole("textbox", { name: "Name" }), {
+      target: { value: "New Agent" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "AGENT.md editor" }), {
+      target: { value: "# New Agent" },
+    });
+    expect(screen.getByRole("heading", { name: "RAG" })).toBeTruthy();
+    expect(
+      screen.queryByRole("checkbox", { name: /Generated Knowledge/ }),
+    ).toBeNull();
+    expect(screen.queryByText("No Knowledge yet.")).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(1));
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(api.replaceAgentKnowledgeSets).not.toHaveBeenCalled();
   });
 
   it("starts from an existing Agent's saved Sources when Done is explicitly chosen", async () => {

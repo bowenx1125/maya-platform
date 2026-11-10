@@ -7,6 +7,7 @@ import { useT } from "../lib/i18n";
 import { cn } from "../lib/utils";
 import { IconClose, IconDownload, IconEye } from "./quiet-icons";
 import { buttonVariants } from "./ui/button";
+import selection from "./selection-motion.module.css";
 import { ReportMarkdown } from "./report/report-markdown";
 
 export type KnowledgeCheck = { title: string; markdown: string };
@@ -128,7 +129,8 @@ export function KnowledgeRowActions({
   const t = useT();
   const icon = cn(
     buttonVariants({ variant: "neutral", size: "icon" }),
-    "min-h-0 rounded-[10px] p-0",
+    selection.rowAction,
+    "size-11 min-h-0 rounded-[10px] border-[3px] p-0",
   );
   return (
     <>

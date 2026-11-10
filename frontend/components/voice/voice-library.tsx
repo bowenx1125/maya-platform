@@ -35,6 +35,7 @@ import { PageAction } from "../page-action";
 import { buttonVariants } from "../ui/button";
 import { AGENT_NEW_BUTTON, agentCard } from "../agent-chrome";
 import { cn } from "../../lib/utils";
+import selection from "../selection-motion.module.css";
 import {
   AlbumMic,
   AlbumRings,
@@ -141,25 +142,48 @@ function previewIsCurrent(expiresAt: string): boolean {
   return Number.isFinite(expires) && expires > Date.now();
 }
 
-/**
- * Option A (2026-11-03), the Agent page's voice picker: each voice is a
- * record. It sits right after the visually hidden radio, so the radio's
- * checked state spins it, rings it lime and lights its centre.
- */
 function VoiceDisc({ none = false }: { none?: boolean }) {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "relative grid size-16 place-items-center rounded-full border-[3px] border-[#111] shadow-[0_4px_0_#111]",
+        selection.voiceDisc,
+        "relative grid size-16 place-items-center rounded-full border-[3px] border-[#111]",
         none
           ? "bg-white text-[18px] leading-none font-black after:content-['∅']"
           : "bg-[repeating-radial-gradient(#222_0_2px,#333_2px_4px)] after:size-5 after:rounded-full after:border-2 after:border-[#111] after:bg-[#FFE14D] after:content-[''] peer-checked:after:bg-[#A3E635]",
-        "peer-checked:animate-[spin_2.4s_linear_infinite] peer-checked:shadow-[0_0_0_4px_#A3E635,0_4px_0_4px_#111] motion-reduce:peer-checked:animate-none",
-        "peer-focus-visible:outline peer-focus-visible:outline-[3px] peer-focus-visible:outline-offset-4 peer-focus-visible:outline-main",
         "peer-disabled:opacity-50",
       )}
-    ></span>
+    >
+      <span
+        className={cn(
+          selection.voiceCheck,
+          "absolute -top-1.5 -right-1.5 size-[22px] place-items-center rounded-full border-[2.5px] border-[#111] bg-[#FF4D8D] text-white shadow-[2px_2px_0_#111]",
+        )}
+      >
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="m5 12 4 4L19 6" />
+        </svg>
+      </span>
+    </span>
+  );
+}
+
+function VoiceSelectedLabel() {
+  const t = useT();
+  return (
+    <span aria-hidden="true" className={selection.selectedLabel}>
+      {t("selected")}
+    </span>
   );
 }
 
@@ -685,7 +709,6 @@ export function VoiceLibrary({
     </div>
   );
 
-  // Arcade V2 picker (Create/Edit): white rows, keycap radio, lime + EQ when selected.
   const arcadePicker = Boolean(onSelect);
   // Option A: a record per voice, its name below, its keys under that.
   function arcadeRow(selected: boolean) {
@@ -695,13 +718,19 @@ export function VoiceLibrary({
     );
   }
   function arcadeChoice() {
-    return "grid min-w-0 cursor-pointer justify-items-center gap-1.5 font-body text-ink has-[input:disabled]:cursor-not-allowed";
+    return cn(
+      selection.voiceChoice,
+      "grid min-w-0 cursor-pointer justify-items-center gap-1.5 font-body text-ink has-[input:disabled]:cursor-not-allowed",
+    );
   }
   function arcadeRadio() {
     return "peer sr-only";
   }
   function arcadeName() {
-    return "max-w-full rounded-md border-2 border-[#111] bg-white px-2 py-px text-center font-body text-xs leading-[1.4] font-extrabold wrap-anywhere peer-checked:bg-[#FFE14D]";
+    return cn(
+      selection.voiceName,
+      "max-w-full rounded-md border-[3px] border-[#111] bg-white px-2 py-px text-center font-body text-xs leading-[1.4] font-extrabold wrap-anywhere peer-checked:bg-[#FFE14D]",
+    );
   }
   const selectedListed = profiles.some(
     (profile) => profile.id === selectedId && profile.status === "ready",
@@ -750,6 +779,7 @@ export function VoiceLibrary({
             >
               {t("voiceNoneOption")}
             </span>
+            {arcadePicker ? <VoiceSelectedLabel /> : null}
           </label>
         </li>
         {selectedId && !selectedListed ? (
@@ -791,6 +821,7 @@ export function VoiceLibrary({
               >
                 {t("currentVoiceBinding")}
               </span>
+              {arcadePicker ? <VoiceSelectedLabel /> : null}
             </label>
           </li>
         ) : null}
@@ -1052,6 +1083,7 @@ export function VoiceLibrary({
                   >
                     {name}
                   </span>
+                  {arcadePicker ? <VoiceSelectedLabel /> : null}
                 </label>
               ) : (
                 nameField(profile, name, editing, manageable, false)

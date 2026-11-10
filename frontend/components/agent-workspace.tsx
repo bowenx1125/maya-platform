@@ -27,7 +27,6 @@ import {
   type KnowledgeDocumentMutation,
   type AvatarTemplate,
   type KnowledgeDocument,
-  type KnowledgeSetSummary,
   type KnowledgeSnapshot,
   type RagPreview,
   type VoiceProfile,
@@ -43,6 +42,7 @@ import { blockerLabel, statusLabel, type MessageKey } from "../lib/i18n";
 import { useT } from "../lib/i18n";
 import { cn } from "../lib/utils";
 import { PRESS_MOTION } from "./ui/button";
+import selection from "./selection-motion.module.css";
 import {
   AVATAR_TEMPLATE_DEFAULT_CONFIGS,
   AvatarEditor,
@@ -97,18 +97,6 @@ const MARKDOWN_CARD = cn(
   "[&_.editor-footer]:mt-2 [&_.editor-footer]:font-body [&_.editor-footer]:text-xs [&_.editor-footer]:[line-height:normal] [&_.editor-footer]:font-bold",
   "[&_.button-row]:flex [&_.button-row]:items-center [&_.button-row]:gap-1.5",
 );
-const BRAINFORM_ROWS =
-  "[&_.brainform-source-group_h3]:font-display [&_.brainform-source-group_h3]:text-base [&_.brainform-source-group_h3]:font-extrabold [&_.brainform-source-group_h3]:tracking-normal [&_.brainform-source-group_h3]:text-[#111] " +
-  "[&_.document-row]:mb-2 [&_.document-row]:rounded-[10px] [&_.document-row]:border-2 [&_.document-row]:border-[#111] [&_.document-row]:bg-white [&_.document-row]:shadow-[2px_2px_0_#111] " +
-  "[&_.document-row_:is(span,strong,p)]:min-w-[6em] [&_.document-row_:is(span,strong,p)]:overflow-visible [&_.document-row_:is(span,strong,p)]:text-clip [&_.document-row_:is(span,strong,p)]:break-normal [&_.document-row_:is(span,strong,p)]:wrap-break-word [&_.document-row_:is(span,strong,p)]:whitespace-normal " +
-  "[&_.row-actions]:flex [&_.row-actions]:items-center [&_.row-actions]:gap-1.5";
-/** Filled Brainform: a hairline between the RAG and Knowledge groups, as in the mock. */
-const BRAINFORM_SPLIT =
-  "[&_.brainform-source-group+.brainform-source-group]:border-0 [&_.brainform-source-group+.brainform-source-group]:border-t [&_.brainform-source-group+.brainform-source-group]:border-solid [&_.brainform-source-group+.brainform-source-group]:border-[#E4E1D9]";
-const BRAINFORM_COMPACT =
-  "[&_.brainform-source-group]:m-0 [&_.brainform-source-group]:flex [&_.brainform-source-group]:items-baseline [&_.brainform-source-group]:gap-2.5 [&_.brainform-source-group]:border-0 [&_.brainform-source-group]:border-t-2 [&_.brainform-source-group]:border-dashed [&_.brainform-source-group]:border-[#1144] [&_.brainform-source-group]:px-0.5 [&_.brainform-source-group]:py-2 " +
-  "[&_.brainform-source-group_h3]:m-0 [&_.brainform-source-group_h3]:min-w-[84px] [&_.brainform-source-group_h3]:text-sm [&_.brainform-source-group_h3]:leading-[1.5] " +
-  "[&_.brainform-source-group_p]:m-0 [&_.brainform-source-group_p]:font-body [&_.brainform-source-group_p]:text-[13px] [&_.brainform-source-group_p]:[line-height:normal] [&_.brainform-source-group_p]:font-medium [&_.brainform-source-group_p]:text-[#1119]";
 const AVATAR_CARD = cn(
   agentCard("avatar"),
   "[background:radial-gradient(ellipse_at_50%_46%,#FFE14D_0_20%,transparent_21%),repeating-conic-gradient(from_0deg_at_50%_32%,#FDBA74_0_9deg,#FFE7CC_9deg_18deg)]",
@@ -271,8 +259,7 @@ export function AgentOverview({ agentId }: { agentId: string }) {
 }
 
 // The editor offers the library Brainform lists, plus whatever this Agent
-// already uses. A private file belongs only to the Agent it was uploaded into,
-// and a Knowledge set whose Agent was deleted is no longer in the library.
+// already uses. A private file belongs only to the Agent it was uploaded into.
 function libraryDocuments(
   rows: KnowledgeDocument[],
   boundIds: string[],
@@ -300,42 +287,6 @@ function activeDocumentIds(documents: KnowledgeDocument[]): string[] {
   return documents
     .filter((document) => document.workspace_state === "active")
     .map((document) => document.id);
-}
-
-function librarySetIds(
-  rows: { canonical_set_id: string }[] | null,
-): Set<string> | null {
-  return rows === null
-    ? null
-    : new Set(rows.map((row) => row.canonical_set_id));
-}
-
-function libraryKnowledgeSets(
-  rows: KnowledgeSetSummary[],
-  listed: Set<string> | null,
-  boundIds: string[],
-): KnowledgeSetSummary[] {
-  if (listed === null) return rows;
-  const bound = new Set(boundIds);
-  return rows.filter((set) => listed.has(set.id) || bound.has(set.id));
-}
-
-function brainformSetIds(
-  api: {
-    brainformKnowledge?: (
-      courseId: string,
-    ) => Promise<{ canonical_set_id: string }[]>;
-  },
-  courseId: string,
-): Promise<Set<string> | null> {
-  // Without Brainform's list the editor keeps every readable set rather than
-  // hiding real ones.
-  if (typeof api.brainformKnowledge !== "function")
-    return Promise.resolve(null);
-  return api
-    .brainformKnowledge(courseId)
-    .then(librarySetIds)
-    .catch(() => null);
 }
 
 export function AgentWorkbench({
@@ -397,7 +348,6 @@ export function AgentWorkbench({
   // Private files this editor has already offered stay offered, so a file
   // unticked here can be ticked again after a reload of the same editor.
   const offeredDocumentIds = useRef<Set<string>>(new Set());
-  const [knowledgeSets, setKnowledgeSets] = useState<KnowledgeSetSummary[]>([]);
   const [agentKnowledge, setAgentKnowledge] =
     useState<AgentKnowledgeSets | null>(null);
   const [selectedKnowledgeSetIds, setSelectedKnowledgeSetIds] = useState<
@@ -588,18 +538,11 @@ export function AgentWorkbench({
             courseId = courseId ?? group.course_id;
           }
           if (!courseId) throw new Error("missing course");
-          const [
-            nextDocuments,
-            nextAvatarTemplates,
-            nextKnowledgeSets,
-            nextLibrarySetIds,
-          ] = await Promise.all([
+          const [nextDocuments, nextAvatarTemplates] = await Promise.all([
             unsavedGroupId
               ? api.knowledge(unsavedGroupId)
               : api.workspaceDocuments(courseId),
             loadAvatarTemplates(),
-            api.knowledgeSets(courseId),
-            brainformSetIds(api, courseId),
           ]);
           if (!isCurrentScope(requestScope)) return;
           const baselineAvatar =
@@ -647,9 +590,6 @@ export function AgentWorkbench({
             }
           });
           setDocuments(offered);
-          setKnowledgeSets(
-            libraryKnowledgeSets(nextKnowledgeSets, nextLibrarySetIds, []),
-          );
           setAgentKnowledge({
             agent_id: "",
             agent_metadata_revision: 0,
@@ -674,25 +614,18 @@ export function AgentWorkbench({
         const nextAgent = await api.agent(nextVersion.agent_id);
         if (!isCurrentScope(requestScope)) return;
         void loadAvatarTemplates();
-        const [
-          nextDocuments,
-          nextPreview,
-          nextKnowledgeSets,
-          nextAgentKnowledge,
-          nextLibrarySetIds,
-        ] = await Promise.all([
-          nextAgent.group_id
-            ? groupLibraryOrClosed(api.knowledge(nextAgent.group_id))
-            : api.workspaceDocuments(nextAgent.course_id),
-          // Preview is draft-only. A published version is the editor baseline
-          // until Done, and its preview request is a not-found.
-          nextVersion.state === "draft"
-            ? api.ragPreview(versionId)
-            : Promise.resolve(null),
-          api.knowledgeSets(nextAgent.course_id),
-          api.agentKnowledgeSets(nextAgent.id),
-          brainformSetIds(api, nextAgent.course_id),
-        ]);
+        const [nextDocuments, nextPreview, nextAgentKnowledge] =
+          await Promise.all([
+            nextAgent.group_id
+              ? groupLibraryOrClosed(api.knowledge(nextAgent.group_id))
+              : api.workspaceDocuments(nextAgent.course_id),
+            // Preview is draft-only. A published version is the editor baseline
+            // until Done, and its preview request is a not-found.
+            nextVersion.state === "draft"
+              ? api.ragPreview(versionId)
+              : Promise.resolve(null),
+            api.agentKnowledgeSets(nextAgent.id),
+          ]);
         if (!isCurrentScope(requestScope)) return;
         setVersion(nextVersion);
         setAgent(nextAgent);
@@ -711,20 +644,6 @@ export function AgentWorkbench({
           }
         });
         setDocuments(offered);
-        const boundSetIds = nextAgentKnowledge.sets.map((set) => set.id);
-        setKnowledgeSets(
-          libraryKnowledgeSets(
-            Array.from(
-              new Map(
-                [...nextKnowledgeSets, ...nextAgentKnowledge.sets].map(
-                  (set) => [set.id, set],
-                ),
-              ).values(),
-            ),
-            nextLibrarySetIds,
-            boundSetIds,
-          ),
-        );
         setAgentKnowledge(nextAgentKnowledge);
         setPreview(nextPreview);
         setKnowledgePreviewRefreshFailed(false);
@@ -975,7 +894,15 @@ export function AgentWorkbench({
       return;
     }
     const requestScope = workbenchScope;
-    if (!agentKnowledge || knowledgeBindingSaving) return;
+    if (
+      !agentKnowledge ||
+      knowledgeBindingSaving ||
+      sameIds(
+        nextSetIds,
+        agentKnowledge.sets.map((set) => set.id),
+      )
+    )
+      return;
     setSelectedKnowledgeSetIds(nextSetIds);
     setPendingKnowledgeSetIds(nextSetIds);
     setKnowledgeBindingSaving(true);
@@ -1648,10 +1575,7 @@ export function AgentWorkbench({
   }
 
   const brainformEmpty =
-    documents.length === 0 &&
-    stagedRag.length === 0 &&
-    !queuedCreateRag &&
-    knowledgeSets.length === 0;
+    documents.length === 0 && stagedRag.length === 0 && !queuedCreateRag;
   const voicesEmpty = voiceProfiles.length === 0;
   const duoEmpty = brainformEmpty && voicesEmpty;
 
@@ -2037,12 +1961,10 @@ export function AgentWorkbench({
                 )}
               >
                 <SectionCard
-                  title={t("brainform")}
+                  title={t("agentRagPanelTitle")}
                   guide="agent.brainform"
                   className={cn(
                     agentCard("brainform", brainformEmpty),
-                    BRAINFORM_ROWS,
-                    brainformEmpty ? BRAINFORM_COMPACT : BRAINFORM_SPLIT,
                     "[&_label[data-ui-guide='agent.uploadRag']]:shadow-[6px_6px_0_#111]",
                   )}
                   action={
@@ -2065,8 +1987,7 @@ export function AgentWorkbench({
                     check={knowledgeCheck.check}
                     onClose={knowledgeCheck.closeCheck}
                   />
-                  <div className="brainform-source-group">
-                    <h3>{t("rag")}</h3>
+                  <div role="group" aria-label={t("rag")}>
                     {saving && pendingKnowledgeUpload ? (
                       <p
                         className="muted-copy"
@@ -2203,7 +2124,7 @@ export function AgentWorkbench({
                                 <RagPickerOrigin document={document} />
                               </RagStickerFace>
                             </label>
-                            <div className="relative z-[1] flex flex-wrap items-center gap-1.5">
+                            <div className="pointer-events-none relative z-[1] flex flex-wrap items-center gap-1.5 [&_button]:pointer-events-auto">
                               {document.index_status === "ready" ? null : (
                                 <StatusBadge
                                   status={document.index_status}
@@ -2230,63 +2151,6 @@ export function AgentWorkbench({
                                   void knowledgeCheck.downloadMarkdown(
                                     document.source_filename,
                                     loadDocumentMarkdown(api, document),
-                                  )
-                                }
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="brainform-source-group">
-                    <h3>{t("brainformKnowledgeHeading")}</h3>
-                    {knowledgeSets.length === 0 ? (
-                      <p className="muted-copy">
-                        {t("brainformKnowledgeEmpty")}
-                      </p>
-                    ) : (
-                      <div className="document-list">
-                        {knowledgeSets.map((set) => (
-                          <div className="document-row" key={set.id}>
-                            <label className="document-select">
-                              <input
-                                type="checkbox"
-                                checked={selectedKnowledgeSetIds.includes(
-                                  set.id,
-                                )}
-                                disabled={
-                                  editingLocked ||
-                                  knowledgeBindingSaving ||
-                                  !set.can_edit
-                                }
-                                onChange={(event) => {
-                                  const nextIds = event.target.checked
-                                    ? [...selectedKnowledgeSetIds, set.id]
-                                    : selectedKnowledgeSetIds.filter(
-                                        (id) => id !== set.id,
-                                      );
-                                  void saveKnowledgeSetSelection(nextIds);
-                                }}
-                              />
-                              <span className="document-main">
-                                <strong>{set.display_name}</strong>
-                              </span>
-                            </label>
-                            <div className="row-actions">
-                              <KnowledgeRowActions
-                                name={set.display_name}
-                                disabled={knowledgeCheckDisabled}
-                                onView={() =>
-                                  void knowledgeCheck.viewMarkdown(
-                                    set.display_name,
-                                    loadSetMarkdown(api, set.id),
-                                  )
-                                }
-                                onDownload={() =>
-                                  void knowledgeCheck.downloadMarkdown(
-                                    `${set.display_name}.md`,
-                                    loadSetMarkdown(api, set.id),
                                   )
                                 }
                               />
@@ -2352,7 +2216,6 @@ type KnowledgeCheckApi = {
     documentId: string,
     filename: string,
   ): Promise<{ content: string }>;
-  knowledgeMarkdown(setId: string): Promise<{ markdown: string }>;
 };
 
 /** The server copy of a RAG file, the same text read-only Brainform shows. */
@@ -2366,14 +2229,6 @@ function loadDocumentMarkdown(
       document.source_filename,
     );
     return downloaded.content;
-  };
-}
-
-/** The saved Markdown of a Knowledge Set, as read-only Brainform shows it. */
-function loadSetMarkdown(api: KnowledgeCheckApi, setId: string) {
-  return async () => {
-    const document = await api.knowledgeMarkdown(setId);
-    return document.markdown;
   };
 }
 
@@ -2536,18 +2391,14 @@ function RagPickerOrigin({ document }: { document: KnowledgeDocument }) {
   );
 }
 
-/*
- * Option A (2026-11-03), the Agent page's RAG picker: two columns of sticker
- * cards. The checkbox stays (visually hidden) inside the card's label, so the
- * whole card toggles it; a checked card turns lime, lifts and gets a pink
- * check stamp.
- */
 const RAG_STICKERS =
   "grid grid-cols-[repeat(2,minmax(0,1fr))] gap-3 max-[560px]:grid-cols-[minmax(0,1fr)]";
-const RAG_STICKER =
-  "group/sticker relative grid content-start gap-2 rounded-[12px] border-[2.5px] border-[#111] bg-white p-2.5 shadow-[0_4px_0_#111] transition-[transform,box-shadow,background-color] duration-150 has-[input:checked]:-translate-y-[3px] has-[input:checked]:-rotate-1 has-[input:checked]:bg-[#A3E635] has-[input:checked]:shadow-[0_7px_0_#111] has-[input:focus-visible]:outline has-[input:focus-visible]:outline-[3px] has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-main motion-reduce:transition-none motion-reduce:has-[input:checked]:translate-y-0 motion-reduce:has-[input:checked]:rotate-0";
+const RAG_STICKER = cn(
+  selection.ragSticker,
+  "group/sticker relative grid content-start gap-2 rounded-[12px] border-[3px] border-[#111] bg-white p-2.5 has-[input:checked]:border-4 has-[input:checked]:bg-[#A3E635]",
+);
 const RAG_STICKER_SELECT =
-  "grid min-w-0 cursor-pointer gap-1.5 text-left has-[input:disabled]:cursor-not-allowed";
+  "grid min-h-11 min-w-0 cursor-pointer gap-1.5 text-left has-[input:disabled]:cursor-not-allowed";
 
 function RagStickerFace({
   filename,
@@ -2556,6 +2407,7 @@ function RagStickerFace({
   filename: string;
   children?: ReactNode;
 }) {
+  const t = useT();
   const extension = filename.includes(".")
     ? filename.split(".").pop()!.slice(0, 4).toUpperCase()
     : "FILE";
@@ -2563,7 +2415,7 @@ function RagStickerFace({
     <>
       <span
         aria-hidden="true"
-        className="absolute -top-2.5 -right-2 hidden size-[30px] rotate-12 place-items-center rounded-full border-[2.5px] border-[#111] bg-[#FF4D8D] text-white shadow-[2px_2px_0_#111] peer-checked:grid"
+        className="absolute -top-2.5 -right-2 hidden size-[30px] rotate-12 place-items-center rounded-full border-[2.5px] border-[#111] bg-[#FF4D8D] text-white shadow-[2px_2px_0_#111] peer-checked:grid motion-reduce:rotate-0"
       >
         <svg
           width="16"
@@ -2592,6 +2444,9 @@ function RagStickerFace({
           {children}
         </span>
       ) : null}
+      <span aria-hidden="true" className={selection.selectedLabel}>
+        {t("selected")}
+      </span>
     </>
   );
 }

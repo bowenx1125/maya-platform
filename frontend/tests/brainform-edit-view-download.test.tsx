@@ -167,7 +167,7 @@ describe("edit-mode Brainform view and download", () => {
     expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
-  it("downloads a RAG file and a Knowledge Set as read-only mode does", async () => {
+  it("downloads RAG without toggling it and has no Knowledge Set actions", async () => {
     const api = renderWorkbench();
     fireEvent.click(
       await screen.findByRole("button", { name: "Download Notes.md" }),
@@ -178,27 +178,25 @@ describe("edit-mode Brainform view and download", () => {
       "Notes.md",
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "View Unit Knowledge" }),
+    expect(screen.getByRole("checkbox", { name: "Notes.md" })).toHaveProperty(
+      "checked",
+      true,
     );
-    const dialog = await screen.findByRole("dialog", {
-      name: "Unit Knowledge",
-    });
     expect(
-      within(dialog).getByRole("heading", { name: "Saved set-1" }),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Download Unit Knowledge" }),
-    );
-    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(2));
-    expect(api.knowledgeMarkdown).toHaveBeenLastCalledWith("set-1");
-    const setBox = screen.getByRole("checkbox", {
-      name: "Unit Knowledge",
-    }) as HTMLInputElement;
-    expect(setBox.checked).toBe(true);
+      screen
+        .getByRole("button", { name: "Download Notes.md" })
+        .closest("label"),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "View Unit Knowledge" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Download Unit Knowledge" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("checkbox", { name: "Unit Knowledge" }),
+    ).toBeNull();
+    expect(api.knowledgeMarkdown).not.toHaveBeenCalled();
   });
 
   it("disables view and download for a file removed from the library", async () => {
