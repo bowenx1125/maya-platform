@@ -84,15 +84,23 @@ class PrewarmScheduler:
             return
         loop.call_soon_threadsafe(self._focus, debate_id)
 
-    def resume(self, debate_id: str) -> None:
-        """An explicit Remake reopens a draft and resumes its whole Preview."""
-        self._ended.discard(debate_id)
+    def resume(self, debate_id: str, *, priority: bool = False) -> bool:
+        """Return whether the draft's Preview resume was accepted.
+
+        Retry takes priority; bulk Remake keeps each draft queued.
+        """
         loop = self._loop
         if self._closed or loop is None or loop.is_closed():
-            return
-        loop.call_soon_threadsafe(self._resume, debate_id)
+            return False
+        self._ended.discard(debate_id)
+        loop.call_soon_threadsafe(self._resume, debate_id, priority)
+        return True
 
-    def _resume(self, debate_id: str) -> None:
+    def _resume(self, debate_id: str, priority: bool = False) -> None:
+        if priority:
+            self._stalled.discard(debate_id)
+            self._focus(debate_id)
+            return
         if self._task is not None and not self._task.done() and self._owner != debate_id:
             if debate_id not in self._resume_queue:
                 self._resume_queue.append(debate_id)

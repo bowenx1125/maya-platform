@@ -422,6 +422,7 @@ def create_app(
             session.commit()
 
     prewarm = PrewarmScheduler(plan=_prewarm_plan, prepare=_prewarm_prepare)
+    playback_service.resume_preview = lambda debate_id: prewarm.resume(debate_id, priority=True)
     if runtime_settings.is_test:
         # Warming is a runtime behaviour, not part of any request's contract.
         # Left armed under a test client it writes turns between a test's own

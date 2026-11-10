@@ -427,3 +427,43 @@ def test_expire_still_times_out_segments_earlier_round(timeout_db) -> None:
         db.commit()
         repository = SqlPlaybackRepository()
         assert repository.expire_stale_preparation(db, debate_id=ids["debate"]) == 1
+
+
+@pytest.mark.parametrize("status", ["draft", "running"])
+def test_failed_head_blocks_repeated_sweeps_of_later_siblings(timeout_db, monkeypatch, status):
+    from app.modules.debates.models import DebateTurn
+    from app.modules.debates.playback import sql_repository
+
+    database, ids = timeout_db
+    now = datetime.now(UTC)
+    repository = SqlPlaybackRepository()
+    with database.session() as db:
+        db.execute(
+            text("UPDATE debates SET status=:status WHERE id=:id"),
+            {"status": status, "id": ids["debate"]},
+        )
+        head = db.get(DebateTurn, ids["turn"])
+        head.turn_index = 0
+        template = {c.name: getattr(head, c.name) for c in DebateTurn.__table__.columns}
+        for index in range(1, 4):
+            values = dict(template)
+            values.update(id=_uid(9200 + index), turn_index=index, round_no=1)
+            db.add(DebateTurn(**values))
+        db.commit()
+        for index in range(5):
+            monkeypatch.setattr(
+                sql_repository, "_now", lambda index=index: now + timedelta(seconds=100 * index)
+            )
+            assert repository.expire_stale_preparation(db, debate_id=ids["debate"]) == (
+                1 if index == 0 else 0
+            )
+            db.commit()
+        rows = db.execute(
+            text(
+                "SELECT generation_status, safe_error_code FROM debate_turns "
+                "WHERE debate_id=:id ORDER BY turn_index"
+            ),
+            {"id": ids["debate"]},
+        ).all()
+        assert rows[0][1] == "preparation_timeout"
+        assert rows[1:] == [("pending", None)] * 3

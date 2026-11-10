@@ -611,12 +611,16 @@ class PlaybackControlMixin(PlaybackCore):
                         "stale_control_version",
                         "The Preview changed before retry was committed.",
                     )
+                reset = getattr(self.repository, "reset_unattempted_retry_successors", None)
+                if callable(reset):
+                    reset(db, debate, target)
                 debate = self._get_debate(db, debate_id)
                 state = self._state(db, debate)
                 result = self._state_dto(state, db, debate)
                 self._finish_control_idempotency(db, record, result)
                 self._commit(db)
-                await self._enqueue(debate, target)
+                if self.resume_preview is None or not self.resume_preview(debate_id):
+                    await self._enqueue(debate, target)
                 return result
             if debate_status != "running":
                 raise invalid_state("Only a running Debate can retry preparation.")
@@ -656,6 +660,9 @@ class PlaybackControlMixin(PlaybackCore):
                 if callable(authorize) and not authorize(db, debate, target, code=code):
                     self._rollback(db)
                     raise conflict("stale_control_version", "The audio retry changed.")
+            reset = getattr(self.repository, "reset_unattempted_retry_successors", None)
+            if callable(reset):
+                reset(db, debate, target)
             state.control_version += 1
             self._save(db, debate, state)
             result = self._state_dto(state, db, debate)

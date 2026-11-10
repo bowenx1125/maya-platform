@@ -3299,8 +3299,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "WHERE earlier.debate_id=t.debate_id "
                         "AND earlier.turn_index < t.turn_index "
                         "AND earlier.generation_status NOT IN "
-                        "('final_ready','ready','completed') "
-                        "AND COALESCE(earlier.safe_error_code,'') = '')"
+                        "('final_ready','ready','completed'))"
                     ),
                     params,
                 ).all()
@@ -3720,6 +3719,61 @@ class SqlPlaybackRepository(PlaybackRepository):
                     rollback()
                 return False
         return True
+
+    def reset_unattempted_retry_successors(self, db: Any, debate: SqlRow, turn: SqlRow) -> None:
+        """Repair cascade failures without authorizing another provider attempt."""
+        if not self._has_table(db, "provider_operations"):
+            return
+        successors = db.execute(
+            text(
+                "SELECT id, generation_status, safe_error_code FROM debate_turns "
+                "WHERE debate_id=:debate AND turn_index>:index ORDER BY turn_index FOR UPDATE"
+            ),
+            {"debate": str(debate.id), "index": int(turn.turn_index)},
+        ).all()
+        for successor in successors:
+            if successor[1] in {"final_ready", "ready", "completed"}:
+                continue
+            if not successor[2] and successor[1] == "pending":
+                continue
+            if successor[2] not in {_PREPARATION_TIMEOUT_CODE, "provider_not_sent"}:
+                break
+            parameters = {"debate": str(debate.id), "turn": str(successor[0]), "now": _now()}
+            # Only definitive zero-request not_sent operations are equivalent
+            # to a turn for which no provider operation was ever created.
+            changed = db.execute(
+                text(
+                    "UPDATE debate_turns SET generation_status='pending', "
+                    "preparation_stage='generation', safe_error_code=NULL, "
+                    "transcript_hash=NULL, updated_at=:now "
+                    "WHERE id=:turn AND debate_id=:debate "
+                    "AND generation_status IN ('failed','pending') "
+                    "AND publication_status='unpublished' AND COALESCE(speech,'')='' "
+                    "AND structured_json IS NULL AND audio_file_id IS NULL "
+                    "AND NOT EXISTS (SELECT 1 FROM llm_accepted_stages AS a "
+                    "WHERE a.turn_id=:turn) "
+                    "AND NOT EXISTS (SELECT 1 FROM provider_operations AS p "
+                    "WHERE p.scope_id=:debate AND p.logical_item_id=:turn "
+                    "AND (p.state<>'not_sent' OR p.request_count<>0 "
+                    "OR p.charged_request_count<>0 OR p.staged_response_hash IS NOT NULL)) "
+                    "AND NOT EXISTS (SELECT 1 FROM jobs WHERE debate_id=:debate "
+                    "AND turn_id=:turn AND operation='debate_turn_prepare' "
+                    "AND (state NOT IN ('pending','failed') OR claim_token IS NOT NULL "
+                    "OR COALESCE(safe_error_code,'') NOT IN "
+                    "('preparation_timeout','provider_not_sent')))"
+                ),
+                parameters,
+            )
+            if int(getattr(changed, "rowcount", 0)) != 1:
+                break
+            db.execute(
+                text(
+                    "UPDATE jobs SET state='pending', safe_error_code=NULL, updated_at=:now "
+                    "WHERE debate_id=:debate AND turn_id=:turn "
+                    "AND operation='debate_turn_prepare'"
+                ),
+                parameters,
+            )
 
     def defer_turn_job(
         self,
