@@ -135,7 +135,6 @@ const enMessages = {
   debateSupport: "Support",
   debateOppose: "Oppose",
   debateNeutral: "Neutral",
-  debateNote: "Teacher note (optional)",
   debateSelectCount: "{count} selected",
   debateBack: "Back",
   debateNoDebates: "No debates yet.",

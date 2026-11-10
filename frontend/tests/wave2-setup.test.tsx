@@ -883,7 +883,7 @@ describe("Wave 2 teacher debate setup", () => {
     ).toEqual(["A", "B"]);
   });
 
-  it("keeps row positions, numbers selection order, and preserves notes across deselection", async () => {
+  it("keeps row positions, numbers selection order, and offers no teacher note", async () => {
     useSessionMock.mockReturnValue(teacherSession());
     const create = vi.fn().mockResolvedValue(createdDebate());
     render(
@@ -915,23 +915,19 @@ describe("Wave 2 teacher debate setup", () => {
     expect(
       newest.compareDocumentPosition(older) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    const note = screen.getByRole("textbox", { name: /Older.*note/i });
-    fireEvent.change(note, {
-      target: { value: "Discuss practical consequences" },
-    });
-    fireEvent.click(note);
+    expect(screen.queryByRole("textbox", { name: /note/i })).toBeNull();
+    expect(screen.queryByPlaceholderText("Agent note")).toBeNull();
+    // A click on the stance controls must not toggle the row it sits in.
+    fireEvent.click(
+      within(older.parentElement as HTMLElement).getByRole("button", {
+        name: "Assigned stance",
+      }),
+    );
     expect(older.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(older);
     expect(within(newest).getByText("1")).toBeTruthy();
     fireEvent.click(older);
     expect(within(older).getByText("2")).toBeTruthy();
-    expect(
-      (
-        screen.getByRole("textbox", {
-          name: /Older.*note/i,
-        }) as HTMLInputElement
-      ).value,
-    ).toBe("Discuss practical consequences");
     fireEvent.change(screen.getByLabelText("Topic"), {
       target: { value: "A shared decision?" },
     });
@@ -942,9 +938,9 @@ describe("Wave 2 teacher debate setup", () => {
         (row: { agent_id: string }) => row.agent_id,
       ),
     ).toEqual(["new", "old"]);
-    expect(create.mock.calls[0][1].participants[1].teacher_note).toBe(
-      "Discuss practical consequences",
-    );
+    for (const participant of create.mock.calls[0][1].participants) {
+      expect(participant).not.toHaveProperty("teacher_note");
+    }
   });
 
   it("loads candidates once with the stable default platform controller", async () => {
@@ -1059,6 +1055,221 @@ describe("Wave 2 teacher debate setup", () => {
     });
     expect(input.getAttribute("aria-invalid")).toBe("false");
     expect(screen.queryByRole("combobox", { name: "Language" })).toBeNull();
+  });
+
+  it("shows the platform contract read-only and sends only the editable Ruleset", async () => {
+    useSessionMock.mockReturnValue(teacherSession());
+    const create = vi.fn().mockResolvedValue(createdDebate());
+    const controller: DebateCreateController = {
+      loadRuleset: vi.fn().mockResolvedValue({
+        zh: "# 默认规则",
+        en: "# Default rules",
+        contract: {
+          zh: "# 执行契约\n\n- 中文契约条款",
+          en: "# Execution contract\n\n- English contract clause",
+        },
+      }),
+      loadCandidates: vi
+        .fn()
+        .mockResolvedValue([
+          candidate("bowen", "Bowen"),
+          candidate("kaikai", "Kaikai"),
+        ]),
+      create,
+    };
+
+    render(<TeacherDebateCreate controller={controller} />);
+    await screen.findByRole("button", { name: /Bowen/ });
+    const box = screen.getByTestId("ruleset-contract");
+    expect(box.textContent).toContain(
+      "Execution contract: fixed by the platform, not editable",
+    );
+    expect(within(box).getByText("中文契约条款")).toBeTruthy();
+    expect(within(box).queryByRole("textbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
+    expect(within(box).getByText("English contract clause")).toBeTruthy();
+    expect(within(box).queryByText("中文契约条款")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const editor = screen.getByRole("textbox", { name: "English rules" });
+    expect((editor as HTMLTextAreaElement).value).toBe("# Default rules");
+    fireEvent.change(editor, { target: { value: "# Edited rules" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(
+      within(screen.getByTestId("ruleset-contract")).getByText(
+        "English contract clause",
+      ),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
+    fireEvent.change(screen.getByLabelText("Topic"), {
+      target: { value: "A contract-free request" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0][1].teaching_prompts).toEqual({
+      zh: "# 默认规则",
+      en: "# Edited rules",
+    });
+  });
+
+  it("sends the chosen target length, five minutes by default", async () => {
+    useSessionMock.mockReturnValue(teacherSession());
+    const create = vi.fn().mockResolvedValue(createdDebate());
+    const controller: DebateCreateController = {
+      loadRuleset: vi
+        .fn()
+        .mockResolvedValue({ zh: "# 默认规则", en: "# Default rules" }),
+      loadCandidates: vi
+        .fn()
+        .mockResolvedValue([
+          candidate("bowen", "Bowen"),
+          candidate("kaikai", "Kaikai"),
+        ]),
+      create,
+    };
+
+    render(<TeacherDebateCreate controller={controller} />);
+    await screen.findByRole("button", { name: /Bowen/ });
+    const length = screen.getByRole("group", {
+      name: "Target length in minutes",
+    });
+    expect(
+      within(length)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["3", "4", "5", "6", "7", "8", "9", "10"]);
+    expect(
+      within(length)
+        .getByRole("button", { name: "5 minutes" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen.getByText(
+        "Speeches are kept short enough for the whole debate to fit this length.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
+    fireEvent.change(screen.getByLabelText("Topic"), {
+      target: { value: "How long should a debate be?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0][1].target_minutes).toBe(5);
+
+    fireEvent.click(within(length).getByRole("button", { name: "8 minutes" }));
+    expect(
+      within(length)
+        .getByRole("button", { name: "8 minutes" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      within(length)
+        .getByRole("button", { name: "5 minutes" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+    expect(create.mock.calls[1][1].target_minutes).toBe(8);
+  });
+
+  it("sends the card's parameters without frequency_penalty or max_tokens and restores defaults", async () => {
+    useSessionMock.mockReturnValue(teacherSession());
+    const create = vi.fn().mockResolvedValue(createdDebate());
+    const bounds = { exclusive_minimum: false, exclusive_maximum: false };
+    const controller: DebateCreateController = {
+      loadRuleset: vi
+        .fn()
+        .mockResolvedValue({ zh: "# 默认规则", en: "# Default rules" }),
+      loadCandidates: vi
+        .fn()
+        .mockResolvedValue([
+          candidate("bowen", "Bowen"),
+          candidate("kaikai", "Kaikai"),
+        ]),
+      loadLLMDefaults: vi.fn().mockResolvedValue({
+        params: [
+          {
+            ...bounds,
+            name: "temperature",
+            kind: "float",
+            default: 0.7,
+            minimum: 0,
+            maximum: 2,
+            exclusive_maximum: true,
+            step: 0.05,
+            sent: true,
+          },
+          {
+            ...bounds,
+            name: "frequency_penalty",
+            kind: "float",
+            default: 0.2,
+            minimum: -2,
+            maximum: 2,
+            step: 0.1,
+            sent: false,
+          },
+          {
+            ...bounds,
+            name: "max_tokens",
+            kind: "int",
+            default: 4096,
+            minimum: 1,
+            maximum: 32768,
+            sent: true,
+          },
+          {
+            ...bounds,
+            name: "seed",
+            kind: "int",
+            default: null,
+            minimum: 0,
+            maximum: 2147483647,
+            sent: true,
+          },
+        ],
+        voice_params: [],
+      }),
+      create,
+    };
+
+    render(<TeacherDebateCreate controller={controller} />);
+    await screen.findByRole("button", { name: /Bowen/ });
+    expect(screen.queryByText("frequency_penalty")).toBeNull();
+    expect(screen.queryByText("max_tokens")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "seed" }), {
+      target: { value: "7" },
+    });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "temperature" }), {
+      target: { value: "1.1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
+    fireEvent.change(screen.getByLabelText("Topic"), {
+      target: { value: "Which parameters reach the model?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0][1].llm_params).toEqual({
+      temperature: 1.1,
+      seed: 7,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore defaults" }));
+    expect(
+      (screen.getByRole("spinbutton", { name: "seed" }) as HTMLInputElement)
+        .value,
+    ).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+    expect(create.mock.calls[1][1].llm_params).toEqual({
+      temperature: 0.7,
+      seed: null,
+    });
   });
 
   it("uses default English when Chinese rules alone were edited", async () => {

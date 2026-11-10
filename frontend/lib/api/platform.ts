@@ -535,6 +535,8 @@ export type DemoRuntimeStatus = {
 export type DebateDraftRequest =
   operations["createDebate"]["requestBody"]["content"]["application/json"];
 export type DebateLLMDefaults = components["schemas"]["DebateLLMDefaults"];
+export type DebateRulesetDefaults =
+  components["schemas"]["DebateRulesetDefaults"];
 export type DebateDraftUpdateRequest =
   operations["updateDebateDraft"]["requestBody"]["content"]["application/json"];
 export type AdvancePlaybackRequest =
@@ -2853,7 +2855,7 @@ export class PlatformApi {
 
   async debateRulesetDefaults(
     courseId: string,
-  ): Promise<{ zh: string; en: string }> {
+  ): Promise<DebateRulesetDefaults> {
     return unwrap(
       await this.client.GET("/courses/{course_id}/debate-ruleset", {
         params: { path: { course_id: courseId } },

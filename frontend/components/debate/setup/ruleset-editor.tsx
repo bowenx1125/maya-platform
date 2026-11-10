@@ -7,6 +7,7 @@ import {
   IconCheck,
   IconEdit,
   IconGlobe,
+  IconLock,
 } from "../../quiet-icons";
 import { cn } from "../../../lib/utils";
 import {
@@ -27,6 +28,7 @@ export type TeachingPrompts = { zh: string; en: string };
 
 export function RulesetEditor({
   prompts,
+  contract = null,
   language,
   disabled = false,
   onLanguageChange,
@@ -34,6 +36,9 @@ export function RulesetEditor({
   onEditingChange,
 }: {
   prompts: TeachingPrompts;
+  /** The platform's execution contract: shown beside the Ruleset, never
+   * edited or sent back, so a Ruleset edit cannot reach it. */
+  contract?: TeachingPrompts | null;
   language: "zh" | "en";
   disabled?: boolean;
   onLanguageChange: (language: "zh" | "en") => void;
@@ -138,6 +143,24 @@ export function RulesetEditor({
           </div>
         )}
       </div>
+      {contract ? (
+        <div className="mt-4" data-testid="ruleset-contract">
+          <p className="m-0 flex items-center gap-1.5 font-body text-xs leading-[normal] font-bold text-[#111]">
+            <IconLock size={13} />
+            Execution contract: fixed by the platform, not editable
+          </p>
+          <div
+            className={cn(
+              RULES_BOX,
+              "mt-2 max-h-[420px] resize-none border-dashed bg-[#F4F4F5] focus:shadow-none",
+            )}
+          >
+            <ReportMarkdown label="Execution contract">
+              {contract[language]}
+            </ReportMarkdown>
+          </div>
+        </div>
+      ) : null}
     </CreateCard>
   );
 }

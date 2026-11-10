@@ -119,6 +119,9 @@ export const uiGuideCopy = {
   "debate.agentOrder": {
     en: "Arrange the Agents in the order they will speak.",
   },
+  "debate.targetLength": {
+    en: "The spoken length the whole debate aims for, from 3 to 10 minutes.",
+  },
   "debate.ruleset": {
     en: "These teaching instructions are frozen into debates when they are created.",
   },

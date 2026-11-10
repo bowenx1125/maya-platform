@@ -19,6 +19,7 @@ import {
   type DebateDetail,
   type DebateDraftRequest,
   type DebateLLMDefaults,
+  type DebateRulesetDefaults,
   type DebateSummary,
   type PlatformApi,
   type PublishedAgentSummary,
@@ -84,7 +85,7 @@ export type DebateListController = {
 };
 
 export type DebateCreateController = {
-  loadRuleset: (courseId: string) => Promise<TeachingPrompts>;
+  loadRuleset: (courseId: string) => Promise<DebateRulesetDefaults>;
   loadCandidates: (courseId: string) => Promise<PublishedAgentSummary[]>;
   /** The env defaults and ranges the parameter card starts from. Without
    * it the card is not shown and the server freezes those defaults itself. */
@@ -435,23 +436,28 @@ type StanceValue = "support" | "oppose" | "neutral";
 // A new Debate is always ordered multi-expert mutual learning. The legacy demo
 // RuleSets remain readable on existing Debates but can no longer be created.
 type DebateRuleSetId = "ordered_multi_expert_mutual_learning_v1";
+// The teacher note never reaches the model (manifests forbid exporting it),
+// so the form no longer offers or sends one.
+type SetupParticipant = Omit<
+  DebateDraftRequest["participants"][number],
+  "teacher_note"
+>;
 type SetupDraftPayload = Omit<
   DebateDraftRequest,
-  "round_count" | "rule_set_id"
+  "round_count" | "rule_set_id" | "participants"
 > & {
   round_count: 4;
   rule_set_id: DebateRuleSetId;
+  participants: SetupParticipant[];
 };
 type ParticipantDraft = {
   mode: "assigned" | "open";
   stance: StanceValue | null;
-  note: string;
 };
 
 const defaultParticipant = (): ParticipantDraft => ({
   mode: "open",
   stance: null,
-  note: "",
 });
 
 function defaultCreateController(api: PlatformApi): DebateCreateController {
@@ -490,7 +496,9 @@ export function TeacherDebateCreate({
     zh: "",
     en: "",
   });
+  const [contract, setContract] = useState<TeachingPrompts | null>(null);
   const [rulesEditing, setRulesEditing] = useState(false);
+  const [targetMinutes, setTargetMinutes] = useState(DEFAULT_TARGET_MINUTES);
   const [llmDefaults, setLLMDefaults] = useState<DebateLLMDefaults | null>(
     null,
   );
@@ -562,7 +570,10 @@ export function TeacherDebateCreate({
         setVoiceValues(defaultVoiceValues(llm.voice_params ?? []));
       }
       if (defaults !== null) {
-        setTeachingPrompts(defaults);
+        // Only the editable Ruleset is kept for sending; the contract is the
+        // platform's and is shown, never sent back.
+        setTeachingPrompts({ zh: defaults.zh, en: defaults.en });
+        setContract(defaults.contract ?? null);
         rulesLoaded.current = true;
       }
       setCandidates(next.filter((item) => item.agent.status === "active"));
@@ -661,13 +672,13 @@ export function TeacherDebateCreate({
           agent_id: agentId,
           stance_mode: draft.mode,
           assigned_stance: draft.mode === "assigned" ? draft.stance : null,
-          teacher_note: draft.note,
         };
       }),
       round_count: 4,
       rule_set_id: ruleSetId,
       total_duration_seconds: null,
       turn_duration_seconds: null,
+      target_minutes: targetMinutes,
       ...(llmValues ? { llm_params: paramsPayload(llmValues) } : {}),
       ...(voiceValues ? { voice_params: voicePayload(voiceValues) } : {}),
     };
@@ -1049,16 +1060,6 @@ export function TeacherDebateCreate({
                             </option>
                           </select>
                         ) : null}
-                        <input
-                          aria-label={`${candidate.agent.name} ${copy(t, "debateNote")}`}
-                          className="box-border h-auto min-h-0 w-44 min-w-0 rounded-full border-[2.5px] border-[#111] bg-white px-3 py-1 font-body text-xs text-[#111] max-[600px]:flex-1"
-                          disabled={busy}
-                          onChange={(event) =>
-                            updateParticipant(id, { note: event.target.value })
-                          }
-                          placeholder="Agent note"
-                          value={draft.note}
-                        />
                       </div>
                     ) : null}
                   </div>
@@ -1068,8 +1069,44 @@ export function TeacherDebateCreate({
           )}
         </CreateCard>
 
+        <CreateCard
+          title="Target length"
+          className="[--sh:#FDBA74]"
+          guide="debate.targetLength"
+        >
+          <div className="mt-3 flex flex-wrap items-center gap-2.5">
+            <div
+              className={CREATE_SEG}
+              role="group"
+              aria-label="Target length in minutes"
+            >
+              {TARGET_MINUTES.map((minutes, index) => (
+                <button
+                  key={minutes}
+                  type="button"
+                  className={cn(CREATE_SEG_BUTTON, index === 0 && "border-l-0")}
+                  aria-label={`${minutes} minutes`}
+                  aria-pressed={targetMinutes === minutes}
+                  disabled={busy}
+                  onClick={() => setTargetMinutes(minutes)}
+                >
+                  {minutes}
+                </button>
+              ))}
+            </div>
+            <span className="font-body text-xs leading-[normal] font-bold">
+              minutes
+            </span>
+          </div>
+          <p className="mt-2 mb-0 font-body text-xs leading-normal text-[#4B5563]">
+            Speeches are kept short enough for the whole debate to fit this
+            length.
+          </p>
+        </CreateCard>
+
         <RulesetEditor
           prompts={teachingPrompts}
+          contract={contract}
           language={outputLanguage}
           disabled={busy}
           onLanguageChange={setOutputLanguage}
@@ -1105,6 +1142,10 @@ export function TeacherDebateCreate({
     </div>
   );
 }
+
+// The server accepts 3 to 10 and defaults to 5 (DebateDraftRequest).
+const TARGET_MINUTES = [3, 4, 5, 6, 7, 8, 9, 10] as const;
+const DEFAULT_TARGET_MINUTES = 5;
 
 const AGENT_TONES = [
   "#FFE14D",

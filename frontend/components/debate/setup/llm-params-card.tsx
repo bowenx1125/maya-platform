@@ -1,23 +1,54 @@
 "use client";
 
-import type { CSSProperties } from "react";
-import { IconLock, IconRefresh, IconSend } from "../../quiet-icons";
+import { useState, type CSSProperties } from "react";
+import {
+  IconArrowRight,
+  IconLock,
+  IconRefresh,
+  IconSend,
+} from "../../quiet-icons";
 import { useT } from "../../../lib/i18n";
 import { cn } from "../../../lib/utils";
 import type { DebateDraftRequest, DebateLLMDefaults } from "../../../lib/api";
 import {
   CREATE_SUB_DEBATE,
+  CREATE_SMALL_BUTTON,
   CREATE_SUB_VOICE,
   CREATE_TEXTAREA,
   DEBATE_BUTTON,
 } from "../debate-chrome";
 import { CreateCard } from "./create-card";
 
-export type LLMParamSpec = DebateLLMDefaults["params"][number];
-export type LLMParamName = LLMParamSpec["name"];
+type ServerParamSpec = DebateLLMDefaults["params"][number];
+// v4 Debates never store frequency_penalty (the supplier does not document
+// it), and max_tokens can cut off the structured JSON a speech is returned
+// in, so the card neither shows nor sends either one.
+const OFF_CARD = new Set<ServerParamSpec["name"]>([
+  "frequency_penalty",
+  "max_tokens",
+]);
+export type LLMParamName = Exclude<
+  ServerParamSpec["name"],
+  "frequency_penalty" | "max_tokens"
+>;
+export type LLMParamSpec = ServerParamSpec & { name: LLMParamName };
 /** One row: the value shown and whether it is sent at all. */
 export type LLMParamState = { value: number | boolean | null; send: boolean };
 export type LLMParamValues = Record<LLMParamName, LLMParamState>;
+
+// The supplier asks for only one of temperature/top_p to be tuned, so the
+// card leads with temperature and folds the rest away.
+const ADVANCED = new Set<LLMParamName>([
+  "top_p",
+  "presence_penalty",
+  "repetition_penalty",
+  "enable_thinking",
+  "seed",
+]);
+
+function onCard(spec: ServerParamSpec): spec is LLMParamSpec {
+  return !OFF_CARD.has(spec.name);
+}
 
 export const LLM_PARAMS_ANCHOR = "debate-llm-params";
 
@@ -40,20 +71,10 @@ const HELP: Record<LLMParamName, [string, string, string]> = {
     "范围：-2 到 2。-2 反复围绕同一话题；2 不断换新话题，容易发散。",
     "建议：0.3–0.6。",
   ],
-  frequency_penalty: [
-    "减少重复同一个词。DashScope 的接口没有写明支持这个参数，所以只保存、不会发给模型。",
-    "范围：-2 到 2。-2 鼓励重复用词；2 刻意避开用过的词。",
-    "建议：先不传。",
-  ],
   repetition_penalty: [
     "DashScope 的防重复参数，越大越不容易重复。",
     "范围：大于 0，最大 2；1.0 表示不惩罚。小于 1 更容易重复；接近 2 极力避免重复，用词可能生硬。",
     "建议：1.0–1.1。",
-  ],
-  max_tokens: [
-    "一次回答的输出硬上限（token 数）。",
-    "范围：正整数，1 到 32768。很小会把回答截断；很大只是上限，不会让回答变长。",
-    "建议：不设；设了可能截断 JSON，导致生成失败。",
   ],
   enable_thinking: [
     "让模型先思考再回答。",
@@ -115,16 +136,14 @@ const RESTING: Record<LLMParamName, number | boolean | null> = {
   temperature: 0.7,
   top_p: 0.8,
   presence_penalty: 0,
-  frequency_penalty: 0,
   repetition_penalty: 1,
-  max_tokens: null,
   enable_thinking: false,
   seed: null,
 };
 
-export function defaultParamValues(specs: LLMParamSpec[]): LLMParamValues {
+export function defaultParamValues(specs: ServerParamSpec[]): LLMParamValues {
   return Object.fromEntries(
-    specs.map((spec) => [
+    specs.filter(onCard).map((spec) => [
       spec.name,
       {
         value: spec.default ?? RESTING[spec.name],
@@ -217,7 +236,7 @@ export function LlmParamsCard({
   onVoiceChange,
   onReset,
 }: {
-  specs: LLMParamSpec[];
+  specs: ServerParamSpec[];
   values: LLMParamValues;
   voiceSpecs?: VoiceParamSpec[];
   voiceValues?: VoiceParamValues;
@@ -228,6 +247,154 @@ export function LlmParamsCard({
 }) {
   const t = useT();
   const hasVoice = Boolean(voiceValues && voiceSpecs.length > 0);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const cardSpecs = specs.filter(onCard);
+  const main = cardSpecs.filter((spec) => !ADVANCED.has(spec.name));
+  const advanced = cardSpecs.filter((spec) => ADVANCED.has(spec.name));
+  const row = (spec: LLMParamSpec) => {
+    const state = values[spec.name];
+    if (!state) return null;
+    const off = disabled || !state.send;
+    const help = HELP[spec.name].join("\n");
+    const extra = [
+      ...(!spec.sent ? [t("debateParamsNeverSent")] : []),
+      ...(spec.kind === "int" ? [t("debateParamsEmpty")] : []),
+    ];
+    const bounds = sliderBounds(spec);
+    return (
+      <div key={spec.name} className={ROW} data-param={spec.name}>
+        <div className={LABEL}>
+          <span className={NAME}>{spec.name}</span>
+          <HelpButton name={spec.name} help={help} extra={extra} />
+          {!spec.sent ? (
+            <span
+              className={LOCK}
+              role="img"
+              aria-label={t("debateParamsNeverSent")}
+            >
+              <IconLock size={12} />
+            </span>
+          ) : null}
+        </div>
+        <div
+          className={cn(
+            CONTROL,
+            spec.kind !== "int" && !state.send && "opacity-40",
+          )}
+        >
+          {spec.kind === "bool" ? (
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                role="switch"
+                className={SWITCH}
+                aria-label={spec.name}
+                checked={Boolean(state.value)}
+                disabled={off}
+                onChange={(event) =>
+                  onChange(spec.name, {
+                    ...state,
+                    value: event.target.checked,
+                  })
+                }
+              />
+              <span className="sr-only">
+                {state.value ? t("debateParamsOn") : t("debateParamsOff")}
+              </span>
+            </label>
+          ) : spec.kind === "int" ? (
+            <input
+              type="number"
+              className={cn(NUMBER, INTEGER)}
+              aria-label={spec.name}
+              min={spec.minimum ?? undefined}
+              max={spec.maximum ?? undefined}
+              step={1}
+              value={state.value === null ? "" : String(state.value)}
+              disabled={disabled}
+              onChange={(event) => {
+                const raw = event.target.value.trim();
+                // Empty means not sent.
+                onChange(
+                  spec.name,
+                  raw === ""
+                    ? { value: null, send: false }
+                    : { value: Math.trunc(Number(raw)), send: true },
+                );
+              }}
+            />
+          ) : (
+            <>
+              <input
+                type="range"
+                className={SLIDER}
+                style={
+                  {
+                    "--fill": fillPercent(
+                      Number(state.value ?? 0),
+                      bounds.min,
+                      bounds.max,
+                    ),
+                  } as CSSProperties
+                }
+                aria-label={`${spec.name} slider`}
+                {...bounds}
+                step={spec.step ?? 0.01}
+                value={Number(state.value ?? 0)}
+                disabled={off}
+                onChange={(event) =>
+                  onChange(spec.name, {
+                    ...state,
+                    value: Number(event.target.value),
+                  })
+                }
+              />
+              <input
+                type="number"
+                className={NUMBER}
+                aria-label={spec.name}
+                {...bounds}
+                step={spec.step ?? 0.01}
+                value={state.value === null ? "" : String(state.value)}
+                disabled={off}
+                onChange={(event) =>
+                  onChange(spec.name, {
+                    ...state,
+                    value:
+                      event.target.value === ""
+                        ? null
+                        : Number(event.target.value),
+                  })
+                }
+              />
+            </>
+          )}
+        </div>
+        <div className={OMIT_CELL}>
+          {spec.kind !== "int" ? (
+            <label className="relative grid size-8 place-items-center">
+              <input
+                type="checkbox"
+                className={OMIT}
+                checked={!state.send}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChange(spec.name, {
+                    ...state,
+                    send: !event.target.checked,
+                  })
+                }
+              />
+              <span className="pointer-events-none relative text-[#111] peer-checked:translate-y-[2px] peer-checked:text-[#B91C1C]">
+                <IconSend off={!state.send} />
+              </span>
+              <span className="sr-only">{t("debateParamsOmit")}</span>
+            </label>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
   return (
     <section className="mb-[22px]" aria-labelledby="debate-params-title">
       <div className="mb-[18px] flex items-center gap-3">
@@ -267,154 +434,34 @@ export function LlmParamsCard({
           className={CREATE_SUB_DEBATE}
         >
           <div id={LLM_PARAMS_ANCHOR} className="mt-2.5">
-            {specs.map((spec) => {
-              const state = values[spec.name];
-              if (!state) return null;
-              const off = disabled || !state.send;
-              const help = HELP[spec.name].join("\n");
-              const extra = [
-                ...(!spec.sent ? [t("debateParamsNeverSent")] : []),
-                ...(spec.kind === "int" ? [t("debateParamsEmpty")] : []),
-              ];
-              const bounds = sliderBounds(spec);
-              return (
-                <div key={spec.name} className={ROW} data-param={spec.name}>
-                  <div className={LABEL}>
-                    <span className={NAME}>{spec.name}</span>
-                    <HelpButton name={spec.name} help={help} extra={extra} />
-                    {!spec.sent ? (
-                      <span
-                        className={LOCK}
-                        role="img"
-                        aria-label={t("debateParamsNeverSent")}
-                      >
-                        <IconLock size={12} />
-                      </span>
-                    ) : null}
-                  </div>
-                  <div
+            {main.map(row)}
+            {advanced.length > 0 ? (
+              <div className="border-0 border-t-2 border-dashed border-[#11111122] px-1 pt-[9px]">
+                <button
+                  type="button"
+                  className={CREATE_SMALL_BUTTON}
+                  aria-expanded={advancedOpen}
+                  aria-controls="debate-llm-advanced"
+                  onClick={() => setAdvancedOpen((open) => !open)}
+                >
+                  <span
                     className={cn(
-                      CONTROL,
-                      spec.kind !== "int" && !state.send && "opacity-40",
+                      "inline-flex transition-transform",
+                      advancedOpen && "rotate-90",
                     )}
+                    aria-hidden="true"
                   >
-                    {spec.kind === "bool" ? (
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          role="switch"
-                          className={SWITCH}
-                          aria-label={spec.name}
-                          checked={Boolean(state.value)}
-                          disabled={off}
-                          onChange={(event) =>
-                            onChange(spec.name, {
-                              ...state,
-                              value: event.target.checked,
-                            })
-                          }
-                        />
-                        <span className="sr-only">
-                          {state.value
-                            ? t("debateParamsOn")
-                            : t("debateParamsOff")}
-                        </span>
-                      </label>
-                    ) : spec.kind === "int" ? (
-                      <input
-                        type="number"
-                        className={cn(NUMBER, INTEGER)}
-                        aria-label={spec.name}
-                        min={spec.minimum ?? undefined}
-                        max={spec.maximum ?? undefined}
-                        step={1}
-                        value={state.value === null ? "" : String(state.value)}
-                        disabled={disabled}
-                        onChange={(event) => {
-                          const raw = event.target.value.trim();
-                          // Empty means not sent.
-                          onChange(
-                            spec.name,
-                            raw === ""
-                              ? { value: null, send: false }
-                              : { value: Math.trunc(Number(raw)), send: true },
-                          );
-                        }}
-                      />
-                    ) : (
-                      <>
-                        <input
-                          type="range"
-                          className={SLIDER}
-                          style={
-                            {
-                              "--fill": fillPercent(
-                                Number(state.value ?? 0),
-                                bounds.min,
-                                bounds.max,
-                              ),
-                            } as CSSProperties
-                          }
-                          aria-label={`${spec.name} slider`}
-                          {...bounds}
-                          step={spec.step ?? 0.01}
-                          value={Number(state.value ?? 0)}
-                          disabled={off}
-                          onChange={(event) =>
-                            onChange(spec.name, {
-                              ...state,
-                              value: Number(event.target.value),
-                            })
-                          }
-                        />
-                        <input
-                          type="number"
-                          className={NUMBER}
-                          aria-label={spec.name}
-                          {...bounds}
-                          step={spec.step ?? 0.01}
-                          value={
-                            state.value === null ? "" : String(state.value)
-                          }
-                          disabled={off}
-                          onChange={(event) =>
-                            onChange(spec.name, {
-                              ...state,
-                              value:
-                                event.target.value === ""
-                                  ? null
-                                  : Number(event.target.value),
-                            })
-                          }
-                        />
-                      </>
-                    )}
+                    <IconArrowRight size={14} />
+                  </span>
+                  Advanced
+                </button>
+                {advancedOpen ? (
+                  <div id="debate-llm-advanced" className="mt-1.5">
+                    {advanced.map(row)}
                   </div>
-                  <div className={OMIT_CELL}>
-                    {spec.kind !== "int" ? (
-                      <label className="relative grid size-8 place-items-center">
-                        <input
-                          type="checkbox"
-                          className={OMIT}
-                          checked={!state.send}
-                          disabled={disabled}
-                          onChange={(event) =>
-                            onChange(spec.name, {
-                              ...state,
-                              send: !event.target.checked,
-                            })
-                          }
-                        />
-                        <span className="pointer-events-none relative text-[#111] peer-checked:translate-y-[2px] peer-checked:text-[#B91C1C]">
-                          <IconSend off={!state.send} />
-                        </span>
-                        <span className="sr-only">{t("debateParamsOmit")}</span>
-                      </label>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </CreateCard>
         {hasVoice && voiceValues ? (

@@ -193,26 +193,20 @@ uploaded Voices ready at once (0073);▷ listens only;Team model call12 rows.
 recovery/no auto-retry,login fences,stale_base_version,constant history SELECTs,
 PG poll REPEATABLE READ.50-user Mock:p95≤7.85s. Details:Git history.
 
-## Oct24 Team chats and junk (#241)
+## Oct24 chats/deletion/Next/create
 
-Open Team chats follow each new Team version; history,mid-reply chats and unfinished
+#241:Open Team chats follow each new Team version; history,mid-reply chats and unfinished
 attempts keep theirs. Failed uncharged RAG uploads/Voices dropped; empty Agents swept after 1h.
 
-## Oct24 true deletion (#242, supersedes #233)
-
-0080:work hard-deletes with storage; null history FKs/name snapshots preserve
+#242(supersedes #233)/0080:work hard-deletes with storage; null history FKs/name snapshots preserve
 Records. Agent/Team deletion ends chats and abandons unfinished attempts.
 Debates own AGENT.md/RAG/Knowledge and voice ID/sample copies; supplier cleanup
 waits for no holders under a per-voice lock. Prune keeps head+previous/in-use.
 Scripts:backfill_debate_snapshots,backfill_debate_voice_clones,cleanup_soft_deleted
 (dry-run default,--confirm-production).
 
-## Oct24 Debate Next and errors
-
 Next: live prepares up to3 turns ahead after final-ready predecessors;per-Debate lock;
 controller-only next-audio prefetch ticket. Errors name the Agent/Team or show the code.
-
-## Oct24 cleanup, hints, Debate create
 
 app/modules/purge.py rules every live FK delete/null/protect; unknown refs retain parents;
 unlink after outer commit. Records/answers/Debate copies/ledgers keep null links except
@@ -235,18 +229,14 @@ E:DEBATE_LLM_* (no MAYA_ prefix;unset=previous)/DEBATE_TTS_* freeze into rule_sn
 
 Agents4-col,Teams3-col;sign-in38v3;one39C LoadingCard;fixed key hit area.
 
-## Nov2 Chatform lists
+## Nov2 Chatform, visits, chat speed
 
 0081 adds chat_type agent|team; maya_team=team. Backfill needs entry-kind/binding
 agreement; leftover NULLs logged,typed lists skip them. Separate Agent/Team
 histories; no kind selects Agent history.
 
-## Nov2 Accounts group visit
-
 0082:Enter grants2h teacher_group_access (not roster),renewed20min;Backout;expiry sweeps/min.
 Visits edit group Studyform Agents/public Brainform,not deletion/other groups.
-
-## Nov2 chat speed and recovery
 
 Single Chat: `draft` SSE (unsaved text as written), then delta/text_done after commit;
 ledger keeps the folded completion. Turn runners hold a pg advisory lock; each process
@@ -299,7 +289,7 @@ Nov10: classes Maya1002 and Maya1001, stable IDs, student data.
 Teacher scopes corrected. RAG actions follow the class bar.
 47 PG, 1188 UI. Debates/Quizzes/Accounts; optional choice answer; no empty Agents card; large loader; chat omits missing group/editor.
 
-## Nov10 Debate prompt v4 (phase A1, backend; supersedes Oct24 contract-in-Ruleset)
+## Nov10 Debate prompt v4 (A1 backend, A2 UI; supersedes Oct24 contract-in-Ruleset)
 
 New Debates freeze ruleset_contract_v4: code contract default_rules/contract/{zh,en}.md
 (read-only debate-ruleset `contract`); Ruleset=style+one task per round; System=Ruleset
@@ -311,3 +301,5 @@ down to 5s,min 40/25; >1.25×cap:1 repair,then trailing whole sentences dropped.
 stump<40% cap or own 8/5-gram overlap>35%:1 repair,then accepted. Round-1 query:Topic,
 Topic+name+stance,no Agent.md. v4 snapshots drop min/max/target words,retrieval_policy_id,
 frequency_penalty. v3/older keep their bytes (pinned test). Offline tests only;0 provider calls.
+A2 form:read-only contract,sends {zh,en};Target length=target_minutes;temperature+voice,
+rest Advanced;frequency_penalty/max_tokens/teacher note not sent.
