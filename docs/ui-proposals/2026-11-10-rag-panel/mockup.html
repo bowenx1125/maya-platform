@@ -1,0 +1,1348 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RAG panel proposal — EXAMPLE DATA</title>
+    <style>
+      @font-face {
+        font-family: Lexend;
+        src: url("fonts/lexend-700.woff2") format("woff2");
+        font-weight: 700;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: Lexend;
+        src: url("fonts/lexend-800.woff2") format("woff2");
+        font-weight: 800;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "Bricolage Grotesque";
+        src: url("fonts/bricolage-800.woff2") format("woff2");
+        font-weight: 800;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      :root {
+        --ink: #111;
+        --cyan: #67e8f9;
+        --lime: #a3e635;
+        --pink: #ff4d8d;
+        --yellow: #ffe14d;
+        --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+        --ui: 150ms;
+        --press: 80ms;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        font-family: Lexend, system-ui, sans-serif;
+        background-color: #e7eef8;
+        background-image:
+          linear-gradient(#d5deee 1px, transparent 1px),
+          linear-gradient(90deg, #d5deee 1px, transparent 1px);
+        background-size: 24px 24px;
+      }
+
+      .topnav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        padding: 16px 20px 0;
+      }
+
+      .topnav a {
+        color: var(--ink);
+        background: #fff;
+        border: 3px solid var(--ink);
+        border-radius: 999px;
+        box-shadow: 3px 3px 0 var(--ink);
+        font-weight: 800;
+        font-size: 13px;
+        padding: 6px 12px;
+        text-decoration: none;
+      }
+
+      .flag {
+        display: inline-block;
+        margin: 0 0 8px;
+        padding: 3px 8px;
+        border: 2px solid var(--ink);
+        border-radius: 4px;
+        background: var(--yellow);
+        box-shadow: 2px 2px 0 var(--ink);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+      }
+
+      .lede {
+        margin: 0 0 18px;
+        max-width: 62ch;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.45;
+      }
+
+      .stage {
+        width: min(1180px, calc(100% - 28px));
+        margin: 0 auto;
+        padding: 28px 0 56px;
+      }
+
+      .duo {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 44px;
+        align-items: start;
+      }
+
+      .panel {
+        position: relative;
+        margin-top: 18px;
+        border: 3px solid var(--ink);
+        border-radius: 12px;
+        box-shadow: 8px 8px 0 var(--ink);
+        padding: 62px 18px 18px;
+      }
+
+      .panel.rag {
+        background: var(--cyan);
+      }
+
+      .panel.voices {
+        background: var(--pink);
+      }
+
+      .panel h2 {
+        position: absolute;
+        top: -18px;
+        left: 18px;
+        margin: 0;
+        padding: 2px 16px;
+        transform: rotate(-1deg);
+        border: 3px solid var(--ink);
+        background-color: #fff;
+        background-image: linear-gradient(
+          90deg,
+          var(--yellow) 0 8px,
+          transparent 8px calc(100% - 8px),
+          var(--yellow) calc(100% - 8px)
+        );
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 22px;
+        font-weight: 800;
+        line-height: 1.35;
+      }
+
+      .new,
+      .key {
+        border: 3px solid var(--ink);
+        background: var(--pink);
+        color: var(--ink);
+        box-shadow: 0 6px 0 var(--ink);
+        cursor: pointer;
+        transition:
+          translate var(--ui) var(--ease),
+          box-shadow var(--ui) var(--ease),
+          background-color var(--ui) var(--ease);
+      }
+
+      .new:hover,
+      .key:hover {
+        translate: 0 -2px;
+        box-shadow: 0 8px 0 var(--ink);
+      }
+
+      .new:active,
+      .key:active {
+        translate: 0 6px;
+        box-shadow: 0 0 0 var(--ink);
+        transition-duration: var(--press);
+      }
+
+      .new:focus-visible,
+      .key:focus-visible {
+        outline: 3px solid var(--ink);
+        outline-offset: 3px;
+      }
+
+      .new {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 44px;
+        padding: 0 16px;
+        border-radius: 10px;
+        font:
+          800 15px/1 Lexend,
+          system-ui,
+          sans-serif;
+      }
+
+      .key {
+        display: inline-grid;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border-radius: 10px;
+        background: #fff;
+      }
+
+      .rag-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px 12px;
+        margin: 0;
+        padding: 8px 0 0;
+        list-style: none;
+      }
+
+      .voice-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px 16px;
+        margin: 0;
+        padding: 10px 0 0;
+        list-style: none;
+      }
+
+      .sticker {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        min-height: 148px;
+        border: 3px solid var(--ink);
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 6px 0 var(--ink);
+      }
+
+      .sticker label {
+        display: grid;
+        flex: 1;
+        align-content: start;
+        gap: 6px;
+        min-height: 44px;
+        padding: 12px 12px 4px;
+        cursor: pointer;
+      }
+
+      .keys {
+        display: flex;
+        gap: 8px;
+        padding: 8px 12px 12px;
+      }
+
+      .ext {
+        justify-self: start;
+        padding: 0 6px;
+        border: 2px solid var(--ink);
+        border-radius: 5px;
+        background: var(--yellow);
+        font-size: 11px;
+        font-weight: 800;
+        line-height: 1.4;
+      }
+
+      .fn {
+        font-size: 14px;
+        font-weight: 800;
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+      }
+
+      .meta {
+        color: #333;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.35;
+      }
+
+      .badge {
+        position: absolute;
+        top: -10px;
+        right: -8px;
+        display: none;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border: 2.5px solid var(--ink);
+        border-radius: 50%;
+        background: var(--pink);
+        color: #fff;
+        box-shadow: 2px 2px 0 var(--ink);
+        rotate: 12deg;
+      }
+
+      .sel,
+      .plate,
+      .tape {
+        display: none;
+      }
+
+      .sel {
+        justify-self: start;
+        padding: 2px 6px;
+        border: 2px solid var(--ink);
+        border-radius: 4px;
+        background: var(--ink);
+        color: #fff;
+        box-shadow: 2px 2px 0 var(--yellow);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        line-height: 1.3;
+      }
+
+      .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      .voice {
+        position: relative;
+        display: grid;
+        justify-items: center;
+        gap: 6px;
+        width: 112px;
+        min-height: 44px;
+        cursor: pointer;
+      }
+
+      .disc {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 64px;
+        height: 64px;
+        border: 3px solid var(--ink);
+        border-radius: 50%;
+        background: repeating-radial-gradient(#222 0 2px, #333 2px 4px);
+        box-shadow: 0 6px 0 var(--ink);
+      }
+
+      .disc::after {
+        content: "";
+        width: 20px;
+        height: 20px;
+        border: 2px solid var(--ink);
+        border-radius: 50%;
+        background: var(--yellow);
+      }
+
+      .voice.none .disc {
+        background: #fff;
+      }
+
+      .voice.none .disc::after {
+        width: auto;
+        height: auto;
+        border: 0;
+        background: none;
+        content: "∅";
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .vname {
+        max-width: 100%;
+        padding: 1px 8px;
+        border: 2px solid var(--ink);
+        border-radius: 6px;
+        background: #fff;
+        font-size: 12px;
+        font-weight: 800;
+        line-height: 1.35;
+        text-align: center;
+        overflow-wrap: anywhere;
+      }
+
+      .voice .badge {
+        top: -6px;
+        right: -6px;
+        width: 22px;
+        height: 22px;
+      }
+
+      .voice .badge svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      .voice .sel {
+        justify-self: center;
+      }
+
+      /* Variant A — press key. Same lift / sink as New. */
+      .v-a .sticker,
+      .v-a .disc,
+      .v-a .vname {
+        transition:
+          translate var(--ui) var(--ease),
+          box-shadow var(--ui) var(--ease),
+          background-color var(--ui) var(--ease),
+          border-width var(--ui) var(--ease),
+          border-color var(--ui) var(--ease);
+      }
+
+      .v-a .sticker:has(label:hover),
+      .v-a .sticker.is-hover,
+      .v-a .voice:hover .disc,
+      .v-a .voice.is-hover .disc {
+        translate: 0 -2px;
+        box-shadow: 0 8px 0 var(--ink);
+      }
+
+      .v-a .sticker:has(label:active),
+      .v-a .sticker.is-pressed,
+      .v-a .voice:active .disc,
+      .v-a .voice.is-pressed .disc {
+        translate: 0 6px;
+        box-shadow: 0 0 0 var(--ink);
+        transition-duration: var(--press);
+      }
+
+      .v-a .sticker:has(input:checked),
+      .v-a .sticker.is-selected {
+        border-width: 4px;
+        background: var(--lime);
+        box-shadow: 0 6px 0 var(--ink);
+      }
+
+      .v-a .sticker:has(input:checked):has(label:hover),
+      .v-a .sticker.is-selected.is-hover {
+        translate: 0 -2px;
+        box-shadow: 0 8px 0 var(--ink);
+      }
+
+      .v-a .sticker:has(input:checked):has(label:active),
+      .v-a .sticker.is-selected.is-pressed {
+        translate: 0 6px;
+        box-shadow: 0 0 0 var(--ink);
+        transition-duration: var(--press);
+      }
+
+      .v-a .sticker:has(input:focus-visible),
+      .v-a .sticker.is-focus {
+        outline: 3px solid var(--ink);
+        outline-offset: 3px;
+        box-shadow:
+          0 0 0 3px var(--yellow),
+          0 6px 0 var(--ink);
+      }
+
+      .v-a .voice:has(input:checked) .disc,
+      .v-a .voice.is-selected .disc {
+        box-shadow:
+          0 0 0 4px var(--lime),
+          0 6px 0 4px var(--ink);
+      }
+
+      .v-a .voice:has(input:checked):hover .disc,
+      .v-a .voice.is-selected.is-hover .disc {
+        translate: 0 -2px;
+        box-shadow:
+          0 0 0 4px var(--lime),
+          0 8px 0 4px var(--ink);
+      }
+
+      .v-a .voice:has(input:checked):active .disc,
+      .v-a .voice.is-selected.is-pressed .disc {
+        translate: 0 6px;
+        box-shadow: 0 0 0 4px var(--lime);
+        transition-duration: var(--press);
+      }
+
+      .v-a .voice:has(input:focus-visible),
+      .v-a .voice.is-focus {
+        border-radius: 12px;
+        outline: 3px solid var(--ink);
+        outline-offset: 4px;
+      }
+
+      .v-a .voice:has(input:checked) .vname,
+      .v-a .voice.is-selected .vname {
+        border-width: 4px;
+        background: var(--yellow);
+      }
+
+      .v-a :is(.sticker, .voice):is(:has(input:checked), .is-selected) .badge,
+      .v-a :is(.sticker, .voice):is(:has(input:checked), .is-selected) .sel {
+        display: grid;
+      }
+
+      .v-a
+        .voice:not(.none):is(:has(input:checked), .is-selected)
+        .disc::after {
+        background: var(--lime);
+      }
+
+      /* Variant B — stamp tilt. */
+      .v-b .sticker,
+      .v-b .disc {
+        box-shadow: 4px 4px 0 var(--ink);
+        transition:
+          translate var(--ui) var(--ease),
+          rotate var(--ui) var(--ease),
+          box-shadow var(--ui) var(--ease),
+          background-color var(--ui) var(--ease),
+          border-width var(--ui) var(--ease);
+      }
+
+      .v-b .sticker:has(label:hover),
+      .v-b .sticker.is-hover,
+      .v-b .voice:hover .disc,
+      .v-b .voice.is-hover .disc {
+        translate: -2px -2px;
+        rotate: -1.5deg;
+        box-shadow: 6px 6px 0 var(--ink);
+      }
+
+      .v-b .sticker:has(label:active),
+      .v-b .sticker.is-pressed,
+      .v-b .voice:active .disc,
+      .v-b .voice.is-pressed .disc {
+        translate: 3px 3px;
+        rotate: 0deg;
+        box-shadow: 0 0 0 var(--ink);
+        transition-duration: var(--press);
+      }
+
+      .v-b .sticker:has(input:checked),
+      .v-b .sticker.is-selected {
+        border-width: 4px;
+        background: var(--lime);
+        box-shadow: 6px 6px 0 var(--ink);
+        rotate: -2deg;
+      }
+
+      .v-b .voice:has(input:checked) .disc,
+      .v-b .voice.is-selected .disc {
+        border-width: 4px;
+        box-shadow: 6px 6px 0 var(--ink);
+        rotate: -8deg;
+      }
+
+      .v-b .sticker:has(input:focus-visible),
+      .v-b .sticker.is-focus,
+      .v-b .voice:has(input:focus-visible),
+      .v-b .voice.is-focus {
+        outline: 3px dashed var(--ink);
+        outline-offset: 4px;
+      }
+
+      .v-b :is(.sticker, .voice):is(:has(input:checked), .is-selected) .badge {
+        display: grid;
+      }
+
+      .v-b .tape {
+        position: absolute;
+        top: 14px;
+        right: -6px;
+        z-index: 2;
+        padding: 2px 8px;
+        border: 2px solid var(--ink);
+        background: var(--yellow);
+        box-shadow: 2px 2px 0 var(--ink);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        rotate: 8deg;
+      }
+
+      .v-b :is(.sticker, .voice):is(:has(input:checked), .is-selected) .tape {
+        display: block;
+      }
+
+      .v-b .voice .tape {
+        top: 18px;
+        right: 10px;
+      }
+
+      .v-b
+        .voice:not(.none):is(:has(input:checked), .is-selected)
+        .disc::after {
+        background: var(--lime);
+      }
+
+      .v-b .voice:is(:has(input:checked), .is-selected) .vname {
+        border-width: 4px;
+        background: var(--yellow);
+      }
+
+      /* Variant C — plate. Hover grows a yellow bar; press sinks 4px. */
+      .v-c .sticker {
+        transition:
+          translate var(--ui) var(--ease),
+          box-shadow var(--ui) var(--ease),
+          background-color var(--ui) var(--ease),
+          border-width var(--ui) var(--ease);
+      }
+
+      .v-c .sticker::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 0;
+        width: 0;
+        background: var(--yellow);
+        pointer-events: none;
+        transition: width var(--ui) var(--ease);
+      }
+
+      .v-c .sticker > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      .v-c .sticker:has(label:hover)::before,
+      .v-c .sticker.is-hover::before,
+      .v-c .sticker:has(input:checked)::before,
+      .v-c .sticker.is-selected::before {
+        width: 16px;
+        box-shadow: 3px 0 0 var(--ink);
+      }
+
+      .v-c .sticker:has(label:active),
+      .v-c .sticker.is-pressed {
+        background: #fff7cc;
+        box-shadow: 0 2px 0 var(--ink);
+        translate: 0 4px;
+        transition-duration: var(--press);
+      }
+
+      .v-c .sticker:has(input:checked),
+      .v-c .sticker.is-selected {
+        border-width: 4px;
+        background: var(--lime);
+        box-shadow: 0 6px 0 var(--ink);
+      }
+
+      .v-c .sticker:has(input:focus-visible),
+      .v-c .sticker.is-focus {
+        outline: 3px solid var(--ink);
+        outline-offset: 3px;
+        box-shadow:
+          0 0 0 3px var(--pink),
+          0 6px 0 var(--ink);
+      }
+
+      .v-c .plate {
+        margin: 8px 12px 12px;
+        padding: 4px 8px;
+        border: 2px solid var(--ink);
+        border-radius: 4px;
+        background: var(--yellow);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-align: center;
+      }
+
+      .v-c .sticker:is(:has(input:checked), .is-selected) .plate,
+      .v-c .sticker:is(:has(input:checked), .is-selected) .badge {
+        display: grid;
+      }
+
+      .v-c .disc {
+        transition:
+          translate var(--ui) var(--ease),
+          box-shadow var(--ui) var(--ease),
+          border-color var(--ui) var(--ease);
+      }
+
+      .v-c .voice:hover .disc,
+      .v-c .voice.is-hover .disc {
+        box-shadow:
+          0 0 0 4px var(--yellow),
+          0 6px 0 4px var(--ink);
+      }
+
+      .v-c .voice:active .disc,
+      .v-c .voice.is-pressed .disc {
+        box-shadow: 0 2px 0 var(--ink);
+        translate: 0 4px;
+        transition-duration: var(--press);
+      }
+
+      .v-c .voice:is(:has(input:checked), .is-selected) .disc {
+        border-width: 4px;
+        box-shadow:
+          0 0 0 4px var(--yellow),
+          0 6px 0 4px var(--ink);
+      }
+
+      .v-c .voice:is(:has(input:checked), .is-selected) .badge,
+      .v-c .voice:is(:has(input:checked), .is-selected) .plate {
+        display: grid;
+      }
+
+      .v-c .voice .plate {
+        margin: 0;
+        width: 100%;
+      }
+
+      .v-c .voice:has(input:focus-visible),
+      .v-c .voice.is-focus {
+        border-radius: 12px;
+        outline: 3px solid var(--ink);
+        outline-offset: 4px;
+      }
+
+      .v-c
+        .voice:not(.none):is(:has(input:checked), .is-selected)
+        .disc::after {
+        background: var(--lime);
+      }
+
+      .v-c .voice:is(:has(input:checked), .is-selected) .vname {
+        border-width: 4px;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        :root {
+          --move: 0;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .sticker,
+        .disc,
+        .vname,
+        .new,
+        .key,
+        .v-c .sticker::before {
+          transition:
+            background-color var(--ui) var(--ease),
+            border-color var(--ui) var(--ease),
+            box-shadow var(--ui) var(--ease),
+            color var(--ui) var(--ease);
+        }
+
+        .sticker:hover,
+        .sticker:active,
+        .sticker.is-hover,
+        .sticker.is-pressed,
+        .sticker.is-selected,
+        .voice:hover .disc,
+        .voice:active .disc,
+        .voice.is-hover .disc,
+        .voice.is-pressed .disc,
+        .voice.is-selected .disc,
+        .new:hover,
+        .new:active,
+        .key:hover,
+        .key:active {
+          translate: 0 0;
+          rotate: 0deg;
+        }
+      }
+
+      html.reduce .sticker,
+      html.reduce .disc,
+      html.reduce .vname,
+      html.reduce .new,
+      html.reduce .key,
+      html.reduce .v-c .sticker::before {
+        transition:
+          background-color var(--ui) var(--ease),
+          border-color var(--ui) var(--ease),
+          box-shadow var(--ui) var(--ease),
+          color var(--ui) var(--ease);
+      }
+
+      html.reduce :is(.sticker, .disc, .new, .key),
+      html.reduce .voice.is-hover .disc,
+      html.reduce .voice.is-pressed .disc,
+      html.reduce .voice.is-selected .disc,
+      html.reduce .voice:hover .disc,
+      html.reduce .voice:active .disc {
+        translate: 0 0 !important;
+        rotate: 0deg !important;
+      }
+
+      #states .sticker,
+      #states .voice,
+      #states .key {
+        pointer-events: none;
+      }
+
+      .board {
+        width: min(1360px, calc(100% - 24px));
+        margin: 16px auto 40px;
+        padding: 20px 18px 24px;
+        border: 3px solid var(--ink);
+        border-radius: 16px;
+        background: #fff8e7;
+        box-shadow: 8px 8px 0 var(--ink);
+      }
+
+      .board h3 {
+        margin: 0 0 4px;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 28px;
+        font-weight: 800;
+      }
+
+      .board .recommend {
+        display: inline-block;
+        margin-left: 8px;
+        padding: 2px 8px;
+        border: 2px solid var(--ink);
+        border-radius: 999px;
+        background: var(--lime);
+        font-family: Lexend, system-ui, sans-serif;
+        font-size: 12px;
+        vertical-align: 6px;
+      }
+
+      .board p {
+        margin: 0 0 14px;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.45;
+      }
+
+      .matrix {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .cell h4 {
+        margin: 0 0 8px;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .cap {
+        min-height: 2.6em;
+        margin: 8px 0 0;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.35;
+      }
+
+      .ground {
+        position: relative;
+        border: 3px solid var(--ink);
+        border-radius: 14px;
+        padding: 28px 10px 12px;
+      }
+
+      .ground.cyan {
+        background: var(--cyan);
+      }
+
+      .ground.pink {
+        margin-top: 12px;
+        background: var(--pink);
+      }
+
+      .movetag {
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        z-index: 5;
+        padding: 1px 6px;
+        border: 2px solid var(--ink);
+        border-radius: 4px;
+        background: var(--yellow);
+        box-shadow: 2px 2px 0 var(--ink);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+      }
+
+      .ground .restline {
+        position: absolute;
+        top: 28px;
+        right: 8px;
+        left: 8px;
+        z-index: 4;
+        height: 0;
+        border-top: 2px solid var(--ink);
+        pointer-events: none;
+      }
+
+      .ground.cyan {
+        min-height: 248px;
+      }
+
+      .ground.pink {
+        min-height: 168px;
+      }
+
+      html.reduce .flag::after {
+        content: " · movement off";
+      }
+
+      @media (max-width: 800px) {
+        .duo,
+        .rag-grid,
+        .matrix {
+          grid-template-columns: 1fr;
+        }
+
+        .panel {
+          padding-top: 78px;
+        }
+
+        .panel h2 {
+          font-size: 20px;
+        }
+      }
+    </style>
+    <script>
+      const shot = new URLSearchParams(location.search).get("shot");
+      if (shot === "a-reduce") {
+        document.documentElement.dataset.shot = "a";
+        document.documentElement.classList.add("reduce");
+      } else if (shot) {
+        document.documentElement.dataset.shot = shot;
+      }
+    </script>
+    <style>
+      html[data-shot] .topnav {
+        display: none;
+      }
+      html[data-shot="layout"] #states {
+        display: none;
+      }
+      html[data-shot="a"] #layout,
+      html[data-shot="a"] #variant-b,
+      html[data-shot="a"] #variant-c {
+        display: none;
+      }
+      html[data-shot="b"] #layout,
+      html[data-shot="b"] #variant-a,
+      html[data-shot="b"] #variant-c {
+        display: none;
+      }
+      html[data-shot="c"] #layout,
+      html[data-shot="c"] #variant-a,
+      html[data-shot="c"] #variant-b {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="topnav">
+      <a href="#layout">Proposed layout</a>
+      <a href="#variant-a">A · Press key</a>
+      <a href="#variant-b">B · Stamp tilt</a>
+      <a href="#variant-c">C · Plate</a>
+    </nav>
+
+    <main id="layout" class="v-a">
+      <div class="stage">
+        <p class="flag">EXAMPLE DATA</p>
+        <p class="lede">
+          Proposed Agent editor. Variant A, Press key. Click a card or a disc.
+          Tab to the focus ring.
+        </p>
+        <div class="duo">
+          <section class="panel rag" aria-labelledby="rag-title">
+            <h2 id="rag-title">RAG</h2>
+            <button class="new" type="button">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              New
+            </button>
+            <ul class="rag-grid">
+              <li>
+                <article class="sticker">
+                  <label>
+                    <input class="sr" type="checkbox" checked />
+                    <span class="ext">MD</span>
+                    <strong class="fn">EXAMPLE_Notes.md</strong>
+                    <span class="meta">No Agents yet</span>
+                    <span class="sel">Selected</span>
+                    <span class="badge" aria-hidden="true">
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="16"
+                        height="16"
+                        fill="none"
+                        stroke="#fff"
+                        stroke-width="3.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="m5 12 4 4L19 6" />
+                      </svg>
+                    </span>
+                  </label>
+                  <div class="keys">
+                    <button
+                      class="key"
+                      type="button"
+                      aria-label="View EXAMPLE_Notes.md"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="18"
+                        height="18"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M2.5 12s3.3-6 9.5-6 9.5 6 9.5 6-3.3 6-9.5 6-9.5-6-9.5-6Z"
+                        />
+                        <circle cx="12" cy="12" r="2.5" />
+                      </svg>
+                    </button>
+                    <button
+                      class="key"
+                      type="button"
+                      aria-label="Download EXAMPLE_Notes.md"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="18"
+                        height="18"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M12 3v12" />
+                        <path d="m8 11 4 4 4-4" />
+                        <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                      </svg>
+                    </button>
+                  </div>
+                </article>
+              </li>
+              <li>
+                <article class="sticker">
+                  <label>
+                    <input class="sr" type="checkbox" />
+                    <span class="ext">PDF</span>
+                    <strong class="fn">EXAMPLE_Lecture.pdf</strong>
+                    <span class="meta">Used by EXAMPLE Agent</span>
+                    <span class="sel">Selected</span>
+                    <span class="badge" aria-hidden="true">
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="16"
+                        height="16"
+                        fill="none"
+                        stroke="#fff"
+                        stroke-width="3.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="m5 12 4 4L19 6" />
+                      </svg>
+                    </span>
+                  </label>
+                  <div class="keys">
+                    <button
+                      class="key"
+                      type="button"
+                      aria-label="View EXAMPLE_Lecture.pdf"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="18"
+                        height="18"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M2.5 12s3.3-6 9.5-6 9.5 6 9.5 6-3.3 6-9.5 6-9.5-6-9.5-6Z"
+                        />
+                        <circle cx="12" cy="12" r="2.5" />
+                      </svg>
+                    </button>
+                    <button
+                      class="key"
+                      type="button"
+                      aria-label="Download EXAMPLE_Lecture.pdf"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="18"
+                        height="18"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M12 3v12" />
+                        <path d="m8 11 4 4 4-4" />
+                        <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                      </svg>
+                    </button>
+                  </div>
+                </article>
+              </li>
+            </ul>
+          </section>
+
+          <section class="panel voices" aria-labelledby="voices-title">
+            <h2 id="voices-title">Voices</h2>
+            <button class="new" type="button">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              New
+            </button>
+            <ul class="voice-row" role="radiogroup" aria-label="Voices">
+              <li>
+                <label class="voice none">
+                  <input class="sr" type="radio" name="layout-voice" />
+                  <span class="disc" aria-hidden="true">
+                    <span class="badge">
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="12"
+                        height="12"
+                        fill="none"
+                        stroke="#fff"
+                        stroke-width="3.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="m5 12 4 4L19 6" />
+                      </svg>
+                    </span>
+                  </span>
+                  <span class="vname">None</span>
+                  <span class="sel">Selected</span>
+                </label>
+              </li>
+              <li>
+                <label class="voice">
+                  <input class="sr" type="radio" name="layout-voice" checked />
+                  <span class="disc" aria-hidden="true">
+                    <span class="badge">
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="12"
+                        height="12"
+                        fill="none"
+                        stroke="#fff"
+                        stroke-width="3.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="m5 12 4 4L19 6" />
+                      </svg>
+                    </span>
+                  </span>
+                  <span class="vname">EXAMPLE Classroom</span>
+                  <span class="sel">Selected</span>
+                </label>
+              </li>
+              <li>
+                <label class="voice">
+                  <input class="sr" type="radio" name="layout-voice" />
+                  <span class="disc" aria-hidden="true">
+                    <span class="badge">
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="12"
+                        height="12"
+                        fill="none"
+                        stroke="#fff"
+                        stroke-width="3.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="m5 12 4 4L19 6" />
+                      </svg>
+                    </span>
+                  </span>
+                  <span class="vname">EXAMPLE Lecture</span>
+                  <span class="sel">Selected</span>
+                </label>
+              </li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <div id="states"></div>
+    <script>
+      const CHECK = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>`;
+      const EYE = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.3-6 9.5-6 9.5 6 9.5 6-3.3 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>`;
+      const DOWN = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>`;
+      const VARIANTS = [
+        [
+          "a",
+          "A · Press key",
+          true,
+          "Same 2px lift and 6px sink as the New button, 150ms, 80ms on press. Selected adds a pink check, the word Selected, and a 4px border.",
+        ],
+        [
+          "b",
+          "B · Stamp tilt",
+          false,
+          "Diagonal shadow and a small rotate, closer to a loose sticker. Selected adds the check, a yellow ON tape, a 4px border, and a tilt.",
+        ],
+        [
+          "c",
+          "C · Plate",
+          false,
+          "Hover grows a yellow bar instead of lifting. Press sinks 4px. Selected adds the check, a 4px border, and a yellow SELECTED plate.",
+        ],
+      ];
+      const STATES = ["default", "hover", "pressed", "selected", "focus"];
+      const LABELS = {
+        default: "Default",
+        hover: "Hover",
+        pressed: "Pressed",
+        selected: "Selected",
+        focus: "Focus",
+      };
+      const TAGS = {
+        a: { hover: "−2px", pressed: "+6px" },
+        b: { hover: "−2px · −1.5°", pressed: "+3px" },
+        c: { hover: "bar", pressed: "+4px" },
+      };
+      const CAPS = {
+        a: {
+          default: "Rest. Hard shadow 6px. Black line marks the top.",
+          hover: "Up 2px. Shadow grows to 8px.",
+          pressed: "Down 6px. Shadow goes to 0.",
+          selected: "Check, the word Selected, 4px border.",
+          focus: "3px black ring and a yellow offset.",
+        },
+        b: {
+          default: "Rest. Diagonal shadow 4px.",
+          hover: "Up-left 2px and rotate −1.5°.",
+          pressed: "Down-right 3px. Shadow goes to 0.",
+          selected: "Check, yellow ON tape, 4px border, −2°.",
+          focus: "3px dashed black ring.",
+        },
+        c: {
+          default: "Rest. No bar yet.",
+          hover: "Yellow bar grows in. The card does not lift.",
+          pressed: "Down 4px. Face turns paper yellow.",
+          selected: "Check, 4px border, yellow SELECTED plate.",
+          focus: "3px black ring and a pink offset.",
+        },
+      };
+
+      function cls(state) {
+        if (state === "default") return "";
+        if (state === "hover") return "is-hover";
+        if (state === "pressed") return "is-pressed";
+        if (state === "selected") return "is-selected";
+        return "is-focus";
+      }
+
+      function rag(variant, state) {
+        const on = state === "selected" ? "checked" : "";
+        return `<article class="sticker ${cls(state)}">
+          <label>
+            <input class="sr" type="checkbox" tabindex="-1" ${on} aria-label="EXAMPLE_Notes.md" />
+            <span class="ext">MD</span>
+            <strong class="fn">EXAMPLE_Notes.md</strong>
+            <span class="meta">No Agents yet</span>
+            <span class="sel">Selected</span>
+            <span class="badge">${CHECK}</span>
+            <span class="tape">ON</span>
+          </label>
+          <div class="keys">
+            <span class="key" aria-hidden="true">${EYE}</span>
+            <span class="key" aria-hidden="true">${DOWN}</span>
+          </div>
+          <span class="plate">SELECTED</span>
+        </article>`;
+      }
+
+      function voice(variant, state) {
+        const on = state === "selected" ? "checked" : "";
+        return `<label class="voice ${cls(state)}">
+          <input class="sr" type="radio" tabindex="-1" name="specimen-${variant}-${state}" ${on} />
+          <span class="disc"><span class="badge">${CHECK}</span><span class="tape">ON</span></span>
+          <span class="vname">EXAMPLE</span>
+          <span class="sel">Selected</span>
+          <span class="plate">SELECTED</span>
+        </label>`;
+      }
+
+      const root = document.getElementById("states");
+      for (const [id, title, recommended, copy] of VARIANTS) {
+        const cells = STATES.map(
+          (state) => `<div class="cell">
+            <h4>${LABELS[state]}</h4>
+            <p class="cap">${CAPS[id][state]}</p>
+            <div class="ground cyan"><div class="restline"></div>${TAGS[id][state] ? `<span class="movetag">${TAGS[id][state]}</span>` : ""}${rag(id, state)}</div>
+            <div class="ground pink"><div class="restline"></div>${voice(id, state)}</div>
+          </div>`,
+        ).join("");
+        root.insertAdjacentHTML(
+          "beforeend",
+          `<section class="board v-${id}" id="variant-${id}" aria-hidden="true">
+            <p class="flag">EXAMPLE DATA</p>
+            <h3>${title}${recommended ? '<span class="recommend">Recommended</span>' : ""}</h3>
+            <p>${copy} The black line is the rest top. Reduced motion keeps the check, the word, and the border, and drops the move.</p>
+            <div class="matrix">${cells}</div>
+          </section>`,
+        );
+      }
+    </script>
+  </body>
+</html>
