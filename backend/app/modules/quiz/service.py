@@ -34,6 +34,7 @@ from .schemas import (
     CreateQuizRequest,
     GradeQuizAttemptRequest,
     PatchQuizRequest,
+    QuizAnswerSubmission,
     QuizAttemptDTO,
     QuizAttemptItemStudent,
     QuizAttemptItemTeacher,
@@ -620,6 +621,26 @@ def _answers_by_id(attempt: ClassroomQuizAttempt) -> dict[str, dict[str, Any]]:
     }
 
 
+def _effective_objective(
+    attempt: ClassroomQuizAttempt,
+) -> tuple[float, dict[str, dict[str, Any]]]:
+    # Old attempts retain their answer payloads; only keyless choice results
+    # are projected anew, leaving teacher and AI text grades untouched.
+    answers = _answers_by_id(attempt)
+    score = attempt.score_objective
+    for item in _snapshot_items(attempt):
+        if item.type not in CHOICE_TYPES or (item.answer and item.answer.choice_ids):
+            continue
+        answer = answers.get(item.id, {})
+        submission = QuizAnswerSubmission(
+            item_id=item.id, choice_ids=answer.get("choice_ids") or []
+        )
+        awarded, _, _, normalized = grade_objective([item], [submission])
+        score += awarded - float(answer.get("points_awarded") or 0)
+        answers[item.id] = {**answer, **normalized[0]}
+    return score, answers
+
+
 def _item_grading_mode(item: Any) -> str:
     grading = getattr(item, "grading", None)
     if grading is None:
@@ -681,6 +702,7 @@ def _grading_status(
 
 
 def _quiz_record_row(db: Session, attempt: ClassroomQuizAttempt) -> RecordAttemptDTO:
+    score_objective, _ = _effective_objective(attempt)
     quiz = db.get(ClassroomQuiz, attempt.quiz_id)
     score_max_manual = _manual_max(_snapshot_items(attempt))
     return RecordAttemptDTO(
@@ -691,14 +713,14 @@ def _quiz_record_row(db: Session, attempt: ClassroomQuizAttempt) -> RecordAttemp
         title=quiz.title if quiz is not None else "Quiz",
         status=attempt.status,
         submitted_at=attempt.submitted_at,
-        score_objective=attempt.score_objective,
+        score_objective=score_objective,
         score_max_objective=attempt.score_max_objective,
         grading_status=attempt.grading_status,  # type: ignore[arg-type]
         score_ai=_compute_score_ai(_answers_by_id(attempt)),
         quiz_id=UUID(attempt.quiz_id),
         # Totals cover text items too, so an ungraded paper never reads as a
         # full score over its choice questions alone.
-        points_awarded=attempt.score_objective + attempt.score_manual,
+        points_awarded=score_objective + attempt.score_manual,
         points_total=attempt.score_max_objective + score_max_manual,
         phase="completed" if attempt.grading_status == "complete" else "grading_pending",
         taking_epoch=attempt.taking_epoch,
@@ -728,7 +750,7 @@ def _attempt_detail(
 ) -> TeacherQuizAttemptDetailDTO | StudentQuizAttemptDetailDTO:
     items = _snapshot_items(attempt)
     grades = _manual_grades(attempt)
-    answers = _answers_by_id(attempt)
+    score_objective, answers = _effective_objective(attempt)
     item_cls = QuizAttemptItemTeacher if teacher else QuizAttemptItemStudent
     rows: list[Any] = []
     for item in items:
@@ -791,12 +813,12 @@ def _attempt_detail(
         "taking_epoch": attempt.taking_epoch,
         "status": "submitted",
         "grading_status": attempt.grading_status,
-        "score_objective": attempt.score_objective,
+        "score_objective": score_objective,
         "score_max_objective": attempt.score_max_objective,
         "score_manual": attempt.score_manual,
         "score_max_manual": score_max_manual,
         "score_ai": _compute_score_ai(answers),
-        "points_awarded": attempt.score_objective + attempt.score_manual,
+        "points_awarded": score_objective + attempt.score_manual,
         "points_total": attempt.score_max_objective + score_max_manual,
         "submitted_at": attempt.submitted_at,
         "graded_at": attempt.graded_at,
