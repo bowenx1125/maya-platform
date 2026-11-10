@@ -312,6 +312,6 @@ Hard delete removes student-owned work and grades, including Quiz attempts.
 PR #390 merged. Local upgrade 0082→0087; build, 1187 UI tests, 82 focused passed.
 Full run at 535d227: 3073 pass/139 fail/1 skip. Main reproduced 135; four fixed.
 
-Nov10 local: original class Maya1002, second Maya1001, stable IDs and student data.
-Teacher scopes corrected. Shared RAG action style; RAG follows the class bar.
-47 PG, 1188 UI. Teacher home omits empty Agents card. Chat card omits missing group and editor.
+Nov10: classes Maya1002 and Maya1001, stable IDs, student data.
+Teacher scopes corrected. RAG actions follow the class bar.
+47 PG, 1188 UI. Debates/Quizzes/Accounts; optional choice answer; no empty Agents card; large loader; chat omits missing group/editor.
