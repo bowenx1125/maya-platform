@@ -26,7 +26,7 @@
 
 ## Round 2
 
-- Pick one opponent's most specific claim and answer it head-on, then ask the program-assigned recipient one question, saying it in the speech.
+- Answer head-on the most specific claim in the opening of the opponent the task names, then ask that opponent one question, saying it in the speech.
 
 ## Round 3
 
