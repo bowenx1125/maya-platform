@@ -104,7 +104,7 @@ function subscribeCollapsed(listener: () => void) {
 
 /**
  * The Classroom group's student-facing rows: Live plus Quiz (M4). Teachers
- * add their own rows (Debates, Accounts) on top of this base set.
+ * see Debates, Quizzes, then Accounts.
  */
 export const STUDENT_CLASSROOM_KEYS = ["live", "quiz"] as const;
 
@@ -702,14 +702,14 @@ export function AppShell({
             icon: "classroom" as const,
           },
           {
-            href: "/teacher/roster",
-            label: t("accounts"),
-            icon: "accounts" as const,
-          },
-          {
             href: "/teacher/quizzes",
             label: t("quizzes"),
             icon: "classroom" as const,
+          },
+          {
+            href: "/teacher/roster",
+            label: t("accounts"),
+            icon: "accounts" as const,
           },
         ]
       : []),

@@ -95,17 +95,13 @@ def validate_teacher_items(items: list[QuizItemTeacher]) -> None:
                     "quiz_item_choices_invalid",
                     f"Item {item.id} has duplicate choice ids.",
                 )
-            if item.answer is None or not item.answer.choice_ids:
-                raise unprocessable(
-                    "quiz_answer_required",
-                    f"Item {item.id} needs answer.choice_ids.",
-                )
-            if item.type == "single" and len(item.answer.choice_ids) != 1:
+            standard = item.answer.choice_ids if item.answer is not None else None
+            if standard and item.type == "single" and len(standard) != 1:
                 raise unprocessable(
                     "quiz_answer_invalid",
                     f"Item {item.id} single answer must have exactly one choice.",
                 )
-            unknown = [cid for cid in item.answer.choice_ids if cid not in choice_ids]
+            unknown = [cid for cid in (standard or []) if cid not in choice_ids]
             if unknown:
                 raise unprocessable(
                     "quiz_answer_invalid",

@@ -131,7 +131,7 @@ describe("sidebar groups", () => {
     expect(groupRows("Studyform")).toEqual(["Agents", "Teams"]);
     // Owner decision (2026-11-08): Record moved under Quizzes Records.
     expect(groupRows("Brainform")).toEqual(["RAG", "Voices", "Knowledge"]);
-    expect(groupRows("Classroom")).toEqual(["Debates", "Accounts", "Quizzes"]);
+    expect(groupRows("Classroom")).toEqual(["Debates", "Quizzes", "Accounts"]);
     expect(nav().queryByText("Live")).toBeNull();
     expect(
       nav().getByRole("link", { name: "Agents" }).getAttribute("href"),

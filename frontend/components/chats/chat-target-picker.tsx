@@ -13,6 +13,20 @@ import { teamVersionLabel } from "../studyform-layout";
 import { cn } from "../../lib/utils";
 import styles from "../agent-chat.module.css";
 
+/**
+ * Catalog row plus the two labels chat-agents does not send yet.
+ * Absent or blank values are left off the card; nothing is invented.
+ */
+export type ChatTargetAgent = ChatAgent & {
+  group_name?: string | null;
+  last_edited_by_name?: string | null;
+};
+
+function shown(value: string | null | undefined): string | null {
+  const text = value?.trim();
+  return text ? text : null;
+}
+
 export type ChatTargetTeam = {
   id: string;
   display_name: string;
@@ -39,7 +53,7 @@ export function ChatTargetPicker({
   surface = "both",
 }: {
   teams: ChatTargetTeam[];
-  agents: ChatAgent[];
+  agents: ChatTargetAgent[];
   value: string;
   disabled: boolean;
   onPick: (value: string) => void;
@@ -48,7 +62,7 @@ export function ChatTargetPicker({
 }) {
   const t = useT();
 
-  const agentTile = (agent: ChatAgent, index: number) => {
+  const agentTile = (agent: ChatTargetAgent, index: number) => {
     const key = `agent:${agent.version_id}`;
     const picked = value === key;
     const unavailable = agent.available === false;
@@ -57,22 +71,28 @@ export function ChatTargetPicker({
       agent.agent_id,
       agent.avatar_config?.material_theme,
     );
+    const group = shown(agent.group_name);
+    const version = shown(agent.version_label);
+    const editor = shown(agent.last_edited_by_name);
+    const fact = (label: string, text: string) => (
+      <span className={styles.pickFact}>
+        <span className={styles.pickFactLabel}>{label}</span>
+        <span className={styles.pickFactValue}>{text}</span>
+      </span>
+    );
     return (
       <li key={key} className={cn(styles.pickCardWrap, LIST_CARD_LIFT)}>
         <button
           type="button"
-          className={cn(styles.pickCard, picked && styles.pickCardPicked)}
-          style={{ transform: `rotate(${index % 2 ? 1.2 : -1.2}deg)` }}
+          className={cn(
+            styles.pickCard,
+            styles.pickAgentCard,
+            picked && styles.pickCardPicked,
+          )}
           aria-pressed={picked}
           disabled={disabled || unavailable}
           onClick={() => onPick(picked ? "" : key)}
         >
-          {agent.version_label ? (
-            <span className={styles.pickVersion}>{agent.version_label}</span>
-          ) : null}
-          <span className={styles.pickName}>
-            <FitTitle text={agent.name} />
-          </span>
           <span
             className={styles.pickArt}
             style={{
@@ -84,17 +104,17 @@ export function ChatTargetPicker({
           >
             <MascotFigure id={mascot} className="h-24 w-auto" />
           </span>
-          <span className={styles.pickMeta}>
-            <span
-              className={cn(
-                styles.pickBadge,
-                agent.visibility === "private" && styles.pickBadgeMuted,
-              )}
-            >
-              {agent.visibility === "private"
-                ? t("privateOption")
-                : t("publicOption")}
-            </span>
+          <span className={styles.pickAgentName}>
+            <FitTitle text={agent.name} />
+          </span>
+          <span className={styles.pickFacts}>
+            {group ? fact(t("groupNameLabel"), group) : null}
+            {version ? fact(t("chatPickVersion"), version) : null}
+            {editor ? (
+              <span className={styles.pickFactLine}>
+                {t("agentLastEditedBy", { name: editor })}
+              </span>
+            ) : null}
             {/* "Available" said nothing; only a card that cannot be picked
                 is labelled (2026-11-03). */}
             {unavailable ? (
@@ -199,7 +219,9 @@ export function ChatTargetPicker({
             {t("agents")}
           </h2>
           {agents.length ? (
-            <ul className={styles.pickGrid}>{agents.map(agentTile)}</ul>
+            <ul className={cn(styles.pickGrid, styles.pickGridAgents)}>
+              {agents.map(agentTile)}
+            </ul>
           ) : (
             <p className={styles.pickEmpty}>{t("noAgents")}</p>
           )}

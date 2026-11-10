@@ -1609,8 +1609,8 @@ describe("teacher workspace access", () => {
       "Agents",
       "Chat with Agent",
       "Debates",
-      "Accounts",
       "Quizzes",
+      "Accounts",
     ]);
     expect(screen.queryByText("Components")).toBeNull();
     expect(screen.queryByRole("button", { name: "Set API Key" })).toBeNull();

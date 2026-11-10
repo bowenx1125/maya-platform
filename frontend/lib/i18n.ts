@@ -875,6 +875,7 @@ const enMessages = {
   editMember: "Edit",
   displayNameLabel: "Display name",
   groupNameLabel: "Group",
+  chatPickVersion: "Version",
   overviewMembers: "Members",
   recordIntro:
     "Formal assessment results, grouped by the Team that ran the assessment.",

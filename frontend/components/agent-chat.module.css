@@ -1162,6 +1162,64 @@
     outline: 4px solid #ff4d8d;
     outline-offset: 2px;
   }
+  /* New Agent chat: name is the title; Group / Version / editor sit under it.
+     The whole card is the control, so the 44px floor is the touch target. */
+  .pickGridAgents {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  }
+  .pickAgentCard {
+    min-width: 0;
+    min-height: 44px;
+    gap: 8px;
+    padding: 10px 10px 12px;
+    text-align: left;
+  }
+  .pickAgentCard:focus-visible {
+    outline: 3px solid #111;
+    outline-offset: 3px;
+  }
+  .pickAgentName {
+    min-width: 0;
+    color: #111;
+    font-family: var(--font-display, inherit);
+    font-size: 17px;
+    font-weight: 800;
+    line-height: 1.25;
+    text-align: left;
+  }
+  .pickFacts {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    padding: 8px;
+    border-top: 2px dashed rgb(17 17 17 / 35%);
+    border-radius: 8px;
+    background: #fff8e7;
+    color: #111;
+    text-align: left;
+  }
+  .pickFact {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px;
+    align-items: baseline;
+    min-width: 0;
+  }
+  .pickFactLabel {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .pickFactValue,
+  .pickFactLine {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: #111;
+    font-size: 13px;
+    font-weight: 650;
+    line-height: 1.35;
+  }
   .pickVersion {
     position: absolute;
     top: -8px;

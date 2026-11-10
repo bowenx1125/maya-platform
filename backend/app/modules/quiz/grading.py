@@ -8,7 +8,7 @@ from .schemas import QuizAnswerSubmission, QuizItemTeacher
 
 
 def _as_choice_set(values: list[str] | None) -> set[str]:
-    return {str(v) for v in (values or [])}
+    return {v for v in (values or []) if v.strip()}
 
 
 def grade_objective(
@@ -17,7 +17,7 @@ def grade_objective(
 ) -> tuple[float, float, str, list[dict[str, Any]]]:
     """Return (score, score_max, grading_status, normalized_answers).
 
-    single/multiple: unordered set equality.
+    single/multiple: unordered set equality, or any valid selection without a key.
     short_text/long_text: stored only; contribute to pending/mixed.
     """
 
@@ -39,7 +39,13 @@ def grade_objective(
             score_max += points
             expected = _as_choice_set(item.answer.choice_ids if item.answer is not None else None)
             got = _as_choice_set(submission.choice_ids if submission else None)
-            correct = got == expected and len(expected) > 0
+            correct: bool | None
+            if expected:
+                correct = got == expected
+            elif got:
+                correct = got.issubset({choice.id for choice in item.choices})
+            else:
+                correct = None
             if correct:
                 score += points
             entry["choice_ids"] = sorted(got)

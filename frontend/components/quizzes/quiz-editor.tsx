@@ -18,7 +18,6 @@ import {
   type QuizSettings,
 } from "@/lib/api/quiz";
 import {
-  canPublish,
   isPublishedLocked,
   quizDraftProblems,
   withAiGrading,
@@ -182,8 +181,11 @@ export function QuizEditor({
   const toggleChoiceId = (index: number, choiceId: string, single: boolean) => {
     const item = items[index];
     const current = item.answer?.choice_ids ?? [];
+    // A single choice can be cleared: no mark means there is no standard answer.
     const next = single
-      ? [choiceId]
+      ? current.length === 1 && current[0] === choiceId
+        ? []
+        : [choiceId]
       : current.includes(choiceId)
         ? current.filter((id) => id !== choiceId)
         : [...current, choiceId];
@@ -212,7 +214,15 @@ export function QuizEditor({
     if (!courseId) throw new Error("No teacher course.");
     const payload = {
       title: title.trim(),
-      items: items.map(withAiGrading),
+      items: items.map((item) => {
+        const next = withAiGrading(item);
+        if (next.type !== "single" && next.type !== "multiple") return next;
+        const ids = (next.answer?.choice_ids ?? []).filter(
+          (id): id is string => typeof id === "string" && id.trim() !== "",
+        );
+        // Empty choice_ids is the explicit "no standard answer".
+        return { ...next, answer: { choice_ids: ids } };
+      }),
       settings: DEFAULT_SETTINGS,
     };
     if (quizId) {
@@ -226,12 +236,8 @@ export function QuizEditor({
   const onDone = async () => {
     if (!beginDoneLock(doneLock)) return;
     const draftProblems = quizDraftProblems(title, items);
-    if (draftProblems.length > 0 || !canPublish(title, items)) {
-      setProblems(
-        draftProblems.length > 0
-          ? draftProblems
-          : ["Every choice question needs at least one marked answer."],
-      );
+    if (draftProblems.length > 0) {
+      setProblems(draftProblems);
       releaseDoneLock(doneLock);
       return;
     }
@@ -589,6 +595,12 @@ export function QuizEditor({
                               className="sr-only"
                               checked={checked}
                               disabled={busy}
+                              onClick={() => {
+                                // A selected radio does not fire change again.
+                                if (item.type === "single" && checked) {
+                                  toggleChoiceId(index, choice.id, true);
+                                }
+                              }}
                               onChange={() =>
                                 toggleChoiceId(
                                   index,

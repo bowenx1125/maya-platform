@@ -371,6 +371,43 @@ describe("teacher Quiz Submissions tab", () => {
     expect(within(sheet).queryByText(/Mixed|Complete/)).toBeNull();
   });
 
+  it("shows a selection as correct when the choice question has no standard answer", async () => {
+    routes[1] = {
+      method: "GET",
+      match: /attempts\/att-1$/,
+      reply: () =>
+        json({
+          ...detail("teacher"),
+          points_awarded: 0,
+          points_total: 3,
+          items: [
+            {
+              id: "q-open",
+              type: "multiple",
+              prompt: "Pick anything",
+              choices: [
+                { id: "a", label: "One" },
+                { id: "b", label: "Two" },
+              ],
+              points: 3,
+              response_choice_ids: ["b"],
+              correct: false,
+              points_awarded: 0,
+              graded: true,
+              answer: { choice_ids: [] },
+            },
+          ],
+        }),
+    };
+    renderTab();
+    fireEvent.click(await screen.findByRole("button", { name: /^Ada/ }));
+    const sheet = await screen.findByTestId("quiz-attempt-detail");
+    expect(within(sheet).getByText("Correct")).toBeTruthy();
+    expect(within(sheet).queryByText("Incorrect")).toBeNull();
+    expect(within(sheet).getByLabelText("3 / 3")).toBeTruthy();
+    expect(sheet.textContent).toContain("3 / 3");
+  });
+
   it("shows the AI score beside the editable points once it arrives", async () => {
     routes[1] = {
       method: "GET",

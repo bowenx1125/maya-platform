@@ -115,3 +115,14 @@ Components 所有用户 UI 删除成果保持，注册工具/Provider配置在�
 - [ ] 全前端测试、types/lint/format、generated boundary通过；权限/调用次数负断言不删除。
 - [ ] 独立同版本Sol复核，桌面与375/390/768浏览器实见，记录实际未测范围。
 - [ ] 已授权Maya定向部署后健康检查及截图，其他容器/env不变；无UI触发Provider调用。
+
+## Chat agent card response
+
+`GET /api/v1/courses/{course_id}/chat-agents` returns `ChatAgent` cards with
+three optional, nullable fields: `group_name` resolves the Agent's group name
+(null for personal Agents, missing groups or empty names); `last_edited_by_name`
+resolves the audit editor's current `User.display_name`, and when there is no
+edit audit it is the creator's display name, the same as AgentSummary (null
+when that user is missing); `last_edited_at` is the audit row's timestamp and
+stays null without an audit. Group names, edit audits and names are fetched
+in batches.

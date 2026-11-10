@@ -19,6 +19,7 @@ from .document import loads_document
 from .models import ClassroomQuizAttempt
 from .service import (
     _display_name,
+    _effective_objective,
     _get_quiz,
     _manual_grades,
     _manual_max,
@@ -139,9 +140,8 @@ def export_quiz_attempts(
 
     attempt_rows: list[dict[str, Any]] = []
     for attempt in attempts:
-        answers_raw = json.loads(attempt.answers_json)
-        if not isinstance(answers_raw, list):
-            answers_raw = []
+        score_objective, answers = _effective_objective(attempt)
+        answers_raw = list(answers.values())
         score_max_manual = _manual_max(_snapshot_items(attempt))
         attempt_rows.append(
             {
@@ -152,11 +152,11 @@ def export_quiz_attempts(
                 "taking_epoch": attempt.taking_epoch,
                 "submitted_at": _iso(attempt.submitted_at),
                 "grading_status": attempt.grading_status,
-                "score_objective": attempt.score_objective,
+                "score_objective": score_objective,
                 "score_max_objective": attempt.score_max_objective,
                 "score_manual": attempt.score_manual,
                 "score_max_manual": score_max_manual,
-                "points_awarded": attempt.score_objective + attempt.score_manual,
+                "points_awarded": score_objective + attempt.score_manual,
                 "points_total": attempt.score_max_objective + score_max_manual,
                 "graded_at": _iso(attempt.graded_at),
                 "manual_grades": _manual_grades(attempt),

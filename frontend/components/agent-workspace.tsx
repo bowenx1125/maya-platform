@@ -195,7 +195,7 @@ export function AgentOverview({ agentId }: { agentId: string }) {
     }
   }
 
-  if (loading) return <LoadingCard size="sm" />;
+  if (loading) return <LoadingCard />;
   if (!agent)
     return (
       <ErrorNotice
@@ -808,7 +808,7 @@ export function AgentWorkbench({
   );
   const blockers = version?.publish_blockers ?? [];
 
-  if (loading) return <LoadingCard size="sm" />;
+  if (loading) return <LoadingCard />;
   // Keep the loaded workbench mounted for mutation errors so local AGENT.md,
   // avatar/voice edits, selected documents, and retry handles remain visible
   // and usable. A load error without the required records still uses the
@@ -832,8 +832,7 @@ export function AgentWorkbench({
   const currentAgent = agent;
   // A published version outside publishOnDone is only a hand-off: Done has
   // already sent the user to the agent overview (the read-only view is gone).
-  if (version.state !== "draft" && !publishOnDone)
-    return <LoadingCard size="sm" />;
+  if (version.state !== "draft" && !publishOnDone) return <LoadingCard />;
 
   function stashLocalDraft() {
     if (!agent?.id) return;

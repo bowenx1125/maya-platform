@@ -328,12 +328,33 @@ def test_pending_turn_with_failed_job_projects_actionable_preview_and_list(draft
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("scheduler_state", ["absent", "disabled", "unbound", "closed_loop"])
 async def test_draft_segment_retry_requeues_cached_tts_without_playback_or_provider(
     draft_retry_db,
     monkeypatch,
+    scheduler_state,
 ):
     database, ids, speech, structured = draft_retry_db
     service = _service(database, database.data_root)
+    if scheduler_state != "absent":
+        import asyncio
+
+        from app.modules.debates.playback.prewarm import PrewarmScheduler
+
+        def unexpected_plan(_debate_id):
+            pytest.fail("Unavailable scheduler must use direct enqueue")
+
+        async def unexpected_prepare(_debate_id, _turn_id):
+            pytest.fail("Unavailable scheduler must use direct enqueue")
+
+        scheduler = PrewarmScheduler(plan=unexpected_plan, prepare=unexpected_prepare)
+        if scheduler_state == "disabled":
+            scheduler.bind_running_loop()
+            scheduler.disable()
+        elif scheduler_state == "closed_loop":
+            scheduler._loop = asyncio.new_event_loop()
+            scheduler._loop.close()
+        service.resume_preview = scheduler.resume
     enqueued: list[tuple[str, str]] = []
 
     async def record_enqueue(debate, turn):
@@ -1107,3 +1128,199 @@ def test_prewarm_release_rolls_back_turn_when_job_update_loses_claim(
             db, turn, claim_token="owned", cancellation_generation=0
         )
     assert _claim_rows(database, ids) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fail_again", [False, True])
+async def test_one_retry_continues_cascaded_preview(pending_draft_runtime, fail_again):
+    app, database, ids, speech, structured = pending_draft_runtime
+    turn_ids = [ids["turn"], _uid(9101), _uid(9102), _uid(9103)]
+    with database.session() as db:
+        first = db.get(DebateTurn, ids["turn"])
+        template = {c.name: getattr(first, c.name) for c in DebateTurn.__table__.columns}
+        first.turn_index = 0
+        first.generation_status = "failed"
+        first.preparation_stage = "failed"
+        first.safe_error_code = "preparation_timeout"
+        for index, turn_id in enumerate(turn_ids[1:], 1):
+            values = dict(template)
+            values.update(
+                id=turn_id,
+                turn_index=index,
+                round_no=2 if index == 3 else 1,
+                generation_status="pending" if index == 3 else "failed",
+                preparation_stage="generation" if index == 3 else "failed",
+                safe_error_code=None if index == 3 else "preparation_timeout",
+            )
+            db.add(DebateTurn(**values))
+        db.execute(
+            text(
+                "UPDATE jobs SET state='failed', safe_error_code='preparation_timeout' WHERE id=:id"
+            ),
+            {"id": ids["job"]},
+        )
+    with database.session() as db:
+        provider_before = db.execute(text("SELECT * FROM provider_operations ORDER BY id")).all()
+    service = app.state.playback_service
+    scheduler = app.state.prewarm_scheduler
+    scheduler._closed = False
+    scheduler.bind_running_loop()
+    calls = []
+
+    class Preparer:
+        def generation_fence(self, *_args, **_kwargs):
+            return PreparedGenerationFence((), "t" * 64, 0)
+
+        def __call__(self, _db, _debate, turn, **_kwargs):
+            calls.append(str(turn.id))
+            if fail_again and calls == turn_ids[:2]:
+                raise ValueError("local mock failure")
+            return PreparedTurn(
+                speech=speech,
+                structured=json.loads(structured),
+                transcript_hash="t" * 64,
+                cutoff_turn_index=0,
+                word_count=80,
+            )
+
+    service.turn_preparer = Preparer()
+
+    class TTS(MockTTSProvider):
+        def synthesize(self, *_args, **_kwargs):
+            raise TTSProviderTimeout()
+
+    service.audio_store.tts_provider = TTS()
+
+    async def wait_for_warmer():
+        async with asyncio.timeout(10):
+            await asyncio.sleep(0)
+            while scheduler.busy:
+                await asyncio.sleep(0.01)
+
+    try:
+        with database.session() as db:
+            await service.retry_preparation(
+                db,
+                ids["debate"],
+                turn_id=turn_ids[0],
+                expected_control_version=0,
+                context=_teacher(ids),
+                idempotency_key="continuous-preview-retry-1",
+            )
+        await wait_for_warmer()
+        if fail_again:
+            assert calls == turn_ids[:2]
+            with database.session() as db:
+                assert db.get(DebateTurn, turn_ids[1]).safe_error_code == "turn_generation_failed"
+                assert db.get(DebateTurn, turn_ids[2]).generation_status == "pending"
+                await service.retry_preparation(
+                    db,
+                    ids["debate"],
+                    turn_id=turn_ids[1],
+                    expected_control_version=1,
+                    context=_teacher(ids),
+                )
+            await wait_for_warmer()
+        assert calls == (turn_ids[:2] + turn_ids[1:3] if fail_again else turn_ids[:3])
+        with database.session() as db:
+            assert all(
+                db.get(DebateTurn, t).generation_status == "final_ready" for t in turn_ids[:3]
+            )
+            assert db.get(DebateTurn, turn_ids[3]).generation_status == "pending"
+            assert (
+                db.execute(text("SELECT * FROM provider_operations ORDER BY id")).all()
+                == provider_before
+            )
+            await service.retry_preparation(
+                db,
+                ids["debate"],
+                turn_id=turn_ids[0],
+                expected_control_version=0,
+                context=_teacher(ids),
+                idempotency_key="continuous-preview-retry-1",
+            )
+        await wait_for_warmer()
+        assert len(calls) == (4 if fail_again else 3)
+    finally:
+        await scheduler.close()
+        await service.task_manager.close()
+
+
+@pytest.mark.parametrize(
+    ("status", "fence", "cleared"),
+    [
+        ("draft", "none", True),
+        ("running", "not_sent", True),
+        ("draft", "sending", False),
+        ("running", "acceptance_unknown", False),
+        ("draft", "accepted", False),
+        ("running", "charged", False),
+        ("draft", "failed", False),
+        ("running", "claim", False),
+        ("draft", "content", False),
+    ],
+)
+def test_cascade_reset_preserves_provider_and_worker_fences(
+    pending_draft_runtime, status, fence, cleared
+):
+    app, database, ids, _, _ = pending_draft_runtime
+    successor_id = _uid(9301)
+    with database.session() as db:
+        head = db.get(DebateTurn, ids["turn"])
+        head.turn_index = 0
+        values = {c.name: getattr(head, c.name) for c in DebateTurn.__table__.columns}
+        values.update(
+            id=successor_id,
+            turn_index=1,
+            generation_status="failed",
+            preparation_stage="failed",
+            safe_error_code="provider_not_sent",
+            speech="saved text" if fence == "content" else None,
+        )
+        db.add(DebateTurn(**values))
+        db.execute(
+            text("UPDATE debates SET status=:status WHERE id=:id"),
+            {"status": status, "id": ids["debate"]},
+        )
+        if fence in {"not_sent", "sending", "acceptance_unknown", "accepted", "charged", "failed"}:
+            db.add(
+                ProviderOperation(
+                    id=_uid(9302),
+                    scope_id=ids["debate"],
+                    logical_item_id=successor_id,
+                    provider_operation="llm_debate_turn",
+                    attempt_no=1,
+                    request_hash="r" * 64,
+                    max_tokens=0,
+                    max_cost_cny=0,
+                    policy_hash="p" * 64,
+                    export_manifest_hash="e" * 64,
+                    state="not_sent" if fence == "charged" else fence,
+                    request_count=1 if fence == "charged" else 0,
+                    charged_request_count=1 if fence == "charged" else 0,
+                    created_at=head.created_at,
+                    updated_at=head.updated_at,
+                )
+            )
+        if fence == "claim":
+            repo = app.state.playback_service.repository
+            debate = repo.get_debate(db, ids["debate"])
+            db.flush()
+            successor = next(t for t in repo.turns(db, debate) if str(t.id) == successor_id)
+            repo._ensure_turn_job(db, debate, successor)
+            db.execute(
+                text("UPDATE jobs SET state='running', claim_token='active' WHERE turn_id=:id"),
+                {"id": successor_id},
+            )
+        db.commit()
+        repo = app.state.playback_service.repository
+        debate = repo.get_debate(db, ids["debate"])
+        turn = next(t for t in repo.turns(db, debate) if str(t.id) == ids["turn"])
+        repo.reset_unattempted_retry_successors(db, debate, turn)
+        db.commit()
+        db.expire_all()
+        successor = db.get(DebateTurn, successor_id)
+        assert successor.safe_error_code == (None if cleared else "provider_not_sent")
+        assert successor.generation_status == ("pending" if cleared else "failed")
+        if fence == "charged":
+            assert db.get(ProviderOperation, _uid(9302)).charged_request_count == 1
