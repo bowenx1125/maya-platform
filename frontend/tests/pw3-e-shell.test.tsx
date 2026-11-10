@@ -95,7 +95,7 @@ beforeEach(() => {
 describe("PW3-E teacher information architecture", () => {
   afterEach(() => cleanup());
 
-  it("exposes the five primary destinations, then the teacher's Debates and Accounts", () => {
+  it("exposes the five primary destinations, then Debates, Quizzes and Accounts", () => {
     renderTeacherShell("/teacher");
 
     const navigationElement = screen.getByRole("navigation");
@@ -110,16 +110,16 @@ describe("PW3-E teacher information architecture", () => {
       "Agents",
       "Chat with Agent",
       "Debates",
-      "Accounts",
       "Quizzes",
+      "Accounts",
     ]);
     expect(navHrefs()).toEqual([
       "/teacher",
       "/teacher/agents",
       "/teacher/chat",
       "/teacher/debates",
-      "/teacher/roster",
       "/teacher/quizzes",
+      "/teacher/roster",
     ]);
     // Owner request (2026-10-20): Brainform's cards joined Studyform.
     expect(document.querySelector('[data-tour="brain"]')).toBeNull();
