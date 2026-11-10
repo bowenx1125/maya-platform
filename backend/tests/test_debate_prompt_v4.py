@@ -36,7 +36,7 @@ from app.modules.debates.teaching_rules import (
     frozen_system_prompt,
     strip_execution_contract,
 )
-from app.providers.llm_segments import CODE_CONTRACT_PROMPT_VERSION
+from app.providers.llm_segments import OWNED_CONTRACT_PROMPT_VERSION
 
 from tests.conftest import login
 from tests.test_four_round_content import context
@@ -303,7 +303,7 @@ def test_task_group_carries_cap_and_assigned_stance_but_no_teacher_note() -> Non
     # The export manifest forbids teacher notes, so they never reach the wire.
     request = adapter().build_request(snapshot)
     assert "PRIVATE TEACHER NOTE" not in request.user_message.content
-    assert request.prompt_contract_version == CODE_CONTRACT_PROMPT_VERSION
+    assert request.prompt_contract_version == OWNED_CONTRACT_PROMPT_VERSION
     assert "task" not in _snapshot(_v4_context(1, frozen_llm=None)).to_user_payload()
 
 

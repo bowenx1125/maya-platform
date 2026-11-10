@@ -338,7 +338,10 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
         assert persisted is not None
         persisted_rule = json.loads(persisted.rule_snapshot_json)
         assert persisted_rule["rule_set_id"] == "ordered_multi_expert_mutual_learning_v1"
-        assert persisted_rule["retrieval_policy_id"] == "mock_lexical_anchor_v2"
+        # v4 (2026-11-10) stops freezing this never-read policy id; older
+        # snapshots keep theirs.
+        assert persisted_rule["contract_version"] == "ruleset_contract_v4"
+        assert "retrieval_policy_id" not in persisted_rule
     assert [item["slot"] for item in created["participants"]] == ["A", "B"]
     assert [item["agent_id"] for item in created["participants"]] == [bowen_id, kaikai_id]
     assert [item["agent_version_id"] for item in created["participants"]] == [
