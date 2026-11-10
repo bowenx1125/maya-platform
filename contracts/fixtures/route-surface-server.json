@@ -9564,6 +9564,32 @@
             "title": "Deleted",
             "type": "boolean"
           },
+          "group_name": {
+            "title": "Group Name",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_edited_by_name": {
+            "title": "Last Edited By Name",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_edited_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Edited At"
+          },
           "name": {
             "title": "Name",
             "type": "string"

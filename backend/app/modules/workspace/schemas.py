@@ -19,6 +19,9 @@ ComponentMode = Literal["real", "mock"]
 
 
 class ChatAgent(ClosedModel):
+    group_name: str | None = None
+    last_edited_by_name: str | None = None
+    last_edited_at: datetime | None = None
     agent_id: UUID
     version_id: UUID
     course_id: UUID
