@@ -1052,3 +1052,46 @@ async def test_global_remake_queues_each_draft_without_stealing_inflight_work():
     finally:
         release.set()
         await scheduler.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stalled", [False, True])
+async def test_retry_takes_prewarm_ownership_at_turn_boundary(stalled):
+    import asyncio
+
+    from app.modules.debates.playback.prewarm import PrewarmScheduler
+
+    started, release, finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    ready, calls = set(), []
+
+    def plan(debate_id):
+        return [(debate_id + str(index), debate_id + str(index) in ready) for index in range(2)]
+
+    async def prepare(debate_id, turn_id):
+        calls.append(turn_id)
+        if turn_id == "a0":
+            started.set()
+            await release.wait()
+        ready.add(turn_id)
+        if turn_id == "b1":
+            finished.set()
+
+    scheduler = PrewarmScheduler(plan=plan, prepare=prepare)
+    scheduler.bind_running_loop()
+    if stalled:
+        scheduler._stalled.add("b")
+    try:
+        scheduler.focus("a")
+        await asyncio.wait_for(started.wait(), 2)
+        assert scheduler.resume("b", priority=True)
+        await asyncio.sleep(0)
+        assert scheduler.owner == "b"
+        assert "b" not in scheduler._stalled
+        assert calls == ["a0"]
+        release.set()
+        await asyncio.wait_for(finished.wait(), 2)
+        assert calls == ["a0", "b0", "b1"]
+        assert "a0" in ready
+    finally:
+        release.set()
+        await scheduler.close()

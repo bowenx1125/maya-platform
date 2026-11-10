@@ -196,6 +196,7 @@ class PlaybackCore:
         self.tts_provider = tts_provider or MockTTSProvider()
         self.session_factory = session_factory
         self.settings = settings
+        self.resume_preview: Callable[[str], bool] | None = None
         self.snapshot_projector = snapshot_projector
         self._db_hint: Any | None = None
         self._connection_callbacks: dict[
