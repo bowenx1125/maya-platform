@@ -2171,6 +2171,12 @@ export interface components {
              * @default false
              */
             deleted: boolean;
+            /** Group Name */
+            group_name?: string | null;
+            /** Last Edited By Name */
+            last_edited_by_name?: string | null;
+            /** Last Edited At */
+            last_edited_at?: string | null;
             /** Name */
             name: string;
             /**

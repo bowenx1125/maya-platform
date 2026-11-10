@@ -6,6 +6,7 @@ import re
 import weakref
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
+from functools import partial
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4, uuid5
 
@@ -25,8 +26,10 @@ from app.core.errors import Error, PlatformError, conflict, not_found, unprocess
 from app.core.message_timing import message_timing
 from app.core.models import (
     Agent,
+    AgentEditAudit,
     AgentVersion,
     CourseMember,
+    Group,
     KnowledgeDocument,
     KnowledgeSnapshot,
     ProviderOperation,
@@ -35,6 +38,7 @@ from app.core.models import (
     StoredFile,
     User,
 )
+from app.core.prefetch import prefetched
 from app.core.read_memo import request_read_memo
 from app.core.version_label import agent_version_label
 from app.core.write_guard import WriteSlot, reserve_write_slot, write_guard_slot
@@ -1470,16 +1474,36 @@ def _chat_agents(db: Session, context: AuthContext, course_id: str) -> list[Chat
     prefetch_agent_reads(
         db, [(agent, version) for version, agent in rows], viewer_id=context.user.id
     )
-    return [
-        agent_view(
-            version,
-            agent,
-            course_id,
-            available=_version_sources_usable(db, version),
-        )
-        for version, agent in rows
-        if _version_chat_available(db, context, version, agent)
-    ]
+    group_ids = {agent.group_id for _, agent in rows if agent.group_id}
+    group_names = (
+        {
+            group_id: group_name
+            for group_id, group_name in db.execute(
+                select(Group.id, Group.name).where(Group.id.in_(group_ids))
+            )
+        }
+        if group_ids
+        else {}
+    )
+    result = []
+    for version, agent in rows:
+        if not _version_chat_available(db, context, version, agent):
+            continue
+        view = agent_view(version, agent, course_id, available=_version_sources_usable(db, version))
+        view.group_name = group_names.get(agent.group_id) or None
+        audit = prefetched(db, "edit_audit", agent.id, partial(db.get, AgentEditAudit, agent.id))
+        if audit is not None:
+            editor_id = audit.last_edited_by_user_id
+            if editor_id:
+                view.last_edited_by_name = prefetched(
+                    db,
+                    "user_display_name",
+                    editor_id,
+                    partial(db.scalar, select(User.display_name).where(User.id == editor_id)),
+                )
+            view.last_edited_at = audit.last_edited_at
+        result.append(view)
+    return result
 
 
 # entry_kind=team covers both stored Team kinds.
