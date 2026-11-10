@@ -2,11 +2,13 @@
 
 2026-11-10。两组界面方案，供伯闻选择。没有改产品代码，没有改 `main`，没有部署，没有打开 `DEMO_MODE` 或 `DEMO_QUICK_LOGIN`。
 
+同日下一轮：伯闻选定班切换的方向 B（放进侧栏品牌）。三套新稿在「1 的下一轮」，仍不改产品代码。
+
 mock 是静态 HTML，样式对齐现有 arcade 贴纸：3px 黑边、硬阴影、黄底太阳纹 banner、粉色 `#FF4D8D`。页顶黑条上的 **EXAMPLE DATA** 表示班名、人数、问卷标题和题目都是示例。界面文案保持英文。问卷标题里的中文是老师写的标题，沿用现在的内容，不是新的界面文案。
 
 字体是自托管的 Bricolage Grotesque、Lexend 和 Noto Sans SC 子集，按 SIL Open Font License 使用。
 
-打开同目录的 `switcher-a.html`、`switcher-b.html`、`switcher-c.html`、`quizheader-a.html`、`quizheader-b.html`、`quizheader-c.html`，把窗口拉到 1440 和 390 即可对照。截图在 `shots/`。
+打开同目录的 `switcher-a.html`、`switcher-b.html`、`switcher-c.html`、`quizheader-a.html`、`quizheader-b.html`、`quizheader-c.html`，以及下一轮的 `brand-split.html`、`brand-chip.html`、`brand-subline.html`。收起侧栏的样子在地址后加 `?collapsed=1`。截图在 `shots/`。
 
 共同规则：新控件高度至少 44px；当前项除了粉色，还有勾或文字；键盘焦点是 3px 黑环、向外 2px。黑字在粉色 `#FF4D8D` 上约为 6.7:1，在白、`#FFF7CC`、`#ECFCCB`、`#A3E635`、`#67E8F9` 上都高于此。只有一个班时不画切换器。现在一个班也会留下一颗点了没反应的粉按钮。
 
@@ -61,6 +63,60 @@ mock 是静态 HTML，样式对齐现有 arcade 贴纸：3px 黑边、硬阴影�
 现在就是两个班，Maya1001 和 Maya1002。方案 C 让当前班用文字写明，另一班留在旁边，Welcome banner 保持同事的原样，也不会再像两张贴纸浮在 banner 上。全站老师页面可以共用这一条。
 
 如果以后班会超过四个，改选方案 B。方案 A 看起来最贴 banner，但要改首页，也解决不了其他页面。
+
+## 1 的下一轮 · 品牌按钮带上当前班
+
+伯闻选定方向 B，并要求品牌按钮本身带上当前班，例如「Mayaform-1001」。后缀来自 `selectTeacherCourse` 和 `TeacherClassBar` 用的同一份老师课程。示例里的课名是 Maya1001、Maya1002，品牌写成 Mayaform-1001：课名若以 Maya 开头，后缀用剩下的部分；不以 Maya 开头的课名整段接在后面，放不下就截断。点品牌主体回主页，和现在的品牌链接一样。右侧另有一个下拉，切换效果和现在的 `TeacherClassBar` 一样。只有一个班时不画下拉，品牌仍写成 Mayaform-1001。
+
+三套都满足：两个点击区各至少 44px；Tab 能分别落到回主页和下拉上；下拉按钮带 `aria-haspopup="menu"` 和 `aria-expanded`，方向键移动，Escape 关闭并把焦点还回去；当前班靠文字和勾，不单靠颜色。粉色沿用现在的规则，表示「当前页是 Mayaform 首页」，不表示当前班。菜单里多一行很长的课名，只为展示截断，是 EXAMPLE DATA。
+
+### B1 · 分割按钮
+
+左边是回主页的链接，文字是 Mayaform-1001。右边是单独的 44px 白按钮，只有 ▾，中间一条 3px 黑分隔。下拉在按钮下方列出班级，当前项粉色加勾。班名变长时，Mayaform 先被省略，后缀自己再省略，避免数字先被切掉。侧栏收起后，上面一颗 44px 的圆点回主页，下面一颗 44px 的按钮写着 ▾ 和 1001，菜单从轨道右侧打开，落在 Welcome 下面。390 上同一颗分割按钮放进顶栏，菜单在顶栏下面整页展开，不盖住品牌。
+
+优点：就是伯闻说的「右边一个下拉按钮」，两个区靠分隔线和白/粉两块分开，一眼能认。收起和手机都还是这一套，不另起一行。当前班写在品牌上。
+
+缺点：▾ 按钮上没有 “Class” 这个词，要靠打开的菜单和读屏名称 “Switch class” 才知道它是换班。只有一个班时，整颗按钮变成没有分隔的链接。
+
+![B1 at 1440, menu open](shots/switcher-B1-1440.png)
+
+![B1 at 390, menu open](shots/switcher-B1-390.png)
+
+![B1 sidebar collapsed, menu open](shots/switcher-B1-collapsed.png)
+
+### B2 · 胶囊上的班级 chip
+
+一颗胶囊。左边是 Mayaform，点它回主页。右边是一枚白底圆 chip，写着 1001 和 ▾，整枚 chip 才是下拉，不是单独的箭头。当前班就是 chip 上的数字，菜单里再加勾。侧栏收起后，圆点在上，圆 chip「1001」在下。390 上同一颗胶囊放进顶栏。
+
+优点：换班的那一块自己写着班号，不必猜 ▾ 是做什么的。品牌词 Mayaform 固定，长后缀只挤 chip。
+
+缺点：胶囊里字要比分割按钮小，窄侧栏才放得下 Mayaform 和 chip。它和 B1 都是左右分，差别主要在右边是「班号」还是「纯箭头」。
+
+![B2 at 1440, menu open](shots/switcher-B2-1440.png)
+
+![B2 at 390, menu open](shots/switcher-B2-390.png)
+
+![B2 sidebar collapsed, menu open](shots/switcher-B2-collapsed.png)
+
+### B3 · 品牌下面一行 Class
+
+上面的 Mayaform 保持现在的品牌链接，只负责回主页。下面另起一行 44px 的白条：「Class」、勾、1001、▾。点这一行才打开下拉。侧栏收起后，圆点在上，下面一颗 44px 的按钮分成 Class 和 1001 两行。390 上顶栏变成两行：第一行是菜单和 Mayaform，第二行是通栏的 Class 1001，菜单再往下排。
+
+优点：两个点击区是上下两块，不可能点错。Mayaform 这个词不被班名挤。长班名有整行宽度来截断。
+
+缺点：侧栏多占一行，手机顶栏变高。品牌不再读成「Mayaform-1001」这一串，班号在下一行。
+
+![B3 at 1440, menu open](shots/switcher-B3-1440.png)
+
+![B3 at 390, menu open](shots/switcher-B3-390.png)
+
+![B3 sidebar collapsed, menu open](shots/switcher-B3-collapsed.png)
+
+### 推荐：B1
+
+它把当前班写进品牌，读成 Mayaform-1001，右边的 ▾ 是单独一击，中间有分隔线。两个区都到 44px，收起和 390 顶栏不用改结构。当前班靠文字和菜单里的勾，粉色仍只表示「这页是首页」。
+
+如果希望换班的按钮上直接写着班号，用 B2。如果希望 Mayaform 四个字保持现状、班号单独一行，用 B3。
 
 ## 2. Quiz 详情页头部
 
