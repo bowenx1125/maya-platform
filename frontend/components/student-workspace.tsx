@@ -836,7 +836,7 @@ function GroupWorkspaceSession({
       />
     );
 
-  return <LoadingCard size="sm" />;
+  return <LoadingCard />;
 }
 
 function GroupAgentRow({

@@ -2522,7 +2522,7 @@ function BrainformWorkspaceBody({
       {!courseId ? (
         <p className={styles.empty}>{t("brainformUnavailable")}</p>
       ) : null}
-      {loading && courseId && !embedded ? <LoadingCard size="sm" /> : null}
+      {loading && courseId && !embedded ? <LoadingCard /> : null}
 
       {/* Embedded in Studyform each card paints on its own: RAG shows a
           loading line while its list arrives, Record never waits for it. */}
