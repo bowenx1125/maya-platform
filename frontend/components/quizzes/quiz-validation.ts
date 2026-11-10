@@ -54,6 +54,51 @@ export function withAiGrading(item: QuizItemTeacher): QuizItemTeacher {
   };
 }
 
+/**
+ * A choice item has no standard answer when `answer` is missing or its
+ * `choice_ids` hold no real id.
+ *
+ * Empty: `answer` null/undefined, `choice_ids` null/undefined/not an array,
+ * `[]`, or an array of only blank strings. A non-blank id is a key.
+ * Text rubrics are not choice keys; callers apply this to choice items only.
+ */
+export function choiceAnswerKeyMissing(
+  answer: { choice_ids?: readonly unknown[] | null } | null | undefined,
+): boolean {
+  if (answer == null) return true;
+  const ids = answer.choice_ids;
+  if (!Array.isArray(ids)) return true;
+  return !ids.some((id) => typeof id === "string" && id.trim() !== "");
+}
+
+export type ChoiceResultMark = "correct" | "incorrect" | "neutral";
+
+/**
+ * How a choice row is marked.
+ *
+ * Teacher payloads include `answer`. An empty key means any selection is
+ * correct and a blank response stays neutral — never incorrect — even when
+ * a not-yet-updated scorer still sends `correct: false`.
+ * Student payloads omit `answer`. Pass `answerKnown: false` so a missing
+ * key is not invented; the row follows `correct` from the server.
+ */
+export function choiceResultMark(input: {
+  answerKnown: boolean;
+  answer?: { choice_ids?: readonly unknown[] | null } | null;
+  correct?: boolean | null;
+  responseChoiceIds?: readonly unknown[] | null;
+}): ChoiceResultMark {
+  if (input.answerKnown && choiceAnswerKeyMissing(input.answer)) {
+    const responded = (input.responseChoiceIds ?? []).some(
+      (id) => typeof id === "string" && id.trim() !== "",
+    );
+    return responded ? "correct" : "neutral";
+  }
+  if (input.correct === true) return "correct";
+  if (input.correct === false) return "incorrect";
+  return "neutral";
+}
+
 function itemProblems(item: QuizItemTeacher): string[] {
   const problems: string[] = [];
   if (!item.prompt.trim()) {
@@ -84,16 +129,9 @@ export function quizDraftProblems(
   return problems;
 }
 
-/** Extra requirements on top of a valid draft before the quiz may be published. */
+/** A draft may be published with choice items that have no standard answer. */
 export function canPublish(title: string, items: QuizItemTeacher[]): boolean {
-  if (quizDraftProblems(title, items).length > 0) {
-    return false;
-  }
-  return items.every((item) => {
-    if (!isChoiceItem(item)) return true;
-    const ids = item.answer?.choice_ids ?? [];
-    return ids.length > 0;
-  });
+  return quizDraftProblems(title, items).length === 0;
 }
 
 /** Published quizzes are locked for structural edits. */

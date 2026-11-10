@@ -55,6 +55,7 @@ const base = {
 
 beforeEach(() => {
   state.api = new PlatformApi({ csrfToken: "c".repeat(32) });
+  state.push.mockClear();
   state.routes = [];
   vi.stubGlobal(
     "fetch",
@@ -186,6 +187,50 @@ describe("teacher Quiz editor", () => {
     expect(marks).toHaveLength(2);
     fireEvent.click(marks[0]);
     expect((marks[0] as HTMLInputElement).checked).toBe(true);
+    // Clicking the selected single-choice mark clears it.
+    fireEvent.click(marks[0]);
+    expect((marks[0] as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("publishes a choice question that has no marked answer", async () => {
+    state.routes.push(
+      {
+        method: "POST",
+        match: /\/quizzes\/q-open\/publish$/,
+        body: { id: "q-open", status: "published" },
+      },
+      {
+        method: "POST",
+        match: /\/quizzes$/,
+        body: { id: "q-open", title: "Open", status: "draft" },
+      },
+    );
+    render(<QuizEditor />);
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Open quiz" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Single choice" }));
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Pick any" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() =>
+      expect(state.push).toHaveBeenCalledWith("/teacher/quizzes"),
+    );
+    expect(
+      screen.queryByText(
+        "Every choice question needs at least one marked answer.",
+      ),
+    ).toBeNull();
+    const create = (
+      globalThis.fetch as ReturnType<typeof vi.fn>
+    ).mock.calls.find(
+      (call) =>
+        String(call[0]).endsWith("/quizzes") &&
+        (call[1] as RequestInit | undefined)?.method === "POST",
+    );
+    const body = JSON.parse(String((create?.[1] as RequestInit).body));
+    expect(body.items[0].answer).toEqual({ choice_ids: [] });
   });
 
   it("opens a published quiz on Submissions; its Paper is read-only with Unpublish", async () => {
