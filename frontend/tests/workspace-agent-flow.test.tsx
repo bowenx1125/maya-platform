@@ -330,7 +330,7 @@ describe("Workspace Agent flow", () => {
     );
     await screen.findByRole("heading", { name: "Current prompt" });
     expect(screen.getByRole("heading", { name: "Avatar" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Brainform" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "RAG" })).toBeTruthy();
     expect(
       screen.queryByRole("textbox", { name: "AGENT.md editor" }),
     ).toBeNull();

@@ -908,7 +908,13 @@ describe("Agent voice picker", () => {
     return screen
       .getAllByRole("radio")
       .filter((radio) => (radio as HTMLInputElement).checked)
-      .map((radio) => radio.closest("label")?.textContent);
+      .map((radio) => {
+        const label = radio.closest("label")?.cloneNode(true) as HTMLElement;
+        label
+          .querySelectorAll('[aria-hidden="true"]')
+          .forEach((node) => node.remove());
+        return label.textContent;
+      });
   }
 
   it("always checks exactly one row, None by default", async () => {
@@ -936,6 +942,13 @@ describe("Agent voice picker", () => {
       />,
     );
     expect(checked()).toEqual(["peer.wav"]);
+    const chosen = screen.getByRole("radio", { name: "peer.wav" });
+    const label = chosen.closest("label")!;
+    expect(within(label).getByText("Selected")).toBeTruthy();
+    expect(label.querySelector('svg path[d="m5 12 4 4L19 6"]')).toBeTruthy();
+    expect(chosen.hasAttribute("aria-selected")).toBe(false);
+    expect(chosen.hasAttribute("aria-pressed")).toBe(false);
+    expect(label.querySelector('[class*="animate-"]')).toBeNull();
     fireEvent.click(screen.getByRole("radio", { name: "None" }));
     expect(onSelect).toHaveBeenLastCalledWith(null);
   });

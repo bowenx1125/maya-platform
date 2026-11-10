@@ -394,9 +394,8 @@ describe("W1 teacher personal workspace", () => {
     );
   });
 
-  // Bug (2026-10-13): a new Agent's Brainform listed another Agent's private
-  // file and the Knowledge of a deleted Agent, which Brainform itself hides.
-  it("offers a new Agent only the library Brainform lists", async () => {
+  // A new Agent must not offer another Agent's private RAG.
+  it("offers a new Agent only library RAG and no Knowledge controls", async () => {
     const knowledgeSet = (id: string, name: string) => ({
       id,
       display_name: name,
@@ -450,8 +449,8 @@ describe("W1 teacher personal workspace", () => {
       document.getElementById("rag-origin-shared-source")?.textContent,
     ).toBe("@kaikai · Used by Socrates, Plato");
     expect(
-      screen.getByRole("checkbox", { name: "Live Knowledge" }),
-    ).toBeTruthy();
+      screen.queryByRole("checkbox", { name: "Live Knowledge" }),
+    ).toBeNull();
     expect(
       screen.queryByRole("checkbox", { name: "private-notes.md" }),
     ).toBeNull();

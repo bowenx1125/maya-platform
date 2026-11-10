@@ -453,7 +453,7 @@ describe("Wave 1C real workbench boundary", () => {
     expect(api.publish).not.toHaveBeenCalled();
     expect(
       within(screen.getByRole("main")).getByRole("heading", {
-        name: "Brainform",
+        name: "RAG",
       }),
     ).toBeTruthy();
     expect(screen.getByLabelText("AGENT.md editor")).toHaveProperty(

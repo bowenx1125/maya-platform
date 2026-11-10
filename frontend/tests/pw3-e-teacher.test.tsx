@@ -239,7 +239,7 @@ describe("PW3-E teacher shell and responsive contract", () => {
       expect(screen.getByRole("heading", { name: "AGENT.md" })).toBeTruthy(),
     );
     expect(api.group).toHaveBeenCalledWith(groupId);
-    expect(screen.getByRole("heading", { name: "Brainform" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "RAG" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Avatar" })).toBeTruthy();
     expect(screen.queryByText("Bowen group")).toBeNull();
     expect(screen.queryByText("Current release")).toBeNull();
