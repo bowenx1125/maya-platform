@@ -14,11 +14,9 @@ once,one eligible reply/Agent,no invention.
 
 Preview:R1–3 text/audio,R4 live. Successful predecessors visible (same-round after
 barriers). Rotating order,fixed identities/targets. Next/scheduling/hashes/recovery:
-accepted prefix reused,no recharge. Chinese chars/English words:50/80,50/80,50/100,
-100/150,no minimum; exclude Chinese spaces/punctuation,count English internal
-apostrophes/hyphens. Readable length never rejected/repaired/truncated/padded. Bad
-auxiliary metadata dropped,exact sources/bindings kept. Unreadable:≤1 authorized frozen
-repair; one-call adds none; unknown never resent.
+accepted prefix reused,no recharge. Length: see Nov10 v4 (pre-v4 Debates: never
+rejected/trimmed). Bad auxiliary metadata dropped,exact sources/bindings kept.
+Unreadable:≤1 authorized frozen repair; one-call adds none; unknown never resent.
 Questions≠reply_to. Memory excludes speech/TTS/Agent.md/version/KB; Round4/Report:
 separate session_discussion_memory. Own KB/Persona+others' public speeches only,no
 private receipts/Persona.0024:drops speaker/snapshot FK only. Evidence support≠
@@ -86,8 +84,7 @@ Agents/Voices; Teachers publish Maya Teams; Chats→Chatform. Oct11:New→Teams/
 Done→owner-only Chat. Brainform:no disclosure entry; `PROVIDER_STANDING_CONSENT`
 covers classroom/prod,else unlinked Teacher approvals. Teacher Accounts Public-
 group read-only visits remove temp membership on return; Debates restored.
-Sidebar New/Back/Done contextual. Voice New module-right,no sidebar; consent→create,
-top-right←cancel. Agent Voice=None; groupmates choose/hear ready voices,course teachers
+Sidebar New/Back/Done contextual. Voice New module-right; consent→create,←cancel. Agent Voice=None; groupmates choose/hear ready voices,course teachers
 hear/bind/manage (1026). Immediate heading help. Brainform:3 columns,no title/eyebrow;
 RAG uses Knowledge view/edit/download/delete,PDF/DOCX. View/New/edit replaces content,
 deep links,no bottom panel. Knowledge:asset-name entry,authorized Agent consumers,
@@ -198,9 +195,8 @@ PG poll REPEATABLE READ.50-user Mock:p95≤7.85s. Details:Git history.
 
 ## Oct24 Team chats and junk (#241)
 
-Open Team chats follow each new Team version (save, publish, 5-min sweep); history,
-mid-reply chats and unfinished attempts keep theirs. Failed RAG uploads/Voices are not
-kept (unless charged or holding a supplier id); empty Agents are swept after 1h.
+Open Team chats follow each new Team version; history,mid-reply chats and unfinished
+attempts keep theirs. Failed uncharged RAG uploads/Voices dropped; empty Agents swept after 1h.
 
 ## Oct24 true deletion (#242, supersedes #233)
 
@@ -213,26 +209,16 @@ Scripts:backfill_debate_snapshots,backfill_debate_voice_clones,cleanup_soft_dele
 
 ## Oct24 Debate Next and errors
 
-Next: live prepares up to3 turns ahead,each after its predecessor is final-ready;
-per-Debate lock;controller-only POST /debates/{id}/next-audio prefetch ticket,stage
-plays the blob (debate_timing logs each step). Uploaded voice auto-selected;
-Team errors name the Agent;agent_in_team names own Teams;unknown codes show the code.
+Next: live prepares up to3 turns ahead after final-ready predecessors;per-Debate lock;
+controller-only next-audio prefetch ticket. Errors name the Agent/Team or show the code.
 
-## Oct24 cleanup and Record hotfix
+## Oct24 cleanup, hints, Debate create
 
-Prod rollback had unlinked841 files. app/modules/purge.py rules every live
-FK delete/null/protect; unknown refs retain parents; unlink after outer commit.
-Records/answers/Debate copies/ledgers keep null links except account erasure
-below. Teacher Record deletion is real,Chat kept.0076→0078 dry-run→apply→second
-apply0,snapshots unchanged.
-
-## Oct24 Agent hints and Debate create
-
-Agent checks are hints, never save/publish blockers (empty AGENT.md and unindexed RAG
-still block). readiness_issues covers the published version. Debate create names each
-Agent in one sticky bar (pencil to /teacher/agents/{id}); blocking lines stop the send.
-Server still refuses with debate_agents_not_ready (not found unnamed; fence drift named).
-malformed_request lists field+type. Each bar line's Done publishes that line. Topic: any language.
+app/modules/purge.py rules every live FK delete/null/protect; unknown refs retain parents;
+unlink after outer commit. Records/answers/Debate copies/ledgers keep null links except
+account erasure. Teacher Record deletion is real,Chat kept. Agent checks are hints (empty AGENT.md/unindexed RAG block). Debate create: one sticky bar
+names each Agent,blocking lines stop the send,server debate_agents_not_ready;
+malformed_request lists field+type. Topic: any language.
 
 ## Oct24–25 infra (PRs A/A2/B/C/E)
 
@@ -243,13 +229,11 @@ A2:Stage predownloads ready speeches as blobs in speaking order;blob (≤3s) els
 C:DEBATE_AUDIO_MP3 (prod on):ffmpeg mp3,64 MB LRU,max-age=300/304;playback off the event
 loop (offload.py);per-Debate lock;tickets in Postgres (0079);Next 103→35 SQL.
 E:DEBATE_LLM_* (no MAYA_ prefix;unset=previous)/DEBATE_TTS_* freeze into rule_snapshot_json
-(ruleset_contract_v3;null=not sent);contract default_rules/{zh,en}.md;pre-v3 Debates keep
-legacy;playback rate removed in 0080 (always 1.0).
+(null=not sent);v3 contract lived in the Ruleset,pre-v3 keep legacy;playback rate 1.0 (0080).
 
-## Oct27 UI (#305, 38)
+## Oct27 UI (#305)
 
-#305:Agents4-col,Teams3-col/shared empty. Sign-in38v3;waits:one39C LoadingCard.
-Keys:fixed hit area;sidebar:active wait/query context. Sheets/mockups removed: chosen UI shipped.
+Agents4-col,Teams3-col;sign-in38v3;one39C LoadingCard;fixed key hit area.
 
 ## Nov2 Chatform lists
 
@@ -259,9 +243,8 @@ histories; no kind selects Agent history.
 
 ## Nov2 Accounts group visit
 
-0082:Enter grants2h teacher_group_access (not roster),renewed20min;Backout replaces
-Logout;no header Back;expiry sweeps/min. Visits edit group Studyform Agents/public
-Brainform,not group/Agent deletion/other groups. Old group-card no-op fixed.
+0082:Enter grants2h teacher_group_access (not roster),renewed20min;Backout;expiry sweeps/min.
+Visits edit group Studyform Agents/public Brainform,not deletion/other groups.
 
 ## Nov2 chat speed and recovery
 
@@ -315,3 +298,16 @@ Full run at 535d227: 3073 pass/139 fail/1 skip. Main reproduced 135; four fixed.
 Nov10 local: original class Maya1002, second Maya1001, stable IDs and student data.
 Teacher scopes corrected. Shared RAG action style; RAG follows the class bar.
 47 PG and 1188 UI tests passed. Browser matched button style and class switching.
+
+## Nov10 Debate prompt v4 (phase A1, backend; supersedes Oct24 contract-in-Ruleset)
+
+New Debates freeze ruleset_contract_v4: code contract default_rules/contract/{zh,en}.md
+(read-only debate-ruleset `contract`); Ruleset=style+one task per round; System=Ruleset
+minus other rounds+this round's contract; legacy contract tails stripped.
+User JSON adds `task`{round_task with names,max_units,stance?}; teacher_note withheld
+(manifests forbid exporting it). Length is hard: target_minutes 3–10 (5)×230 zh Han
+chars (measured)/150 en words (unmeasured)×voice rate×0.9/(Agents×4),×1.1/0.9/0.9/1.1,
+down to 5s,min 40/25; >1.25×cap:1 repair,then trailing whole sentences dropped. Copy-strip
+stump<40% cap or own 8/5-gram overlap>35%:1 repair,then accepted. Round-1 query:Topic,
+Topic+name+stance,no Agent.md. v4 snapshots drop min/max/target words,retrieval_policy_id,
+frequency_penalty. v3/older keep their bytes (pinned test). Offline tests only;0 provider calls.

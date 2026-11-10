@@ -8,12 +8,13 @@ existed falls back to the current defaults. A parameter that is empty (None)
 is never sent.
 
 Ranges follow the DashScope OpenAI-compatible chat endpoint. That endpoint
-does not document ``frequency_penalty``, so it is accepted and stored but
-never sent.
+does not document ``frequency_penalty``, so it is accepted but never sent;
+v4 Debates no longer store it.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -49,7 +50,21 @@ PARAM_SPECS: tuple[ParamSpec, ...] = (
     ParamSpec("seed", "int", 0, 2**31 - 1),
 )
 PARAM_NAMES = tuple(spec.name for spec in PARAM_SPECS)
-CONTRACT_VERSION = "ruleset_contract_v3"
+# v3 Debates carry the execution contract inside their frozen Ruleset text; v4
+# (2026-11-10) freezes a code-owned contract beside it plus per-turn tasks and
+# enforced length/repetition rules. Each frozen Debate keeps its own version.
+RULESET_CONTRACT_V3 = "ruleset_contract_v3"
+CONTRACT_VERSION = "ruleset_contract_v4"
+# Stored and accepted on input before v4; a v4 Debate no longer stores it.
+UNSTORED_V4_PARAMS = frozenset({"frequency_penalty"})
+
+
+def uses_code_contract(frozen_llm: Mapping[str, Any] | None) -> bool:
+    """Whether a Debate's frozen settings select the v4 code-owned contract."""
+
+    return (
+        isinstance(frozen_llm, Mapping) and frozen_llm.get("contract_version") == CONTRACT_VERSION
+    )
 
 
 class DebateLLMParams(BaseModel):

@@ -413,8 +413,18 @@ def scan_segment_outbound_messages(
     if not isinstance(decoded, Mapping) or set(decoded) not in (
         _SEGMENT_INPUT_KEYS,
         _SEGMENT_INPUT_KEYS | {"discussion"},
+        _SEGMENT_INPUT_KEYS | {"discussion", "task"},
     ):
         _reject(code="llm_outbound_field_forbidden")
+    if "task" in decoded:
+        from app.modules.debates.generation.four_round import validate_task
+
+        # Server-written round task, cap and assigned stance only; the closed
+        # shape keeps the teacher note, which manifests forbid exporting, off the wire.
+        try:
+            validate_task(decoded["task"])
+        except (TypeError, ValueError, KeyError):
+            _reject(code="llm_outbound_field_forbidden")
     discussion = decoded.get("discussion")
     if "discussion" in decoded:
         from app.modules.debates.generation.four_round import validate_discussion

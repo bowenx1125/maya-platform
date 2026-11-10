@@ -65,6 +65,10 @@ SEGMENT_REPAIR_CODES = frozenset(
         "segment_count_invalid",
         "segment_text_invalid",
         "segment_history_copy",
+        # v4 rules; the repair attempt accepts (and trims) what comes back.
+        "segment_history_stump",
+        "segment_self_repetition",
+        "segment_too_long",
     }
 )
 
@@ -466,6 +470,8 @@ class SegmentLLMRuntime:
                     candidate.provider_output,
                     prepared.snapshot,
                     allow_history_copy=prepared.attempt_no >= 2,
+                    repairable=prepared.attempt_no < 2
+                    and prepared.request.authorized_max_attempts == 2,
                 )
                 stored = checked.as_stored_payload()
                 output_json = json.dumps(

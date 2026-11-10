@@ -3,7 +3,8 @@
 The module has no provider, database, filesystem, or runtime dependency.  A
 server freezes retrieval receipts and classroom barrages into one immutable
 ``SegmentInputSnapshot``.  Its serialized user view has exactly seven compact
-groups; its full receipt tuple and local ``S1`` bindings stay server-side for
+groups (plus ``discussion`` for four-round Debates and a code-written ``task``
+under the v4 contract); its full receipt tuple and local ``S1`` bindings stay server-side for
 recovery.  Validation returns the exact public speech and half-open offsets
 into that speech, joined with ``"\\n\\n"``.\n"""
 
@@ -25,14 +26,21 @@ from app.modules.agents.persona import (
     PersonaSpecV1,
     PersonaSpecV2,
 )
+from app.modules.debates.generation_params import CONTRACT_VERSION
+from app.modules.debates.teaching_rules import DEFAULT_TARGET_MINUTES
 
 from .four_round import (
+    ENGLISH_WORD,
     TEACHING_PROTOCOL,
     discussion_context,
+    over_length_limit,
+    speech_units,
     system_prompt,
+    turn_task,
     usable_memory,
     usable_question,
     validate_discussion,
+    validate_task,
     visible_predecessors,
 )
 from .types import GenerationContext, SnapshotRetrievalReceipt
@@ -61,6 +69,11 @@ _WHITESPACE_RE = re.compile(r"\s+")
 # "照耀问得好。" stay, a re-read paragraph does not.
 SEGMENT_HISTORY_COPY_MIN_CHARS = 14
 SEGMENT_HISTORY_COPY_KEEP_RATIO = 0.4
+# v4 (2026-11-10): what stripping copies may leave before the speech is a stump
+# (share of the turn cap), and how much of a speech may restate the speaker's
+# own earlier speeches (share of its character 8-grams or word 5-grams).
+SEGMENT_STUMP_RATIO = 0.4
+SEGMENT_SELF_REPEAT_RATIO = 0.35
 _SENTENCE_END_RE = re.compile(r"[。！？!?；;]+[”’」』\"')）]*|\.(?=\s|$)[”’\"')]*|\n+")
 
 
@@ -608,6 +621,8 @@ class SegmentInputSnapshot:
     # Canonical {"contract_version","params"} a Debate froze at creation; absent
     # for Debates created before, whose hashes and requests stay as they were.
     frozen_llm_json: str | None = None
+    # The v4 code-written task group; None under earlier contracts.
+    task_json: str | None = None
 
     @classmethod
     def from_user_payload(
@@ -627,6 +642,9 @@ class SegmentInputSnapshot:
         a local alias rather than a provider-visible evidence identity.
         """
 
+        # v4 adds the code-written task group to four-round input; every other
+        # contract keeps exactly the seven groups it was frozen with.
+        with_task = _code_contract(frozen_llm_json) and "discussion" in payload
         if set(payload) - {"discussion"} != {
             "topic",
             "language",
@@ -635,11 +653,16 @@ class SegmentInputSnapshot:
             "history",
             "sources",
             "barrages",
+            *(("task",) if with_task else ()),
         }:
             raise _error(
                 "segment input must contain exactly seven groups.",
                 code="input_shape_invalid",
             )
+        try:
+            task = validate_task(payload["task"]) if with_task else None
+        except ValueError as exc:
+            raise _error("the task group is invalid.", code="input_shape_invalid") from exc
         topic = _text(payload.get("topic"), "topic")
         language = payload.get("language")
         if language not in {"en", "zh"}:
@@ -710,6 +733,7 @@ class SegmentInputSnapshot:
             source_bindings=bindings,
             snapshot_id=snapshot_id,
             discussion_json=_canonical(discussion) if discussion is not None else None,
+            task_json=_canonical(task) if task is not None else None,
         )
 
     @classmethod
@@ -735,6 +759,7 @@ class SegmentInputSnapshot:
         frozen_system_prompt: str | None = None,
         discussion: Mapping[str, object] | None = None,
         frozen_llm: Mapping[str, object] | None = None,
+        task: Mapping[str, object] | None = None,
     ) -> SegmentInputSnapshot:
         """Create a snapshot from compact fields without provider access."""
 
@@ -756,6 +781,8 @@ class SegmentInputSnapshot:
         }
         if discussion is not None:
             raw["discussion"] = dict(discussion)
+        if task is not None:
+            raw["task"] = dict(task)
         return cls.from_user_payload(
             raw,
             receipts=receipts,
@@ -852,6 +879,10 @@ class SegmentInputSnapshot:
         return json.loads(self.discussion_json) if self.discussion_json else None
 
     @property
+    def task(self) -> dict[str, object] | None:
+        return json.loads(self.task_json) if self.task_json else None
+
+    @property
     def phase(self) -> SegmentPhase:
         return self.round.phase
 
@@ -885,6 +916,7 @@ class SegmentInputSnapshot:
             "sources": [item.as_payload() for item in self.sources],
             "barrages": [item.as_payload() for item in self.barrages],
             **({"discussion": self.discussion} if self.discussion_json is not None else {}),
+            **({"task": self.task} if self.task_json is not None else {}),
         }
 
     def to_user_json(self) -> str:
@@ -988,6 +1020,16 @@ class SegmentInputSnapshot:
         return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def _code_contract(frozen_llm_json: str | None) -> bool:
+    if not frozen_llm_json:
+        return False
+    try:
+        value = json.loads(frozen_llm_json)
+    except ValueError:
+        return False
+    return isinstance(value, Mapping) and value.get("contract_version") == CONTRACT_VERSION
+
+
 def _context_round_total(context: GenerationContext, explicit: int | None) -> int:
     if explicit is not None:
         return explicit
@@ -1063,6 +1105,11 @@ def build_segment_input(
         barrages=barrages,
         snapshot_id=context.participant.snapshot_id or None,
         discussion=discussion_context(context) if teaching else None,
+        task=turn_task(context, minutes=context.target_minutes or DEFAULT_TARGET_MINUTES)
+        if teaching
+        and isinstance(context.frozen_llm, Mapping)
+        and context.frozen_llm.get("contract_version") == CONTRACT_VERSION
+        else None,
     )
 
 
@@ -1701,11 +1748,84 @@ def _lineage(segments: Sequence[Segment]) -> tuple[SegmentLineage, ...]:
     return tuple(rows)
 
 
+def _gram_set(text: str, language: str) -> set[tuple[str, ...]]:
+    if language == "zh":
+        units = [char for char in unicodedata.normalize("NFKC", text).casefold() if char.isalnum()]
+        size = 8
+    else:
+        units = [word.casefold() for word in ENGLISH_WORD.findall(text)]
+        size = 5
+    return {tuple(units[index : index + size]) for index in range(len(units) - size + 1)}
+
+
+def self_repetition_ratio(text: str, earlier: Sequence[str], language: str) -> float:
+    """Share of this speech's n-grams already in the speaker's earlier speeches."""
+
+    grams = _gram_set(text, language)
+    if not grams or not earlier:
+        return 0.0
+    seen: set[tuple[str, ...]] = set()
+    for item in earlier:
+        seen |= _gram_set(item, language)
+    return len(grams & seen) / len(grams)
+
+
+def _segments_units(segments: Sequence[Segment], language: str) -> int:
+    return sum(speech_units(item.text, language) for item in segments)
+
+
+def trim_trailing_sentences(
+    segments: Sequence[Segment],
+    limit: int,
+    language: str,
+    *,
+    protected: Sequence[str] = (),
+) -> list[Segment]:
+    """Drop whole sentences from the end until the speech fits ``limit`` units.
+
+    A sentence is never cut, at least one always stays, and the round-2
+    question is kept so its routing metadata still matches the speech. A
+    paragraph left with no sentence goes with its own metadata.
+    """
+
+    protected_keys = tuple(key for key in (_copy_key(item) for item in protected) if key)
+    spans = [_sentence_spans(item.text) for item in segments]
+    keep = [[True] * len(item) for item in spans]
+    order = [(seg, index) for seg, item in enumerate(spans) for index in range(len(item))]
+    total = _segments_units(segments, language)
+    for seg, index in reversed(order):
+        if total <= limit or sum(map(sum, keep)) <= 1:
+            break
+        start, end = spans[seg][index]
+        key = _copy_key(segments[seg].text[start:end])
+        if any(guard in key or key in guard for guard in protected_keys):
+            continue
+        keep[seg][index] = False
+        total -= speech_units(segments[seg].text[start:end], language)
+    result: list[Segment] = []
+    for segment, item_spans, flags in zip(segments, spans, keep, strict=True):
+        if all(flags):
+            result.append(segment)
+            continue
+        pieces: list[str] = []
+        for index, ((start, end), kept) in enumerate(zip(item_spans, flags, strict=True)):
+            if not kept:
+                continue
+            if pieces and flags[index - 1]:
+                pieces.append(segment.text[item_spans[index - 1][1] : start])
+            pieces.append(segment.text[start:end])
+        text = "".join(pieces).strip()
+        if text:
+            result.append(replace(segment, text=text))
+    return result
+
+
 def validate_segment_output(
     value: object,
     snapshot: SegmentInputSnapshot,
     *,
     allow_history_copy: bool = False,
+    repairable: bool | None = None,
 ) -> SegmentTurnResult:
     """Validate output shape and resolve every S/B ref against ``snapshot``.
 
@@ -1713,6 +1833,13 @@ def validate_segment_output(
     left the output is rejected with the repairable ``segment_history_copy``,
     unless ``allow_history_copy`` (the repair attempt, or a stored result being
     reloaded) says a turn must not be lost over it.
+
+    Under the v4 contract (a ``task`` group) a stump left by that stripping,
+    heavy self-repetition and an over-length speech are rejected with their
+    own repair codes while ``repairable`` (default: not ``allow_history_copy``)
+    says the one repair attempt is still available. Afterwards the speech is
+    accepted, an over-length one trimmed by whole trailing sentences, so no
+    turn is ever lost to these rules.
     """
 
     if not isinstance(snapshot, SegmentInputSnapshot):
@@ -1747,12 +1874,13 @@ def validate_segment_output(
                 support_mode=mode,
             )
         )
+    task = snapshot.task
+    repair = (not allow_history_copy) if repairable is None else repairable
+    language = snapshot.language
+    raw_question = raw.get("question")
+    protected = (str(raw_question.get("text") or ""),) if isinstance(raw_question, Mapping) else ()
     history_keys = tuple(_copy_key(item.text) for item in snapshot.history)
     if history_keys:
-        raw_question = raw.get("question")
-        protected = (
-            (str(raw_question.get("text") or ""),) if isinstance(raw_question, Mapping) else ()
-        )
         if not allow_history_copy and any(
             history_copy_leaves_a_hole(segment.text, history_keys, protected=protected)
             for segment in segments_list
@@ -1777,7 +1905,45 @@ def validate_segment_output(
                 code="segment_history_copy",
                 pointer="/segments",
             )
+        if task is not None:
+            left = _segments_units(deduplicated, language)
+            cap = cast(int, task["max_units"])
+            if left < _segments_units(segments_list, language) and left < cap * SEGMENT_STUMP_RATIO:
+                if repair:
+                    raise _error(
+                        "removing copied sentences leaves too little of the speech.",
+                        code="segment_history_stump",
+                        pointer="/segments",
+                    )
+                # The rewrite still copies: a whole speech beats a stump.
+                deduplicated = segments_list
         segments_list = deduplicated
+    if task is not None:
+        cap = cast(int, task["max_units"])
+        discussion_value = snapshot.discussion or {}
+        own = [
+            item.text
+            for item in snapshot.history
+            if item.participant_id and item.participant_id == discussion_value.get("self_id")
+        ]
+        speech_text = "\n\n".join(item.text for item in segments_list)
+        if repair and self_repetition_ratio(speech_text, own, language) > SEGMENT_SELF_REPEAT_RATIO:
+            raise _error(
+                "the speech repeats the speaker's earlier speeches.",
+                code="segment_self_repetition",
+                pointer="/segments",
+            )
+        limit = over_length_limit(cap)
+        if _segments_units(segments_list, language) > limit:
+            if repair:
+                raise _error(
+                    "the speech is longer than task.max_units allows.",
+                    code="segment_too_long",
+                    pointer="/segments",
+                )
+            segments_list = trim_trailing_sentences(
+                segments_list, limit, language, protected=protected
+            )
     segments = tuple(segments_list)
     speech = "\n\n".join(item.text for item in segments)
     discussion = snapshot.discussion

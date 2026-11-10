@@ -44,7 +44,12 @@ from app.core.models import (
 )
 from app.core.version_label import agent_version_label
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
-from app.modules.debates.generation_params import resolve_params, resolve_voice_params
+from app.modules.debates.generation_params import (
+    CONTRACT_VERSION,
+    UNSTORED_V4_PARAMS,
+    resolve_params,
+    resolve_voice_params,
+)
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
 from app.modules.debates.owned_copies import (
     adopt_debate_knowledge,
@@ -80,7 +85,7 @@ from app.modules.debates.setup.rules import (
     build_turn_plan,
     canonical_rule_snapshot_json,
 )
-from app.modules.debates.teaching_rules import freeze_teaching_rules
+from app.modules.debates.teaching_rules import freeze_teaching_rules, strip_execution_contract
 from app.modules.debates.topic_language import TopicLanguageError, validate_topic
 from app.modules.debates.voice_clones import snapshot_debate_voices, sync_debate_clones
 from app.modules.interactions.service import create_closed_window
@@ -1305,6 +1310,7 @@ def create_debate_draft(
                 llm_params=resolve_params(runtime_settings, payload.llm_params),
                 # Every speech (preview, live, regenerated) uses these voice values.
                 voice_params=resolve_voice_params(runtime_settings, payload.voice_params),
+                target_minutes=payload.target_minutes,
             ),
         ),
         status="draft",
@@ -1600,17 +1606,32 @@ def update_debate_draft(
     teaching_protocol = debate_teaching_protocol(debate)
     _ensure_payload(payload, teaching_protocol=teaching_protocol)
     stored_rules = json.loads(debate.rule_snapshot_json)
-    if (
-        payload.teaching_prompts is not None
-        and payload.teaching_prompts.model_dump() != stored_rules.get("teaching_prompts")
-    ):
+    prompts, params = payload.teaching_prompts, payload.llm_params
+    sent_prompts = prompts.model_dump() if prompts is not None else None
+    sent_params = params.model_dump() if params is not None else None
+    if stored_rules.get("contract_version") == CONTRACT_VERSION:
+        # v4 froze these without the legacy contract section and the unstored
+        # parameter, so the same form values still compare equal.
+        if sent_prompts is not None:
+            sent_prompts = {
+                lang: strip_execution_contract(sent_prompts[lang]) for lang in sent_prompts
+            }
+        if sent_params is not None:
+            sent_params = {
+                name: value for name, value in sent_params.items() if name not in UNSTORED_V4_PARAMS
+            }
+    if sent_prompts is not None and sent_prompts != stored_rules.get("teaching_prompts"):
         raise invalid_state("Teaching rules are frozen when the debate is created.")
     if (
-        payload.llm_params is not None
-        and payload.llm_params.model_dump() != stored_rules.get("llm_params")
-    ) or (
-        payload.voice_params is not None
-        and payload.voice_params.model_dump() != stored_rules.get("voice_params")
+        (sent_params is not None and sent_params != stored_rules.get("llm_params"))
+        or (
+            payload.voice_params is not None
+            and payload.voice_params.model_dump() != stored_rules.get("voice_params")
+        )
+        or (
+            payload.target_minutes is not None
+            and payload.target_minutes != stored_rules.get("target_minutes")
+        )
     ):
         raise invalid_state("Generation parameters are frozen when the debate is created.")
     frozen_teaching = {
@@ -1621,6 +1642,7 @@ def update_debate_draft(
             "contract_version",
             "llm_params",
             "voice_params",
+            "target_minutes",
         )
         if key in stored_rules
     }

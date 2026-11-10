@@ -19,8 +19,9 @@ from app.modules.debates.schemas import (
     DebateDraftRequest,
     DebateDraftUpdateRequest,
     DebateLLMDefaults,
+    DebateRulesetContract,
+    DebateRulesetDefaults,
     DebateSummary,
-    TeachingPrompts,
 )
 from app.modules.debates.setup.service import (
     create_debate_draft,
@@ -35,19 +36,25 @@ router = APIRouter(tags=["Debates"])
 
 @router.get(
     "/courses/{course_id}/debate-ruleset",
-    response_model=TeachingPrompts,
+    response_model=DebateRulesetDefaults,
     operation_id="getDebateRulesetDefaults",
-    responses={200: {"model": TeachingPrompts}, 403: {"model": Error}, 404: {"model": Error}},
+    responses={
+        200: {"model": DebateRulesetDefaults},
+        403: {"model": Error},
+        404: {"model": Error},
+    },
 )
 def get_ruleset_defaults(
     course_id: UUID,
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
-) -> TeachingPrompts:
-    from app.modules.debates.teaching_rules import default_teaching_prompts
+) -> DebateRulesetDefaults:
+    from app.modules.debates.teaching_rules import default_teaching_prompts, execution_contracts
 
     require_teacher_course(db, context.user.id, str(course_id))
-    return TeachingPrompts(**default_teaching_prompts())
+    return DebateRulesetDefaults(
+        **default_teaching_prompts(), contract=DebateRulesetContract(**execution_contracts())
+    )
 
 
 @router.get(

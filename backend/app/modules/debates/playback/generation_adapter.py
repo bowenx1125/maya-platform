@@ -81,7 +81,11 @@ from app.modules.debates.round_count import (
     uses_segment_protocol,
     visible_turn_predecessors,
 )
-from app.modules.debates.teaching_rules import frozen_llm_settings, frozen_system_prompt
+from app.modules.debates.teaching_rules import (
+    frozen_llm_settings,
+    frozen_speech_length,
+    frozen_system_prompt,
+)
 from app.modules.debates.topic_language import model_topic
 from app.modules.knowledge.providers.adapters import (
     DashScopeEmbeddingConfig,
@@ -1341,6 +1345,7 @@ class SqlTurnPreparer:
             barrages = final_barrages_for_generation(
                 debate, [row for row in predecessor_rows if row.round_no < round_count]
             )
+        target_minutes, voice_rate = frozen_speech_length(debate.rule_snapshot_json)
         context = GenerationContext(
             debate_id=debate_id,
             topic=model_topic(debate.topic, debate.background or ""),
@@ -1359,6 +1364,8 @@ class SqlTurnPreparer:
             else None,
             frozen_llm=frozen_llm_settings(debate.rule_snapshot_json),
             barrages=barrages,
+            target_minutes=target_minutes,
+            voice_rate=voice_rate,
         )
         llm_runtime, llm_runtime_options, llm_manifest_preparer = self._llm_runtime_for_turn(
             db,

@@ -18,16 +18,14 @@ from app.modules.debates.generation.segments import (
     history_copy_leaves_a_hole,
     validate_segment_output,
 )
-from app.modules.debates.teaching_rules import default_teaching_prompts
+from app.modules.debates.teaching_rules import default_teaching_prompts, execution_contracts
 
 from tests.test_debate_final_report_fixes import HISTORY, ROUND3_ZHAOYAO, _snapshot
 
-CONTRACT_HEADING = {"zh": "# 执行约定", "en": "# Execution contract"}
-
 
 def _rules(language: str) -> tuple[str, str]:
-    teaching, contract = default_teaching_prompts()[language].split(CONTRACT_HEADING[language], 1)
-    return teaching, contract
+    # v4 (2026-11-10): the contract left the editable Ruleset for a code-owned file.
+    return default_teaching_prompts()[language], execution_contracts()[language]
 
 
 def test_english_rules_no_longer_script_labels_or_scores() -> None:
@@ -50,7 +48,7 @@ DEFENSIVE = {
 
 @pytest.mark.parametrize("language", ["zh", "en"])
 def test_default_rules_state_goals_not_prohibitions(language: str) -> None:
-    whole = default_teaching_prompts()[language]
+    whole = "".join(_rules(language))
     found = [word for word in DEFENSIVE[language] if word in whole]
     assert found == [], found
 
@@ -59,7 +57,11 @@ def test_default_rules_state_goals_not_prohibitions(language: str) -> None:
     ("language", "audience", "naming"),
     [
         ("zh", "普通高中生", "回应谁就先点名"),
-        ("en", "ordinary high-school listener", "name them and say in half a sentence"),
+        (
+            "en",
+            "ordinary high-school listener",
+            "name them and sum up their claim in half a sentence",
+        ),
     ],
 )
 def test_both_languages_speak_to_a_listener_who_missed_the_start(
@@ -96,7 +98,7 @@ def test_both_contracts_state_the_same_machine_rules() -> None:
         assert token in en, token
     # The server now also sends a mid-paragraph copy back; both say so.
     assert "退回重写" in zh
-    assert "sends the speech back to be rewritten" in en
+    assert "sent back to be rewritten" in en
 
 
 FRESH_A = "我先回答你的问题：高分只有在学生能把证据迁移到新题时才说明学会。"

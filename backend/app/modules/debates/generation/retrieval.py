@@ -9,12 +9,13 @@ from dataclasses import dataclass
 from typing import Literal, Protocol, cast
 
 from app.modules.agents.markdown import AgentMarkdown
+from app.modules.debates.generation_params import uses_code_contract
 from app.modules.knowledge.mock_lexical import (
     MOCK_LEXICAL_ANCHOR_POLICY_ID,
     MockLexicalAnchorV2,
 )
 
-from .four_round import TEACHING_PROTOCOL, received_questions, visible_predecessors
+from .four_round import TEACHING_PROTOCOL, received_questions, stance_text, visible_predecessors
 from .segments import SegmentBarrage, SegmentPersona, coerce_persona
 from .types import (
     GenerationContext,
@@ -610,6 +611,23 @@ def build_segment_subqueries(
             )
         return tuple(queries)
 
+    if context.turn.round_no == 1 and uses_code_contract(context.frozen_llm):
+        # v4: a long Agent.md as a query made retrieval follow the persona text
+        # instead of the Topic, so round 1 sends only the Topic, the name and a
+        # stated position (round 1 has no barrages).
+        participant = context.participant
+        position = initial_position.strip() or stance_text(
+            context.output_language, participant.initial_stance
+        )
+        return (
+            TurnSubquery("viewpoint", topic),
+            TurnSubquery(
+                "context",
+                "\n".join(
+                    item for item in (topic, participant.agent_name.strip(), position) if item
+                ),
+            ),
+        )
     if context.turn.round_no == 1 or getattr(context.turn, "phase", "") == "opening":
         queries = [
             TurnSubquery("viewpoint", topic),

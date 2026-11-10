@@ -33,7 +33,12 @@ from app.modules.debates.generation.segments import (
     parse_segment_output_json,
     validate_segment_output,
 )
-from app.modules.debates.generation_params import CONTRACT_VERSION, default_params, request_fields
+from app.modules.debates.generation_params import (
+    CONTRACT_VERSION,
+    RULESET_CONTRACT_V3,
+    default_params,
+    request_fields,
+)
 from app.providers.llm_adapter import LLMAdapterError, LLMUsageV1
 from app.providers.llm_price_card import (
     LLM_INPUT_TOKEN_CAP,
@@ -68,6 +73,8 @@ SEGMENT_PROMPT_VERSION = "segment_prompt_v2"
 FOUR_ROUND_SEGMENT_PROMPT_VERSION = "segment_prompt_four_round_v2"
 # The Ruleset template carries the execution contract (ruleset_contract_v3).
 RULESET_CONTRACT_PROMPT_VERSION = "segment_prompt_four_round_v3"
+# A code-owned contract, the per-turn task group and enforced length (v4).
+CODE_CONTRACT_PROMPT_VERSION = "segment_prompt_four_round_v4"
 SEGMENT_OUTPUT_SCHEMA_ID = "maya_llm_turn_output_v2"
 SEGMENT_OPERATION = "llm_debate_turn"
 SEGMENT_ENDPOINT_PATH = "/compatible-mode/v1/chat/completions"
@@ -107,7 +114,10 @@ SEGMENT_REPAIR_PREFIX_ZH = (
 def segment_prompt_version(snapshot: SegmentInputSnapshot) -> str:
     if getattr(snapshot, "discussion_json", None) is None:
         return SEGMENT_PROMPT_VERSION
-    if _frozen_llm(snapshot).get("contract_version") == CONTRACT_VERSION:
+    contract = _frozen_llm(snapshot).get("contract_version")
+    if contract == CONTRACT_VERSION:
+        return CODE_CONTRACT_PROMPT_VERSION
+    if contract == RULESET_CONTRACT_V3:
         return RULESET_CONTRACT_PROMPT_VERSION
     return FOUR_ROUND_SEGMENT_PROMPT_VERSION
 
@@ -793,9 +803,12 @@ class SegmentLLMAdapter:
         system = build_segment_system_prompt(snapshot)
         zh = getattr(snapshot, "language", "en") == "zh"
         frozen_llm = _frozen_llm(snapshot)
-        # A Ruleset template carries the no-copy rule itself; Debates frozen
-        # before that keep having it appended, as they always did.
-        if snapshot.history and frozen_llm.get("contract_version") != CONTRACT_VERSION:
+        # A Ruleset template (v3) or the code contract (v4) carries the no-copy
+        # rule itself; Debates frozen before that keep having it appended.
+        if snapshot.history and frozen_llm.get("contract_version") not in {
+            RULESET_CONTRACT_V3,
+            CONTRACT_VERSION,
+        }:
             system += SEGMENT_NO_HISTORY_COPY_RULE_ZH if zh else SEGMENT_NO_HISTORY_COPY_RULE
         if repair_feedback is not None:
             system += (SEGMENT_REPAIR_PREFIX_ZH if zh else SEGMENT_REPAIR_PREFIX) + _canonical(
@@ -1080,10 +1093,13 @@ class SegmentLLMAdapter:
                 if isinstance(candidate, SegmentAcceptedCandidateV2) and candidate.safe_error_code
                 else "provider_response_invalid",
             )
+        request = candidate.request
         return validate_segment_output(
             candidate.provider_output,
-            candidate.request.snapshot,
-            allow_history_copy=candidate.request.attempt_no >= 2,
+            request.snapshot,
+            allow_history_copy=request.attempt_no >= 2,
+            # A v4 rule rejects only while the one repair is still authorized.
+            repairable=request.attempt_no < 2 and request.authorized_max_attempts == 2,
         )
 
     def execute(
@@ -1172,6 +1188,7 @@ __all__ = [
     "SEGMENT_PROMPT_VERSION",
     "FOUR_ROUND_SEGMENT_PROMPT_VERSION",
     "RULESET_CONTRACT_PROMPT_VERSION",
+    "CODE_CONTRACT_PROMPT_VERSION",
     "SEGMENT_NO_HISTORY_COPY_RULE_ZH",
     "segment_prompt_version",
     "SEGMENT_PROTOCOL",

@@ -69,6 +69,21 @@ class TeachingPrompts(_ClosedModel):
     en: str
 
 
+class DebateRulesetContract(_ClosedModel):
+    """The code-owned execution contract per language; read-only for teachers."""
+
+    zh: str
+    en: str
+
+
+class DebateRulesetDefaults(_ClosedModel):
+    """The editable default Ruleset plus the contract every new Debate adds to it."""
+
+    zh: str
+    en: str
+    contract: DebateRulesetContract
+
+
 class DebateLLMParamSpec(_ClosedModel):
     name: Literal[
         "temperature",
@@ -125,6 +140,18 @@ class DebateDraftRequest(_ClosedModel):
     llm_params: DebateLLMParams | None = None
     # Voice card values (cloned voices); omitted means the DEBATE_TTS_* defaults.
     voice_params: DebateVoiceParams | None = None
+    # Spoken length the whole Debate aims for; omitted means five minutes.
+    target_minutes: int | None = Field(default=None, ge=3, le=10)
+
+    @field_validator("teaching_prompts", mode="before")
+    @classmethod
+    def ignore_echoed_contract(cls, value: object) -> object:
+        # The ruleset read returns the read-only contract beside the editable
+        # text, and an editor that sends that object back must still create
+        # the Debate. The server never reads the echoed contract.
+        if isinstance(value, dict) and "contract" in value:
+            return {key: item for key, item in value.items() if key != "contract"}
+        return value
 
     @field_validator("topic")
     @classmethod
@@ -477,6 +504,8 @@ __all__ = [
     "DebateParticipantInput",
     "DebatePlaybackResource",
     "DebateRuleSnapshot",
+    "DebateRulesetContract",
+    "DebateRulesetDefaults",
     "DebateStartRequest",
     "DebateSummary",
     "DebateTurn",

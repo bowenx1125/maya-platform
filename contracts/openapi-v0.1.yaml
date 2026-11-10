@@ -2679,11 +2679,11 @@ paths:
       operationId: getDebateRulesetDefaults
       responses:
         '200':
-          description: Default teaching Markdown for a new debate.
+          description: Default teaching Markdown for a new debate and the read-only execution contract.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TeachingPrompts'
+                $ref: '#/components/schemas/DebateRulesetDefaults'
         '403':
           $ref: '#/components/responses/Error'
         '404':
@@ -8278,6 +8278,33 @@ components:
           type: string
         en:
           type: string
+    DebateRulesetContract:
+      type: object
+      additionalProperties: false
+      description: The code-owned execution contract per language; read-only for teachers.
+      required:
+      - zh
+      - en
+      properties:
+        zh:
+          type: string
+        en:
+          type: string
+    DebateRulesetDefaults:
+      type: object
+      additionalProperties: false
+      description: The editable default Ruleset plus the contract every new debate adds to it.
+      required:
+      - zh
+      - en
+      - contract
+      properties:
+        zh:
+          type: string
+        en:
+          type: string
+        contract:
+          $ref: '#/components/schemas/DebateRulesetContract'
     DebateLLMParams:
       additionalProperties: false
       description: One Debate's overrides; null means "do not send this parameter".
@@ -8508,6 +8535,13 @@ components:
           - $ref: '#/components/schemas/DebateVoiceParams'
           - type: 'null'
           description: Voice card values (cloned voices); omitted means the DEBATE_TTS_* defaults.
+        target_minutes:
+          anyOf:
+          - type: integer
+            minimum: 3
+            maximum: 10
+          - type: 'null'
+          description: Spoken length the whole debate aims for; omitted means five minutes.
         topic:
           type: string
           minLength: 1

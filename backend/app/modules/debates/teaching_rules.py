@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from pathlib import Path
 
 DEFAULT_DIRECTORY = Path(__file__).with_name("default_rules")
 LEGACY_DIRECTORY = DEFAULT_DIRECTORY / "legacy"
+CONTRACT_DIRECTORY = DEFAULT_DIRECTORY / "contract"
+# A frozen v4 Debate without its own minutes (none exist yet) and the form's default.
+DEFAULT_TARGET_MINUTES = 5
 
 
 def default_teaching_prompts() -> dict[str, str]:
@@ -25,7 +29,63 @@ def legacy_teaching_prompts() -> dict[str, str]:
     }
 
 
+def execution_contracts() -> dict[str, str]:
+    """The code-owned v4 contract; teachers see it read-only and never edit it."""
+
+    return {
+        lang: (CONTRACT_DIRECTORY / f"{lang}.md").read_text(encoding="utf-8")
+        for lang in ("zh", "en")
+    }
+
+
 ROUND_PLACEHOLDER = "{round}"
+# Rulesets saved while the contract lived in them (v3) end with it; v4 owns
+# that text in code, so a copy left in the teacher's text would contradict it.
+_LEGACY_CONTRACT_HEADING = re.compile(r"^#[ \t]+(?:执行约定|Execution contract)[ \t]*$", re.M)
+_ROUND_HEADING = re.compile(
+    r"^##[ \t]+(?:第[ \t]*([1-4一二三四])[ \t]*轮|Round[ \t]+([1-4]))\b.*$", re.M | re.I
+)
+_HEADING = re.compile(r"^##?[ \t]", re.M)
+_ROUND_DIGITS = {"一": 1, "二": 2, "三": 3, "四": 4}
+
+
+def strip_execution_contract(markdown: str) -> str:
+    """The teacher's Ruleset without a trailing legacy execution-contract section."""
+
+    match = _LEGACY_CONTRACT_HEADING.search(markdown)
+    if match is None:
+        return markdown
+    return markdown[: match.start()].rstrip() + "\n"
+
+
+def _round_view(markdown: str, round_number: int) -> str:
+    """Everything except the other rounds' ``## Round N`` sections.
+
+    A Ruleset without round headings is kept whole: teacher text that does not
+    follow the default layout still reaches the model rather than vanishing.
+    """
+
+    kept: list[str] = []
+    cursor = 0
+    for match in _ROUND_HEADING.finditer(markdown):
+        kept.append(markdown[cursor : match.start()])
+        found = match.group(1) or match.group(2)
+        number = _ROUND_DIGITS.get(found) or int(found)
+        following = _HEADING.search(markdown, match.end())
+        cursor = following.start() if following is not None else len(markdown)
+        if number == round_number:
+            kept.append(markdown[match.start() : cursor])
+    kept.append(markdown[cursor:])
+    return re.sub(r"\n{3,}", "\n\n", "".join(kept)).strip()
+
+
+def compile_code_contract_prompt(markdown: str, round_number: int, language: str) -> str:
+    """v4: the teacher's style and this round's task, then the code-owned contract."""
+
+    teacher = _round_view(strip_execution_contract(markdown), round_number)
+    contract = _round_view(execution_contracts()[language], round_number)
+    parts = [item for item in (teacher, contract) if item]
+    return "\n\n".join(parts).replace(ROUND_PLACEHOLDER, str(round_number))
 
 
 def compile_system_prompt(markdown: str, round_number: int, language: str = "en") -> str:
@@ -143,20 +203,25 @@ def freeze_teaching_rules(
     prompts: Mapping[str, str] | None = None,
     llm_params: Mapping[str, object] | None = None,
     voice_params: Mapping[str, object] | None = None,
+    target_minutes: int | None = None,
 ) -> dict[str, object]:
-    from app.modules.debates.generation_params import CONTRACT_VERSION
+    from app.modules.debates.generation_params import CONTRACT_VERSION, UNSTORED_V4_PARAMS
 
-    authored = dict(default_teaching_prompts() if prompts is None else prompts)
+    source = default_teaching_prompts() if prompts is None else prompts
+    authored = {lang: strip_execution_contract(source[lang]) for lang in ("zh", "en")}
     frozen: dict[str, object] = {
         "teaching_prompts": authored,
         "system_prompts": {
-            lang: [compile_system_prompt(authored[lang], turn, lang) for turn in range(1, 5)]
+            lang: [compile_code_contract_prompt(authored[lang], turn, lang) for turn in range(1, 5)]
             for lang in ("zh", "en")
         },
         "contract_version": CONTRACT_VERSION,
+        "target_minutes": DEFAULT_TARGET_MINUTES if target_minutes is None else target_minutes,
     }
     if llm_params is not None:
-        frozen["llm_params"] = dict(llm_params)
+        frozen["llm_params"] = {
+            name: value for name, value in llm_params.items() if name not in UNSTORED_V4_PARAMS
+        }
     if voice_params is not None:
         frozen["voice_params"] = dict(voice_params)
     return frozen
@@ -170,6 +235,23 @@ def frozen_system_prompt(snapshot_json: str, round_number: int, language: str) -
     # Only pre-editor records lack a frozen prompt. They keep the contract the
     # code wrote then, over the Ruleset text of that time (now legacy_rules).
     return legacy_compile_system_prompt(legacy_teaching_prompts()[language], round_number, language)
+
+
+def frozen_speech_length(snapshot_json: str) -> tuple[int | None, float]:
+    """A v4 Debate's frozen minutes and voice rate; None minutes before v4."""
+
+    from app.modules.debates.generation_params import CONTRACT_VERSION
+
+    snapshot = json.loads(snapshot_json)
+    if snapshot.get("contract_version") != CONTRACT_VERSION:
+        return None, 1.0
+    minutes = snapshot.get("target_minutes")
+    voice = snapshot.get("voice_params")
+    rate = voice.get("rate") if isinstance(voice, dict) else None
+    return (
+        minutes if isinstance(minutes, int) and not isinstance(minutes, bool) else None,
+        float(rate) if isinstance(rate, (int, float)) and not isinstance(rate, bool) else 1.0,
+    )
 
 
 def frozen_llm_settings(snapshot_json: str) -> dict[str, object] | None:

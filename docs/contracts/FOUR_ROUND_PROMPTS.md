@@ -7,9 +7,11 @@
 
 ## 实际发送
 
-每次 Debate 生成发送一条 System 和一条 User JSON。System 是冻结教学 Markdown
-加语言、当前轮次、输出字段、来源与问题/弹幕路由协议；不解析标题决定教学流程。
-User 包含当前 Agent 的原文、Topic/Background、历史、来源及本轮资料。
+每次 Debate 生成发送一条 System 和一条 User JSON。v4（2026-11-10 起新建的 Debate）的
+System 是冻结的教学 Markdown（只保留本轮的 `## 第N轮`/`## Round N` 任务）加代码维护的
+[执行约定](../../backend/app/modules/debates/default_rules/contract/zh.md)（本轮字段、篇幅、
+重复与语体规则）。User 包含当前 Agent 的原文、Topic/Background、历史、来源、本轮资料和
+程序写的 `task`（本轮任务、`max_units`、指定立场）。更早的 Debate 继续发送各自冻结的 System。
 
 新输入保留兼容字段名 `persona`，值为 `{ "name": "Agent name", "markdown": "原文" }`；
 不编译、扩写或验证人设章节。历史五段 Persona 仍可读取，不回写已保存内容。
@@ -22,7 +24,9 @@ RAG 文件同样自由，完整保存且无单文件或合计字符上限，不�
 
 前三轮 Preview，第四轮现场生成。后续发言读取此前成功的完整发言，包括同轮前序；
 第三轮讨论记忆独立保存，第四轮和 Report 使用它，不写回 Agent.md。
-模型输出正文不按长短、风格或观点自动拒收，损坏的结构最多按原授权修复一次。
+v4 的正文超过 `max_units` 1.25 倍、删去照抄句后不足四成或与本人旧发言重合超过 35% 时，
+按原授权修复一次；修复后照单接受，超长只从末尾整句删去。风格与观点不自动拒收，损坏的
+结构最多按原授权修复一次。
 恢复使用冻结输入与哈希，不重新生成已接受结果。
 
 ## Chats

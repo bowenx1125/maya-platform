@@ -145,7 +145,10 @@ def test_debate_speaker_gets_only_its_own_rag_and_ruleset() -> None:
     assert "My own evidence." in user
     assert "Another speaker's private evidence." not in user
     assert ROLE_TEMPLATE.search(user) is None
-    # The system message is the Debate's editable Ruleset, word for word.
+    # The system message is the Debate's editable Ruleset, word for word, then
+    # (v4, 2026-11-10) the code-owned execution contract.
     ruleset = "# Rules\n\nRound {round}: speak as your Persona."
     frozen = json.dumps(freeze_teaching_rules({"zh": ruleset, "en": ruleset}))
-    assert frozen_system_prompt(frozen, 2, "en") == "# Rules\n\nRound 2: speak as your Persona."
+    assert frozen_system_prompt(frozen, 2, "en").startswith(
+        "# Rules\n\nRound 2: speak as your Persona.\n\n# Execution contract\n"
+    )

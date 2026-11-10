@@ -3349,6 +3349,17 @@ export interface components {
             zh: string;
             en: string;
         };
+        /** @description The code-owned execution contract per language; read-only for teachers. */
+        DebateRulesetContract: {
+            zh: string;
+            en: string;
+        };
+        /** @description The editable default Ruleset plus the contract every new debate adds to it. */
+        DebateRulesetDefaults: {
+            zh: string;
+            en: string;
+            contract: components["schemas"]["DebateRulesetContract"];
+        };
         /**
          * DebateLLMParams
          * @description One Debate's overrides; null means "do not send this parameter".
@@ -3445,6 +3456,8 @@ export interface components {
             llm_params?: components["schemas"]["DebateLLMParams"] | null;
             /** @description Voice card values (cloned voices); omitted means the DEBATE_TTS_* defaults. */
             voice_params?: components["schemas"]["DebateVoiceParams"] | null;
+            /** @description Spoken length the whole debate aims for; omitted means five minutes. */
+            target_minutes?: number | null;
             /** @description Non-empty topic; any script or symbols are accepted. */
             topic: string;
             /** @default  */
@@ -8802,13 +8815,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Default teaching Markdown for a new debate. */
+            /** @description Default teaching Markdown for a new debate and the read-only execution contract. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TeachingPrompts"];
+                    "application/json": components["schemas"]["DebateRulesetDefaults"];
                 };
             };
             403: components["responses"]["Error"];

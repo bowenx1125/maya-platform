@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections.abc import Mapping
+from fractions import Fraction
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
@@ -20,6 +22,133 @@ def body_count(text: str, language: str) -> int:
         if language == "zh"
         else len(ENGLISH_WORD.findall(text))
     )
+
+
+# v4 length (owner decision 2026-11-10): a whole Debate targets a few minutes
+# of audio. Units are Han characters (zh) or words (en) at a spoken pace,
+# scaled by the frozen voice rate, with 10% headroom for pauses. zh is measured
+# production audio (median 224 Han chars/min at rate 1.0, 310 at 1.25); en has
+# no measurement yet and uses a common speaking pace.
+UNITS_PER_MINUTE = {"zh": 230, "en": 150}
+MIN_TURN_UNITS = {"zh": 40, "en": 25}
+ROUND_WEIGHTS = {1: Fraction(11, 10), 2: Fraction(9, 10), 3: Fraction(9, 10), 4: Fraction(11, 10)}
+# A speech this far over its cap is sent back once, then trimmed.
+OVER_LENGTH_RATIO = Fraction(5, 4)
+_HAN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\U00020000-\U0002ffff]")
+
+
+def speech_units(text: str, language: str) -> int:
+    """Units the v4 length rule counts: Han characters (zh) or words (en)."""
+
+    return len(_HAN.findall(text)) if language == "zh" else len(ENGLISH_WORD.findall(text))
+
+
+def turn_unit_cap(
+    language: str, *, minutes: int, voice_rate: float, participants: int, round_number: int
+) -> int:
+    budget = minutes * UNITS_PER_MINUTE[language] * Fraction(str(voice_rate)) * Fraction(9, 10)
+    share = budget / (participants * 4) * ROUND_WEIGHTS[round_number]
+    return max(MIN_TURN_UNITS[language], math.floor(share / 5) * 5)
+
+
+def over_length_limit(cap: int) -> int:
+    return math.floor(cap * OVER_LENGTH_RATIO)
+
+
+_STANCES = {
+    "zh": {
+        "support": "支持题目中的主张",
+        "oppose": "反对题目中的主张",
+        "neutral": "保持中立，权衡双方",
+    },
+    "en": {
+        "support": "support the Topic's claim",
+        "oppose": "oppose the Topic's claim",
+        "neutral": "stay neutral and weigh both sides",
+    },
+}
+
+
+def stance_text(language: str, stance: str | None) -> str:
+    return _STANCES["zh" if language == "zh" else "en"].get(stance or "", "")
+
+
+def _round_task(language: str, round_number: int, other: str) -> str:
+    zh = language == "zh"
+    if round_number == 1:
+        return (
+            "独立陈述你对题目的判断和理由。"
+            if zh
+            else "State your own judgment on the Topic and your reason."
+        )
+    if round_number == 2:
+        return (
+            f"反驳{other}的开场发言，并向{other}提一个问题。"
+            if zh
+            else f"Rebut {other}'s opening and ask {other} one question."
+        )
+    if round_number == 3:
+        return (
+            f"回答{other}向你提的问题，再就一个观点提出反驳。"
+            if zh
+            else f"Answer {other}'s question, then push back on one point."
+        )
+    return "给出你的最终判断。" if zh else "Give your final judgment."
+
+
+def turn_task(context: GenerationContext, *, minutes: int) -> dict[str, object]:
+    """The code-written v4 task group for this speaker's turn.
+
+    Names follow the same cyclic order as ``question_target_id``: round 2
+    questions the next Agent, so round 3 answers the previous one unless a
+    question actually arrived from someone else.
+    """
+
+    language = "zh" if context.output_language == "zh" else "en"
+    agents = sorted(context.participants, key=lambda item: item.order_index)
+    ids = [item.participant_id for item in agents]
+    names = {item.participant_id: item.agent_name for item in agents}
+    index = ids.index(context.participant.participant_id)
+    round_number = context.turn.round_no
+    other = ""
+    if round_number == 2:
+        other = names[ids[(index + 1) % len(ids)]]
+    elif round_number == 3:
+        received = received_questions(context)
+        asker = received[0]["from_id"] if received else ids[(index - 1) % len(ids)]
+        other = names.get(asker, names[ids[(index - 1) % len(ids)]])
+    task: dict[str, object] = {
+        "round_task": _round_task(language, round_number, other),
+        "max_units": turn_unit_cap(
+            language,
+            minutes=minutes,
+            voice_rate=context.voice_rate or 1.0,
+            participants=len(ids),
+            round_number=round_number,
+        ),
+    }
+    if context.participant.stance_mode == "assigned":
+        stance = stance_text(language, context.participant.initial_stance)
+        if stance:
+            task["stance"] = stance
+    return task
+
+
+def validate_task(value: object) -> dict[str, object]:
+    if (
+        not isinstance(value, Mapping)
+        or not {"round_task", "max_units"} <= set(value) <= {"round_task", "max_units", "stance"}
+        or isinstance(value["max_units"], bool)
+        or not isinstance(value["max_units"], int)
+        or value["max_units"] < 1
+        or any(
+            not isinstance(value[key], str) or not value[key].strip()
+            for key in ("round_task", "stance")
+            if key in value
+        )
+    ):
+        raise ValueError("invalid task group")
+    return cast(dict[str, object], json.loads(json.dumps(dict(value), ensure_ascii=False)))
 
 
 def visible_predecessors(context: GenerationContext) -> tuple[FinalReadyTurn, ...]:

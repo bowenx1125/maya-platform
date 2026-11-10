@@ -7,8 +7,10 @@ import pytest
 from app.modules.debates.generation.segments import SegmentInputSnapshot, build_segment_input
 from app.modules.debates.models import Debate
 from app.modules.debates.teaching_rules import (
+    compile_code_contract_prompt,
     compile_system_prompt,
     default_teaching_prompts,
+    execution_contracts,
     freeze_teaching_rules,
     frozen_system_prompt,
 )
@@ -48,11 +50,15 @@ def test_actual_wire_uses_only_frozen_markdown_and_execution_contract(language, 
     )
     request = adapter().build_request(frozen)
     assert request.system_message.content == system
-    # The execution contract lives in the Ruleset template: the wire carries
-    # exactly the teacher's Markdown with {round} filled in, nothing appended.
-    assert system == custom.replace("{round}", str(round_number))
-    assert "# 执行约定" not in system
-    assert "Execution contract" not in system
+    # v4 (2026-11-10) overturns the 2026-10-24 template decision: the wire
+    # carries the teacher's Markdown word for word, then the code-owned
+    # contract for this round, and nothing else.
+    teacher = custom.replace("{round}", str(round_number))
+    contract_heading = "# 执行约定" if language == "zh" else "# Execution contract"
+    assert system == compile_code_contract_prompt(custom, round_number, language)
+    assert system.startswith(teacher + "\n\n" + contract_heading)
+    assert system.count(contract_heading) == 1
+    assert "{round}" not in system
     assert "Output speech in" not in system
     assert "First-person pronouns in a history entry" not in system
     assert "preserve who gave it and whom it was addressed to" not in system
@@ -121,7 +127,7 @@ def test_creation_freezes_two_languages_and_other_debates_remain_independent(
     _session, csrf = login(client)
     defaults = client.get(f"/api/v1/courses/{COURSE_ID}/debate-ruleset")
     assert defaults.status_code == 200
-    assert defaults.json() == default_teaching_prompts()
+    assert defaults.json() == {**default_teaching_prompts(), "contract": execution_contracts()}
     body = {
         "output_language": "en",
         "topic": "Water?",
@@ -193,7 +199,7 @@ def test_selected_language_only_uses_its_own_frozen_prompt():
     defaults = default_teaching_prompts()
     rules = freeze_teaching_rules({**defaults, "zh": "# Chinese-only revision"})
     english = frozen_system_prompt(json.dumps(rules), 1, "en")
-    assert english == defaults["en"].replace("{round}", "1")
+    assert english == compile_code_contract_prompt(defaults["en"], 1, "en")
     assert "Chinese-only revision" not in english
     assert "Chinese-only revision" in frozen_system_prompt(json.dumps(rules), 1, "zh")
     assert DebateDraftRequest.model_fields["output_language"].default == "zh"
