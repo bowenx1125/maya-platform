@@ -186,7 +186,7 @@ A:`request_timing` JSON/request(+debate_timing);browser:25% samples->/client-met
 refused;tests need MAYA_TEST_POSTGRES_URL;races fixed:budget,Agent/document,attempt.
 A2:Stage predownloads ready speeches as blobs in speaking order;blob(≤3s) else URL once.
 C:DEBATE_AUDIO_MP3(prod on):ffmpeg mp3,64 MB LRU,max-age=300/304;playback off event loop(offload.py);per-Debate lock;tickets in Postgres(0079);Next 103->35 SQL.
-E:DEBATE_LLM_*(no MAYA_ prefix;unset=previous)/DEBATE_TTS_* freeze into rule_snapshot_json
+E:`DEBATE_LLM_*`/`DEBATE_TTS_*`(no MAYA_ prefix;unset=previous) freeze:rule_snapshot_json
 (null=not sent);v3 contract lived in the Ruleset,pre-v3 keep legacy;playback rate 1.0(0080).
 
 ## Oct27 UI(#305):Agents4/Teams3 cols,one LoadingCard.
