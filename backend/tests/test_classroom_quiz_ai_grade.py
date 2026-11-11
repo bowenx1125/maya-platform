@@ -18,6 +18,7 @@ from sqlalchemy import select
 
 from tests.test_classroom_quiz_api import (  # noqa: F401
     Actor,
+    _set_results_visible,
     actors,
     student,
     teacher,
@@ -200,6 +201,7 @@ def _create_publish_open(teacher: Actor, items: list[dict[str, Any]]) -> str:
     )
     assert created.status_code == 201, created.text
     quiz_id = created.json()["id"]
+    _set_results_visible(teacher, quiz_id)
     assert teacher.post(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/publish").status_code == 200
     opened = teacher.post(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/start-taking")
     assert opened.status_code == 200, opened.text

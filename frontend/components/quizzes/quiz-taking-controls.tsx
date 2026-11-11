@@ -29,9 +29,9 @@ import {
 import { cn } from "@/lib/utils";
 import { useSession } from "../session-provider";
 import { ErrorNotice } from "../ui";
-import { Button } from "../ui/button";
+import { BUSY_MOTION, Button, PRESS_MOTION } from "../ui/button";
 import { Input } from "../ui/input";
-import { WorkspaceIcon } from "../workspace-icon";
+import { WorkspaceIcon, type WorkspaceIconName } from "../workspace-icon";
 import { QuizKey } from "./quiz-chrome";
 
 export const TZ_TAG = (
@@ -53,11 +53,13 @@ export function QuizSticker({
   tone,
   tilt = true,
   testId,
+  icon = "clock",
   children,
 }: {
   tone: "lime" | "yellow" | "cyan";
   tilt?: boolean;
   testId?: string;
+  icon?: WorkspaceIconName;
   children: ReactNode;
 }) {
   return (
@@ -65,7 +67,7 @@ export function QuizSticker({
       className={cn(STICKER, TONE[tone], tilt ? "-rotate-1" : "")}
       data-testid={testId}
     >
-      <WorkspaceIcon name="clock" size={14} stroke={2.6} />
+      <WorkspaceIcon name={icon} size={14} stroke={2.6} />
       {children}
     </span>
   );
@@ -174,6 +176,7 @@ type OpenPanel = "extend" | "schedule" | null;
 export function QuizTakingControls({
   courseId,
   quiz,
+  placement = "row",
   busy: busyProp,
   onQuizUpdated,
   onError,
@@ -181,6 +184,7 @@ export function QuizTakingControls({
 }: {
   courseId: string;
   quiz: QuizSummaryDTO;
+  placement?: "row" | "page";
   busy?: boolean;
   onQuizUpdated: (next: QuizSummaryDTO | TeacherQuizDTO) => void;
   onError?: (cause: unknown | null) => void;
@@ -190,8 +194,31 @@ export function QuizTakingControls({
   const { api } = useSession();
   const quizApi = useMemo(() => new QuizApi(api), [api]);
   const [open, setOpen] = useState<OpenPanel>(null);
-  const [busyAction, setBusyAction] = useState<"start" | "pause" | null>(null);
+  const [busyAction, setBusyAction] = useState<
+    "start" | "pause" | "results" | null
+  >(null);
   const busy = Boolean(busyProp || busyAction);
+
+  const shown = quiz.show_results !== false;
+  const toggleResults = async () => {
+    if (busy) return;
+    setBusyAction("results");
+    onError?.(null);
+    onQuizUpdated({ ...quiz, show_results: !shown });
+    try {
+      const updated = await quizApi.setResultsVisible(
+        courseId,
+        quiz.id,
+        !shown,
+      );
+      onQuizUpdated(updated);
+    } catch (cause) {
+      onQuizUpdated(quiz);
+      onError?.(cause);
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
   const onToggle = async (next: "start" | "pause") => {
     if (busy) return;
@@ -283,6 +310,39 @@ export function QuizTakingControls({
             setOpen((current) => (current === "extend" ? null : "extend"))
           }
         />
+        {placement === "page" ? (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={shown}
+            aria-busy={busyAction === "results" || undefined}
+            disabled={busy}
+            data-testid="quiz-results-toggle"
+            onClick={() => void toggleResults()}
+            className={cn(
+              "relative inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full border-[3px] border-border px-3 py-[7px] font-body text-sm font-extrabold text-ink disabled:cursor-not-allowed disabled:opacity-50",
+              PRESS_MOTION,
+              BUSY_MOTION,
+              shown ? "bg-[#BEF264]" : "bg-white",
+            )}
+          >
+            <WorkspaceIcon
+              name={shown ? "eye" : "eyeOff"}
+              size={16}
+              stroke={2.6}
+            />
+            <span>{shown ? "Results shown" : "Results hidden"}</span>
+            <span
+              className={cn(
+                "inline-flex w-9 shrink-0 items-center rounded-full border-2 border-border bg-white p-0.5",
+                shown ? "justify-end" : "justify-start",
+              )}
+              aria-hidden="true"
+            >
+              <span className="size-3 rounded-full border-2 border-border bg-ink" />
+            </span>
+          </button>
+        ) : null}
         {trailing}
       </div>
       {open === "extend" && !neverStarted ? (

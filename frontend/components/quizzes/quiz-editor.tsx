@@ -128,6 +128,9 @@ export function QuizEditor({
   const doneLock = useRef(false);
   const [error, setError] = useState<unknown>(null);
   const [takingOpen, setTakingOpen] = useState(false);
+  const [showResults, setShowResults] = useState<boolean | undefined>(
+    undefined,
+  );
   const [takingEpoch, setTakingEpoch] = useState(0);
   const [exemptionCount, setExemptionCount] = useState(0);
   const [scheduledStartAt, setScheduledStartAt] = useState<string | null>(null);
@@ -148,6 +151,7 @@ export function QuizEditor({
         if (!alive) return;
         setTitle(quiz.title);
         setStatus(quiz.status);
+        setShowResults(quiz.show_results);
         setTakingOpen(quiz.taking_open === true);
         setTakingEpoch(quiz.taking_epoch ?? 0);
         setExemptionCount(quiz.exemption_count ?? 0);
@@ -356,6 +360,7 @@ export function QuizEditor({
         ) : null}
         {locked && quizId ? (
           <QuizTakingControls
+            placement="page"
             courseId={courseId}
             quiz={{
               id: quizId,
@@ -368,6 +373,7 @@ export function QuizEditor({
               created_at: "",
               updated_at: "",
               taking_open: takingOpen,
+              show_results: showResults,
               taking_epoch: takingEpoch,
               exemption_count: exemptionCount,
               scheduled_start_at: scheduledStartAt,
@@ -376,6 +382,7 @@ export function QuizEditor({
             busy={busy}
             onQuizUpdated={(updated) => {
               setTakingOpen(updated.taking_open === true);
+              setShowResults(updated.show_results);
               setStatus(updated.status);
               setTakingEpoch(updated.taking_epoch ?? takingEpoch);
               setExemptionCount(updated.exemption_count ?? exemptionCount);

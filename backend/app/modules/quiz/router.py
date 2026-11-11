@@ -20,6 +20,7 @@ from .schemas import (
     GradeQuizAttemptRequest,
     PatchQuizRequest,
     PutQuizExemptionsRequest,
+    PutQuizResultsRequest,
     PutQuizScheduleRequest,
     QuizAttemptDTO,
     QuizExemptionsDTO,
@@ -210,6 +211,23 @@ def pause_course_quiz_taking(
     db: Session = Depends(get_db),
 ) -> TeacherQuizDTO:
     return service.pause_taking(db, actor, str(course_id), str(quiz_id))
+
+
+@router.put(
+    "/courses/{course_id}/quizzes/{quiz_id}/results",
+    response_model=QuizSummaryDTO,
+    operation_id="putCourseQuizResults",
+    responses={401: {"model": Error}, 403: {"model": Error}, 404: {"model": Error}},
+)
+def put_course_quiz_results(
+    course_id: UUID,
+    quiz_id: UUID,
+    body: PutQuizResultsRequest,
+    _csrf: CsrfHeader,
+    actor: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> QuizSummaryDTO:
+    return service.put_results(db, actor, str(course_id), str(quiz_id), body)
 
 
 @router.post(

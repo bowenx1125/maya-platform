@@ -260,9 +260,10 @@ volume untouched. Stalled needs backend receipt recovery;safety gates kept.
 detail,hand grading,hide;Record→Quiz. #383/4:opt-in AI grading. UI A:1 page/quiz,
 Paper|Submissions,no Chat tests;New/Back/Done 1 style. [Contract](contracts/CLASSROOM_QUIZ_API.md)
 Agent name card;Private→Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)).
-Nov11 in progress:0088_quiz_exemptions_schedule adds epoch deadlines+one-shot taking,
-lazy+10s sweeper(non-test lifespan).Static checks pass;PG/boundary:sandbox EPERM.
-0 calls/deploy.
+0088 in progress:epoch deadlines/one-shot taking,lazy+10s sweeper(non-test lifespan).
+Static checks pass;PG/boundary:sandbox EPERM.0 calls/deploy.
+0090:old=true/new=false,toggle/redaction;7 offline+SQL/ruff/format/mypy pass.
+Test stamps fixture first.PG/boundary EPERM;V1 UI:13/1260 tests,type/lint/format pass;build/screens blocked.
 
 ## Nov9 local classes and accounts (in progress)
 

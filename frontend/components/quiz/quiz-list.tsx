@@ -21,7 +21,10 @@ import {
   QuizEmpty,
   QuizKey,
 } from "../quizzes/quiz-chrome";
-import { StudentQuizStickers } from "../quizzes/quiz-taking-controls";
+import {
+  QuizSticker,
+  StudentQuizStickers,
+} from "../quizzes/quiz-taking-controls";
 import { Score } from "../quizzes/quiz-submissions";
 import { QuizAttemptDetailView } from "./quiz-attempt-detail";
 
@@ -145,6 +148,7 @@ export function StudentQuizList({
         </li>
       ))}
       {results.map((row) => {
+        const hidden = row.show_results === false;
         const expanded = openId === row.attempt_id;
         const graded = row.grading_status === "complete";
         const meta = [
@@ -175,12 +179,20 @@ export function StudentQuizList({
                 {row.title}
               </span>
               <span className="text-xs font-bold text-arc-muted">{meta}</span>
-              <span
-                className={`shrink-0 rounded-full border-2 border-border px-3 py-1 text-xs font-extrabold ${graded ? "bg-[#ECFCCB]" : "bg-warn-bg"}`}
-              >
-                {graded ? t("quizGraded") : t("quizNotGraded")}
-              </span>
-              <Score row={row} />
+              {hidden ? (
+                <QuizSticker tone="lime" icon="done">
+                  Submitted
+                </QuizSticker>
+              ) : (
+                <>
+                  <span
+                    className={`shrink-0 rounded-full border-2 border-border px-3 py-1 text-xs font-extrabold ${graded ? "bg-[#ECFCCB]" : "bg-warn-bg"}`}
+                  >
+                    {graded ? t("quizGraded") : t("quizNotGraded")}
+                  </span>
+                  <Score row={row} />
+                </>
+              )}
             </button>
             {expanded && row.quiz_id ? (
               <div className="basis-full border-t-[3px] border-dashed border-border p-4">

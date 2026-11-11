@@ -14,19 +14,19 @@ disagree, the code and its tests win; record the deviation here, do not
 silently rewrite either side. Progress and deployment facts live in
 [PROJECT](../PROJECT.md).
 
-| Concern               | Source of truth                                                                                                           |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Routes and gates      | `backend/app/modules/quiz/router.py`, `service.py`                                                                        |
-| DTOs                  | `backend/app/modules/quiz/schemas.py`                                                                                     |
-| Item validation       | `backend/app/modules/quiz/document.py`                                                                                    |
-| Objective grading     | `backend/app/modules/quiz/grading.py`                                                                                     |
-| ZIP export            | `backend/app/modules/quiz/export.py`                                                                                      |
-| Tables                | `backend/migrations/versions/0083_classroom_quizzes.py`, `0084_quiz_taking_open_retest.py`, `0085_quiz_manual_grading.py` |
-| Backend tests         | `backend/tests/test_classroom_quiz_api.py`, `test_classroom_quiz_export.py`, `test_classroom_quiz_attempt_review.py`      |
-| Frontend client/gates | `frontend/lib/api/quiz.ts`, `frontend/lib/quiz-gate.ts`, `frontend/lib/quiz-urls.ts`                                      |
-| Frontend tests        | `frontend/tests/quiz-*.test.ts(x)`                                                                                        |
-| Decision record       | [ADR-011](../adr/ADR-011-classroom-quiz-parallel-domain.md)                                                               |
-| Document shape        | `contracts/quiz-document.v1.schema.json` (descriptive; no runtime code loads it)                                          |
+| Concern               | Source of truth                                                                                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Routes and gates      | `backend/app/modules/quiz/router.py`, `service.py`                                                                                                     |
+| DTOs                  | `backend/app/modules/quiz/schemas.py`                                                                                                                  |
+| Item validation       | `backend/app/modules/quiz/document.py`                                                                                                                 |
+| Objective grading     | `backend/app/modules/quiz/grading.py`                                                                                                                  |
+| ZIP export            | `backend/app/modules/quiz/export.py`                                                                                                                   |
+| Tables                | `backend/migrations/versions/0083_classroom_quizzes.py`, `0084_quiz_taking_open_retest.py`, `0085_quiz_manual_grading.py`, `0090_quiz_show_results.py` |
+| Backend tests         | `backend/tests/test_classroom_quiz_api.py`, `test_classroom_quiz_export.py`, `test_classroom_quiz_attempt_review.py`, `test_classroom_quiz_results.py` |
+| Frontend client/gates | `frontend/lib/api/quiz.ts`, `frontend/lib/quiz-gate.ts`, `frontend/lib/quiz-urls.ts`                                                                   |
+| Frontend tests        | `frontend/tests/quiz-*.test.ts(x)`                                                                                                                     |
+| Decision record       | [ADR-011](../adr/ADR-011-classroom-quiz-parallel-domain.md)                                                                                            |
+| Document shape        | `contracts/quiz-document.v1.schema.json` (descriptive; no runtime code loads it)                                                                       |
 
 Quiz is a parallel domain: it never writes `assessment_attempts` or
 conversations, and submission makes no model or Agent WebSocket call.
@@ -34,8 +34,9 @@ conversations, and submission makes no model or Agent WebSocket call.
 ## Operations
 
 All paths are under `/api/v1`. Every mutation needs a signed-in session and an
-`X-CSRF-Token` header. None of these operations is in the frozen
-`contracts/openapi-v0.1.yaml`; see [Route-surface classification](#route-surface-classification).
+`X-CSRF-Token` header. The frozen `contracts/openapi-v0.1.yaml` includes
+list/detail, exemptions, scheduling and results visibility; see
+[Route-surface classification](#route-surface-classification).
 
 | Method | Path                                                                  | operationId                | Who                               |
 | ------ | --------------------------------------------------------------------- | -------------------------- | --------------------------------- |
@@ -48,6 +49,7 @@ All paths are under `/api/v1`. Every mutation needs a signed-in session and an
 | POST   | `/courses/{course_id}/quizzes/{quiz_id}/unpublish`                    | `unpublishCourseQuiz`      | course teacher                    |
 | POST   | `/courses/{course_id}/quizzes/{quiz_id}/start-taking`                 | `startCourseQuizTaking`    | course teacher                    |
 | POST   | `/courses/{course_id}/quizzes/{quiz_id}/pause-taking`                 | `pauseCourseQuizTaking`    | course teacher                    |
+| PUT    | `/courses/{course_id}/quizzes/{quiz_id}/results`                      | `putCourseQuizResults`     | course teacher                    |
 | POST   | `/courses/{course_id}/quizzes/{quiz_id}/attempts`                     | `submitCourseQuizAttempt`  | course student                    |
 | GET    | `/courses/{course_id}/quizzes/{quiz_id}/attempts/export`              | `exportCourseQuizAttempts` | course teacher                    |
 | GET    | `/courses/{course_id}/quizzes/{quiz_id}/attempts/{attempt_id}`        | `getCourseQuizAttempt`     | teacher, or the attempt's student |
@@ -69,6 +71,7 @@ never parsed as an attempt id.
   (`workspace.access.course_member(teacher=True)` raises `not_found`). Tests
   accept 403 or 404; the observed status is 404.
 - A course teacher submitting an attempt: **403**.
+- Results visibility: a student receives **403**; a non-member receives **404**.
 - Attempt detail: a course teacher reads any non-hidden attempt of the quiz;
   a student reads only their own; anything else, and any hidden attempt, is
   **404**.
@@ -155,8 +158,37 @@ with at least one answer.
   enforced by the server.
 - The attempt stores `content_revision`, `taking_epoch`, the full
   `document_snapshot_json` (including the key) and the normalized answers.
-- The 201 `QuizAttemptDTO` returns the submitter's normalized answers,
-  including per-item `correct` and `points_awarded`.
+- The 201 `QuizAttemptDTO` returns the submitter's normalized answers.
+  Per-item `correct` and `points_awarded` appear only when results are visible.
+
+## Results visibility
+
+`PUT …/quizzes/{quiz_id}/results` accepts `{"show_results": true | false}`
+(strict boolean) and returns `QuizSummaryDTO`. It is available to course
+teachers in draft and published states and requires the normal session,
+Origin and CSRF checks. The flag lives in `classroom_quizzes.show_results`,
+outside the frozen document/settings, and applies immediately to every
+attempt, including earlier rounds. Turning it off hides results again.
+
+Migration `0090_quiz_show_results` follows `0089_debate_cards`, backfills
+existing quizzes to true, then sets the database default to false and the
+column to NOT NULL. New quizzes default to false in both SQL and ORM inserts.
+Quiz summaries, student papers, submission receipts, Record rows and attempt
+details carry `show_results` (legacy chat Record rows retain true).
+
+When false, student submission receipts return null aggregate scores and
+grading status; their answers contain only item IDs/types and chosen IDs/text.
+Student Record rows return null objective/AI scores, points, grading status
+and phase. Student attempt detail returns null scores, points, grading status
+and graded time; item correctness, awarded points, AI scores and feedback are
+null and `graded` is false. Question text, choices, maximum item points and
+the student's own answers remain available. Answer keys/rubrics remain private
+regardless of visibility. With true, the previous grading projections apply.
+
+Teacher papers, submissions, grading and ZIP exports retain their complete
+results in either state. Quiz has no notification/event or websocket score
+payload. The frontend visibility controls and null-aware rendering are a
+separate implementation step.
 
 ## Student answer isolation
 
@@ -376,10 +408,11 @@ and ADR-011's per-quiz wording (amended there).
 
 ## Route-surface classification
 
-The Quiz operations are server extras outside the frozen OpenAPI and are
-classified in `contracts/route-surface-placeholders.json` (owner
-`T2-QUIZ-M1M3`), all fifteen of them. `node scripts/compare_route_surface.mjs`
-passes against the exported server OpenAPI.
+List/detail, exemptions, scheduling and results visibility are frozen OpenAPI
+operations. The remaining Quiz operations are classified server extras in
+`contracts/route-surface-placeholders.json` (owner `T2-QUIZ-M1M3`). The frozen
+DTO schemas also describe nullable student grading projections and complete
+teacher projections.
 
 ## Verification behind this file
 

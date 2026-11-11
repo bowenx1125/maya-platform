@@ -9888,6 +9888,105 @@
         "description": "Replace both one-shot taking times; both keys are required and null clears a time. Times must include a timezone and be strictly in the future (422 quiz_schedule_naive / quiz_schedule_in_past); end must follow start (422 quiz_schedule_order). Draft quizzes return 409 quiz_not_published. Due schedules are applied before replacement. Auto start opens a new epoch and clears exemptions; auto end pauses taking and preserves exemptions. Due actions on drafts or already-matching taking states are skipped and cleared."
       }
     },
+    "/api/v1/courses/{course_id}/quizzes/{quiz_id}/results": {
+      "put": {
+        "operationId": "putCourseQuizResults",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quiz_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quiz Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutQuizResultsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizSummaryDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Put Course Quiz Results",
+        "tags": [
+          "Classroom Quiz"
+        ],
+        "description": "Course teachers may reveal or hide grading results for all past and future attempts. New quizzes hide results; migrated quizzes keep results visible. Students receive 403; non-members receive 404. Hidden student responses keep answers but redact scores, correctness, feedback, AI grades and grading state. Teacher views and exports remain unchanged."
+      }
+    },
     "/health/live": {
       "get": {
         "operationId": "health_live_health_live_get",
@@ -21372,6 +21471,10 @@
             "title": "Schema Version",
             "type": "integer"
           },
+          "show_results": {
+            "title": "Show Results",
+            "type": "boolean"
+          },
           "status": {
             "enum": [
               "draft",
@@ -21401,6 +21504,7 @@
           }
         },
         "required": [
+          "show_results",
           "id",
           "course_id",
           "title",
@@ -21514,6 +21618,10 @@
           "settings": {
             "$ref": "#/components/schemas/QuizSettings"
           },
+          "show_results": {
+            "title": "Show Results",
+            "type": "boolean"
+          },
           "status": {
             "const": "published",
             "title": "Status",
@@ -21535,6 +21643,7 @@
           }
         },
         "required": [
+          "show_results",
           "id",
           "course_id",
           "title",
@@ -21678,6 +21787,10 @@
           "settings": {
             "$ref": "#/components/schemas/QuizSettings"
           },
+          "show_results": {
+            "title": "Show Results",
+            "type": "boolean"
+          },
           "status": {
             "enum": [
               "draft",
@@ -21707,6 +21820,7 @@
           }
         },
         "required": [
+          "show_results",
           "id",
           "course_id",
           "title",
@@ -22047,6 +22161,930 @@
           }
         },
         "title": "QuizItemGrading",
+        "type": "object"
+      },
+      "PutQuizResultsRequest": {
+        "properties": {
+          "show_results": {
+            "title": "Show Results",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "show_results"
+        ],
+        "title": "PutQuizResultsRequest",
+        "type": "object"
+      },
+      "QuizAttemptDTO": {
+        "properties": {
+          "actor_user_id": {
+            "format": "uuid",
+            "title": "Actor User Id",
+            "type": "string"
+          },
+          "answers": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Answers",
+            "type": "array"
+          },
+          "content_revision": {
+            "title": "Content Revision",
+            "type": "integer"
+          },
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "grading_status": {
+            "enum": [
+              "complete",
+              "pending",
+              "mixed",
+              null
+            ],
+            "title": "Grading Status",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "quiz_id": {
+            "format": "uuid",
+            "title": "Quiz Id",
+            "type": "string"
+          },
+          "scheduled_end_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled End At"
+          },
+          "scheduled_start_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Start At"
+          },
+          "score_max_objective": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Max Objective"
+          },
+          "score_objective": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Objective"
+          },
+          "show_results": {
+            "title": "Show Results",
+            "type": "boolean"
+          },
+          "status": {
+            "const": "submitted",
+            "title": "Status",
+            "type": "string"
+          },
+          "submitted_at": {
+            "format": "date-time",
+            "title": "Submitted At",
+            "type": "string"
+          },
+          "taking_epoch": {
+            "default": 0,
+            "title": "Taking Epoch",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "show_results",
+          "id",
+          "quiz_id",
+          "course_id",
+          "actor_user_id",
+          "content_revision",
+          "status",
+          "grading_status",
+          "score_objective",
+          "score_max_objective",
+          "submitted_at"
+        ],
+        "title": "QuizAttemptDTO",
+        "type": "object"
+      },
+      "QuizAttemptItemStudent": {
+        "description": "One item of the paper as it was frozen at submit, with the response.\n\nNo answer key or rubric: a student sees their own choices, whether a\nchoice item was right, and the teacher's grade and feedback.",
+        "properties": {
+          "ai_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Score"
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/QuizChoice"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "correct": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correct"
+          },
+          "feedback": {
+            "title": "Feedback",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "graded": {
+            "default": false,
+            "title": "Graded",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "points": {
+            "default": 0,
+            "title": "Points",
+            "type": "number"
+          },
+          "points_awarded": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Awarded"
+          },
+          "prompt": {
+            "default": "",
+            "title": "Prompt",
+            "type": "string"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "response_choice_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Choice Ids"
+          },
+          "response_text": {
+            "title": "Response Text",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "single",
+                  "multiple",
+                  "short_text",
+                  "long_text"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "unknown",
+                "type": "string"
+              }
+            ],
+            "title": "Type"
+          }
+        },
+        "required": [
+          "id",
+          "type"
+        ],
+        "title": "QuizAttemptItemStudent",
+        "type": "object"
+      },
+      "QuizAttemptItemTeacher": {
+        "properties": {
+          "ai_grading": {
+            "default": false,
+            "title": "Ai Grading",
+            "type": "boolean"
+          },
+          "ai_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Score"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuizAnswerKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/QuizChoice"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "correct": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correct"
+          },
+          "feedback": {
+            "title": "Feedback",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "graded": {
+            "default": false,
+            "title": "Graded",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "points": {
+            "default": 0,
+            "title": "Points",
+            "type": "number"
+          },
+          "points_awarded": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Awarded"
+          },
+          "prompt": {
+            "default": "",
+            "title": "Prompt",
+            "type": "string"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "response_choice_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Choice Ids"
+          },
+          "response_text": {
+            "title": "Response Text",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "single",
+                  "multiple",
+                  "short_text",
+                  "long_text"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "unknown",
+                "type": "string"
+              }
+            ],
+            "title": "Type"
+          }
+        },
+        "required": [
+          "id",
+          "type"
+        ],
+        "title": "QuizAttemptItemTeacher",
+        "type": "object"
+      },
+      "RecordAttemptDTO": {
+        "description": "Unified Record row for Quiz and legacy chat attempts.",
+        "properties": {
+          "attempt_id": {
+            "format": "uuid",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "content_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Revision"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "grading_status": {
+            "enum": [
+              "complete",
+              "pending",
+              "mixed",
+              null
+            ],
+            "title": "Grading Status",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phase": {
+            "title": "Phase",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "points_awarded": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Awarded"
+          },
+          "points_total": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Total"
+          },
+          "quiz_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiz Id"
+          },
+          "score_ai": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Ai"
+          },
+          "score_max_objective": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Max Objective"
+          },
+          "score_objective": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Objective"
+          },
+          "show_results": {
+            "title": "Show Results",
+            "type": "boolean"
+          },
+          "source": {
+            "enum": [
+              "quiz",
+              "chat"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "student_name": {
+            "title": "Student Name",
+            "type": "string"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "taking_epoch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taking Epoch"
+          },
+          "team_name": {
+            "title": "Team Name",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "show_results",
+          "source",
+          "attempt_id",
+          "user_id",
+          "student_name",
+          "title",
+          "status"
+        ],
+        "title": "RecordAttemptDTO",
+        "type": "object"
+      },
+      "StudentQuizAttemptDetailDTO": {
+        "properties": {
+          "content_revision": {
+            "title": "Content Revision",
+            "type": "integer"
+          },
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "graded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graded At"
+          },
+          "grading_status": {
+            "enum": [
+              "complete",
+              "pending",
+              "mixed",
+              null
+            ],
+            "title": "Grading Status",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuizAttemptItemStudent"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "points_awarded": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Awarded"
+          },
+          "points_total": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Total"
+          },
+          "quiz_id": {
+            "format": "uuid",
+            "title": "Quiz Id",
+            "type": "string"
+          },
+          "score_ai": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Ai"
+          },
+          "score_manual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Manual"
+          },
+          "score_max_manual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Max Manual"
+          },
+          "score_max_objective": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Max Objective"
+          },
+          "score_objective": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Objective"
+          },
+          "show_results": {
+            "title": "Show Results",
+            "type": "boolean"
+          },
+          "status": {
+            "const": "submitted",
+            "title": "Status",
+            "type": "string"
+          },
+          "student_name": {
+            "title": "Student Name",
+            "type": "string"
+          },
+          "submitted_at": {
+            "format": "date-time",
+            "title": "Submitted At",
+            "type": "string"
+          },
+          "taking_epoch": {
+            "title": "Taking Epoch",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          },
+          "view": {
+            "const": "student",
+            "default": "student",
+            "title": "View",
+            "type": "string"
+          }
+        },
+        "required": [
+          "show_results",
+          "id",
+          "quiz_id",
+          "course_id",
+          "user_id",
+          "student_name",
+          "title",
+          "content_revision",
+          "taking_epoch",
+          "status",
+          "grading_status",
+          "score_objective",
+          "score_max_objective",
+          "score_manual",
+          "score_max_manual",
+          "points_awarded",
+          "points_total",
+          "submitted_at"
+        ],
+        "title": "StudentQuizAttemptDetailDTO",
+        "type": "object"
+      },
+      "TeacherQuizAttemptDetailDTO": {
+        "properties": {
+          "content_revision": {
+            "title": "Content Revision",
+            "type": "integer"
+          },
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "graded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graded At"
+          },
+          "grading_status": {
+            "enum": [
+              "complete",
+              "pending",
+              "mixed"
+            ],
+            "title": "Grading Status",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuizAttemptItemTeacher"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "points_awarded": {
+            "title": "Points Awarded",
+            "type": "number"
+          },
+          "points_total": {
+            "title": "Points Total",
+            "type": "number"
+          },
+          "quiz_id": {
+            "format": "uuid",
+            "title": "Quiz Id",
+            "type": "string"
+          },
+          "score_ai": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Ai"
+          },
+          "score_manual": {
+            "title": "Score Manual",
+            "type": "number"
+          },
+          "score_max_manual": {
+            "title": "Score Max Manual",
+            "type": "number"
+          },
+          "score_max_objective": {
+            "title": "Score Max Objective",
+            "type": "number"
+          },
+          "score_objective": {
+            "title": "Score Objective",
+            "type": "number"
+          },
+          "show_results": {
+            "title": "Show Results",
+            "type": "boolean"
+          },
+          "status": {
+            "const": "submitted",
+            "title": "Status",
+            "type": "string"
+          },
+          "student_name": {
+            "title": "Student Name",
+            "type": "string"
+          },
+          "submitted_at": {
+            "format": "date-time",
+            "title": "Submitted At",
+            "type": "string"
+          },
+          "taking_epoch": {
+            "title": "Taking Epoch",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          },
+          "view": {
+            "const": "teacher",
+            "default": "teacher",
+            "title": "View",
+            "type": "string"
+          }
+        },
+        "required": [
+          "show_results",
+          "id",
+          "quiz_id",
+          "course_id",
+          "user_id",
+          "student_name",
+          "title",
+          "content_revision",
+          "taking_epoch",
+          "status",
+          "grading_status",
+          "score_objective",
+          "score_max_objective",
+          "score_manual",
+          "score_max_manual",
+          "points_awarded",
+          "points_total",
+          "submitted_at"
+        ],
+        "title": "TeacherQuizAttemptDetailDTO",
         "type": "object"
       }
     }

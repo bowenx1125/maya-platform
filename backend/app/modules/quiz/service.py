@@ -35,6 +35,7 @@ from .schemas import (
     GradeQuizAttemptRequest,
     PatchQuizRequest,
     PutQuizExemptionsRequest,
+    PutQuizResultsRequest,
     PutQuizScheduleRequest,
     QuizAnswerSubmission,
     QuizAttemptDTO,
@@ -174,6 +175,7 @@ def _summary(
         exemption_deadline_latest=exemption_deadline_latest,
         exempt_until=exempt_until,
         can_take_now=can_take_now,
+        show_results=quiz.show_results,
         taking_open=quiz.taking_open,
         taking_epoch=quiz.taking_epoch,
         scheduled_start_at=quiz.scheduled_start_at,
@@ -222,6 +224,7 @@ def _student_dto(db: Session, quiz: ClassroomQuiz, user_id: str) -> StudentQuizD
         status="published",
         schema_version=quiz.schema_version,
         content_revision=quiz.content_revision,
+        show_results=quiz.show_results,
         taking_open=quiz.taking_open,
         taking_epoch=quiz.taking_epoch,
         scheduled_start_at=quiz.scheduled_start_at,
@@ -326,6 +329,7 @@ def create_quiz(
         content_revision=0,
         content_hash=None,
         created_by_user_id=str(actor.user.id),
+        show_results=False,
         taking_open=False,
         taking_epoch=0,
         published_at=None,
@@ -698,6 +702,23 @@ def delete_exemptions(
     db.commit()
 
 
+def put_results(
+    db: Session,
+    actor: AuthContext,
+    course_id: str,
+    quiz_id: str,
+    body: PutQuizResultsRequest,
+) -> QuizSummaryDTO:
+    if _require_member(db, actor, course_id) != "teacher":
+        raise forbidden("Only teachers can change quiz results visibility.")
+    quiz = _lock_quiz_row(db, course_id, quiz_id)
+    quiz.show_results = body.show_results
+    quiz.updated_at = _now()
+    db.commit()
+    count, latest = _active_exemption_stats(db, [quiz.id], _now()).get(quiz.id, (0, None))
+    return _summary(db, quiz, exemption_count=count, exemption_deadline_latest=latest)
+
+
 def submit_attempt(
     db: Session,
     actor: AuthContext,
@@ -775,10 +796,22 @@ def submit_attempt(
         content_revision=quiz.content_revision,
         taking_epoch=epoch,
         status="submitted",
-        grading_status=grading_status,  # type: ignore[arg-type]
-        score_objective=score,
-        score_max_objective=score_max,
-        answers=normalized,
+        show_results=quiz.show_results,
+        grading_status=grading_status if quiz.show_results else None,  # type: ignore[arg-type]
+        score_objective=score if quiz.show_results else None,
+        score_max_objective=score_max if quiz.show_results else None,
+        answers=(
+            normalized
+            if quiz.show_results
+            else [
+                {
+                    key: value
+                    for key, value in answer.items()
+                    if key in ("item_id", "type", "choice_ids", "text")
+                }
+                for answer in normalized
+            ]
+        ),
         submitted_at=now,
     )
 
@@ -812,7 +845,7 @@ def list_my_record_attempts(
         quiz_query = quiz_query.where(ClassroomQuizAttempt.quiz_id == quiz_id)
     quiz_attempts = db.scalars(quiz_query.order_by(ClassroomQuizAttempt.submitted_at.desc())).all()
     for attempt in quiz_attempts:
-        rows.append(_quiz_record_row(db, attempt))
+        rows.append(_quiz_record_row(db, attempt, teacher=role == "teacher"))
 
     # Legacy chat attempts stay readable.
     if quiz_id is not None:
@@ -824,6 +857,7 @@ def list_my_record_attempts(
     for chat in chat_rows:
         rows.append(
             RecordAttemptDTO(
+                show_results=True,
                 source="chat",
                 attempt_id=UUID(str(chat["attempt_id"])),
                 user_id=UUID(str(chat["user_id"])),
@@ -871,7 +905,7 @@ def list_course_record_attempts(
         quiz_query = quiz_query.where(ClassroomQuizAttempt.quiz_id == quiz_id)
     quiz_attempts = db.scalars(quiz_query.order_by(ClassroomQuizAttempt.submitted_at.desc())).all()
     for attempt in quiz_attempts:
-        rows.append(_quiz_record_row(db, attempt))
+        rows.append(_quiz_record_row(db, attempt, teacher=True))
 
     if quiz_id is not None:
         chat_source: list[dict[str, Any]] = []
@@ -880,6 +914,7 @@ def list_course_record_attempts(
     for chat in chat_source:
         rows.append(
             RecordAttemptDTO(
+                show_results=True,
                 source="chat",
                 attempt_id=UUID(str(chat["attempt_id"])),
                 user_id=UUID(str(chat["user_id"])),
@@ -1014,11 +1049,14 @@ def _grading_status(
     return "mixed" if any(item.type in CHOICE_TYPES for item in items) else "pending"
 
 
-def _quiz_record_row(db: Session, attempt: ClassroomQuizAttempt) -> RecordAttemptDTO:
+def _quiz_record_row(
+    db: Session, attempt: ClassroomQuizAttempt, *, teacher: bool
+) -> RecordAttemptDTO:
     score_objective, _ = _effective_objective(attempt)
     quiz = db.get(ClassroomQuiz, attempt.quiz_id)
     score_max_manual = _manual_max(_snapshot_items(attempt))
-    return RecordAttemptDTO(
+    row = RecordAttemptDTO(
+        show_results=quiz is not None and quiz.show_results,
         source="quiz",
         attempt_id=UUID(attempt.id),
         user_id=UUID(attempt.actor_user_id),
@@ -1039,6 +1077,16 @@ def _quiz_record_row(db: Session, attempt: ClassroomQuizAttempt) -> RecordAttemp
         taking_epoch=attempt.taking_epoch,
         content_revision=attempt.content_revision,
     )
+
+    if not teacher and not row.show_results:
+        row.score_objective = None
+        row.score_max_objective = None
+        row.grading_status = None
+        row.score_ai = None
+        row.points_awarded = None
+        row.points_total = None
+        row.phase = None
+    return row
 
 
 def _visible_attempt(
@@ -1116,6 +1164,7 @@ def _attempt_detail(
     quiz = db.get(ClassroomQuiz, attempt.quiz_id)
     score_max_manual = _manual_max(items)
     payload: dict[str, Any] = {
+        "show_results": quiz is not None and quiz.show_results,
         "id": UUID(attempt.id),
         "quiz_id": UUID(attempt.quiz_id),
         "course_id": UUID(attempt.course_id),
@@ -1141,6 +1190,22 @@ def _attempt_detail(
         return TeacherQuizAttemptDetailDTO(**payload)
     # Rebuilt through the student DTO: its items carry no answer field.
     detail = StudentQuizAttemptDetailDTO(**payload)
+    if not detail.show_results:
+        detail.grading_status = None
+        detail.score_objective = None
+        detail.score_max_objective = None
+        detail.score_manual = None
+        detail.score_max_manual = None
+        detail.score_ai = None
+        detail.points_awarded = None
+        detail.points_total = None
+        detail.graded_at = None
+        for row in detail.items:
+            row.correct = None
+            row.points_awarded = None
+            row.feedback = None
+            row.ai_score = None
+            row.graded = False
     assert_no_answer_keys(detail.model_dump(mode="json"))
     return detail
 
