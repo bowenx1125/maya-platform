@@ -1152,4 +1152,66 @@ async def stream_audio_route(
     )
 
 
+@router.get(
+    "/debates/{debate_id}/performance/{turn_id}",
+    operation_id="streamTurnPerformance",
+    response_class=Response,
+    responses={
+        200: {
+            "description": "Teacher-authorized retained turn performance timeline.",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "additionalProperties": True,
+                        "description": (
+                            "Compiled animation timeline for one retained turn "
+                            "(gesture events, viseme windows); absent turns are "
+                            "synthesized without word timestamps."
+                        ),
+                    }
+                }
+            },
+        },
+        403: {"model": Error},
+        404: {"model": Error},
+        410: {"model": Error},
+    },
+)
+@_offloaded
+async def stream_performance_route(
+    debate_id: UUID,
+    turn_id: UUID,
+    media_ticket: Annotated[
+        str,
+        Query(min_length=43, max_length=43, pattern=r"^[A-Za-z0-9_-]{43}$"),
+    ] = None,  # type: ignore[assignment]
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+    service: PlaybackService = Depends(get_playback_service),
+) -> Response:
+    if service.audio_store is None:
+        raise not_found()
+    # The timeline is private exactly like the audio bytes: same teacher
+    # authorization, same one-turn ticket binding, same retained-pointer rules.
+    await service.authorize_audio(
+        db,
+        str(debate_id),
+        str(turn_id),
+        session_hash=_session_hash(context),
+        media_ticket=media_ticket,
+        context=context,
+    )
+    payload = await asyncio.to_thread(
+        service.audio_store.read_performance,
+        str(debate_id),
+        str(turn_id),
+    )
+    if payload is None:
+        # Turns synthesized without word timestamps (or Mock audio) have no
+        # timeline; the stage keeps its procedural motion in that case.
+        raise not_found()
+    return Response(content=payload, media_type="application/json")
+
+
 __all__ = ["get_playback_service", "router"]

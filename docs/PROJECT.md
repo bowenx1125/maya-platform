@@ -264,8 +264,7 @@ lazy+10s sweeper(non-test lifespan).Static checks pass;PG/boundary:sandbox EPERM
 
 ## Nov9 local classes and accounts (in progress)
 
-Integrated 3081da2 (base b6c2047b1549c5d28e84b52c5323a1e655bb596f) onto
-535d2272a9b337e9daec819e89df889d100789a8, then 28b8bf8e8f8ef6169bbe876a281bb93dd031d3ac.
+Integrated 3081da2 onto 535d2272, then 28b8bf8e.
 Class scope covers teacher pages; registration keeps group join/create (0086 choice, 0087 erasure keeps contributors' work). Hard delete removes student-owned work/grades incl. Quiz attempts.
 PR #390 merged; 0082→0087 local. Full run at 535d227: 3073 pass/139 fail/1 skip
 (main reproduced 135; four fixed).
@@ -274,13 +273,13 @@ Nov10: teacher scopes corrected; RAG follows class bar (47 PG, 1188 UI). Choice-
 
 ## Nov10 Debate prompt v4 (supersedes Oct24 contract-in-Ruleset)
 
-ruleset_contract_v4: code contract default_rules/contract/*.md,read-only in the form;
-Ruleset=style+round tasks; System=this round's task+contract. User JSON `task`
-{round_task,max_units,stance?}; no teacher note. Length: target_minutes 3–10 (5)×230 zh
-chars/150 en words×voice rate×0.9/(Agents×4),weights 1.1/0.9/0.9/1.1; >1.25×cap:tail
-sentences cut,no repair. Unspoken R2 question appended; received questions from R3.
-Stump<40% cap or own 5-gram overlap>25% (frozen 35% kept):1 repair. Round-1 query has no Agent.md. v4 drops word
-limits,retrieval_policy_id,frequency_penalty,max_tokens. v3/older bytes pinned.
+ruleset_contract_v4: default_rules/contract/*.md code contract,read-only in form;
+Ruleset=style+round tasks;System=round task+contract. User JSON `task`
+{round_task,max_units,stance?};no teacher note. Length:target_minutes 3–10
+(5)×230 zh chars/150 en words×voice rate×0.9/(Agents×4);>1.25×cap:tail cut,no
+repair. Unspoken R2 question appended;R3 receives questions. Stump<40% cap or
+own 5-gram overlap>25% (frozen 35% kept):1 repair. R1 query has no Agent.md.
+v4 drops word limits/retrieval_policy_id/frequency_penalty/max_tokens;v3 pinned.
 
 ## Nov11 RAG chunks, diagnostics
 
@@ -300,8 +299,9 @@ Nov11: Agents/Teams <768px: single black banner, no orange ring; desktop diff0 (
 
 DEBATE_TTS_ENGINE=cosyvoice swaps the debate TTS adapter (same DashScope key/
 workspace; qwen3 default, fallback on pre-request refusals only). TTSResult.
-word_timestamps feeds debates/performance (turn text+timelines: gesture
-anchors, viseme windows). 18 tests, ruff/mypy clean. AudioStore stores each
-turn's timeline as a WAV-sibling performance.json (staged/promoted/discarded/
-removed with the audio; enhancement-only, never blocks audio). +8 tests.
-Route/stage wiring pending. 0 calls/deploy.
+word_timestamps feeds debates/performance (gesture anchors, viseme windows).
+18 compiler/adapter tests. AudioStore stores each turn's timeline as a WAV-
+sibling performance.json (staged/promoted/discarded/removed with the audio;
+enhancement-only; +8 tests). Ticket-gated GET /debates/{id}/performance/
+{turn} serves it; 404 = plain audio, stage keeps procedural motion.
+0 calls/deploy.

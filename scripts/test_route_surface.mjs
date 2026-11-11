@@ -88,8 +88,9 @@ try {
   // A teacher deleting a member's account adds one; a Chat turn's model input
   // (Details under Check RAG) adds one; teacher class creation adds one.
   // Quiz list/detail and four extended-time operations and scheduling add seven frozen routes;
-  // the teacher's per-Agent Debate diagnostics read adds one.
-  if (platformOperationCount !== 164 || placeholderCount !== 0) {
+  // the teacher's per-Agent Debate diagnostics read adds one; the retained-turn
+  // performance timeline read adds one.
+  if (platformOperationCount !== 165 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

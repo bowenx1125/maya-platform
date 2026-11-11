@@ -6325,6 +6325,98 @@
         ]
       }
     },
+    "/api/v1/debates/{debate_id}/performance/{turn_id}": {
+      "get": {
+        "operationId": "streamTurnPerformance",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "debate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Debate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "media_ticket",
+            "required": false,
+            "schema": {
+              "maxLength": 43,
+              "minLength": 43,
+              "pattern": "^[A-Za-z0-9_-]{43}$",
+              "title": "Media Ticket",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "description": "Compiled animation timeline for one retained turn (gesture events, viseme windows); absent turns are synthesized without word timestamps.",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Teacher-authorized retained turn performance timeline."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Gone"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Stream Performance Route",
+        "tags": [
+          "Debates"
+        ]
+      }
+    },
     "/api/v1/courses/{course_id}/workspace-agents": {
       "get": {
         "operationId": "listCourseWorkspaceAgents",
