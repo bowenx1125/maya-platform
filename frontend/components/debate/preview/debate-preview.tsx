@@ -23,6 +23,11 @@ import {
   PREVIEW_TURN,
   PREVIEW_TURN_PENDING,
 } from "../debate-chrome";
+import {
+  DebateCardCheck,
+  type DebateCard,
+  type DebateCardStatus,
+} from "./debate-card-check";
 
 export type DebatePreviewProgress = {
   prepared_turns: number;
@@ -61,6 +66,8 @@ export type DebatePreviewParticipant = {
   id: string;
   agent_name: string;
   slot?: string;
+  card_status?: DebateCardStatus | null;
+  card?: DebateCard | null;
 };
 
 export type DebatePreviewSnapshot = {
@@ -168,35 +175,47 @@ export function DebatePreview({
               return (
                 <div
                   key={participant.id}
-                  className="flex min-w-0 items-center gap-2.5 rounded-full border-[2.5px] border-[#111] bg-(--tone) py-1.5 pr-4 pl-1.5 shadow-[3px_4px_0_#111]"
-                  style={
-                    {
-                      "--tone": tones.get(participant.id),
-                    } as React.CSSProperties
-                  }
+                  className="grid min-w-0 content-start gap-2"
                 >
-                  <span
-                    className="box-border grid size-11 flex-none place-items-end-center overflow-hidden rounded-full border-[2.5px] border-[#111] bg-white [&_svg]:w-[34px]"
-                    aria-hidden="true"
+                  <div
+                    className="flex min-w-0 items-center gap-2.5 rounded-full border-[2.5px] border-[#111] bg-(--tone) py-1.5 pr-4 pl-1.5 shadow-[3px_4px_0_#111]"
+                    style={
+                      {
+                        "--tone": tones.get(participant.id),
+                      } as React.CSSProperties
+                    }
                   >
-                    <IconBust size={34} />
-                  </span>
-                  <div className="min-w-0 font-body text-base leading-[normal]">
-                    <b className="font-body text-[15px] leading-[normal] font-extrabold">
-                      {participant.agent_name}
-                    </b>
-                    <div className="mt-[5px] flex gap-[3px]" aria-hidden="true">
-                      {Array.from({ length: perFighter }, (_, index) => (
-                        <i
-                          key={index}
-                          className={cn(
-                            "box-border size-[11px] rounded-full border-2 border-[#111]",
-                            index < done ? "bg-[#111]" : "bg-white",
-                          )}
-                        />
-                      ))}
+                    <span
+                      className="box-border grid size-11 flex-none place-items-end-center overflow-hidden rounded-full border-[2.5px] border-[#111] bg-white [&_svg]:w-[34px]"
+                      aria-hidden="true"
+                    >
+                      <IconBust size={34} />
+                    </span>
+                    <div className="min-w-0 font-body text-base leading-[normal]">
+                      <b className="font-body text-[15px] leading-[normal] font-extrabold">
+                        {participant.agent_name}
+                      </b>
+                      <div
+                        className="mt-[5px] flex gap-[3px]"
+                        aria-hidden="true"
+                      >
+                        {Array.from({ length: perFighter }, (_, index) => (
+                          <i
+                            key={index}
+                            className={cn(
+                              "box-border size-[11px] rounded-full border-2 border-[#111]",
+                              index < done ? "bg-[#111]" : "bg-white",
+                            )}
+                          />
+                        ))}
+                      </div>
                     </div>
                   </div>
+                  <DebateCardCheck
+                    agentName={participant.agent_name}
+                    status={participant.card_status}
+                    card={participant.card}
+                  />
                 </div>
               );
             })}
