@@ -32,6 +32,8 @@ const enMessages = {
   archive: "Archive",
   knowledge: "Knowledge",
   brainform: "Brainform",
+  agentRagPanelTitle: "RAG",
+  selected: "Selected",
   rag: "RAG",
   knowledgeSets: "Knowledge Sets",
   openKnowledge: "Open Knowledge",

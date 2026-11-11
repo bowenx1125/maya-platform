@@ -54,7 +54,7 @@ export const uiGuideCopy = {
     en: "Only selected Knowledge Sets will be shared with this Team.",
   },
   "agent.brainform": {
-    en: "Choose RAG source files and existing Knowledge that this Agent can use.",
+    en: "Choose RAG source files this Agent can use.",
   },
   "agent.lastEdited": {
     en: "Last editor.",
