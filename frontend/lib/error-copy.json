@@ -211,9 +211,6 @@
     "quizAnswerLeak": {
       "en": "This quiz still includes an answer students must not see."
     },
-    "quizAnswerRequired": {
-      "en": "Each choice question needs an answer."
-    },
     "quizDocumentInvalid": {
       "en": "This quiz could not be read."
     },
@@ -318,6 +315,9 @@
     },
     "voiceFailed": {
       "en": "The voice couldn't be generated. The text is still shown; try again later."
+    },
+    "debateCardFallback": {
+      "en": "This Agent's card was not compiled, so it speaks from its original AGENT.md."
     }
   },
   "codes": {
@@ -782,7 +782,6 @@
     "quiz_already_published": "quizAlreadyPublished",
     "quiz_answer_invalid": "quizAnswerInvalid",
     "quiz_answer_leak": "quizAnswerLeak",
-    "quiz_answer_required": "quizAnswerRequired",
     "quiz_document_invalid": "quizDocumentInvalid",
     "quiz_empty": "quizEmpty",
     "quiz_exemption_already_submitted": "quizExemptionAlreadySubmitted",
@@ -971,6 +970,20 @@
     "unsupported_format": "fileUnsupported",
     "upload_size": "fileTooLarge",
     "voice_mapping_unavailable": "voiceFailed",
-    "voice_unavailable": "voiceFailed"
+    "voice_unavailable": "voiceFailed",
+    "debate_card_mock_provider": "debateCardFallback",
+    "debate_card_failed": "debateCardFallback",
+    "debate_card_agent_md_missing": "debateCardFallback",
+    "debate_card_preflight_blocked": "debateCardFallback",
+    "debate_card_budget_invalid": "debateCardFallback",
+    "debate_card_attempt_used": "debateCardFallback",
+    "debate_card_admission_refused": "debateCardFallback",
+    "debate_card_ledger_failed": "debateCardFallback",
+    "debate_card_not_sent": "debateCardFallback",
+    "debate_card_acceptance_unknown": "debateCardFallback",
+    "debate_card_transport_failed": "debateCardFallback",
+    "debate_card_http_rejected": "debateCardFallback",
+    "debate_card_invalid": "debateCardFallback",
+    "debate_card_too_long": "debateCardFallback"
   }
 }

@@ -862,7 +862,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                             voice_token=voice_token,
                             language=debate_output_language(debate),
                             target_model_key=voice.target_model_key,
-                            voice_params=self._voice_params(debate),
+                            voice_params=self._voice_params(debate, db, participant),
                         )
                     )
                     try:
@@ -884,7 +884,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                         voice_token=voice_token,
                         language=debate_output_language(debate),
                         target_model_key=voice.target_model_key,
-                        voice_params=self._voice_params(debate),
+                        voice_params=self._voice_params(debate, db, participant),
                     )
                     synthesis_work = asyncio.create_task(asyncio.to_thread(synthesize))
                     try:

@@ -614,10 +614,13 @@ def build_segment_subqueries(
     if context.turn.round_no == 1 and uses_code_contract(context.frozen_llm):
         # v4: a long Agent.md as a query made retrieval follow the persona text
         # instead of the Topic, so round 1 sends only the Topic, the name and a
-        # stated position (round 1 has no barrages).
+        # stated position (round 1 has no barrages). An assigned stance is what
+        # the speech must argue, so it outranks the debate card's own position.
         participant = context.participant
-        position = initial_position.strip() or stance_text(
-            context.output_language, participant.initial_stance
+        position = (
+            initial_position.strip()
+            or stance_text(context.output_language, participant.initial_stance)
+            or participant.card_position.strip()
         )
         return (
             TurnSubquery("viewpoint", topic),

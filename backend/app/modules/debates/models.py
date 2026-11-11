@@ -158,6 +158,15 @@ class Debate(Base):
     )
 
 
+DEBATE_CARD_STATUS_CHECK = (
+    "card_status IS NULL OR card_status IN ('compiling', 'ready', 'fallback')"
+)
+DEBATE_CARD_JSON_CHECK = (
+    "(card_status = 'ready' AND card_json IS NOT NULL) OR "
+    "(card_status IS DISTINCT FROM 'ready' AND card_json IS NULL)"
+)
+
+
 class DebateParticipant(Base):
     """Frozen Agent/version/snapshot display and voice decision for a debate."""
 
@@ -193,6 +202,11 @@ class DebateParticipant(Base):
     teacher_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
     initial_position_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
     current_position_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # 0088 debate card: NULL for a Debate created before cards (it keeps its
+    # raw AGENT.md persona); compiling, then ready (card_json) or fallback.
+    card_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    card_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    card_safe_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -258,6 +272,8 @@ class DebateParticipant(Base):
         CheckConstraint(
             "stance_mode IN ('assigned', 'open')", name="ck_debate_participants_stance_mode"
         ),
+        CheckConstraint(DEBATE_CARD_STATUS_CHECK, name="ck_debate_participants_card_status"),
+        CheckConstraint(DEBATE_CARD_JSON_CHECK, name="ck_debate_participants_card_json"),
         CheckConstraint(
             "(stance_mode = 'assigned' AND initial_stance IN ('support', 'oppose', 'neutral') "
             "AND current_stance IN ('support', 'oppose', 'neutral')) OR "

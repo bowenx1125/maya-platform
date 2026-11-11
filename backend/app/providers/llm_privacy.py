@@ -471,6 +471,38 @@ def scan_segment_outbound_messages(
     )
 
 
+_DEBATE_CARD_INPUT_KEYS = frozenset({"agent_name", "agent_md", "language"})
+
+
+def scan_debate_card_outbound_messages(messages: Sequence[object]) -> LLMOutboundScanResult:
+    """Scan the closed debate-card request: a frozen Agent.md and its name only."""
+
+    parts = _message_parts(messages)
+    try:
+        decoded = json.loads(
+            parts[1][1],
+            object_pairs_hook=_no_duplicate_pairs,
+            parse_constant=lambda _value: (_ for _ in ()).throw(ValueError()),
+        )
+    except (TypeError, ValueError, json.JSONDecodeError):
+        _reject(code="llm_outbound_json_invalid")
+    if not isinstance(decoded, Mapping) or set(decoded) != _DEBATE_CARD_INPUT_KEYS:
+        _reject(code="llm_outbound_field_forbidden")
+    if (
+        not isinstance(decoded["agent_name"], str)
+        or not isinstance(decoded["agent_md"], str)
+        or not decoded["agent_md"].strip()
+        or decoded["language"] not in {"zh", "en"}
+    ):
+        _reject(code="llm_outbound_field_forbidden")
+    raw = "\x1e".join(content for _role, content in parts).encode("utf-8")
+    return LLMOutboundScanResult(
+        message_hash=hashlib.sha256(raw).hexdigest(),
+        message_bytes=sum(len(content.encode("utf-8")) for _role, content in parts),
+        field_classes=("topic_and_platform_rules", "confirmed_structured_persona"),
+    )
+
+
 def scan_real_llm_messages(*args: object, **kwargs: object) -> LLMOutboundScanResult:
     """Alias named after the real-provider boundary used by tests/runtime."""
 
@@ -494,6 +526,7 @@ __all__ = [
     "LLM_REPAIR_FEEDBACK_POLICY_HASH",
     "LLM_REPAIR_FEEDBACK_POLICY_VERSION",
     "OutboundLLMDataError",
+    "scan_debate_card_outbound_messages",
     "scan_llm_outbound_messages",
     "scan_segment_outbound_messages",
     "scan_real_llm_messages",

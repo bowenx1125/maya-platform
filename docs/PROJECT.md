@@ -160,14 +160,9 @@ reference answers/word-joiner replies unspoken. Casual chat resumes; assessment_
 doesn't end turn:Guide answers,omit empty replies,keep Scorer text/scores. Student send
 locks executor before model call; parallel call→chat_busy.
 
-Oct17 admission:adaptive login/create/write/LLM queue. Danger:load≥6 or Mem<500;
-clear load≤4/Mem≥550,or120s at load<6. Runs2 slots,scoring first (Mem:1 if idle),
-release+1/5s. AIMD×0.7 on danger/load≥4/Mem<900/30s write-pool p95>500ms; hold
-load3–4/Mem900–1100/threads≥90%,else+4/+2; start/idle72. 1s brake (10s write-pool p95,
-running writes,CPU) halves/clamps. Queue-full/180s-wait/chat_busy stores nothing;
-only `messages:stream`. Per process:LLM/write/create8,max128,in-flight48,sync256+
-asyncio96 threads,pool15+25. Separate ready limiter;nested backstop wait fresh;
-refused Debate segments not_sent; hung backend autoheal≈100s.
+Oct17 admission:adaptive login/create/write/LLM queue,danger brake,AIMD,scoring first;
+queue-full/180s-wait/chat_busy stores nothing; refused Debate segments not_sent;
+hung backend autoheal≈100s (thresholds: code/Git history).
 
 Oct17:Record replaces Memory:assessment Teams→student attempt/
 score/sheet/report,one cached read/test (0068). Accounts/group visits omit Test results;
@@ -185,9 +180,7 @@ Per-sign-in Studyform/Brainform/Chat/Voices cache:6 parallel,10s reuse,429/503 b
 Students use teachers' public Agents only in Teams; old chats read-only. Oct19:
 uploaded Voices ready at once (0073);▷ listens only;Team model call12 rows.
 
-## Oct20–23 releases
-
-#225–#239/0076:answer guard,public editing/audit,Chat-independent Record,cascade
+Oct20–23 #225–#239/0076:answer guard,public editing/audit,Chat-independent Record,cascade
 recovery/no auto-retry,login fences,stale_base_version,constant history SELECTs,
 PG poll REPEATABLE READ.50-user Mock:p95≤7.85s. Details:Git history.
 
@@ -223,11 +216,9 @@ loop (offload.py);per-Debate lock;tickets in Postgres (0079);Next 103→35 SQL.
 E:DEBATE_LLM_* (no MAYA_ prefix;unset=previous)/DEBATE_TTS_* freeze into rule_snapshot_json
 (null=not sent);v3 contract lived in the Ruleset,pre-v3 keep legacy;playback rate 1.0 (0080).
 
-## Oct27 UI (#305)
+## Oct27 UI (#305): Agents4/Teams3 cols,one LoadingCard.
 
-Agents4-col,Teams3-col;sign-in38v3;one39C LoadingCard;fixed key hit area.
-
-## Nov2 Chatform, visits, chat speed
+## Nov2 Chatform lists
 
 0081 adds chat_type agent|team; maya_team=team. Backfill needs entry-kind/binding
 agreement; leftover NULLs logged,typed lists skip them. Separate Agent/Team
@@ -253,18 +244,15 @@ Accounts: filter; Delete is real (DELETE /courses/{id}/members/{user}). Chat 429
 provider_rate_limited, 502/503/504/529 → provider_busy (one call). Ordinary Team members
 answer together (≤3; assessment Teams one at a time); history is one read. 390px Brainform fits.
 
-## Nov5 Agent Chat identity
+## Nov5–6 Agent Chat, recovery
 
 #337/#338: Agent Chats send the Agent name, AGENT.md, Knowledge and RAG.
 No assessment Tools or attempt; Teams unchanged. Owner-only RAG Details
 shows stored model input; scoring/summary Rubrics remain hidden.
-
-## Nov6 recovery
-
-main70ecfa29(#356/#357):Replay=Rebirth;Review=playback,not rebirth lock.
-Revocalize:durable intent,3 workers,Back/F5 reseed/revision reconcile;admission retry,
-ambiguous keys kept,definitive errors/manual retry.0 calls/deploy;volume kept.
-Stalled needs backend receipt recovery;safety gates kept.
+Nov6 off main70ecfa29 (#356/#357). Replay=Rebirth;Review=playback,not a rebirth lock.
+Revocalize:durable intent,3 workers,Back/F5 reseed/revision reconcile;admission refusal
+retries safely,ambiguous keys kept,definitive failures shown/manual retry. No calls/deploy;
+volume untouched. Stalled needs backend receipt recovery;safety gates kept.
 
 ## Nov5–8 Classroom Quiz
 
@@ -290,17 +278,26 @@ Nov10: classes Maya1002 and Maya1001, stable IDs, student data.
 Teacher scopes corrected. RAG actions follow the class bar.
 47 PG, 1188 UI. Debates/Quizzes/Accounts; optional choice answer; no empty Agents card; large loader; chat omits missing group/editor.
 
-## Nov10 Debate prompt v4 (A1 backend, A2 UI; supersedes Oct24 contract-in-Ruleset)
+## Nov10 Debate prompt v4 (supersedes Oct24 contract-in-Ruleset)
 
-New Debates freeze ruleset_contract_v4: code contract default_rules/contract/{zh,en}.md
-(read-only debate-ruleset `contract`); Ruleset=style+one task per round; System=Ruleset
-minus other rounds+this round's contract; legacy contract tails stripped.
-User JSON adds `task`{round_task with names,max_units,stance?}; teacher_note withheld
-(manifests forbid exporting it). Length is hard: target_minutes 3–10 (5)×230 zh Han
-chars (measured)/150 en words (unmeasured)×voice rate×0.9/(Agents×4),×1.1/0.9/0.9/1.1,
-down to 5s,min 40/25; >1.25×cap:tail sentences cut,no repair;R2 question appended. Copy-strip
-stump<40% cap or own 8/5-gram overlap>35%:1 repair,then accepted. Round-1 query:Topic,
-Topic+name+stance,no Agent.md. v4 snapshots drop min/max/target words,retrieval_policy_id,
-frequency_penalty. v3/older keep their bytes (pinned test). Offline tests only;0 provider calls.
-A2 form:read-only contract,sends {zh,en};Target length=target_minutes;temperature+voice,
-rest Advanced;frequency_penalty/max_tokens/teacher note not sent.
+ruleset_contract_v4: code contract default_rules/contract/*.md,read-only in the form;
+Ruleset=style+round tasks; System=this round's task+contract. User JSON `task`
+{round_task,max_units,stance?}; no teacher note. Length: target_minutes 3–10 (5)×230 zh
+chars/150 en words×voice rate×0.9/(Agents×4),weights 1.1/0.9/0.9/1.1; >1.25×cap:tail
+sentences cut,no repair. Unspoken R2 question appended; received questions from R3.
+Stump<40% cap or own-overlap>35%:1 repair. Round-1 query has no Agent.md. v4 drops word
+limits,retrieval_policy_id,frequency_penalty,max_tokens. v3/older bytes pinned.
+Real run ac3df08a:16 speeches 52–103 chars,4m16s.
+
+## Nov11 RAG chunks, diagnostics
+
+Builds:`markdown-structure-600t-v3`,150–900 tokens,no overlap; v2 snapshots kept
+till republish. Teacher `getDebateDiagnostics`:3-gram grounding.
+
+## Nov11 Debate cards (phase B)
+
+0089: new v4 participants start `compiling`; before an Agent's first turn its frozen
+AGENT.md compiles once (`llm_debate_card`, Debate model,strict schema, 1 ledgered
+attempt, 60s) to identity/position/reasoning/style/voice/dropped, ≤600 Han/400 words.
+Ready→card persona;failure/Mock→fallback (raw AGENT.md); null (old) keeps pinned bytes.
+Round-1 query:stance, else card position. Preview:Check card. Clone TTS instruction=card voice_style,else Debate's. 0 calls;quality unverified.

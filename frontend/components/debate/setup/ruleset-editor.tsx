@@ -156,7 +156,8 @@ export function RulesetEditor({
             )}
           >
             <ReportMarkdown label="Execution contract">
-              {contract[language]}
+              {/* The server fills the round number per turn; a raw placeholder reads as a bug. */}
+              {contract[language].replaceAll("{round}", "N")}
             </ReportMarkdown>
           </div>
         </div>

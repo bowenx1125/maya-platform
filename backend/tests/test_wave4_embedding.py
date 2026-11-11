@@ -8,7 +8,11 @@ from collections.abc import Mapping
 from dataclasses import replace
 
 import pytest
-from app.modules.knowledge.markdown import MAX_CHUNK_UTF8_BYTES
+from app.modules.knowledge.markdown import (
+    CHUNKING_VERSION,
+    LEGACY_CHUNKING_VERSION,
+    MAX_CHUNK_UTF8_BYTES,
+)
 from app.modules.knowledge.providers import (
     MAX_BATCH_TOKENS,
     REAL_EMBEDDING_DIMENSION,
@@ -52,8 +56,10 @@ def _build(
     text: str = "TikTok recommendation governance and public safety.",
     *,
     dimension: int = 256,
+    chunking_version: str = CHUNKING_VERSION,
 ) -> SnapshotBuildV1:
     return prepare_snapshot_build(
+        chunking_version=chunking_version,
         agent_version_id="agent-version-1",
         knowledge_snapshot_id="snapshot-new-1",
         draft_revision=4,
@@ -165,37 +171,49 @@ def test_snapshot_chunk_ids_are_stable_per_snapshot_but_not_cross_snapshot() -> 
 def test_long_unbroken_input_is_planned_without_a_per_item_cap() -> None:
     # The owner removed the 8,000-token per-item ceiling, so a long unbroken
     # chunk is planned instead of rejected. Planning still calls no provider.
+    # The legacy chunker keeps an unbroken run whole, which is the long item.
     provider = MockEmbeddingProvider()
-    build = _build("x" * 8_001)
+    build = _build("x" * 8_001, chunking_version=LEGACY_CHUNKING_VERSION)
     plan = plan_embedding_batches(build)
     assert [item.token_count for batch in plan.batches for item in batch.items] == [8_001]
     assert provider.call_count == 0
 
 
 @pytest.mark.parametrize(
-    ("source", "expected_tokens"),
+    ("chunking_version", "source", "expected_tokens"),
     (
-        ("x" * 100_001, 100_001),
-        ("界" * 100_001, 300_003),
-        (("w" * 100 + " ") * 400, 40_400),
-        ("prefix" + (" " * 30_000) + "suffix", 15_012),
+        (LEGACY_CHUNKING_VERSION, "x" * 100_001, 100_001),
+        (LEGACY_CHUNKING_VERSION, "界" * 100_001, 300_003),
+        (LEGACY_CHUNKING_VERSION, ("w" * 100 + " ") * 400, 40_400),
+        (LEGACY_CHUNKING_VERSION, "prefix" + (" " * 30_000) + "suffix", 15_012),
+        # The current chunker drops the whitespace between chunks instead of
+        # embedding it, so its totals are the non-gap characters only.
+        (CHUNKING_VERSION, "x" * 100_001, 100_001),
+        (CHUNKING_VERSION, "界" * 100_001, 300_003),
+        (CHUNKING_VERSION, ("w" * 100 + " ") * 400, 40_383),
+        (CHUNKING_VERSION, "prefix" + (" " * 30_000) + "suffix", 12),
     ),
     ids=(
-        "unbroken-ascii",
-        "unbroken-chinese",
-        "many-long-space-separated-words",
-        "large-whitespace-gap",
+        "v2-unbroken-ascii",
+        "v2-unbroken-chinese",
+        "v2-many-long-space-separated-words",
+        "v2-large-whitespace-gap",
+        "v3-unbroken-ascii",
+        "v3-unbroken-chinese",
+        "v3-many-long-space-separated-words",
+        "v3-large-whitespace-gap",
     ),
 )
 def test_oversized_source_splits_losslessly_into_supplier_safe_chunks(
+    chunking_version: str,
     source: str,
     expected_tokens: int,
 ) -> None:
-    build = _build(source)
+    build = _build(source, chunking_version=chunking_version)
     document = build.documents[0]
     chunks = document.chunks
 
-    assert build.chunking_version == "markdown-heading-paragraph-v2"
+    assert build.chunking_version == chunking_version
     assert len(chunks) > 1
     assert document.content_sha256 == hashlib.sha256(source.encode("utf-8")).hexdigest()
     previous_end = 0

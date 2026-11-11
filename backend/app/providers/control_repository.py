@@ -2536,7 +2536,8 @@ class ProviderRepository:
                 values["charged_request_count"] = 0
             elif (
                 str(row["provider_operation"]) == "llm_knowledge_generate"
-                or str(row["provider_operation"]) in {"llm_agent_chat", "embedding_query"}
+                or str(row["provider_operation"])
+                in {"llm_agent_chat", "embedding_query", "llm_debate_card"}
             ) and target_state == "not_sent":
                 # A dispatch proved not sent consumes neither supplier acceptance
                 # nor a billable request, for Single as well as Team calls.

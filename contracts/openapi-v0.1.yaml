@@ -3240,6 +3240,27 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
+  /debates/{debate_id}/diagnostics:
+    get:
+      tags:
+      - Debates
+      operationId: getDebateDiagnostics
+      description: Course-teacher-only per-Agent diagnostics computed from the Debate's stored turns, receipts and frozen snapshots. Grounding is a server text measure shown to teachers; it never changes a speech or a Report score.
+      parameters:
+      - $ref: '#/components/parameters/DebateId'
+      responses:
+        '200':
+          description: One entry per participating Agent with cross-round numbers and a per-round breakdown.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebateDiagnostics'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
   /debates/{debate_id}/interaction:
     get:
       tags:
@@ -9195,6 +9216,67 @@ components:
           - null
         current_position_summary:
           type: string
+        card_status:
+          type:
+          - string
+          - 'null'
+          enum:
+          - compiling
+          - ready
+          - fallback
+          - null
+          description: Null for a Debate created before debate cards. fallback means the
+            turns send the original AGENT.md.
+        card:
+          anyOf:
+          - $ref: '#/components/schemas/DebateCard'
+          - type: 'null'
+    DebateCardDrop:
+      type: object
+      additionalProperties: false
+      required:
+      - excerpt
+      - reason
+      properties:
+        excerpt:
+          type: string
+        reason:
+          type: string
+          enum:
+          - length_limit
+          - language_choice
+          - output_format
+          - debate_procedure
+          - duplicate_translation
+    DebateCard:
+      type: object
+      additionalProperties: false
+      required:
+      - identity
+      - position
+      - reasoning
+      - speaking_style
+      - voice_style
+      - dropped
+      properties:
+        identity:
+          type: string
+        position:
+          type: string
+        reasoning:
+          type: array
+          items:
+            type: string
+        speaking_style:
+          type: string
+        voice_style:
+          type:
+          - string
+          - 'null'
+        dropped:
+          type: array
+          items:
+            $ref: '#/components/schemas/DebateCardDrop'
     DebateStall:
       type: object
       additionalProperties: false
@@ -10109,6 +10191,206 @@ components:
             $ref: '#/components/schemas/DebateTurn'
         audio_retained:
           type: boolean
+    DebateDiagnostics:
+      type: object
+      additionalProperties: false
+      required:
+      - debate_id
+      - output_language
+      - unit
+      - length_capped
+      - agents
+      properties:
+        debate_id:
+          type: string
+        output_language:
+          type: string
+          enum:
+          - zh
+          - en
+        unit:
+          type: string
+          enum:
+          - han_chars
+          - words
+        length_capped:
+          type: boolean
+        agents:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentDiagnostic'
+    GroundingCounts:
+      type: object
+      additionalProperties: false
+      required:
+      - quoted
+      - paraphrased
+      - not_found
+      properties:
+        quoted:
+          type: integer
+        paraphrased:
+          type: integer
+        not_found:
+          type: integer
+    AgentDiagnostic:
+      type: object
+      additionalProperties: false
+      required:
+      - participant_id
+      - agent_name
+      - slot
+      - agent_md_chars
+      - knowledge_documents
+      - knowledge_chunks
+      - retrievals
+      - distinct_chunks
+      - cited_chunks
+      - traced_share
+      - grounding_counts
+      - rounds
+      properties:
+        participant_id:
+          type: string
+        agent_name:
+          type: string
+        slot:
+          type: string
+        agent_md_chars:
+          anyOf:
+          - type: integer
+          - type: 'null'
+        knowledge_documents:
+          type: integer
+        knowledge_chunks:
+          type: integer
+        retrievals:
+          type: integer
+        distinct_chunks:
+          type: integer
+        cited_chunks:
+          type: integer
+        traced_share:
+          anyOf:
+          - type: number
+          - type: 'null'
+        grounding_counts:
+          $ref: '#/components/schemas/GroundingCounts'
+        rounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoundDiagnostic'
+    RoundDiagnostic:
+      type: object
+      additionalProperties: false
+      required:
+      - turn_id
+      - round_no
+      - turn_index
+      - speech_units
+      - unit_cap
+      - repaired
+      - retrieved
+      - paragraphs
+      - traced_share
+      - repeats_earlier_share
+      properties:
+        turn_id:
+          type: string
+        round_no:
+          type: integer
+        turn_index:
+          type: integer
+        speech_units:
+          type: integer
+        unit_cap:
+          anyOf:
+          - type: integer
+          - type: 'null'
+        repaired:
+          type: boolean
+        retrieved:
+          type: array
+          items:
+            $ref: '#/components/schemas/RetrievedChunkDiagnostic'
+        paragraphs:
+          anyOf:
+          - type: array
+            items:
+              $ref: '#/components/schemas/ParagraphDiagnostic'
+          - type: 'null'
+        traced_share:
+          anyOf:
+          - type: number
+          - type: 'null'
+        repeats_earlier_share:
+          anyOf:
+          - type: number
+          - type: 'null'
+    RetrievedChunkDiagnostic:
+      type: object
+      additionalProperties: false
+      required:
+      - chunk_id
+      - source_filename
+      - rank
+      - score
+      - chunk_chars
+      - cited
+      properties:
+        chunk_id:
+          type: string
+        source_filename:
+          type: string
+        rank:
+          type: integer
+        score:
+          type: number
+        chunk_chars:
+          type: integer
+        cited:
+          type: boolean
+    ParagraphDiagnostic:
+      type: object
+      additionalProperties: false
+      required:
+      - units
+      - cited_sources
+      - self_label
+      - grounding_class
+      - coverage
+      - longest_run
+      properties:
+        units:
+          type: integer
+        cited_sources:
+          type: integer
+        self_label:
+          type:
+          - string
+          - 'null'
+          enum:
+          - direct
+          - contextual
+          - no_match
+          - null
+        grounding_class:
+          type:
+          - string
+          - 'null'
+          enum:
+          - quoted
+          - paraphrased
+          - not_found
+          - null
+        coverage:
+          anyOf:
+          - type: number
+          - type: 'null'
+        longest_run:
+          anyOf:
+          - type: integer
+          - type: 'null'
     VoteAggregate:
       type: object
       additionalProperties: false
