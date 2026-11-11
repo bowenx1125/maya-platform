@@ -20,6 +20,7 @@ import {
   quizState,
 } from "./quiz-chrome";
 import {
+  QuizSticker,
   QuizTakingControls,
   TeacherExtendedSticker,
   TeacherScheduleStickers,
@@ -157,6 +158,11 @@ export function QuizzesList() {
                         <TeacherExtendedSticker count={quiz.exemption_count} />
                       </>
                     )}
+                    {quiz.show_results === true ? (
+                      <QuizSticker tone="cyan" icon="eye">
+                        Results shown
+                      </QuizSticker>
+                    ) : null}
                     <span aria-hidden="true" className="shrink-0">
                       <WorkspaceIcon name="chevronRight" size={20} stroke={3} />
                     </span>
@@ -177,6 +183,7 @@ export function QuizzesList() {
                     </QuizKey>
                   ) : (
                     <QuizTakingControls
+                      placement="row"
                       courseId={courseId}
                       quiz={quiz}
                       onQuizUpdated={(next) =>

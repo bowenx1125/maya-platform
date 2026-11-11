@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from tests.test_classroom_quiz_api import (  # noqa: F401
     SAMPLE_ITEMS,
     Actor,
+    _set_results_visible,
     actors,
     student,
     teacher,
@@ -66,6 +67,7 @@ def test_quiz_no_standard_answer(
             item["answer"] = standard
     created = teacher.post(f"/courses/{COURSE_ID}/quizzes", {"title": "Opinion", "items": items})
     assert created.status_code == 201, created.text
+    _set_results_visible(teacher, created.json()["id"])
     base = f"/courses/{COURSE_ID}/quizzes/{created.json()['id']}"
     assert teacher.post(f"{base}/publish").status_code == 200
     assert teacher.post(f"{base}/start-taking").status_code == 200

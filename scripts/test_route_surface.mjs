@@ -88,8 +88,8 @@ try {
   // A teacher deleting a member's account adds one; a Chat turn's model input
   // (Details under Check RAG) adds one; teacher class creation adds one.
   // Quiz list/detail and four extended-time operations and scheduling add seven frozen routes;
-  // the teacher's per-Agent Debate diagnostics read and Bowen identity chooser add two.
-  if (platformOperationCount !== 165 || placeholderCount !== 0) {
+  // the teacher's per-Agent Debate diagnostics read, Quiz results visibility and Bowen identity chooser add three.
+  if (platformOperationCount !== 166 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );
@@ -150,6 +150,35 @@ try {
       (doc) => {
         delete doc.paths["/api/v1/auth/logout"].post.parameters;
       },
+    ],
+    [
+      "quiz results missing CSRF parameter",
+      (doc) => {
+        const operation =
+          doc.paths["/api/v1/courses/{course_id}/quizzes/{quiz_id}/results"]
+            .put;
+        operation.parameters = operation.parameters.filter(
+          (parameter) => parameter.in !== "header",
+        );
+      },
+      "putCourseQuizResults",
+    ],
+    [
+      "quiz results boolean request drift",
+      (doc) => {
+        doc.components.schemas.PutQuizResultsRequest.properties.show_results.type =
+          "string";
+      },
+      "putCourseQuizResults",
+    ],
+    [
+      "quiz results missing session security",
+      (doc) => {
+        doc.paths[
+          "/api/v1/courses/{course_id}/quizzes/{quiz_id}/results"
+        ].put.security = [];
+      },
+      "putCourseQuizResults",
     ],
     [
       "conversation deletion security drift",

@@ -55,6 +55,7 @@ function json(body: unknown, status = 200): Response {
 }
 
 const quizRow = {
+  show_results: true,
   source: "quiz",
   attempt_id: "att-1",
   user_id: "student-1",
@@ -87,6 +88,7 @@ const chatRow = {
 
 function detail(view: "teacher" | "student", graded = false) {
   return {
+    show_results: true,
     view,
     id: "att-1",
     quiz_id: "quiz-1",

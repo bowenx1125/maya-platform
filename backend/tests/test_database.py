@@ -48,7 +48,7 @@ def test_alembic_upgrade_is_idempotent_and_readiness_checks_head(tmp_path: Path)
     db.upgrade_schema()
     db.upgrade_schema()
     assert db.using_migrations
-    assert ALEMBIC_HEAD == "0090_bowen_identity_choice"
+    assert ALEMBIC_HEAD == "0091_quiz_show_results"
     assert db.check_ready()
     with db.engine.connect() as connection:
         assert (
@@ -129,7 +129,7 @@ def test_database_at_the_baseline_runs_no_ddl_and_keeps_its_version(tmp_path: Pa
     finally:
         event.remove(db.engine, "before_cursor_execute", record)
     assert MIGRATION_BASELINE == "0080_drop_playback_rate"
-    assert ALEMBIC_HEAD == "0090_bowen_identity_choice"
+    assert ALEMBIC_HEAD == "0091_quiz_show_results"
     assert not {"CREATE", "ALTER", "DROP", "INSERT", "UPDATE", "DELETE"} & set(statements)
     with db.engine.connect() as connection:
         assert (
@@ -158,6 +158,7 @@ def test_upgrade_0089_keeps_existing_student_session_and_adds_choice_metadata(
             text("SELECT id, name, code FROM courses ORDER BY id")
         ).all()
     with db.engine.begin() as connection:
+        connection.execute(text("ALTER TABLE classroom_quizzes DROP COLUMN show_results"))
         connection.execute(text("DROP TABLE login_identity_challenges"))
         connection.execute(text("ALTER TABLE sessions DROP COLUMN active_course_id"))
         connection.execute(text("ALTER TABLE sessions DROP COLUMN entered_via_user_id"))
