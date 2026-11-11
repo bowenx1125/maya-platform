@@ -1095,6 +1095,91 @@ describe("Agent voice picker", () => {
 });
 
 describe("Voices album create (p2-tab)", () => {
+  it.each([false, true])(
+    "uses the same picked/dropped file and busy state (album=%s)",
+    async (album) => {
+      api.voiceProfiles.mockResolvedValue([]);
+      let finish!: (value: unknown) => void;
+      api.enrollVoice.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      render(
+        <VoiceLibrary groupId="group-a" album={album} embedded={!album} />,
+      );
+      await waitFor(() =>
+        expect(
+          (screen.getByRole("button", { name: "New" }) as HTMLButtonElement)
+            .disabled,
+        ).toBe(false),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "New" }));
+      const input = screen.getByLabelText(/10–20 second/) as HTMLInputElement;
+      const tile = input.closest("label")!;
+      const picked = new File(["sample"], "picked.wav", { type: "audio/wav" });
+      fireEvent.change(input, { target: { files: [picked] } });
+      expect(within(tile).getByText("picked.wav")).toBeTruthy();
+      // Drops follow the existing picker path, which does not validate accept.
+      const dropped = new File(["sample"], "dropped.unknown");
+      const dataTransfer = {
+        types: ["Files"],
+        files: [dropped],
+        dropEffect: "none",
+      };
+      fireEvent.dragEnter(tile, { dataTransfer });
+      expect(tile.getAttribute("data-drag")).toBe("over");
+      fireEvent.dragLeave(tile, { dataTransfer, relatedTarget: document.body });
+      expect(tile.hasAttribute("data-drag")).toBe(false);
+      fireEvent.dragOver(tile, { dataTransfer });
+      expect(tile.getAttribute("data-drag")).toBe("over");
+      fireEvent.drop(tile, { dataTransfer });
+      expect(tile.hasAttribute("data-drag")).toBe(false);
+      expect(within(tile).getByText("dropped.unknown")).toBeTruthy();
+      expect(within(tile).queryByText("picked.wav")).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", { name: album ? "Done" : CONSENT }),
+      );
+      expect(tile.getAttribute("aria-busy")).toBe("true");
+      expect(input.disabled).toBe(true);
+      expect(api.enrollVoice.mock.calls.at(-1)?.[1]).toBe(dropped);
+      expect(
+        fireEvent.drop(tile, {
+          dataTransfer: { types: ["Files"], files: [picked] },
+        }),
+      ).toBe(false);
+      expect(within(tile).getByText("dropped.unknown")).toBeTruthy();
+      await act(async () => {
+        finish({
+          id: "new-voice",
+          status: "ready",
+          source_filename: dropped.name,
+        });
+      });
+      expect(await screen.findByText("Created")).toBeTruthy();
+    },
+  );
+
+  it("ignores drops when the parent disables the Voices create tile", async () => {
+    api.voiceProfiles.mockResolvedValue([]);
+    render(<VoiceLibrary groupId="group-a" album initialCreate disabled />);
+    const input = (await screen.findByLabelText(
+      /10–20 second/,
+    )) as HTMLInputElement;
+    const tile = input.closest("label")!;
+    const dataTransfer = {
+      types: ["Files"],
+      files: [new File(["sample"], "ignored.wav")],
+    };
+    expect(input.disabled).toBe(true);
+    expect(fireEvent.dragOver(tile, { dataTransfer })).toBe(false);
+    expect(tile.hasAttribute("data-drag")).toBe(false);
+    expect(fireEvent.drop(tile, { dataTransfer })).toBe(false);
+    expect(within(tile).queryByText("ignored.wav")).toBeNull();
+    expect(api.enrollVoice).not.toHaveBeenCalled();
+  });
+
   it("labels the sample requirement and wires Done to it and the consent", async () => {
     api.voiceProfiles.mockResolvedValue([]);
     render(

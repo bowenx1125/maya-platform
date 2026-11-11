@@ -1,5 +1,7 @@
 "use client";
 
+import { useFileDrop } from "../ui/use-file-drop";
+
 import { LIST_CARD_LIFT } from "../agent-chrome";
 import { BUSY_MOTION_PRIMARY, PRESS_HIT, PRESS_MOTION } from "../ui/button";
 import { useEffect, useState, type ReactNode } from "react";
@@ -311,12 +313,18 @@ export function VoiceAlbumCreate({
   requirement,
   consent,
   consentAction,
+  busy,
+  disabled,
+  onFile,
 }: {
   fileName: string | null;
   /** The sr-only file input (aria-label + aria-describedby set by the caller). */
   input: ReactNode;
   requirement: string;
   consent: string;
+  busy?: boolean;
+  disabled?: boolean;
+  onFile?: (file: File) => void;
   /**
    * Makes the consent card the create button (Agent page: confirming consent
    * is the create step there, with no header Done).
@@ -329,6 +337,7 @@ export function VoiceAlbumCreate({
   };
 }) {
   const hasFile = Boolean(fileName);
+  const fileDrop = useFileDrop({ busy, disabled, onFile });
   const consentCard = `flex items-start gap-[12px] rounded-[14px] border-[3px] border-[#111] px-[22px] py-[20px] @max-[48rem]:px-[16px] @max-[48rem]:py-[16px] @max-[48rem]:text-[18px] [font:800_22px/1.35_var(--font-bricolage,'Bricolage_Grotesque'),system-ui] ${hasFile ? "border-solid bg-white text-[#111] shadow-[6px_6px_0_#111]" : "border-dashed bg-transparent text-[#9ca3af]"}`;
   // Sized by the room it gets, not the window: the Voices page draws it wide,
   // the narrow Voice card on an Agent page gets the compact record player.
@@ -337,10 +346,14 @@ export function VoiceAlbumCreate({
       <div className="relative grid @max-[22rem]:[zoom:0.75] grid-cols-[auto_1fr] items-center gap-[56px] px-[30px] pt-[20px] pb-[30px] @max-[48rem]:grid-cols-[minmax(0,1fr)] @max-[48rem]:gap-[26px] @max-[48rem]:px-0 @max-[48rem]:pt-[4px] @max-[48rem]:pb-[96px] [&>*:not([aria-hidden])]:relative [&>*:not([aria-hidden])]:z-[1]">
         <CreateDeco hasFile={hasFile} />
         <label
-          className={`mt-[44px] ml-[44px] grid h-[340px] w-[340px] @max-[48rem]:mt-[25px] @max-[48rem]:ml-[25px] @max-[48rem]:mb-[30px] @max-[48rem]:h-[194px] @max-[48rem]:w-[194px] cursor-pointer place-items-center rounded-[50%] border-4 border-solid border-[#111] [background:repeating-radial-gradient(circle,#111_0_3px,#2a2a2a_3px_7px)] ${hasFile ? "shadow-[8px_8px_0_#111,0_0_0_10px_#a3e635]" : "shadow-[8px_8px_0_#111]"}`}
+          aria-busy={busy || undefined}
+          data-kind="voice"
+          data-has-file={hasFile || undefined}
+          {...fileDrop}
+          className={`upload-tile mt-[44px] ml-[44px] grid h-[340px] w-[340px] @max-[48rem]:mt-[25px] @max-[48rem]:ml-[25px] @max-[48rem]:mb-[30px] @max-[48rem]:h-[194px] @max-[48rem]:w-[194px] cursor-pointer place-items-center rounded-[50%] border-4 border-solid border-[#111] [background:repeating-radial-gradient(circle,#111_0_3px,#2a2a2a_3px_7px)] ${hasFile ? "shadow-[8px_8px_0_#111,0_0_0_10px_#a3e635]" : "shadow-[8px_8px_0_#111]"}`}
         >
           <span
-            className={`grid h-[150px] w-[150px] @max-[48rem]:h-[88px] @max-[48rem]:w-[88px] @max-[48rem]:p-[8px] place-items-center rounded-[50%] border-4 border-solid border-[#111] p-[14px] text-center ${hasFile ? "bg-[#ff4d8d]" : "bg-[#ffe14d]"}`}
+            className={`upload-tile-disc grid h-[150px] w-[150px] @max-[48rem]:h-[88px] @max-[48rem]:w-[88px] @max-[48rem]:p-[8px] place-items-center rounded-[50%] border-4 border-solid border-[#111] p-[14px] text-center ${hasFile ? "bg-[#ff4d8d]" : "bg-[#ffe14d]"}`}
           >
             {fileName ? (
               <b

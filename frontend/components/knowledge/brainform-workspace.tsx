@@ -79,6 +79,7 @@ import {
   knowledgeAlbum as kAlbum,
 } from "./knowledge-album";
 import { Button } from "../ui/button";
+import { useFileDrop } from "../ui/use-file-drop";
 import { cn } from "../../lib/utils";
 
 /**
@@ -1699,6 +1700,16 @@ function BrainformWorkspaceBody({
       file: null,
     }));
   }
+
+  function selectRagFile(file: File) {
+    if (pane?.kind === "rag-new") void importNewRag(file);
+    else if (pane?.kind === "rag-edit") void importRag(pane.draftKey, file);
+  }
+
+  const ragFileDrop = useFileDrop({
+    disabled: Boolean(busyKey),
+    onFile: selectRagFile,
+  });
 
   async function saveNewRag() {
     const draft = newRag;
@@ -3412,6 +3423,8 @@ function BrainformWorkspaceBody({
             ) : (
               <label
                 className={album.pack}
+                data-kind="rag"
+                {...ragFileDrop}
                 aria-busy={
                   pane.kind === "rag-new"
                     ? busyKey === "rag-new"
@@ -3441,9 +3454,7 @@ function BrainformWorkspaceBody({
                     const file = event.currentTarget.files?.[0];
                     event.currentTarget.value = "";
                     if (!file) return;
-                    if (pane.kind === "rag-new") void importNewRag(file);
-                    else if (pane.kind === "rag-edit")
-                      void importRag(pane.draftKey, file);
+                    selectRagFile(file);
                   }}
                 />
               </label>

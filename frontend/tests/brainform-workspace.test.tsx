@@ -1,6 +1,8 @@
+import "@testing-library/jest-dom/vitest";
 import {
   act,
   cleanup,
+  createEvent,
   fireEvent,
   render,
   screen,
@@ -266,6 +268,99 @@ afterEach(() => {
 });
 
 describe("Brainform workspace actions", () => {
+  it.each(["pick", "drop"])(
+    "fills the RAG create tile from a %s and keeps the existing extension notice",
+    async (method) => {
+      state.role = "teacher";
+      renderWorkspace("teacher", { ragPage: true });
+      fireEvent.click(await screen.findByRole("button", { name: "New RAG" }));
+      const input = screen.getByLabelText("Upload RAG");
+      const tile = input.closest("label")!;
+      const select = (file: File) => {
+        if (method === "pick")
+          fireEvent.change(input, { target: { files: [file] } });
+        else
+          fireEvent.drop(tile, {
+            dataTransfer: { types: ["Files"], files: [file] },
+          });
+      };
+      select(
+        markdownUpload(
+          "Dropped.md",
+          Promise.resolve(new TextEncoder().encode("# Dropped notes").buffer),
+        ),
+      );
+      await waitFor(() =>
+        expect(screen.getByLabelText("Content")).toHaveValue("# Dropped notes"),
+      );
+      expect(screen.getByLabelText("File Name")).toHaveValue("Dropped");
+      select(new File(["wrong"], "wrong.txt"));
+      expect(
+        screen.getByText(
+          "Choose a .md, .pdf, or .docx file, or enter non-empty Markdown.",
+        ),
+      ).toBeTruthy();
+      expect(screen.getByLabelText("Content")).toHaveValue("# Dropped notes");
+    },
+  );
+
+  it("tracks RAG tile drag state and ignores a drop during an edit import", async () => {
+    state.role = "teacher";
+    state.api.workspaceDocuments.mockResolvedValue([source]);
+    renderWorkspace("teacher", { ragPage: true });
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Edit lesson.md" }))[0],
+    );
+    const input = await screen.findByLabelText("Import a file");
+    const tile = input.closest("label")!;
+    const dataTransfer = {
+      types: ["Files"],
+      files: [] as File[],
+      dropEffect: "none",
+    };
+    fireEvent.dragEnter(tile, { dataTransfer });
+    expect(tile).toHaveAttribute("data-drag", "over");
+    expect(dataTransfer.dropEffect).toBe("copy");
+    const leaveToDisc = createEvent.dragLeave(tile, { dataTransfer });
+    Object.defineProperty(leaveToDisc, "relatedTarget", {
+      value: tile.querySelector("svg"),
+    });
+    fireEvent(tile, leaveToDisc);
+    expect(tile).toHaveAttribute("data-drag", "over");
+    fireEvent.dragLeave(tile, { dataTransfer, relatedTarget: document.body });
+    expect(tile).not.toHaveAttribute("data-drag");
+    let finish!: (bytes: ArrayBuffer) => void;
+    const bytes = new Promise<ArrayBuffer>((resolve) => {
+      finish = resolve;
+    });
+    fireEvent.dragOver(tile, { dataTransfer });
+    fireEvent.drop(tile, {
+      dataTransfer: {
+        types: ["Files"],
+        files: [markdownUpload("Reading.md", bytes)],
+      },
+    });
+    expect(tile).not.toHaveAttribute("data-drag");
+    expect(tile).toHaveAttribute("aria-busy", "true");
+    expect(input).toBeDisabled();
+    const ignored = new File(["# Ignored"], "Ignored.md");
+    const read = vi.fn();
+    Object.defineProperty(ignored, "arrayBuffer", { value: read });
+    expect(fireEvent.dragOver(tile, { dataTransfer })).toBe(false);
+    expect(tile).not.toHaveAttribute("data-drag");
+    expect(
+      fireEvent.drop(tile, {
+        dataTransfer: { types: ["Files"], files: [ignored] },
+      }),
+    ).toBe(false);
+    expect(read).not.toHaveBeenCalled();
+    await act(async () => {
+      finish(new TextEncoder().encode("# Imported").buffer);
+    });
+    expect(screen.getByLabelText("File Name")).toHaveValue("Reading.md");
+    expect(screen.getByLabelText("Content")).toHaveValue("# Imported");
+  });
+
   it("uses the active teacher class on RAG without a second class selector", async () => {
     state.role = "teacher";
     state.courseIds = ["course-1", "course-2"];
