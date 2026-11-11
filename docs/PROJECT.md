@@ -187,32 +187,24 @@ Per-sign-in Studyform/Brainform/Chat/Voices cache:6 parallel,10s reuse,429/503 b
 Students use teachers' public Agents only in Teams; old chats read-only. Oct19:
 uploaded Voices ready at once (0073);▷ listens only;Team model call12 rows.
 
-## Oct20–23 releases
-
-#225–#239/0076:answer guard,public editing/audit,Chat-independent Record,cascade
+Oct20–23 #225–#239/0076:answer guard,public editing/audit,Chat-independent Record,cascade
 recovery/no auto-retry,login fences,stale_base_version,constant history SELECTs,
 PG poll REPEATABLE READ.50-user Mock:p95≤7.85s. Details:Git history.
 
-## Oct24 Team chats and junk (#241)
+## Oct24 chats/deletion/Next/create
 
-Open Team chats follow each new Team version; history,mid-reply chats and unfinished
+#241:Open Team chats follow each new Team version; history,mid-reply chats and unfinished
 attempts keep theirs. Failed uncharged RAG uploads/Voices dropped; empty Agents swept after 1h.
 
-## Oct24 true deletion (#242, supersedes #233)
-
-0080:work hard-deletes with storage; null history FKs/name snapshots preserve
+#242(supersedes #233)/0080:work hard-deletes with storage; null history FKs/name snapshots preserve
 Records. Agent/Team deletion ends chats and abandons unfinished attempts.
 Debates own AGENT.md/RAG/Knowledge and voice ID/sample copies; supplier cleanup
 waits for no holders under a per-voice lock. Prune keeps head+previous/in-use.
 Scripts:backfill_debate_snapshots,backfill_debate_voice_clones,cleanup_soft_deleted
 (dry-run default,--confirm-production).
 
-## Oct24 Debate Next and errors
-
 Next: live prepares up to3 turns ahead after final-ready predecessors;per-Debate lock;
 controller-only next-audio prefetch ticket. Errors name the Agent/Team or show the code.
-
-## Oct24 cleanup, hints, Debate create
 
 app/modules/purge.py rules every live FK delete/null/protect; unknown refs retain parents;
 unlink after outer commit. Records/answers/Debate copies/ledgers keep null links except
@@ -231,22 +223,16 @@ loop (offload.py);per-Debate lock;tickets in Postgres (0079);Next 103→35 SQL.
 E:DEBATE_LLM_* (no MAYA_ prefix;unset=previous)/DEBATE_TTS_* freeze into rule_snapshot_json
 (null=not sent);v3 contract lived in the Ruleset,pre-v3 keep legacy;playback rate 1.0 (0080).
 
-## Oct27 UI (#305)
+Oct27 UI#305:Agents4-col,Teams3-col;sign-in38v3;one39C LoadingCard;fixed key hit area.
 
-Agents4-col,Teams3-col;sign-in38v3;one39C LoadingCard;fixed key hit area.
-
-## Nov2 Chatform lists
+## Nov2 Chatform, visits, chat speed
 
 0081 adds chat_type agent|team; maya_team=team. Backfill needs entry-kind/binding
 agreement; leftover NULLs logged,typed lists skip them. Separate Agent/Team
 histories; no kind selects Agent history.
 
-## Nov2 Accounts group visit
-
 0082:Enter grants2h teacher_group_access (not roster),renewed20min;Backout;expiry sweeps/min.
 Visits edit group Studyform Agents/public Brainform,not deletion/other groups.
-
-## Nov2 chat speed and recovery
 
 Single Chat: `draft` SSE (unsaved text as written), then delta/text_done after commit;
 ledger keeps the folded completion. Turn runners hold a pg advisory lock; each process
@@ -265,15 +251,12 @@ Accounts: filter; Delete is real (DELETE /courses/{id}/members/{user}). Chat 429
 provider_rate_limited, 502/503/504/529 → provider_busy (one call). Ordinary Team members
 answer together (≤3; assessment Teams one at a time); history is one read. 390px Brainform fits.
 
-## Nov5 Agent Chat identity
+## Nov5–6 Agent Chat, recovery
 
 #337/#338: Agent Chats send the Agent name, AGENT.md, Knowledge and RAG.
 No assessment Tools or attempt; Teams unchanged. Owner-only RAG Details
 shows stored model input; scoring/summary Rubrics remain hidden.
-
-## Nov6 recovery
-
-Off main70ecfa29 (#356/#357). Replay=Rebirth;Review=playback,not a rebirth lock.
+Nov6 off main70ecfa29 (#356/#357). Replay=Rebirth;Review=playback,not a rebirth lock.
 Revocalize:durable intent,3 workers,Back/F5 reseed/revision reconcile;admission refusal
 retries safely,ambiguous keys kept,definitive failures shown/manual retry. No calls/deploy;
 volume untouched. Stalled needs backend receipt recovery;safety gates kept.
@@ -311,3 +294,8 @@ down to 5s,min 40/25; >1.25×cap:1 repair,then trailing whole sentences dropped.
 stump<40% cap or own 8/5-gram overlap>35%:1 repair,then accepted. Round-1 query:Topic,
 Topic+name+stance,no Agent.md. v4 snapshots drop min/max/target words,retrieval_policy_id,
 frequency_penalty. v3/older keep their bytes (pinned test). Offline tests only;0 provider calls.
+
+## Nov11 RAG chunks, diagnostics
+
+Builds:`markdown-structure-600t-v3`,150–900 tokens,no overlap; v2 snapshots kept
+till republish. Teacher `getDebateDiagnostics`:3-gram grounding.
