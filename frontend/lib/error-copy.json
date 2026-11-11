@@ -1,6 +1,12 @@
 {
   "comment": "Copy for error codes without a specific i18n message (PR D3). backend/tests/test_error_copy_contract.py fails when a code the backend can send has no copy here or in errorCodeKeys.",
   "messages": {
+    "accountDeleteBlocked": {
+      "en": "This account still has protected references. Nothing was deleted."
+    },
+    "accountDeleteScope": {
+      "en": "Ask a teacher who manages all this account's classes to delete it."
+    },
     "accountFieldManaged": {
       "en": "This comes from the course's account list. Ask your teacher to change it."
     },
@@ -82,23 +88,14 @@
     "chatReplyFailed": {
       "en": "This reply didn't finish. Send your message again."
     },
+    "classChangeForbidden": {
+      "en": "Only students can change class."
+    },
     "classNameInvalid": {
       "en": "Enter a class name with at most 200 characters."
     },
     "classNameTaken": {
       "en": "A class already uses that name. Choose another name."
-    },
-    "accountDeleteBlocked": {
-      "en": "This account still has protected references. Nothing was deleted."
-    },
-    "accountDeleteScope": {
-      "en": "Ask a teacher who manages all this account's classes to delete it."
-    },
-    "teacherDeleteForbidden": {
-      "en": "Teacher accounts cannot be deleted here."
-    },
-    "classChangeForbidden": {
-      "en": "Only students can change class."
     },
     "classNotFound": {
       "en": "Choose an available class."
@@ -220,6 +217,21 @@
     "quizEmpty": {
       "en": "Add at least one question before publishing."
     },
+    "quizExemptionAlreadySubmitted": {
+      "en": "Some students have already submitted."
+    },
+    "quizExemptionDeadlineNaive": {
+      "en": "The deadline must include a timezone."
+    },
+    "quizExemptionDeadlinePast": {
+      "en": "The deadline must be in the future."
+    },
+    "quizExemptionInvalidStudent": {
+      "en": "Only students of this class can be extended."
+    },
+    "quizExemptionNotStarted": {
+      "en": "Start taking once before extending time."
+    },
     "quizGradeItemInvalid": {
       "en": "Only text questions can be graded by hand, each once per save."
     },
@@ -240,6 +252,15 @@
     },
     "quizPublishedImmutable": {
       "en": "Unpublish this quiz before editing it."
+    },
+    "quizScheduleInPast": {
+      "en": "Choose a time in the future."
+    },
+    "quizScheduleNaive": {
+      "en": "The time must include a timezone."
+    },
+    "quizScheduleOrder": {
+      "en": "The end time must be after the start time."
     },
     "recordInUse": {
       "en": "This record is still in use and wasn't deleted."
@@ -277,6 +298,9 @@
     "sourceDeleted": {
       "en": "The source file was deleted."
     },
+    "teacherDeleteForbidden": {
+      "en": "Teacher accounts cannot be deleted here."
+    },
     "teamReplyFailed": {
       "en": "The Team reply didn't finish. Send your message again."
     },
@@ -305,6 +329,8 @@
     "acceptance_unknown": "aiStepFailed",
     "accepted_stage_missing": "aiStepFailed",
     "accepted_stage_ready": "aiStepFailed",
+    "account_delete_blocked": "accountDeleteBlocked",
+    "account_delete_scope_forbidden": "accountDeleteScope",
     "agent_memory_name_ambiguous": "memberNameAmbiguous",
     "agent_memory_name_unknown": "memberNameUnknown",
     "agent_memory_span_missing": "notAvailable",
@@ -412,13 +438,10 @@
     "claim_invalid": "aiStepFailed",
     "claim_lost": "aiStepFailed",
     "claim_unavailable": "aiStepFailed",
-    "account_delete_blocked": "accountDeleteBlocked",
-    "account_delete_scope_forbidden": "accountDeleteScope",
-    "teacher_delete_forbidden": "teacherDeleteForbidden",
     "class_change_forbidden": "classChangeForbidden",
-    "class_not_found": "classNotFound",
     "class_name_invalid": "classNameInvalid",
     "class_name_taken": "classNameTaken",
+    "class_not_found": "classNotFound",
     "classroom_public_url_unavailable": "classroomUrlUnavailable",
     "cleanup_failed": "cleanupFailed",
     "cleanup_journal_invalid": "cleanupFailed",
@@ -761,6 +784,11 @@
     "quiz_answer_leak": "quizAnswerLeak",
     "quiz_document_invalid": "quizDocumentInvalid",
     "quiz_empty": "quizEmpty",
+    "quiz_exemption_already_submitted": "quizExemptionAlreadySubmitted",
+    "quiz_exemption_deadline_naive": "quizExemptionDeadlineNaive",
+    "quiz_exemption_deadline_past": "quizExemptionDeadlinePast",
+    "quiz_exemption_invalid_student": "quizExemptionInvalidStudent",
+    "quiz_exemption_not_started": "quizExemptionNotStarted",
     "quiz_grade_item_invalid": "quizGradeItemInvalid",
     "quiz_grade_points_invalid": "quizGradePointsInvalid",
     "quiz_item_choices_invalid": "quizItemChoicesInvalid",
@@ -768,6 +796,9 @@
     "quiz_item_type_invalid": "quizItemTypeInvalid",
     "quiz_not_published": "quizNotPublished",
     "quiz_published_immutable": "quizPublishedImmutable",
+    "quiz_schedule_in_past": "quizScheduleInPast",
+    "quiz_schedule_naive": "quizScheduleNaive",
+    "quiz_schedule_order": "quizScheduleOrder",
     "range_not_satisfiable": "notAvailable",
     "receipt_hash_changed": "aiStepFailed",
     "receipt_hash_invalid": "aiStepFailed",
@@ -892,6 +923,7 @@
     "support_mode_source_mismatch": "aiStepFailed",
     "target_head_changed": "aiStepFailed",
     "target_head_missing": "aiStepFailed",
+    "teacher_delete_forbidden": "teacherDeleteForbidden",
     "team_acceptance_unknown": "teamReplyFailed",
     "team_call_unavailable": "teamReplyFailed",
     "team_chat_runtime_unavailable": "teamReplyFailed",

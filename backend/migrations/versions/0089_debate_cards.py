@@ -4,8 +4,8 @@ Every existing row keeps a null card status: a Debate created before cards
 never compiles one and keeps sending its original AGENT.md. No row is
 rewritten.
 
-Revision ID: 0088_debate_cards
-Revises: 0087_account_author_links
+Revision ID: 0089_debate_cards
+Revises: 0088_quiz_exemptions_schedule
 """
 
 from collections.abc import Sequence
@@ -13,8 +13,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0088_debate_cards"
-down_revision: str | Sequence[str] | None = "0087_account_author_links"
+revision: str = "0089_debate_cards"
+down_revision: str | Sequence[str] | None = "0088_quiz_exemptions_schedule"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

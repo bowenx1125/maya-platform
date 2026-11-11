@@ -4,24 +4,22 @@ Progress authority; [AGENTS.md](../AGENTS.md) governs work; latest user decision
 
 ## Approved four-round flow — Sep8, 2026
 
-4 rounds,2–5 Agents,no selector,four_round_v1/segments_v2; old records kept,historical
-recovery compatibility waived. Opening:independent own-KB/high priority,cultural
-perspective,acknowledged gaps. Discussion:own-KB/low priority,address claims,stable
-cyclic Agent questions,no moderator/planner. Response:actual challenges/medium retrieval;
-memory=position/change/reason/influence/unresolved_question. Conclusion:fresh own-KB/
-high priority,public speeches/memory,agreement/criticism/learning; freeze barrages
-once,one eligible reply/Agent,no invention.
-
-Preview:R1–3 text/audio,R4 live. Successful predecessors visible (same-round after
-barriers). Rotating order,fixed identities/targets. Next/scheduling/hashes/recovery:
-accepted prefix reused,no recharge. Length: see Nov10 v4 (pre-v4 Debates: never
-rejected/trimmed). Bad auxiliary metadata dropped,exact sources/bindings kept.
-Unreadable:≤1 authorized frozen repair; one-call adds none; unknown never resent.
-Questions≠reply_to. Memory excludes speech/TTS/Agent.md/version/KB; Round4/Report:
-separate session_discussion_memory. Own KB/Persona+others' public speeches only,no
-private receipts/Persona.0024:drops speaker/snapshot FK only. Evidence support≠
-accuracy:direct+5/contextual+2/no_match+0. [Prompts](contracts/FOUR_ROUND_PROMPTS.md)/
-[examples](contracts/four-round-example.json):manual review,no keyword/similarity gates.
+4 rounds,2–5 Agents,no selector;four_round_v1/segments_v2;old records kept,historical
+recovery waived. R1:independent own-KB/high priority,cultural perspective,gaps.
+R2:own-KB/low,address claims,stable cyclic Agent questions,no moderator/planner.
+R3:actual challenges/medium retrieval;memory=position/change/reason/influence/
+unresolved_question. R4:fresh own-KB/high,public speeches/memory,agreement/criticism/
+learning;freeze barrages once,one eligible reply/Agent,no invention.
+Preview:R1–3 text/audio,R4 live;successful predecessors visible,same-round post-barrier.
+Rotating order,fixed identities/targets;Next/scheduling/hashes/recovery reuse accepted
+prefix,no recharge. Length:Nov10 v4;older Debates never rejected/trimmed. Bad auxiliary
+metadata dropped,exact sources/bindings kept. Unreadable:≤1 authorized frozen repair;
+one-call adds none;unknown never resent. Questions≠reply_to. Memory excludes speech/
+TTS/Agent.md/version/KB;R4/Report:separate session_discussion_memory. Own KB/Persona+
+others' public speeches only,no private receipts/Persona.0024:drops speaker/snapshot
+FK only. Support≠accuracy:direct+5/contextual+2/no_match+0.
+[Prompts](contracts/FOUR_ROUND_PROMPTS.md)/[examples](contracts/four-round-example.json):
+manual review,no keyword/similarity gates.
 
 ## Classroom and accounts
 
@@ -102,12 +100,12 @@ unknown protections stay. Four-Agent,classroom load,real Team/report acceptance 
 
 ## Oct7 closure
 
-Teacher generate_agent_knowledge reuses accepted receipts,wakes after commit; first
-publication needs no prior Set. RAG:pending-save lock/draft fence. Production:no Demo/
-quick-login/auto-confirm; exact HTTPS,strong Teacher creds,dedicated mounts,
-abuse bounds only. C1 Mock:60 registrations,parallel send/replay/SSE,0 Provider
-calls. Backup113435Z/migration0053→0054 kept Provider records,0 charges.
-Colleague pose e9b000a:one canvas;preset voice b8f65e7=0056;TTS bar054f420 excluded.
+Teacher generate_agent_knowledge:accepted receipts reused,post-commit wake;first
+publish needs no Set. RAG pending-save lock/draft fence. Production:no Demo/quick-
+login/auto-confirm;exact HTTPS,strong Teacher creds,isolated mounts,abuse bounds only.
+C1 Mock:60 registrations,parallel send/replay/SSE,0 calls. Backup113435Z/0053→0054:
+Provider records kept,0 charges. Pose e9b000a:one canvas;preset voice b8f65e7=0056;
+TTS bar054f420 excluded.
 
 Oct9–13:Debates in Brainform/Chatform/Studyform; private read_memory may pause
 team_no_progress; role Tool ACL; publisher edits Agent.md/Brainform/Avatar/Voice.
@@ -262,6 +260,9 @@ volume untouched. Stalled needs backend receipt recovery;safety gates kept.
 detail,hand grading,hide;Record→Quiz. #383/4:opt-in AI grading. UI A:1 page/quiz,
 Paper|Submissions,no Chat tests;New/Back/Done 1 style. [Contract](contracts/CLASSROOM_QUIZ_API.md)
 Agent name card;Private→Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)).
+Nov11 in progress:0088_quiz_exemptions_schedule adds epoch deadlines+one-shot taking,
+lazy+10s sweeper(non-test lifespan).Static checks pass;PG/boundary:sandbox EPERM.
+0 calls/deploy.
 
 ## Nov9 local classes and accounts (in progress)
 
@@ -295,7 +296,7 @@ till republish. Teacher `getDebateDiagnostics`:3-gram grounding.
 
 ## Nov11 Debate cards (phase B)
 
-0088: new v4 participants start `compiling`; before an Agent's first turn its frozen
+0089: new v4 participants start `compiling`; before an Agent's first turn its frozen
 AGENT.md compiles once (`llm_debate_card`, Debate model,strict schema, 1 ledgered
 attempt, 60s) to identity/position/reasoning/style/voice/dropped, ≤600 Han/400 words.
 Ready→card persona;failure/Mock→fallback (raw AGENT.md); null (old) keeps pinned bytes.

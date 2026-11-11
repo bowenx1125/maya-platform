@@ -34,6 +34,11 @@ import {
   QuizTabs,
   quizState,
 } from "./quiz-chrome";
+import {
+  QuizTakingControls,
+  TeacherExtendedSticker,
+  TeacherScheduleStickers,
+} from "./quiz-taking-controls";
 import { QuizSubmissions } from "./quiz-submissions";
 import { PageBanner } from "../page-banner";
 import { PageAction } from "../page-action";
@@ -123,6 +128,10 @@ export function QuizEditor({
   const doneLock = useRef(false);
   const [error, setError] = useState<unknown>(null);
   const [takingOpen, setTakingOpen] = useState(false);
+  const [takingEpoch, setTakingEpoch] = useState(0);
+  const [exemptionCount, setExemptionCount] = useState(0);
+  const [scheduledStartAt, setScheduledStartAt] = useState<string | null>(null);
+  const [scheduledEndAt, setScheduledEndAt] = useState<string | null>(null);
   const [problems, setProblems] = useState<string[]>([]);
   const [tab, setTab] = useState<QuizPageTab | null>(initialTab ?? null);
   const [attemptCount, setAttemptCount] = useState(0);
@@ -140,6 +149,10 @@ export function QuizEditor({
         setTitle(quiz.title);
         setStatus(quiz.status);
         setTakingOpen(quiz.taking_open === true);
+        setTakingEpoch(quiz.taking_epoch ?? 0);
+        setExemptionCount(quiz.exemption_count ?? 0);
+        setScheduledStartAt(quiz.scheduled_start_at ?? null);
+        setScheduledEndAt(quiz.scheduled_end_at ?? null);
         setAttemptCount(quiz.attempt_count ?? 0);
         // Teacher DTO answer keys may be absent for text items; normalize so
         // the editor always edits defined fields.
@@ -258,24 +271,6 @@ export function QuizEditor({
     }
   };
 
-  const onToggleEvaluation = async (next: "start" | "pause") => {
-    if (!quizId || !courseId || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const updated =
-        next === "start"
-          ? await quizApi.startTaking(courseId, quizId)
-          : await quizApi.pauseTaking(courseId, quizId);
-      setTakingOpen(updated.taking_open === true);
-      setStatus(updated.status);
-    } catch (err) {
-      setError(err);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const onUnpublish = async () => {
     if (!quizId || !courseId) return;
     setBusy(true);
@@ -351,24 +346,44 @@ export function QuizEditor({
       >
         <QuizStatus state={state} label={stateLabel} />
         {locked ? (
-          takingOpen ? (
-            <QuizKey
-              icon="pause"
-              busy={busy}
-              onClick={() => void onToggleEvaluation("pause")}
-            >
-              {t("quizPauseEvaluation")}
-            </QuizKey>
-          ) : (
-            <QuizKey
-              icon="play"
-              tone="primary"
-              busy={busy}
-              onClick={() => void onToggleEvaluation("start")}
-            >
-              {t("quizStartEvaluation")}
-            </QuizKey>
-          )
+          <>
+            <TeacherScheduleStickers
+              startAt={scheduledStartAt}
+              endAt={scheduledEndAt}
+            />
+            <TeacherExtendedSticker count={exemptionCount} />
+          </>
+        ) : null}
+        {locked && quizId ? (
+          <QuizTakingControls
+            courseId={courseId}
+            quiz={{
+              id: quizId,
+              course_id: courseId,
+              title,
+              status: status === "published" ? "published" : "draft",
+              schema_version: 1,
+              content_revision: 1,
+              created_by_user_id: "",
+              created_at: "",
+              updated_at: "",
+              taking_open: takingOpen,
+              taking_epoch: takingEpoch,
+              exemption_count: exemptionCount,
+              scheduled_start_at: scheduledStartAt,
+              scheduled_end_at: scheduledEndAt,
+            }}
+            busy={busy}
+            onQuizUpdated={(updated) => {
+              setTakingOpen(updated.taking_open === true);
+              setStatus(updated.status);
+              setTakingEpoch(updated.taking_epoch ?? takingEpoch);
+              setExemptionCount(updated.exemption_count ?? exemptionCount);
+              setScheduledStartAt(updated.scheduled_start_at ?? null);
+              setScheduledEndAt(updated.scheduled_end_at ?? null);
+            }}
+            onError={setError}
+          />
         ) : null}
         {hasRecord ? (
           <QuizKey

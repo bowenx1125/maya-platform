@@ -9285,6 +9285,609 @@
         }
       }
     },
+    "/api/v1/courses/{course_id}/quizzes": {
+      "get": {
+        "operationId": "listCourseQuizzes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/QuizSummaryDTO"
+                  },
+                  "title": "Response Listcoursequizzes",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List Course Quizzes",
+        "tags": [
+          "Classroom Quiz"
+        ]
+      }
+    },
+    "/api/v1/courses/{course_id}/quizzes/{quiz_id}": {
+      "get": {
+        "operationId": "getCourseQuiz",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quiz_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quiz Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TeacherQuizDTO"
+                    },
+                    {
+                      "$ref": "#/components/schemas/StudentQuizDTO"
+                    }
+                  ],
+                  "title": "Response Getcoursequiz"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Get Course Quiz",
+        "tags": [
+          "Classroom Quiz"
+        ]
+      }
+    },
+    "/api/v1/courses/{course_id}/quizzes/{quiz_id}/exemptions": {
+      "delete": {
+        "operationId": "clearCourseQuizExemptions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quiz_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quiz Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Exemptions removed."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Clear Course Quiz Exemptions",
+        "tags": [
+          "Classroom Quiz"
+        ]
+      },
+      "get": {
+        "operationId": "listCourseQuizExemptions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quiz_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quiz Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizExemptionsDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List Course Quiz Exemptions",
+        "tags": [
+          "Classroom Quiz"
+        ],
+        "description": "Current-epoch exemptions, including expired deadlines, and the active student roster with current-epoch submission flags. Only an unexpired exemption extends paused taking; the paper must remain published."
+      },
+      "put": {
+        "operationId": "putCourseQuizExemptions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quiz_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quiz Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutQuizExemptionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizExemptionsDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Put Course Quiz Exemptions",
+        "tags": [
+          "Classroom Quiz"
+        ],
+        "description": "Upsert current-epoch deadlines for 1–500 student IDs (duplicates collapsed). Deadlines require a timezone (422 quiz_exemption_deadline_naive) and must be in the future (422 quiz_exemption_deadline_past). Only active student members may be extended (422 quiz_exemption_invalid_student, details.student_ids). Any current-epoch attempt, including hidden attempts, rejects the whole grant (409 quiz_exemption_already_submitted, details.student_ids). Granting before the first taking epoch returns 409 quiz_exemption_not_started. Grants may otherwise be managed in any publication state. Starting a new epoch clears every exemption."
+      }
+    },
+    "/api/v1/courses/{course_id}/quizzes/{quiz_id}/exemptions/{student_id}": {
+      "delete": {
+        "operationId": "deleteCourseQuizExemption",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quiz_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quiz Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "student_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Student Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Exemptions removed."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Delete Course Quiz Exemption",
+        "tags": [
+          "Classroom Quiz"
+        ]
+      }
+    },
+    "/api/v1/courses/{course_id}/quizzes/{quiz_id}/schedule": {
+      "put": {
+        "operationId": "putCourseQuizSchedule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quiz_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quiz Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutQuizScheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeacherQuizDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Put Course Quiz Schedule",
+        "tags": [
+          "Classroom Quiz"
+        ],
+        "description": "Replace both one-shot taking times; both keys are required and null clears a time. Times must include a timezone and be strictly in the future (422 quiz_schedule_naive / quiz_schedule_in_past); end must follow start (422 quiz_schedule_order). Draft quizzes return 409 quiz_not_published. Due schedules are applied before replacement. Auto start opens a new epoch and clears exemptions; auto end pauses taking and preserves exemptions. Due actions on drafts or already-matching taking states are skipped and cleared."
+      }
+    },
     "/health/live": {
       "get": {
         "operationId": "health_live_health_live_get",
@@ -20562,6 +21165,888 @@
           "suit"
         ],
         "title": "CardView",
+        "type": "object"
+      },
+      "PutQuizExemptionsRequest": {
+        "properties": {
+          "deadline_at": {
+            "format": "date-time",
+            "title": "Deadline At",
+            "type": "string"
+          },
+          "student_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Student Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "student_ids",
+          "deadline_at"
+        ],
+        "title": "PutQuizExemptionsRequest",
+        "type": "object"
+      },
+      "PutQuizScheduleRequest": {
+        "properties": {
+          "end_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End At"
+          },
+          "start_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start At"
+          }
+        },
+        "required": [
+          "start_at",
+          "end_at"
+        ],
+        "title": "PutQuizScheduleRequest",
+        "type": "object"
+      },
+      "QuizExemptionsDTO": {
+        "properties": {
+          "exemptions": {
+            "items": {
+              "$ref": "#/components/schemas/QuizExemptionDTO"
+            },
+            "title": "Exemptions",
+            "type": "array"
+          },
+          "students": {
+            "items": {
+              "$ref": "#/components/schemas/QuizExemptionStudentDTO"
+            },
+            "title": "Students",
+            "type": "array"
+          },
+          "taking_epoch": {
+            "title": "Taking Epoch",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "taking_epoch",
+          "exemptions",
+          "students"
+        ],
+        "title": "QuizExemptionsDTO",
+        "type": "object"
+      },
+      "QuizSummaryDTO": {
+        "properties": {
+          "attempt_count": {
+            "default": 0,
+            "title": "Attempt Count",
+            "type": "integer"
+          },
+          "can_take_now": {
+            "default": false,
+            "title": "Can Take Now",
+            "type": "boolean"
+          },
+          "content_revision": {
+            "title": "Content Revision",
+            "type": "integer"
+          },
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_user_id": {
+            "format": "uuid",
+            "title": "Created By User Id",
+            "type": "string"
+          },
+          "exempt_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exempt Until"
+          },
+          "exemption_count": {
+            "default": 0,
+            "title": "Exemption Count",
+            "type": "integer"
+          },
+          "exemption_deadline_latest": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exemption Deadline Latest"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "scheduled_end_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled End At"
+          },
+          "scheduled_start_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Start At"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "taking_epoch": {
+            "default": 0,
+            "title": "Taking Epoch",
+            "type": "integer"
+          },
+          "taking_open": {
+            "default": false,
+            "title": "Taking Open",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "course_id",
+          "title",
+          "status",
+          "schema_version",
+          "content_revision",
+          "created_by_user_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "QuizSummaryDTO",
+        "type": "object"
+      },
+      "StudentQuizDTO": {
+        "properties": {
+          "can_take_now": {
+            "default": false,
+            "title": "Can Take Now",
+            "type": "boolean"
+          },
+          "content_revision": {
+            "title": "Content Revision",
+            "type": "integer"
+          },
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "exempt_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exempt Until"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuizItemStudent"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "locale": {
+            "default": "en",
+            "title": "Locale",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "scheduled_end_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled End At"
+          },
+          "scheduled_start_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Start At"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/QuizSettings"
+          },
+          "status": {
+            "const": "published",
+            "title": "Status",
+            "type": "string"
+          },
+          "taking_epoch": {
+            "default": 0,
+            "title": "Taking Epoch",
+            "type": "integer"
+          },
+          "taking_open": {
+            "default": false,
+            "title": "Taking Open",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "course_id",
+          "title",
+          "status",
+          "schema_version",
+          "content_revision",
+          "settings"
+        ],
+        "title": "StudentQuizDTO",
+        "type": "object"
+      },
+      "TeacherQuizDTO": {
+        "properties": {
+          "attempt_count": {
+            "default": 0,
+            "title": "Attempt Count",
+            "type": "integer"
+          },
+          "can_take_now": {
+            "default": false,
+            "title": "Can Take Now",
+            "type": "boolean"
+          },
+          "content_revision": {
+            "title": "Content Revision",
+            "type": "integer"
+          },
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_user_id": {
+            "format": "uuid",
+            "title": "Created By User Id",
+            "type": "string"
+          },
+          "exempt_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exempt Until"
+          },
+          "exemption_count": {
+            "default": 0,
+            "title": "Exemption Count",
+            "type": "integer"
+          },
+          "exemption_deadline_latest": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exemption Deadline Latest"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuizItemTeacher"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "locale": {
+            "default": "en",
+            "title": "Locale",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "scheduled_end_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled End At"
+          },
+          "scheduled_start_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Start At"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/QuizSettings"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "taking_epoch": {
+            "default": 0,
+            "title": "Taking Epoch",
+            "type": "integer"
+          },
+          "taking_open": {
+            "default": false,
+            "title": "Taking Open",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "course_id",
+          "title",
+          "status",
+          "schema_version",
+          "content_revision",
+          "created_by_user_id",
+          "created_at",
+          "updated_at",
+          "settings"
+        ],
+        "title": "TeacherQuizDTO",
+        "type": "object"
+      },
+      "QuizExemptionDTO": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deadline_at": {
+            "format": "date-time",
+            "title": "Deadline At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "student_id": {
+            "format": "uuid",
+            "title": "Student Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "student_id",
+          "username",
+          "display_name",
+          "deadline_at",
+          "active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "QuizExemptionDTO",
+        "type": "object"
+      },
+      "QuizExemptionStudentDTO": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "exempt_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exempt Until"
+          },
+          "student_id": {
+            "format": "uuid",
+            "title": "Student Id",
+            "type": "string"
+          },
+          "submitted": {
+            "title": "Submitted",
+            "type": "boolean"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "student_id",
+          "username",
+          "display_name",
+          "submitted"
+        ],
+        "title": "QuizExemptionStudentDTO",
+        "type": "object"
+      },
+      "QuizItemStudent": {
+        "description": "Student-facing item: answer / rubric must never appear.",
+        "properties": {
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/QuizChoice"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "points": {
+            "default": 1,
+            "title": "Points",
+            "type": "number"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "single",
+              "multiple",
+              "short_text",
+              "long_text"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "prompt"
+        ],
+        "title": "QuizItemStudent",
+        "type": "object"
+      },
+      "QuizItemTeacher": {
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuizAnswerKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/QuizChoice"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "grading": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuizItemGrading"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "points": {
+            "default": 1,
+            "title": "Points",
+            "type": "number"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "single",
+              "multiple",
+              "short_text",
+              "long_text"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "prompt"
+        ],
+        "title": "QuizItemTeacher",
+        "type": "object"
+      },
+      "QuizSettings": {
+        "properties": {
+          "allow_skip": {
+            "default": false,
+            "title": "Allow Skip",
+            "type": "boolean"
+          },
+          "shuffle_choices": {
+            "default": false,
+            "title": "Shuffle Choices",
+            "type": "boolean"
+          },
+          "shuffle_questions": {
+            "default": false,
+            "title": "Shuffle Questions",
+            "type": "boolean"
+          },
+          "time_limit_sec": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Limit Sec"
+          }
+        },
+        "title": "QuizSettings",
+        "type": "object"
+      },
+      "QuizAnswerKey": {
+        "properties": {
+          "choice_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choice Ids"
+          },
+          "rubric": {
+            "title": "Rubric",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "title": "QuizAnswerKey",
+        "type": "object"
+      },
+      "QuizChoice": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "QuizChoice",
+        "type": "object"
+      },
+      "QuizItemGrading": {
+        "properties": {
+          "mode": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "ai"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "rules": {
+            "title": "Rules",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "score_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Max"
+          },
+          "score_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Min"
+          }
+        },
+        "title": "QuizItemGrading",
         "type": "object"
       }
     }

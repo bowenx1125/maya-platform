@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import conflict, forbidden, not_found, unprocessable
-from app.core.models import Group, User
+from app.core.models import CourseMember, Group, User
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import course_member_role
 from app.modules.workspace.access import course_member
@@ -29,15 +29,20 @@ from .document import (
     teacher_items_from_document,
 )
 from .grading import grade_objective
-from .models import ClassroomQuiz, ClassroomQuizAttempt
+from .models import ClassroomQuiz, ClassroomQuizAttempt, ClassroomQuizExemption
 from .schemas import (
     CreateQuizRequest,
     GradeQuizAttemptRequest,
     PatchQuizRequest,
+    PutQuizExemptionsRequest,
+    PutQuizScheduleRequest,
     QuizAnswerSubmission,
     QuizAttemptDTO,
     QuizAttemptItemStudent,
     QuizAttemptItemTeacher,
+    QuizExemptionDTO,
+    QuizExemptionsDTO,
+    QuizExemptionStudentDTO,
     QuizSettings,
     QuizSummaryDTO,
     RecordAttemptDTO,
@@ -88,7 +93,74 @@ def _attempt_count(db: Session, quiz_id: str) -> int:
     )
 
 
-def _summary(db: Session, quiz: ClassroomQuiz) -> QuizSummaryDTO:
+def _exemption_deadline(db: Session, quiz: ClassroomQuiz, user_id: str) -> datetime | None:
+    return db.scalar(
+        select(ClassroomQuizExemption.deadline_at).where(
+            ClassroomQuizExemption.quiz_id == quiz.id,
+            ClassroomQuizExemption.taking_epoch == quiz.taking_epoch,
+            ClassroomQuizExemption.student_user_id == user_id,
+        )
+    )
+
+
+def _can_take(
+    quiz: ClassroomQuiz, deadline: datetime | None, now: datetime, *, submitted: bool = False
+) -> bool:
+    return (
+        quiz.status == "published"
+        and (quiz.taking_open or (deadline is not None and now < deadline))
+        and not submitted
+    )
+
+
+def _active_exemption_stats(
+    db: Session, quiz_ids: list[str], now: datetime
+) -> dict[str, tuple[int, datetime]]:
+    rows = db.execute(
+        select(
+            ClassroomQuizExemption.quiz_id,
+            func.count(),
+            func.max(ClassroomQuizExemption.deadline_at),
+        )
+        .join(ClassroomQuiz, ClassroomQuiz.id == ClassroomQuizExemption.quiz_id)
+        .where(
+            ClassroomQuiz.id.in_(quiz_ids),
+            ClassroomQuizExemption.taking_epoch == ClassroomQuiz.taking_epoch,
+            ClassroomQuizExemption.deadline_at > now,
+        )
+        .group_by(ClassroomQuizExemption.quiz_id)
+    ).all()
+    return {row[0]: (row[1], row[2]) for row in rows}
+
+
+def _student_availability(db: Session, quiz: ClassroomQuiz, user_id: str) -> dict[str, Any]:
+    deadline = _exemption_deadline(db, quiz, user_id)
+    submitted = (
+        db.scalar(
+            select(ClassroomQuizAttempt.id).where(
+                ClassroomQuizAttempt.quiz_id == quiz.id,
+                ClassroomQuizAttempt.taking_epoch == quiz.taking_epoch,
+                ClassroomQuizAttempt.actor_user_id == user_id,
+            )
+        )
+        is not None
+    )
+    now = _now()
+    return {
+        "exempt_until": deadline if deadline is not None and now < deadline else None,
+        "can_take_now": _can_take(quiz, deadline, now, submitted=submitted),
+    }
+
+
+def _summary(
+    db: Session,
+    quiz: ClassroomQuiz,
+    *,
+    exemption_count: int = 0,
+    exemption_deadline_latest: datetime | None = None,
+    exempt_until: datetime | None = None,
+    can_take_now: bool = False,
+) -> QuizSummaryDTO:
     return QuizSummaryDTO(
         id=UUID(quiz.id),
         course_id=UUID(quiz.course_id),
@@ -98,8 +170,14 @@ def _summary(db: Session, quiz: ClassroomQuiz) -> QuizSummaryDTO:
         schema_version=quiz.schema_version,
         content_revision=quiz.content_revision,
         attempt_count=_attempt_count(db, quiz.id),
+        exemption_count=exemption_count,
+        exemption_deadline_latest=exemption_deadline_latest,
+        exempt_until=exempt_until,
+        can_take_now=can_take_now,
         taking_open=quiz.taking_open,
         taking_epoch=quiz.taking_epoch,
+        scheduled_start_at=quiz.scheduled_start_at,
+        scheduled_end_at=quiz.scheduled_end_at,
         created_by_user_id=UUID(quiz.created_by_user_id),
         published_at=quiz.published_at,
         created_at=quiz.created_at,
@@ -109,7 +187,8 @@ def _summary(db: Session, quiz: ClassroomQuiz) -> QuizSummaryDTO:
 
 def _teacher_dto(db: Session, quiz: ClassroomQuiz) -> TeacherQuizDTO:
     document = loads_document(quiz.document_json)
-    summary = _summary(db, quiz)
+    count, latest = _active_exemption_stats(db, [quiz.id], _now()).get(quiz.id, (0, None))
+    summary = _summary(db, quiz, exemption_count=count, exemption_deadline_latest=latest)
     return TeacherQuizDTO(
         **summary.model_dump(),
         settings=settings_from_document(document),
@@ -118,7 +197,7 @@ def _teacher_dto(db: Session, quiz: ClassroomQuiz) -> TeacherQuizDTO:
     )
 
 
-def _student_dto(quiz: ClassroomQuiz) -> StudentQuizDTO:
+def _student_dto(db: Session, quiz: ClassroomQuiz, user_id: str) -> StudentQuizDTO:
     document = loads_document(quiz.document_json)
     stripped = strip_answers(document)
     assert_no_answer_keys(stripped)
@@ -145,6 +224,9 @@ def _student_dto(quiz: ClassroomQuiz) -> StudentQuizDTO:
         content_revision=quiz.content_revision,
         taking_open=quiz.taking_open,
         taking_epoch=quiz.taking_epoch,
+        scheduled_start_at=quiz.scheduled_start_at,
+        scheduled_end_at=quiz.scheduled_end_at,
+        **_student_availability(db, quiz, user_id),
         settings=settings_from_document(document),
         locale=str(document.get("locale") or "en"),
         items=items,  # type: ignore[arg-type]
@@ -158,7 +240,56 @@ def list_quizzes_for_actor(db: Session, actor: AuthContext, course_id: str) -> l
     if role != "teacher":
         query = query.where(ClassroomQuiz.status == "published")
     rows = db.scalars(query.order_by(ClassroomQuiz.updated_at.desc(), ClassroomQuiz.id)).all()
-    return [_summary(db, row) for row in rows]
+    for row in rows:
+        _apply_due_if_needed(db, row)
+    quiz_ids = [row.id for row in rows]
+    now = _now()
+    if role == "teacher":
+        stats = _active_exemption_stats(db, quiz_ids, now)
+        return [
+            _summary(
+                db,
+                row,
+                exemption_count=stats.get(row.id, (0, None))[0],
+                exemption_deadline_latest=stats.get(row.id, (0, None))[1],
+            )
+            for row in rows
+        ]
+    user_id = str(actor.user.id)
+    deadlines = {
+        quiz_id: deadline
+        for quiz_id, deadline in db.execute(
+            select(ClassroomQuizExemption.quiz_id, ClassroomQuizExemption.deadline_at)
+            .join(ClassroomQuiz, ClassroomQuiz.id == ClassroomQuizExemption.quiz_id)
+            .where(
+                ClassroomQuiz.id.in_(quiz_ids),
+                ClassroomQuizExemption.student_user_id == user_id,
+                ClassroomQuizExemption.taking_epoch == ClassroomQuiz.taking_epoch,
+            )
+        ).all()
+    }
+    submitted = set(
+        db.scalars(
+            select(ClassroomQuizAttempt.quiz_id)
+            .join(ClassroomQuiz, ClassroomQuiz.id == ClassroomQuizAttempt.quiz_id)
+            .where(
+                ClassroomQuiz.id.in_(quiz_ids),
+                ClassroomQuizAttempt.actor_user_id == user_id,
+                ClassroomQuizAttempt.taking_epoch == ClassroomQuiz.taking_epoch,
+            )
+        ).all()
+    )
+    return [
+        _summary(
+            db,
+            row,
+            exempt_until=(
+                deadlines[row.id] if row.id in deadlines and now < deadlines[row.id] else None
+            ),
+            can_take_now=_can_take(row, deadlines.get(row.id), now, submitted=row.id in submitted),
+        )
+        for row in rows
+    ]
 
 
 def create_quiz(
@@ -212,11 +343,12 @@ def get_quiz_for_actor(
 ) -> TeacherQuizDTO | StudentQuizDTO:
     role = _require_member(db, actor, course_id)
     quiz = _get_quiz(db, course_id, quiz_id)
+    _apply_due_if_needed(db, quiz)
     if role == "teacher":
         return _teacher_dto(db, quiz)
     if quiz.status != "published":
         raise not_found()
-    return _student_dto(quiz)
+    return _student_dto(db, quiz, str(actor.user.id))
 
 
 def patch_quiz(
@@ -266,7 +398,7 @@ def patch_quiz(
 
 def publish_quiz(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:
     _require_teacher(db, actor, course_id)
-    quiz = _get_quiz(db, course_id, quiz_id)
+    quiz = _get_quiz_for_update(db, course_id, quiz_id)
     if quiz.status == "published":
         raise conflict("quiz_already_published", "The quiz is already published.")
     document = loads_document(quiz.document_json)
@@ -337,17 +469,30 @@ def delete_quiz(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -
     db.commit()
 
 
-def _get_quiz_for_update(db: Session, course_id: str, quiz_id: str) -> ClassroomQuiz:
-    """Load the quiz row with a write lock for taking open/close RMW."""
-
+def _lock_quiz_row(db: Session, course_id: str, quiz_id: str) -> ClassroomQuiz:
     quiz = db.scalar(
         select(ClassroomQuiz)
         .where(ClassroomQuiz.id == quiz_id, ClassroomQuiz.course_id == course_id)
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if quiz is None:
         raise not_found()
     return quiz
+
+
+def _get_quiz_for_update(db: Session, course_id: str, quiz_id: str) -> ClassroomQuiz:
+    """Load the quiz row with a write lock for taking open/close RMW.
+
+    A due schedule is applied once (that helper re-locks), then this reloads
+    the row. It does not recurse, so a stuck due row cannot loop forever.
+    """
+
+    quiz = _lock_quiz_row(db, course_id, quiz_id)
+    if not _schedule_due(quiz, _now()):
+        return quiz
+    apply_due_schedules(db, quiz.id, _now())
+    return _lock_quiz_row(db, course_id, quiz_id)
 
 
 def start_taking(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:
@@ -362,16 +507,15 @@ def start_taking(db: Session, actor: AuthContext, course_id: str, quiz_id: str) 
             "quiz_taking_already_open",
             "The quiz is already open for taking.",
         )
-    quiz.taking_epoch = int(quiz.taking_epoch) + 1
-    quiz.taking_open = True
-    quiz.updated_at = _now()
+    _open_taking(db, quiz)
+    quiz.scheduled_start_at = None
     db.commit()
     db.refresh(quiz)
     return _teacher_dto(db, quiz)
 
 
 def pause_taking(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:
-    """Close taking without touching the epoch; re-opening keeps the epoch."""
+    """Close taking without touching the epoch or student exemptions."""
 
     _require_teacher(db, actor, course_id)
     quiz = _get_quiz_for_update(db, course_id, quiz_id)
@@ -382,11 +526,176 @@ def pause_taking(db: Session, actor: AuthContext, course_id: str, quiz_id: str) 
             "quiz_taking_already_closed",
             "The quiz is already closed for taking.",
         )
-    quiz.taking_open = False
-    quiz.updated_at = _now()
+    _close_taking(db, quiz)
+    quiz.scheduled_end_at = None
     db.commit()
     db.refresh(quiz)
     return _teacher_dto(db, quiz)
+
+
+def _exemptions_dto(db: Session, quiz: ClassroomQuiz) -> QuizExemptionsDTO:
+    now = _now()
+    rows = db.execute(
+        select(ClassroomQuizExemption, User)
+        .join(User, User.id == ClassroomQuizExemption.student_user_id)
+        .where(
+            ClassroomQuizExemption.quiz_id == quiz.id,
+            ClassroomQuizExemption.taking_epoch == quiz.taking_epoch,
+        )
+    ).all()
+    deadlines = {row.student_user_id: row.deadline_at for row, _ in rows}
+    submitted = set(
+        db.scalars(
+            select(ClassroomQuizAttempt.actor_user_id).where(
+                ClassroomQuizAttempt.quiz_id == quiz.id,
+                ClassroomQuizAttempt.taking_epoch == quiz.taking_epoch,
+            )
+        ).all()
+    )
+    students = db.scalars(
+        select(User)
+        .join(CourseMember, CourseMember.user_id == User.id)
+        .where(
+            CourseMember.course_id == quiz.course_id,
+            CourseMember.role == "student",
+            User.status == "active",
+        )
+    ).all()
+    exemptions = [
+        QuizExemptionDTO(
+            id=UUID(row.id),
+            student_id=UUID(user.id),
+            username=user.username,
+            display_name=user.display_name or user.username,
+            deadline_at=row.deadline_at,
+            active=now < row.deadline_at,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+        for row, user in rows
+    ]
+    picker = [
+        QuizExemptionStudentDTO(
+            student_id=UUID(user.id),
+            username=user.username,
+            display_name=user.display_name or user.username,
+            submitted=user.id in submitted,
+            exempt_until=deadlines.get(user.id),
+        )
+        for user in students
+    ]
+    return QuizExemptionsDTO(
+        taking_epoch=quiz.taking_epoch,
+        exemptions=sorted(
+            exemptions, key=lambda row: (row.display_name.casefold(), row.username.casefold())
+        ),
+        students=sorted(
+            picker, key=lambda row: (row.display_name.casefold(), row.username.casefold())
+        ),
+    )
+
+
+def list_exemptions(
+    db: Session, actor: AuthContext, course_id: str, quiz_id: str
+) -> QuizExemptionsDTO:
+    _require_teacher(db, actor, course_id)
+    quiz = _get_quiz(db, course_id, quiz_id)
+    _apply_due_if_needed(db, quiz)
+    return _exemptions_dto(db, quiz)
+
+
+def put_exemptions(
+    db: Session,
+    actor: AuthContext,
+    course_id: str,
+    quiz_id: str,
+    body: PutQuizExemptionsRequest,
+) -> QuizExemptionsDTO:
+    _require_teacher(db, actor, course_id)
+    quiz = _get_quiz_for_update(db, course_id, quiz_id)
+    now = _now()
+    if body.deadline_at <= now:
+        raise unprocessable("quiz_exemption_deadline_past", "The deadline must be in the future.")
+    if quiz.taking_epoch == 0:
+        raise conflict("quiz_exemption_not_started", "Start taking once before extending time.")
+    student_ids = [str(value) for value in body.student_ids]
+    valid = set(
+        db.scalars(
+            select(User.id)
+            .join(CourseMember, CourseMember.user_id == User.id)
+            .where(
+                CourseMember.course_id == course_id,
+                CourseMember.role == "student",
+                User.status == "active",
+                User.id.in_(student_ids),
+            )
+        ).all()
+    )
+    invalid = [user_id for user_id in student_ids if user_id not in valid]
+    if invalid:
+        raise unprocessable(
+            "quiz_exemption_invalid_student",
+            "Only students of this class can be extended.",
+            {"student_ids": invalid},
+        )
+    submitted = set(
+        db.scalars(
+            select(ClassroomQuizAttempt.actor_user_id).where(
+                ClassroomQuizAttempt.quiz_id == quiz_id,
+                ClassroomQuizAttempt.taking_epoch == quiz.taking_epoch,
+                ClassroomQuizAttempt.actor_user_id.in_(student_ids),
+            )
+        ).all()
+    )
+    if submitted:
+        raise conflict(
+            "quiz_exemption_already_submitted",
+            "Some students have already submitted.",
+            {"student_ids": [user_id for user_id in student_ids if user_id in submitted]},
+        )
+    existing = {
+        row.student_user_id: row
+        for row in db.scalars(
+            select(ClassroomQuizExemption).where(
+                ClassroomQuizExemption.quiz_id == quiz_id,
+                ClassroomQuizExemption.taking_epoch == quiz.taking_epoch,
+                ClassroomQuizExemption.student_user_id.in_(student_ids),
+            )
+        ).all()
+    }
+    for user_id in student_ids:
+        row = existing.get(user_id)
+        if row is None:
+            row = ClassroomQuizExemption(
+                id=str(uuid4()),
+                quiz_id=quiz_id,
+                course_id=course_id,
+                student_user_id=user_id,
+                taking_epoch=quiz.taking_epoch,
+                created_by_user_id=str(actor.user.id),
+                created_at=now,
+            )
+            db.add(row)
+        row.deadline_at = body.deadline_at
+        row.updated_at = now
+    db.commit()
+    return _exemptions_dto(db, quiz)
+
+
+def delete_exemptions(
+    db: Session,
+    actor: AuthContext,
+    course_id: str,
+    quiz_id: str,
+    student_id: str | None = None,
+) -> None:
+    _require_teacher(db, actor, course_id)
+    _get_quiz_for_update(db, course_id, quiz_id)
+    query = delete(ClassroomQuizExemption).where(ClassroomQuizExemption.quiz_id == quiz_id)
+    if student_id is not None:
+        query = query.where(ClassroomQuizExemption.student_user_id == student_id)
+    db.execute(query)
+    db.commit()
 
 
 def submit_attempt(
@@ -404,15 +713,19 @@ def submit_attempt(
     - ``document_snapshot_json`` reuses ``quiz.document_json`` as-is (no
       re-serialize). Document is parsed once for objective grading only.
     - Skip ``db.refresh`` after commit; expire_on_commit=False keeps fields.
+    - The quiz row is read without a lock. Lazy schedule apply only takes
+      the row lock when a start or end time is actually due.
     """
 
     role = _require_member(db, actor, course_id)
     if role == "teacher":
         raise forbidden("Teachers cannot submit quiz attempts.")
     quiz = _get_quiz(db, course_id, quiz_id)
+    _apply_due_if_needed(db, quiz)
     if quiz.status != "published":
         raise not_found()
-    if not quiz.taking_open:
+    deadline = _exemption_deadline(db, quiz, str(actor.user.id))
+    if not _can_take(quiz, deadline, _now()):
         raise conflict(
             "quiz_taking_closed",
             "The quiz is not open for taking right now.",
@@ -948,3 +1261,83 @@ def attempt_needs_ai_grade(db: Session, attempt_id: str) -> bool:
     if attempt is None:
         return False
     return document_has_ai_grading(loads_document(attempt.document_snapshot_json))
+
+
+def _open_taking(db: Session, quiz: ClassroomQuiz) -> None:
+    db.execute(delete(ClassroomQuizExemption).where(ClassroomQuizExemption.quiz_id == quiz.id))
+    quiz.taking_epoch = int(quiz.taking_epoch) + 1
+    quiz.taking_open = True
+    quiz.updated_at = _now()
+
+
+def _close_taking(db: Session, quiz: ClassroomQuiz) -> None:
+    quiz.taking_open = False
+    quiz.updated_at = _now()
+
+
+def _schedule_due(quiz: ClassroomQuiz, now: datetime) -> bool:
+    return any(
+        at is not None and at <= now for at in (quiz.scheduled_start_at, quiz.scheduled_end_at)
+    )
+
+
+def apply_due_schedules(db: Session, quiz_id: str, now: datetime) -> bool:
+    quiz = db.get(ClassroomQuiz, quiz_id)
+    if quiz is None or not _schedule_due(quiz, now):
+        return False
+    quiz = db.scalar(
+        select(ClassroomQuiz)
+        .where(ClassroomQuiz.id == quiz_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if quiz is None:
+        return False
+    due = sorted(
+        (
+            (at, action)
+            for at, action in ((quiz.scheduled_start_at, "start"), (quiz.scheduled_end_at, "end"))
+            if at is not None and at <= now
+        ),
+        key=lambda item: (item[0], item[1] == "end"),
+    )
+    for _, action in due:
+        if action == "start":
+            if quiz.status == "published" and not quiz.taking_open:
+                _open_taking(db, quiz)
+            quiz.scheduled_start_at = None
+        else:
+            if quiz.status == "published" and quiz.taking_open:
+                _close_taking(db, quiz)
+            quiz.scheduled_end_at = None
+    # Clearing and effects share the row lock and commit, including skipped actions.
+    db.commit()
+    return bool(due)
+
+
+def _apply_due_if_needed(db: Session, quiz: ClassroomQuiz) -> bool:
+    now = _now()
+    if not _schedule_due(quiz, now):
+        return False
+    applied = apply_due_schedules(db, quiz.id, now)
+    db.refresh(quiz)
+    return applied
+
+
+def put_schedule(
+    db: Session, actor: AuthContext, course_id: str, quiz_id: str, body: PutQuizScheduleRequest
+) -> TeacherQuizDTO:
+    _require_teacher(db, actor, course_id)
+    quiz = _get_quiz_for_update(db, course_id, quiz_id)
+    if quiz.status != "published":
+        raise conflict("quiz_not_published", "The quiz is not published.")
+    now = _now()
+    if any(at is not None and at <= now for at in (body.start_at, body.end_at)):
+        raise unprocessable("quiz_schedule_in_past", "Choose a time in the future.")
+    if body.start_at is not None and body.end_at is not None and body.end_at <= body.start_at:
+        raise unprocessable("quiz_schedule_order", "The end time must be after the start time.")
+    quiz.scheduled_start_at = body.start_at
+    quiz.scheduled_end_at = body.end_at
+    quiz.updated_at = now
+    db.commit()
+    return _teacher_dto(db, quiz)

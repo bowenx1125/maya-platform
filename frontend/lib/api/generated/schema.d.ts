@@ -2161,6 +2161,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/quizzes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Course Quizzes */
+        get: operations["listCourseQuizzes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/quizzes/{quiz_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Course Quiz */
+        get: operations["getCourseQuiz"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/quizzes/{quiz_id}/exemptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Course Quiz Exemptions
+         * @description Current-epoch exemptions, including expired deadlines, and the active student roster with current-epoch submission flags. Only an unexpired exemption extends paused taking; the paper must remain published.
+         */
+        get: operations["listCourseQuizExemptions"];
+        /**
+         * Put Course Quiz Exemptions
+         * @description Upsert current-epoch deadlines for 1–500 student IDs (duplicates collapsed). Deadlines require a timezone (422 quiz_exemption_deadline_naive) and must be in the future (422 quiz_exemption_deadline_past). Only active student members may be extended (422 quiz_exemption_invalid_student, details.student_ids). Any current-epoch attempt, including hidden attempts, rejects the whole grant (409 quiz_exemption_already_submitted, details.student_ids). Granting before the first taking epoch returns 409 quiz_exemption_not_started. Grants may otherwise be managed in any publication state. Starting a new epoch clears every exemption.
+         */
+        put: operations["putCourseQuizExemptions"];
+        post?: never;
+        /** Clear Course Quiz Exemptions */
+        delete: operations["clearCourseQuizExemptions"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/quizzes/{quiz_id}/exemptions/{student_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Course Quiz Exemption */
+        delete: operations["deleteCourseQuizExemption"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/quizzes/{quiz_id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Course Quiz Schedule
+         * @description Replace both one-shot taking times; both keys are required and null clears a time. Times must include a timezone and be strictly in the future (422 quiz_schedule_naive / quiz_schedule_in_past); end must follow start (422 quiz_schedule_order). Draft quizzes return 409 quiz_not_published. Due schedules are applied before replacement. Auto start opens a new epoch and clears exemptions; auto end pauses taking and preserves exemptions. Due actions on drafts or already-matching taking states are skipped and cleared.
+         */
+        put: operations["putCourseQuizSchedule"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5846,6 +5942,401 @@ export interface components {
              * @enum {string}
              */
             suit: "s" | "h" | "d" | "c";
+        };
+        /** PutQuizExemptionsRequest */
+        PutQuizExemptionsRequest: {
+            /**
+             * Deadline At
+             * Format: date-time
+             */
+            deadline_at: string;
+            /** Student Ids */
+            student_ids: string[];
+        };
+        /** PutQuizScheduleRequest */
+        PutQuizScheduleRequest: {
+            /** End At */
+            end_at: string | null;
+            /** Start At */
+            start_at: string | null;
+        };
+        /** QuizExemptionsDTO */
+        QuizExemptionsDTO: {
+            /** Exemptions */
+            exemptions: components["schemas"]["QuizExemptionDTO"][];
+            /** Students */
+            students: components["schemas"]["QuizExemptionStudentDTO"][];
+            /** Taking Epoch */
+            taking_epoch: number;
+        };
+        /** QuizSummaryDTO */
+        QuizSummaryDTO: {
+            /**
+             * Attempt Count
+             * @default 0
+             */
+            attempt_count: number;
+            /**
+             * Can Take Now
+             * @default false
+             */
+            can_take_now: boolean;
+            /** Content Revision */
+            content_revision: number;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By User Id
+             * Format: uuid
+             */
+            created_by_user_id: string;
+            /** Exempt Until */
+            exempt_until?: string | null;
+            /**
+             * Exemption Count
+             * @default 0
+             */
+            exemption_count: number;
+            /** Exemption Deadline Latest */
+            exemption_deadline_latest?: string | null;
+            /** Group Id */
+            group_id?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Published At */
+            published_at?: string | null;
+            /** Scheduled End At */
+            scheduled_end_at?: string | null;
+            /** Scheduled Start At */
+            scheduled_start_at?: string | null;
+            /** Schema Version */
+            schema_version: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "published";
+            /**
+             * Taking Epoch
+             * @default 0
+             */
+            taking_epoch: number;
+            /**
+             * Taking Open
+             * @default false
+             */
+            taking_open: boolean;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** StudentQuizDTO */
+        StudentQuizDTO: {
+            /**
+             * Can Take Now
+             * @default false
+             */
+            can_take_now: boolean;
+            /** Content Revision */
+            content_revision: number;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Exempt Until */
+            exempt_until?: string | null;
+            /** Group Id */
+            group_id?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Items */
+            items?: components["schemas"]["QuizItemStudent"][];
+            /**
+             * Locale
+             * @default en
+             */
+            locale: string;
+            /** Published At */
+            published_at?: string | null;
+            /** Scheduled End At */
+            scheduled_end_at?: string | null;
+            /** Scheduled Start At */
+            scheduled_start_at?: string | null;
+            /** Schema Version */
+            schema_version: number;
+            settings: components["schemas"]["QuizSettings"];
+            /**
+             * Status
+             * @constant
+             */
+            status: "published";
+            /**
+             * Taking Epoch
+             * @default 0
+             */
+            taking_epoch: number;
+            /**
+             * Taking Open
+             * @default false
+             */
+            taking_open: boolean;
+            /** Title */
+            title: string;
+        };
+        /** TeacherQuizDTO */
+        TeacherQuizDTO: {
+            /**
+             * Attempt Count
+             * @default 0
+             */
+            attempt_count: number;
+            /**
+             * Can Take Now
+             * @default false
+             */
+            can_take_now: boolean;
+            /** Content Revision */
+            content_revision: number;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By User Id
+             * Format: uuid
+             */
+            created_by_user_id: string;
+            /** Exempt Until */
+            exempt_until?: string | null;
+            /**
+             * Exemption Count
+             * @default 0
+             */
+            exemption_count: number;
+            /** Exemption Deadline Latest */
+            exemption_deadline_latest?: string | null;
+            /** Group Id */
+            group_id?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Items */
+            items?: components["schemas"]["QuizItemTeacher"][];
+            /**
+             * Locale
+             * @default en
+             */
+            locale: string;
+            /** Published At */
+            published_at?: string | null;
+            /** Scheduled End At */
+            scheduled_end_at?: string | null;
+            /** Scheduled Start At */
+            scheduled_start_at?: string | null;
+            /** Schema Version */
+            schema_version: number;
+            settings: components["schemas"]["QuizSettings"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "published";
+            /**
+             * Taking Epoch
+             * @default 0
+             */
+            taking_epoch: number;
+            /**
+             * Taking Open
+             * @default false
+             */
+            taking_open: boolean;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** QuizExemptionDTO */
+        QuizExemptionDTO: {
+            /** Active */
+            active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Deadline At
+             * Format: date-time
+             */
+            deadline_at: string;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Username */
+            username: string;
+        };
+        /** QuizExemptionStudentDTO */
+        QuizExemptionStudentDTO: {
+            /** Display Name */
+            display_name: string;
+            /** Exempt Until */
+            exempt_until?: string | null;
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Submitted */
+            submitted: boolean;
+            /** Username */
+            username: string;
+        };
+        /**
+         * QuizItemStudent
+         * @description Student-facing item: answer / rubric must never appear.
+         */
+        QuizItemStudent: {
+            /** Choices */
+            choices?: components["schemas"]["QuizChoice"][];
+            /** Id */
+            id: string;
+            /**
+             * Points
+             * @default 1
+             */
+            points: number;
+            /** Prompt */
+            prompt: string;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "single" | "multiple" | "short_text" | "long_text";
+        };
+        /** QuizItemTeacher */
+        QuizItemTeacher: {
+            answer?: components["schemas"]["QuizAnswerKey"] | null;
+            /** Choices */
+            choices?: components["schemas"]["QuizChoice"][];
+            grading?: components["schemas"]["QuizItemGrading"] | null;
+            /** Id */
+            id: string;
+            /**
+             * Points
+             * @default 1
+             */
+            points: number;
+            /** Prompt */
+            prompt: string;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "single" | "multiple" | "short_text" | "long_text";
+        };
+        /** QuizSettings */
+        QuizSettings: {
+            /**
+             * Allow Skip
+             * @default false
+             */
+            allow_skip: boolean;
+            /**
+             * Shuffle Choices
+             * @default false
+             */
+            shuffle_choices: boolean;
+            /**
+             * Shuffle Questions
+             * @default false
+             */
+            shuffle_questions: boolean;
+            /** Time Limit Sec */
+            time_limit_sec?: number | null;
+        };
+        /** QuizAnswerKey */
+        QuizAnswerKey: {
+            /** Choice Ids */
+            choice_ids?: string[] | null;
+            /** Rubric */
+            rubric?: string | null;
+        };
+        /** QuizChoice */
+        QuizChoice: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+        };
+        /** QuizItemGrading */
+        QuizItemGrading: {
+            /**
+             * Mode
+             * @default manual
+             * @enum {string}
+             */
+            mode: "manual" | "ai";
+            /** Rules */
+            rules?: string | null;
+            /** Score Max */
+            score_max?: number | null;
+            /** Score Min */
+            score_min?: number | null;
         };
     };
     responses: {
@@ -11672,6 +12163,368 @@ export interface operations {
             };
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+        };
+    };
+    listCourseQuizzes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuizSummaryDTO"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCourseQuiz: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                quiz_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeacherQuizDTO"] | components["schemas"]["StudentQuizDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCourseQuizExemptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                quiz_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuizExemptionsDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putCourseQuizExemptions: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                course_id: string;
+                quiz_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutQuizExemptionsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuizExemptionsDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    clearCourseQuizExemptions: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                course_id: string;
+                quiz_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Exemptions removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteCourseQuizExemption: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                course_id: string;
+                quiz_id: string;
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Exemptions removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putCourseQuizSchedule: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                course_id: string;
+                quiz_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutQuizScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeacherQuizDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
 }

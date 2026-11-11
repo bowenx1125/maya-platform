@@ -100,7 +100,7 @@ def test_hard_delete_removes_public_work_and_grades_only_for_target(app_factory:
 
     from app.core.models import Agent
     from app.modules.learning.models import LearningAssessment, LearningRecord
-    from app.modules.quiz.models import ClassroomQuiz, ClassroomQuizAttempt
+    from app.modules.quiz.models import ClassroomQuiz, ClassroomQuizAttempt, ClassroomQuizExemption
     from app.modules.teams.models import Team, TeamVersion
 
     from tests.test_mayaform_teams import _make_agent_version
@@ -127,6 +127,7 @@ def test_hard_delete_removes_public_work_and_grades_only_for_target(app_factory:
         grades = []
         answers = []
         quiz_attempts = []
+        quiz_exemptions = []
         quiz_id = str(uuid4())
         team_id, version_id = str(uuid4()), str(uuid4())
         with database.session() as db:
@@ -173,6 +174,21 @@ def test_hard_delete_removes_public_work_and_grades_only_for_target(app_factory:
                 grades.append(grade_id)
                 answers.append(answer_id)
                 quiz_attempts.append(quiz_attempt_id)
+                exemption_id = str(uuid4())
+                quiz_exemptions.append(exemption_id)
+                db.add(
+                    ClassroomQuizExemption(
+                        id=exemption_id,
+                        quiz_id=quiz_id,
+                        course_id=COURSE_ID,
+                        student_user_id=user_id,
+                        taking_epoch=1,
+                        deadline_at=now,
+                        created_by_user_id=users[0][0],
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
                 db.add(
                     ClassroomQuizAttempt(
                         id=quiz_attempt_id,
@@ -219,12 +235,16 @@ def test_hard_delete_removes_public_work_and_grades_only_for_target(app_factory:
             assert db.get(LearningAssessment, grades[0]) is None
             assert db.get(LearningRecord, answers[0]) is None
             assert db.get(ClassroomQuizAttempt, quiz_attempts[0]) is None
+            assert db.get(ClassroomQuizExemption, quiz_exemptions[0]) is None
             assert db.get(User, users[1][0]) is not None
             assert db.get(Agent, agents[1]) is not None
             assert db.get(LearningAssessment, grades[1]) is not None
             assert db.get(LearningRecord, answers[1]) is not None
             assert db.get(ClassroomQuiz, quiz_id) is not None
             assert db.get(ClassroomQuizAttempt, quiz_attempts[1]) is not None
+            exemption = db.get(ClassroomQuizExemption, quiz_exemptions[1])
+            assert exemption is not None
+            assert exemption.created_by_user_id is None
             assert db.get(Team, team_id) is not None
             assert db.get(TeamVersion, version_id).created_by_user_id is None
 
