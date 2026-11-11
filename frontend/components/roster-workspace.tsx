@@ -32,6 +32,15 @@ import styles from "./roster-workspace.module.css";
 import { PageBanner } from "./page-banner";
 import { Input } from "./ui/input";
 import { Card } from "./ui/card";
+import { GroupSortKey, GroupStudentCount } from "./group-sort-key";
+import {
+  byName,
+  countGroupStudents,
+  GROUP_SORT_STORAGE_KEY,
+  parseGroupSort,
+  sortGroups,
+  type GroupSortOrder,
+} from "../lib/group-sort";
 
 type Draft = { display_name: string; group_name: string };
 
@@ -151,6 +160,29 @@ function ClassRosterWorkspace({ courseId }: { courseId: string | undefined }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [issued, setIssued] = useState<IssuedPassword | null>(null);
   const [filter, setFilter] = useState("");
+  const [groupSort, setGroupSort] = useState<GroupSortOrder>("name");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        setGroupSort(
+          parseGroupSort(localStorage.getItem(GROUP_SORT_STORAGE_KEY)),
+        );
+      } catch {
+        // Storage may be unavailable; keep the default for this page.
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  function changeGroupSort(order: GroupSortOrder) {
+    setGroupSort(order);
+    try {
+      localStorage.setItem(GROUP_SORT_STORAGE_KEY, order);
+    } catch {
+      // The selected order still works when storage is unavailable.
+    }
+  }
 
   const load = useCallback(
     async (gate = true) => {
@@ -306,11 +338,6 @@ function ClassRosterWorkspace({ courseId }: { courseId: string | undefined }) {
 
   // Members are listed group by group, groups by name and people by name
   // inside each; anyone without a group comes last.
-  const byName = (left: string, right: string) =>
-    left.localeCompare(right, undefined, {
-      numeric: true,
-      sensitivity: "base",
-    });
   const sections = new Map<string, RosterEntry[]>();
   for (const entry of current) {
     const [first] = (entry.groups ?? [])
@@ -500,9 +527,8 @@ function ClassRosterWorkspace({ courseId }: { courseId: string | undefined }) {
     );
   }
 
-  const sortedGroups = [...groups].sort((left, right) =>
-    byName(left.name, right.name),
-  );
+  const groupCounts = countGroupStudents(entries);
+  const sortedGroups = sortGroups(groups, groupCounts, groupSort);
 
   return (
     <>
@@ -602,7 +628,7 @@ function ClassRosterWorkspace({ courseId }: { courseId: string | undefined }) {
           aria-labelledby="accounts-groups"
           role="region"
         >
-          <div className={styles.head}>
+          <div className={`${styles.head} ${styles.groupsHead}`}>
             <h2 id="accounts-groups" className={styles.tapeTitle}>
               {t("groups")}
             </h2>
@@ -612,6 +638,7 @@ function ClassRosterWorkspace({ courseId }: { courseId: string | undefined }) {
             >
               {groups.length}
             </span>
+            <GroupSortKey order={groupSort} onChange={changeGroupSort} />
           </div>
           {groups.length ? (
             <ul className={styles.polarList}>
@@ -632,7 +659,12 @@ function ClassRosterWorkspace({ courseId }: { courseId: string | undefined }) {
                     onClick={() => onGroupPress(group)}
                   >
                     <span className={styles.polarTape} aria-hidden="true" />
-                    <span className={styles.polarName}>{group.name}</span>
+                    <span className={styles.polarNameRow}>
+                      <span className={styles.polarName}>{group.name}</span>
+                      <GroupStudentCount
+                        count={groupCounts.get(group.id) ?? 0}
+                      />
+                    </span>
                     <span className={styles.polarArrow} aria-hidden="true">
                       <IconArrowRight size={16} />
                     </span>

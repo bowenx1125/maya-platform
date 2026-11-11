@@ -25,6 +25,7 @@ const implementedOperationIds = new Set([
   "putCourseQuizSchedule",
 
   "login",
+  "chooseLoginIdentity",
   "switchDemoIdentity",
   "listDemoIdentities",
   "quickLogin",

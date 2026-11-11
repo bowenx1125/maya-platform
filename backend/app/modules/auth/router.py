@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Request, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import case, func, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -34,6 +35,7 @@ from app.modules.auth.dependencies import (
     require_demo_quick_login,
     require_same_origin,
 )
+from app.modules.auth.identity_choice import consume_choice, issue_choice
 from app.modules.auth.models import UserCredential
 from app.modules.auth.profile import (
     change_group,
@@ -62,6 +64,8 @@ from app.modules.auth.schemas import (
     DemoQuickLoginRequest,
     DemoSwitchRequest,
     GroupMembership,
+    LoginIdentityChoice,
+    LoginIdentityChoiceRequest,
     LoginRequest,
     PasswordChangeRequest,
     PasswordResetRequest,
@@ -82,7 +86,7 @@ from app.modules.auth.service import (
 from app.modules.org.access import WorkspaceMember
 from app.modules.org.classes import SECOND_CLASS_ID
 from app.modules.voices.withdrawal import finish_withdrawn_voices
-from app.seed import COURSE_ID
+from app.seed import BOWEN_ID, COURSE_ID
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -122,12 +126,13 @@ def _set_session_cookie(
     )
 
 
-def _current_user(db: Session, user: User) -> CurrentUser:
+def _current_user(db: Session, user: User, active_course_id: str | None = None) -> CurrentUser:
     course_rows = db.execute(
         select(CourseMember.course_id, CourseMember.role)
         .join(Course, Course.id == CourseMember.course_id)
         .where(CourseMember.user_id == user.id)
         .order_by(
+            case((Course.id == active_course_id, 0), else_=1),
             case((Course.id == COURSE_ID, 0), (Course.id == SECOND_CLASS_ID, 1), else_=2),
             Course.created_at,
             Course.code,
@@ -152,7 +157,7 @@ def _current_user(db: Session, user: User) -> CurrentUser:
 
 def _auth_response(db: Session, context: AuthContext, csrf: str | None = None) -> AuthSession:
     return AuthSession(
-        user=_current_user(db, context.user),
+        user=_current_user(db, context.user, context.session.active_course_id),
         csrf_token=csrf or context.csrf_token,
         expires_at=_utc(context.session.expires_at),
     )
@@ -207,6 +212,7 @@ def _public_demo_identities(db: Session, settings: Settings) -> list[DemoIdentit
     openapi_extra={"security": []},
     responses={
         200: {"model": AuthSession, "description": "Session created and CSRF token returned."},
+        202: {"model": LoginIdentityChoice, "description": "Choose the login identity."},
         401: {"model": Error, "description": "Authentication failed."},
         403: {"model": Error, "description": "The configured public origin is required."},
         413: {"description": "The production gateway rejects oversized login bodies."},
@@ -220,7 +226,7 @@ def login(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
     now: datetime | None = Depends(get_auth_clock),
-) -> AuthSession:
+) -> AuthSession | JSONResponse:
     _require_production_auth_origin(request, settings)
     # Join the unified pressure queue before the abuse limiter and password
     # check: under host pressure sign-in waits (not fails) and does not spend
@@ -236,7 +242,7 @@ def _login_admitted(
     db: Session,
     settings: Settings,
     now: datetime | None = None,
-) -> AuthSession:
+) -> AuthSession | JSONResponse:
     limiter = _limiter(request) if settings.is_production else None
     reservation = None
     failed = False
@@ -280,6 +286,10 @@ def _login_admitted(
             raise PlatformError(
                 "account_inactive", "This account has been deactivated by a teacher.", 401
             )
+        if user.id == BOWEN_ID:
+            challenge = issue_choice(db, client_key(request, settings), now)
+            succeeded = True
+            return JSONResponse(status_code=202, content=challenge.model_dump(mode="json"))
         raw_token, session_row, raw_csrf = create_rotated_session(
             db,
             user,
@@ -303,6 +313,64 @@ def _login_admitted(
             db.commit()
         elif db.in_transaction():
             db.rollback()
+
+
+@router.post(
+    "/identity-choice",
+    response_model=AuthSession,
+    operation_id="chooseLoginIdentity",
+    openapi_extra={"security": []},
+    responses={
+        200: {"model": AuthSession, "description": "Session created for the chosen identity."},
+        401: {"model": Error, "description": "Login choice is invalid or unavailable."},
+        403: {"model": Error, "description": "The configured public origin is required."},
+        422: {"model": Error, "description": "Choose an available class for the student identity."},
+        429: {"model": Error, "description": "Authentication attempts are temporarily limited."},
+    },
+)
+def choose_login_identity(
+    payload: LoginIdentityChoiceRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    now: datetime | None = Depends(get_auth_clock),
+) -> AuthSession:
+    _require_production_auth_origin(request, settings)
+    with adaptive_slot("login", settings):
+        limiter = _limiter(request)
+        key = client_key(request, settings)
+        reservation = limiter.reserve_login(key, "identity-choice", settings)
+        failed = False
+        succeeded = False
+        try:
+            user = consume_choice(db, payload, key, now)
+            raw_token, row, raw_csrf = create_rotated_session(
+                db,
+                user,
+                settings,
+                old_raw_token=request.cookies.get(SESSION_COOKIE_NAME),
+                now=now,
+            )
+            row.entered_via_user_id = BOWEN_ID
+            if payload.identity == "student":
+                row.active_course_id = str(payload.course_id)
+            result = _auth_response(db, AuthContext(raw_token, row, user, raw_csrf))
+            db.commit()
+            succeeded = True
+            _set_session_cookie(response, raw_token, settings, request)
+            return result
+        except PlatformError:
+            failed = True
+            raise
+        except OperationalError as exc:
+            if not login_database_overloaded(exc):
+                raise
+            raise _login_queue_overload(settings) from None
+        finally:
+            limiter.finish_login(reservation, failed=failed)
+            if not succeeded and db.in_transaction():
+                db.rollback()
 
 
 def _login_queue_overload(settings: Settings) -> PlatformError:

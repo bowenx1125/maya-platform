@@ -182,7 +182,7 @@ def test_catalog_account_can_replace_its_password(app_factory: Any) -> None:
                 "/api/v1/auth/login",
                 json={"username": "bowen", "password": "student-owned-password"},
             ).status_code
-            == 200
+            == 202
         )
 
 

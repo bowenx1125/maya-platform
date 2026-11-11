@@ -24,6 +24,7 @@ const implemented = new Set([
   "putCourseQuizSchedule",
 
   "login",
+  "chooseLoginIdentity",
   "switchDemoIdentity",
   "listDemoIdentities",
   "quickLogin",
