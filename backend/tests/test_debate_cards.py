@@ -642,3 +642,31 @@ def test_a_chinese_debate_asks_for_a_chinese_card(debate_app) -> None:
     assert result.status == "ready"
     system = transport.calls[0]["body"]["messages"][0]["content"]
     assert "600 Han characters" in system and "in Chinese" in system
+
+
+# --- voice ------------------------------------------------------------------------
+
+
+def test_a_ready_card_voice_line_replaces_the_debate_instruction() -> None:
+    base = {"rate": 1.25, "instruction": "Everyone sounds formal.", "seed": None}
+    ready = json.dumps(CARD)
+    assert cards.voice_params_with_card(base, "ready", ready) == {
+        **base,
+        "instruction": CARD["voice_style"],
+    }
+    # No voice line, no ready card, or an unreadable card: the Debate's values stay.
+    silent = json.dumps({**CARD, "voice_style": None})
+    for status, stored in (
+        ("ready", silent),
+        ("fallback", None),
+        ("compiling", None),
+        (None, None),
+        ("ready", "not json"),
+    ):
+        assert cards.voice_params_with_card(base, status, stored) == base
+    assert base["instruction"] == "Everyone sounds formal."
+
+
+def test_a_host_without_the_participant_table_voices_as_before() -> None:
+    base = {"rate": 1.0, "instruction": None, "seed": None}
+    assert cards.participant_voice_params(object(), "participant-0", base) == base

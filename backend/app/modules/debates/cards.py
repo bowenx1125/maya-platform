@@ -25,6 +25,7 @@ from uuid import uuid4
 
 import httpx
 from sqlalchemy import select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError
@@ -312,6 +313,48 @@ def render_card_markdown(card: Mapping[str, object], language: str) -> str:
     if card["speaking_style"]:
         sections.append(f"## {style}\n{card['speaking_style']}")
     return "\n\n".join(sections)
+
+
+def voice_params_with_card(
+    base: Mapping[str, object], card_status: object, card_json: object
+) -> dict[str, object]:
+    """The Debate's voice values with this Agent's own delivery line, when it has one.
+
+    The Debate-level instruction is one text for every speaker; a ready card's
+    ``voice_style`` is what the student wrote for this Agent, so it wins. The
+    card is in the Debate's language, which the supplier requires an
+    instruction to share with the text it reads. Any other state keeps the
+    Debate's values: a missing voice line never changes how a turn is voiced.
+    """
+
+    params = dict(base)
+    if card_status != "ready" or not isinstance(card_json, str):
+        return params
+    try:
+        style = json.loads(card_json).get("voice_style")
+    except (ValueError, AttributeError):
+        return params
+    if isinstance(style, str) and style.strip():
+        params["instruction"] = style.strip()[:CARD_MAX_LINE_CHARS]
+    return params
+
+
+def participant_voice_params(
+    db: Any, participant_id: object, base: Mapping[str, object]
+) -> dict[str, object]:
+    """Read the participant's card afresh: it may have compiled during this very turn."""
+
+    try:
+        row = db.execute(
+            select(DebateParticipant.card_status, DebateParticipant.card_json).where(
+                DebateParticipant.id == str(participant_id)
+            )
+        ).first()
+    except (SQLAlchemyError, AttributeError, TypeError) as exc:
+        # A host without the SQL participant table (tests, Mock) voices as before.
+        LOGGER.info("debate_card_voice_unread error=%s", type(exc).__name__)
+        return dict(base)
+    return voice_params_with_card(base, *row) if row is not None else dict(base)
 
 
 def stored_card(row: Any) -> dict[str, object] | None:

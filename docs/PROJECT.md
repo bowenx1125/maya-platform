@@ -300,4 +300,4 @@ till republish. Teacher `getDebateDiagnostics`:3-gram grounding.
 AGENT.md compiles once (`llm_debate_card`, Debate model,strict schema, 1 ledgered
 attempt, 60s) to identity/position/reasoning/style/voice/dropped, ≤600 Han/400 words.
 Ready→card persona;failure/Mock→fallback (raw AGENT.md); null (old) keeps pinned bytes.
-Round-1 query:stance, else card position. Preview:Check card. 0 calls;quality unverified.
+Round-1 query:stance, else card position. Preview:Check card. Clone TTS instruction=card voice_style,else Debate's. 0 calls;quality unverified.
