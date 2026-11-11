@@ -22,7 +22,11 @@ export function AgentsPage({
 }) {
   return (
     <div className={AGENT_PAGE}>
-      <PageBanner title={title} titleId="studyform-agents">
+      <PageBanner
+        title={title}
+        titleId="studyform-agents"
+        className="max-[767px]:shadow-[8px_8px_0_#111]"
+      >
         {action}
       </PageBanner>
       <section aria-labelledby="studyform-agents">{children}</section>
