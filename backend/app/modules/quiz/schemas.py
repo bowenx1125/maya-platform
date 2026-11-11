@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.core.errors import unprocessable
 
 QuizStatus = Literal["draft", "published"]
 ItemType = Literal["single", "multiple", "short_text", "long_text"]
@@ -135,6 +137,12 @@ class QuizSummaryDTO(BaseModel):
     attempt_count: int = 0
     taking_open: bool = False
     taking_epoch: int = 0
+    scheduled_start_at: datetime | None = None
+    scheduled_end_at: datetime | None = None
+    exemption_count: int = 0
+    exemption_deadline_latest: datetime | None = None
+    exempt_until: datetime | None = None
+    can_take_now: bool = False
     created_by_user_id: UUID
     published_at: datetime | None = None
     created_at: datetime
@@ -157,6 +165,10 @@ class StudentQuizDTO(BaseModel):
     content_revision: int
     taking_open: bool = False
     taking_epoch: int = 0
+    scheduled_start_at: datetime | None = None
+    scheduled_end_at: datetime | None = None
+    exempt_until: datetime | None = None
+    can_take_now: bool = False
     settings: QuizSettings
     locale: str = "en"
     items: list[QuizItemStudent] = Field(default_factory=list)
@@ -190,6 +202,8 @@ class QuizAttemptDTO(BaseModel):
     actor_user_id: UUID
     content_revision: int
     taking_epoch: int = 0
+    scheduled_start_at: datetime | None = None
+    scheduled_end_at: datetime | None = None
     status: Literal["submitted"]
     grading_status: GradingStatus
     score_objective: float
@@ -293,3 +307,61 @@ class QuizItemGrade(BaseModel):
 
 class GradeQuizAttemptRequest(BaseModel):
     grades: list[QuizItemGrade] = Field(min_length=1, max_length=500)
+
+
+class PutQuizExemptionsRequest(BaseModel):
+    student_ids: list[UUID] = Field(min_length=1, max_length=500)
+    deadline_at: datetime
+
+    @field_validator("student_ids")
+    @classmethod
+    def _dedupe_students(cls, value: list[UUID]) -> list[UUID]:
+        return list(dict.fromkeys(value))
+
+    @field_validator("deadline_at")
+    @classmethod
+    def _aware_deadline(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise unprocessable(
+                "quiz_exemption_deadline_naive", "The deadline must include a timezone."
+            )
+        return value
+
+
+class QuizExemptionDTO(BaseModel):
+    id: UUID
+    student_id: UUID
+    username: str
+    display_name: str
+    deadline_at: datetime
+    active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class QuizExemptionStudentDTO(BaseModel):
+    student_id: UUID
+    username: str
+    display_name: str
+    submitted: bool
+    exempt_until: datetime | None = None
+
+
+class QuizExemptionsDTO(BaseModel):
+    taking_epoch: int
+    exemptions: list[QuizExemptionDTO]
+    students: list[QuizExemptionStudentDTO]
+
+
+class PutQuizScheduleRequest(BaseModel):
+    start_at: datetime | None
+    end_at: datetime | None
+
+    @field_validator("start_at", "end_at")
+    @classmethod
+    def _aware_schedule(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise unprocessable("quiz_schedule_naive", "The time must include a timezone.")
+        return value.astimezone(UTC)

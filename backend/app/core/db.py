@@ -94,7 +94,7 @@ def resolve_pool_config(
     return size, overflow, timeout
 
 
-ALEMBIC_HEAD = "0087_account_author_links"
+ALEMBIC_HEAD = "0088_quiz_exemptions_schedule"
 # The oldest revision this checkout has (migrations squashed 2026-10-25).
 MIGRATION_BASELINE = "0080_drop_playback_rate"
 
