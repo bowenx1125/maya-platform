@@ -1385,6 +1385,41 @@ it("updates debate progress in place without opening the debate", async () => {
   }
 });
 
+it("checks a list with nothing in motion far less often", async () => {
+  vi.useFakeTimers();
+  try {
+    useSessionMock.mockReturnValue(teacherSession());
+    const finished = {
+      id: "finished-debate",
+      course_id: courseId,
+      topic: "Already over",
+      status: "debate_finished",
+      round_count: 4,
+      created_at: "2026-09-08T00:00:00Z",
+      prepared_turns: 16,
+      expected_turns: 16,
+    } as DebateSummary;
+    const load = vi.fn().mockResolvedValue([finished]);
+    render(<TeacherDebateList controller={{ load }} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(load).toHaveBeenCalledTimes(1);
+    // The first answer says nothing is moving, so the next check waits.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(14000);
+    });
+    expect(load).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(load).toHaveBeenCalledTimes(2);
+  } finally {
+    cleanup();
+    vi.useRealTimers();
+  }
+});
+
 it("removes bulk Refresh and never retries stalled records when reading the list", async () => {
   const failed = {
     id: "failed",

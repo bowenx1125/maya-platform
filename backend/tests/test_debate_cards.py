@@ -65,17 +65,18 @@ CARD = {
 
 # The same eight wires (system, user, body, input hash, version and the turn's
 # retrieval queries) for a participant built by SqlTurnPreparer._participant,
-# computed on the branch at 3b43760, the last commit before cards existed. A participant with
-# no card, a compiling card or a fallback card sends exactly these.
+# first computed at 3b43760, the last commit before cards existed, where they
+# equalled the merged tree's; re-pinned since only for deliberate v4 wording
+# changes. A participant with no card, a compiling card or a fallback card sends exactly these.
 PINNED = {
-    "zh/1": "0d7f307fe3bafed83123f5119a561e556f475ae99f360d0ee8e61ffdcec213da",
-    "zh/2": "9c0e06be4b66bf8d3b4a23f4e6e3948a3f8f644aae1b9c2358f3f9826589108c",
-    "zh/3": "a9acd192d832679d963e874891b581ecfadb4dff1b18744c6647e8cc56a613fe",
-    "zh/4": "7219bc5eb8205b77e35cbb80a3827af07bd5fc66d0005e9d813e236dd6c09e70",
-    "en/1": "21ece532316dc775ae5b0cb0ee0ae30e87d5cd24909de9e7a70ff54e5925898e",
-    "en/2": "62c2db4cd1fb2d738dcaeceff7b67f031e9b1b35f20baa94359f357f82f0e39e",
-    "en/3": "3c127bf2bdc9b777e2ecf59a47341d6b0e10ad148fe20df7c66cac0f2bddde26",
-    "en/4": "ff07a850f428b5797bda23d2e84d155c30e1ea875642456d4b413dd2e5ae25fe",
+    "zh/1": "75b6928cbf7c41c7e1a209d63f28f165a3df2626fefd4c61388456d4e0818b9d",
+    "zh/2": "ed2cdf222761bea861dd2459875bcb7e7d1baf884018b8ee9e052cdb608b98e5",
+    "zh/3": "d521bdcdbb2eba3fff6c2d0dc5d8aa11faaf4a2aa41efb822beac1774d58fab9",
+    "zh/4": "09544ddfbdec028ea008e69f4df5424f10cc764d6cc80f3d6edb7c4112166fb0",
+    "en/1": "e7cf3669ac07fdf7262eb5ed2af1cd3d73615b61c00570bff1b60a2416fd0cfe",
+    "en/2": "146b4bdc2bf2b9d0e2d3b7011ab7921b08a2ecd17d4e86000624e61828018c15",
+    "en/3": "526d1bf3071730bb937e34cef12331b9dab0919ad72ce75c11b527fe18dd107e",
+    "en/4": "a13720b5041bbc99c76091cd81a90589ea214d076c11ba7d36642c2bb79c0edc",
 }
 
 

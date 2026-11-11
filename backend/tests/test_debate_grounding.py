@@ -111,3 +111,17 @@ def test_several_cited_chunks_are_measured_together() -> None:
 def test_an_empty_or_too_short_paragraph_measures_nothing() -> None:
     result = measure_grounding("好。", [ZH_SOURCE], "zh")
     assert (result.grounding_class, result.coverage, result.total_grams) == ("not_found", 0.0, 0)
+
+
+def test_a_source_in_another_language_is_reported_as_unmeasured() -> None:
+    english = "The imitation game replaces the question of whether machines can think."
+    chinese = "模仿游戏用一个可以检验的问题，替换了机器能不能思考这个问题。"
+    measured = measure_grounding(chinese, [english], "zh")
+    assert measured.grounding_class == "other_language"
+    assert measured.total_grams == 0
+    assert measure_grounding(english, [chinese], "en").grounding_class == "other_language"
+    # A mixed source that is mostly the speech's language is still measured.
+    assert measure_grounding(chinese, [chinese + " imitation game"], "zh").grounding_class in {
+        "quoted",
+        "paraphrased",
+    }

@@ -16195,7 +16195,8 @@
         "required": [
           "quoted",
           "paraphrased",
-          "not_found"
+          "not_found",
+          "other_language"
         ],
         "properties": {
           "quoted": {
@@ -16205,6 +16206,9 @@
             "type": "integer"
           },
           "not_found": {
+            "type": "integer"
+          },
+          "other_language": {
             "type": "integer"
           }
         }
@@ -16435,6 +16439,7 @@
               "quoted",
               "paraphrased",
               "not_found",
+              "other_language",
               null
             ]
           },

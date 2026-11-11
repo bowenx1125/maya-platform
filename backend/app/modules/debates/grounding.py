@@ -17,7 +17,7 @@ from typing import Literal
 
 from app.modules.debates.generation.four_round import ENGLISH_WORD
 
-GroundingClass = Literal["quoted", "paraphrased", "not_found"]
+GroundingClass = Literal["quoted", "paraphrased", "not_found", "other_language"]
 
 # Calibrated on two production exports (2026-11-10, 2026-11-11 v4; 164 cited
 # paragraphs). The control set every cited paragraph against every chunk of the
@@ -32,6 +32,11 @@ QUOTED_MIN_RUN = {"zh": 15, "en": 8}
 # restates its source. 0.55% of control pairs reach it (0.15 let 1.05% through;
 # a teacher-facing claim of support should err towards "not found").
 PARAPHRASED_MIN_COVERAGE = 0.2
+# Shared n-grams cannot exist across languages: a Chinese speech drawn from
+# English sources (two of four Agents in the Nov 11 production Debate) scored
+# 1% traced and read as unsupported. Sources whose Han share is on the other
+# side of this line from the speech's language are reported as unmeasurable.
+OTHER_LANGUAGE_HAN_SHARE = 0.2
 # A very common n-gram (a repeated phrase in a long chunk) is matched from at
 # most this many places, which bounds the longest-run search on any input.
 _MAX_POSITIONS_PER_GRAM = 64
@@ -88,12 +93,24 @@ def matched_gram_flags(text: str, sources: Sequence[str], language: str) -> list
     return [gram in seen for gram in _grams(grounding_units(text, language), size)]
 
 
+def sources_in_other_language(sources: Sequence[str], language: str) -> bool:
+    letters = [char for source in sources for char in source if char.isalpha()]
+    if not letters:
+        return False
+    han = sum(1 for char in letters if "\u3400" <= char <= "\u9fff") / len(letters)
+    return (
+        han < OTHER_LANGUAGE_HAN_SHARE if language == "zh" else han > 1 - OTHER_LANGUAGE_HAN_SHARE
+    )
+
+
 def measure_grounding(text: str, sources: Sequence[str], language: str) -> Grounding:
     """Measure one cited paragraph against the full text of the chunks it cites."""
 
     key = "zh" if language == "zh" else "en"
     size = GROUNDING_NGRAM[key]
     units = grounding_units(text, language)
+    if sources_in_other_language(sources, language):
+        return Grounding("other_language", 0.0, 0, 0, 0)
     flags = matched_gram_flags(text, sources, language)
     matched = sum(flags)
     coverage = matched / len(flags) if flags else 0.0

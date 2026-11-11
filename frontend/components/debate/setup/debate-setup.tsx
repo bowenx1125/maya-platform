@@ -126,6 +126,12 @@ export function TeacherDebateList({
   const [endBusy, setEndBusy] = useState(false);
   const [endError, setEndError] = useState<unknown>(null);
 
+  // Progress is worth watching closely only while something is moving: a
+  // draft still warming its turns, or a running lesson. A list of finished or
+  // stalled Debates used to ask the server every two seconds for as long as
+  // the page stayed open. Set from each answer as it arrives, so the next
+  // check is timed by what the server just said.
+  const inMotion = useRef(true);
   const load = useCallback(
     async (silent = false, propagateError = false) => {
       const sequence = ++loadSequence.current;
@@ -143,6 +149,12 @@ export function TeacherDebateList({
           ? await controller.load(courseId)
           : await api.debates(courseId);
         if (sequence !== loadSequence.current) return;
+        inMotion.current = next.some(
+          (row) =>
+            !row.stall &&
+            (row.status === "running" ||
+              (row.status === "draft" && !row.preview?.ready)),
+        );
         setDebates(next);
         setError(null);
       } catch (cause) {
@@ -195,7 +207,11 @@ export function TeacherDebateList({
     const poll = async (initial = false) => {
       if (initial || document.visibilityState !== "hidden")
         await load(!initial);
-      if (!stopped) timer = window.setTimeout(() => void poll(), 2000);
+      if (!stopped)
+        timer = window.setTimeout(
+          () => void poll(),
+          inMotion.current ? 2000 : 15000,
+        );
     };
     const refreshVisible = () => {
       if (document.visibilityState !== "hidden") void load(true);
