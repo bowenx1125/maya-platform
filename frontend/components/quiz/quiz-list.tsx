@@ -72,14 +72,7 @@ export function StudentQuizList({
             () => client.listCourseQuizzes(courseId),
             { refresh },
           ),
-          cachedCall(
-            client,
-            cacheIdentity,
-            "listMyRecordAttempts",
-            [courseId],
-            () => client.listMyRecordAttempts(courseId),
-            { refresh },
-          ),
+          client.listMyRecordAttempts(courseId),
         ]);
         // The server lists published only for a student; filter anyway so a
         // stale cached draft row can never start a draft quiz.
@@ -146,7 +139,8 @@ export function StudentQuizList({
       ))}
       {results.map((row) => {
         const expanded = openId === row.attempt_id;
-        const graded = row.grading_status === "complete";
+        const resultsVisible = row.results_visible === true;
+        const graded = resultsVisible && row.grading_status === "complete";
         const meta = [
           row.taking_epoch ? t("quizRound", { n: row.taking_epoch }) : null,
           row.submitted_at
@@ -175,12 +169,20 @@ export function StudentQuizList({
                 {row.title}
               </span>
               <span className="text-xs font-bold text-arc-muted">{meta}</span>
-              <span
-                className={`shrink-0 rounded-full border-2 border-border px-3 py-1 text-xs font-extrabold ${graded ? "bg-[#ECFCCB]" : "bg-warn-bg"}`}
-              >
-                {graded ? t("quizGraded") : t("quizNotGraded")}
-              </span>
-              <Score row={row} />
+              {resultsVisible ? (
+                <>
+                  <span
+                    className={`shrink-0 rounded-full border-2 border-border px-3 py-1 text-xs font-extrabold ${graded ? "bg-[#ECFCCB]" : "bg-warn-bg"}`}
+                  >
+                    {graded ? t("quizGraded") : t("quizNotGraded")}
+                  </span>
+                  <Score row={row} />
+                </>
+              ) : (
+                <span className="shrink-0 font-body text-xs font-bold text-arc-muted">
+                  {t("quizResultsNotAvailable")}
+                </span>
+              )}
             </button>
             {expanded && row.quiz_id ? (
               <div className="basis-full border-t-[3px] border-dashed border-border p-4">

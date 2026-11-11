@@ -27,6 +27,7 @@ import {
   QuestionnaireProgress,
 } from "../ui/questionnaire";
 import { celebrate } from "../../lib/confetti";
+import { useT } from "../../lib/i18n";
 import { WorkspaceIcon } from "../workspace-icon";
 
 type TakeApi = Pick<PlatformApi, "getStudentQuiz" | "submitCourseQuizAttempt">;
@@ -53,6 +54,7 @@ export function QuizTake({
   api?: TakeApi;
 }) {
   const session = useSession();
+  const t = useT();
   const client = apiProp ?? (session.api as TakeApi);
   const userId = session.user?.id ?? "";
   const [quiz, setQuiz] = useState<StudentQuizDto | null>(quizProp ?? null);
@@ -139,22 +141,65 @@ export function QuizTake({
   }
   if (!quiz) return <LoadingCard />;
   if (result) {
-    const percent =
-      result.score_max_objective > 0
+    const resultsVisible = result.results_visible === true;
+    const hasObjectiveScore =
+      resultsVisible &&
+      typeof result.score_objective === "number" &&
+      Number.isFinite(result.score_objective) &&
+      typeof result.score_max_objective === "number" &&
+      Number.isFinite(result.score_max_objective) &&
+      result.score_max_objective > 0;
+    const percent = hasObjectiveScore
         ? Math.round(
-            (result.score_objective / result.score_max_objective) * 100,
+            ((result.score_objective as number) /
+              (result.score_max_objective as number)) *
+              100,
           )
         : null;
+    const ownAnswers =
+      !resultsVisible && quiz
+        ? (result.answers ?? []).map((answer) => {
+            const item = quiz.items.find((candidate) => candidate.id === answer.item_id);
+            const response = answer.choice_ids?.length
+              ? answer.choice_ids
+                  .map(
+                    (id) =>
+                      item?.choices.find((choice) => choice.id === id)?.label ?? id,
+                  )
+                  .join(" / ")
+              : (answer.text ?? "");
+            return { id: answer.item_id, prompt: item?.prompt ?? answer.item_id, response };
+          })
+        : [];
     return (
       <div className="rounded-[14px] border-[3px] border-border bg-white px-6 py-8 text-center shadow-[6px_6px_0_#C4B5FD]">
         <p className="m-0 inline-block -rotate-[1.5deg] rounded-md border-[3px] border-border bg-main px-[18px] py-1 font-display text-[30px] font-extrabold text-main-fg shadow-[4px_4px_0_#FFE14D]">
           Submitted
         </p>
         <p className="mt-4 font-body text-sm font-semibold text-ink">
-          {percent === null
-            ? "Your answers are in."
-            : `Objective score: ${result.score_objective} / ${result.score_max_objective} (${percent}%)`}
+          {!resultsVisible
+            ? t("quizResultsNotAvailable")
+            : percent === null
+              ? "Your answers are in."
+              : `Objective score: ${result.score_objective} / ${result.score_max_objective} (${percent}%)`}
         </p>
+        {ownAnswers.length ? (
+          <ul className="mx-auto mt-5 grid max-w-2xl list-none gap-3 p-0 text-left">
+            {ownAnswers.map((answer) => (
+              <li
+                key={answer.id}
+                className="rounded-arc border-2 border-border bg-surface px-4 py-3"
+              >
+                <p className="m-0 font-body text-sm font-extrabold text-ink">
+                  {answer.prompt}
+                </p>
+                <p className="mt-1 mb-0 whitespace-pre-wrap font-body text-sm text-ink">
+                  {answer.response}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <button
           type="button"
           onClick={onExit}

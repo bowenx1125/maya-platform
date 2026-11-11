@@ -308,10 +308,16 @@ export type QuizAttemptDto = {
   actor_user_id: string;
   content_revision: number;
   status: "submitted";
-  grading_status: QuizGradingStatus;
-  score_objective: number;
-  score_max_objective: number;
-  answers: Array<Record<string, unknown>>;
+  /** Missing is treated as hidden by student result views. */
+  results_visible?: boolean;
+  grading_status?: QuizGradingStatus | null;
+  score_objective?: number | null;
+  score_max_objective?: number | null;
+  answers: Array<{
+    item_id: string;
+    choice_ids?: string[] | null;
+    text?: string | null;
+  }>;
   taking_epoch?: number;
   submitted_at: string;
 };
@@ -325,15 +331,17 @@ export type RecordAttemptDto = {
   title: string;
   status: string;
   submitted_at: string | null;
-  score_objective: number | null;
-  score_max_objective: number | null;
-  grading_status: QuizGradingStatus | null;
+  /** Missing is treated as hidden by student result views. */
+  results_visible?: boolean;
+  score_objective?: number | null;
+  score_max_objective?: number | null;
+  grading_status?: QuizGradingStatus | null;
   /** Optional AI score aggregate; tolerate absence until BE ships it. */
   score_ai?: number | null;
   quiz_id: string | null;
   conversation_id: string | null;
-  points_awarded: number | null;
-  points_total: number | null;
+  points_awarded?: number | null;
+  points_total?: number | null;
   phase: string | null;
   team_name: string | null;
   taking_epoch?: number | null;

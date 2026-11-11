@@ -54,6 +54,8 @@ export interface QuizSummaryDTO {
   group_id?: string | null;
   title: string;
   status: QuizStatus;
+  /** Missing visibility settings fail closed: students cannot see results. */
+  hide_results_from_students?: boolean;
   schema_version: number;
   content_revision: number;
   attempt_count?: number;
@@ -96,7 +98,7 @@ export interface QuizAttemptItem {
   response_text?: string | null;
   correct?: boolean | null;
   points_awarded?: number | null;
-  graded: boolean;
+  graded?: boolean;
   feedback?: string | null;
   /** Teacher view only; a student's detail never carries the key. */
   answer?: QuizAnswerKey | null;
@@ -117,15 +119,17 @@ export interface QuizAttemptDetail {
   content_revision: number;
   taking_epoch: number;
   status: "submitted";
-  grading_status: QuizGradingStatusValue;
-  score_objective: number;
-  score_max_objective: number;
-  score_manual: number;
-  score_max_manual: number;
+  /** Student result fields are present only after results are released. */
+  results_visible?: boolean;
+  grading_status?: QuizGradingStatusValue | null;
+  score_objective?: number | null;
+  score_max_objective?: number | null;
+  score_manual?: number | null;
+  score_max_manual?: number | null;
   /** Optional aggregate of AI item scores when the API sends it. */
   score_ai?: number | null;
-  points_awarded: number;
-  points_total: number;
+  points_awarded?: number | null;
+  points_total?: number | null;
   submitted_at: string;
   graded_at?: string | null;
   items: QuizAttemptItem[];
@@ -186,6 +190,10 @@ export interface PatchQuizRequest {
   settings?: QuizSettings | null;
   items?: QuizItemTeacher[] | null;
   locale?: string | null;
+}
+
+export interface StudentResultsVisibilityRequest {
+  hide_results_from_students: boolean;
 }
 
 // The backend sends errors top-level ({code, message, details, request_id}),
@@ -290,6 +298,21 @@ export class QuizApi {
     return this.request<TeacherQuizDTO>(
       "PATCH",
       `/api/v1/courses/${courseId}/quizzes/${quizId}`,
+      payload,
+    );
+  }
+
+  setStudentResultsVisibility(
+    courseId: string,
+    quizId: string,
+    hideResultsFromStudents: boolean,
+  ): Promise<TeacherQuizDTO> {
+    const payload: StudentResultsVisibilityRequest = {
+      hide_results_from_students: hideResultsFromStudents,
+    };
+    return this.request<TeacherQuizDTO>(
+      "PUT",
+      `/api/v1/courses/${encodeURIComponent(courseId)}/quizzes/${encodeURIComponent(quizId)}/student-results-visibility`,
       payload,
     );
   }
