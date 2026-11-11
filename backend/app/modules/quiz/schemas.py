@@ -126,6 +126,10 @@ class PatchQuizRequest(BaseModel):
         return cleaned
 
 
+class StudentResultsVisibilityRequest(BaseModel):
+    hide_results_from_students: bool
+
+
 class QuizSummaryDTO(BaseModel):
     id: UUID
     course_id: UUID
@@ -143,6 +147,7 @@ class QuizSummaryDTO(BaseModel):
     exemption_deadline_latest: datetime | None = None
     exempt_until: datetime | None = None
     can_take_now: bool = False
+    hide_results_from_students: bool = True
     created_by_user_id: UUID
     published_at: datetime | None = None
     created_at: datetime
@@ -205,9 +210,10 @@ class QuizAttemptDTO(BaseModel):
     scheduled_start_at: datetime | None = None
     scheduled_end_at: datetime | None = None
     status: Literal["submitted"]
-    grading_status: GradingStatus
-    score_objective: float
-    score_max_objective: float
+    grading_status: GradingStatus | None = None
+    score_objective: float | None = None
+    score_max_objective: float | None = None
+    results_visible: bool
     answers: list[dict[str, Any]] = Field(default_factory=list)
     submitted_at: datetime
 
@@ -235,6 +241,7 @@ class RecordAttemptDTO(BaseModel):
     team_name: str | None = None
     taking_epoch: int | None = None
     content_revision: int | None = None
+    results_visible: bool | None = None
 
 
 class QuizAttemptItemStudent(BaseModel):
@@ -254,7 +261,7 @@ class QuizAttemptItemStudent(BaseModel):
     response_text: str | None = None
     correct: bool | None = None
     points_awarded: float | None = None
-    graded: bool = False
+    graded: bool | None = None
     feedback: str | None = None
     # Present after the AI worker writes a score; omit/null while pending.
     ai_score: float | None = None
@@ -280,15 +287,16 @@ class StudentQuizAttemptDetailDTO(BaseModel):
     content_revision: int
     taking_epoch: int
     status: Literal["submitted"]
-    grading_status: GradingStatus
-    score_objective: float
-    score_max_objective: float
-    score_manual: float
-    score_max_manual: float
+    grading_status: GradingStatus | None = None
+    score_objective: float | None = None
+    score_max_objective: float | None = None
+    score_manual: float | None = None
+    score_max_manual: float | None = None
     # Optional aggregate of AI item scores when any ai_score is present.
     score_ai: float | None = None
-    points_awarded: float
-    points_total: float
+    points_awarded: float | None = None
+    points_total: float | None = None
+    results_visible: bool
     submitted_at: datetime
     graded_at: datetime | None = None
     items: list[QuizAttemptItemStudent] = Field(default_factory=list)

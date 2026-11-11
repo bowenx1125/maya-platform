@@ -16,6 +16,7 @@ from app.seed import COURSE_ID
 from tests.test_classroom_quiz_api import (  # noqa: F401
     Actor,
     _create_publish_open,
+    _set_student_results_visible,
     _submit,
     actors,
     student,
@@ -68,9 +69,13 @@ def test_teacher_detail_has_key_and_student_detail_never_does(
     own = student.get(_attempt_path(quiz_id, attempt_id))
     assert own.status_code == 200, own.text
     assert own.json()["view"] == "student"
+    assert own.json()["results_visible"] is False
     assert '"answer"' not in own.text
     assert '"rubric"' not in own.text
-    assert {item["id"]: item for item in own.json()["items"]}["q1"]["correct"] is True
+    student_q1 = {item["id"]: item for item in own.json()["items"]}["q1"]
+    assert student_q1.get("correct") is None
+    assert student_q1.get("points_awarded") is None
+    assert own.json().get("score_objective") is None
 
     other = actors("kaikai")
     assert other.get(_attempt_path(quiz_id, attempt_id)).status_code == 404
@@ -121,7 +126,17 @@ def test_teacher_grades_text_items_by_hand(teacher: Actor, student: Actor) -> No
     regraded = _put(teacher, grades_path, {"grades": [{"item_id": "q3", "points_awarded": 3}]})
     assert regraded.json()["score_manual"] == 3.0
 
+    hidden = student.get(_attempt_path(quiz_id, attempt_id)).json()
+    assert hidden["results_visible"] is False
+    hidden_q3 = {item["id"]: item for item in hidden["items"]}["q3"]
+    assert hidden_q3.get("graded") is None
+    assert hidden_q3.get("points_awarded") is None
+    assert hidden_q3.get("feedback") is None
+
+    opened = _set_student_results_visible(teacher, quiz_id, hide=False)
+    assert opened.status_code == 200, opened.text
     own = student.get(_attempt_path(quiz_id, attempt_id)).json()
+    assert own["results_visible"] is True
     q3 = {item["id"]: item for item in own["items"]}["q3"]
     assert q3["graded"] is True
     assert q3["points_awarded"] == 3.0
@@ -162,14 +177,20 @@ def test_records_carry_epoch_and_revision(teacher: Actor, student: Actor) -> Non
     teacher.post(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/start-taking")
     assert _submit(quiz_id, student, wrong=True).status_code == 201
 
-    for path, actor in (
-        (f"/courses/{COURSE_ID}/record-attempts?quiz_id={quiz_id}", teacher),
-        (f"/courses/{COURSE_ID}/my-record-attempts?quiz_id={quiz_id}", student),
-    ):
-        rows = actor.get(path).json()
-        assert sorted(row["taking_epoch"] for row in rows) == [1, 2]
-        assert {row["content_revision"] for row in rows} == {1}
-        assert {row["phase"] for row in rows} == {"grading_pending"}
+    teacher_rows = teacher.get(
+        f"/courses/{COURSE_ID}/record-attempts?quiz_id={quiz_id}"
+    ).json()
+    assert sorted(row["taking_epoch"] for row in teacher_rows) == [1, 2]
+    assert {row["content_revision"] for row in teacher_rows} == {1}
+    assert {row["phase"] for row in teacher_rows} == {"grading_pending"}
+
+    student_rows = student.get(
+        f"/courses/{COURSE_ID}/my-record-attempts?quiz_id={quiz_id}"
+    ).json()
+    assert sorted(row["taking_epoch"] for row in student_rows) == [1, 2]
+    assert {row["content_revision"] for row in student_rows} == {1}
+    assert all(row.get("phase") is None and "phase" not in row for row in student_rows)
+    assert all(row.get("results_visible") is False for row in student_rows)
 
 
 def test_teacher_hide_removes_the_attempt_everywhere(teacher: Actor, student: Actor) -> None:

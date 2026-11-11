@@ -70,6 +70,9 @@ class Actor:
     def patch(self, path: str, body: dict[str, Any]) -> Any:
         return self.client.patch(f"/api/v1{path}", json=body, headers=self.headers)
 
+    def put(self, path: str, body: dict[str, Any]) -> Any:
+        return self.client.put(f"/api/v1{path}", json=body, headers=self.headers)
+
 
 @pytest.fixture
 def actors(app_bundle: tuple[FastAPI, Database, Any]):
@@ -140,6 +143,14 @@ def _submit(quiz_id: str, student: Actor, *, wrong: bool = False) -> Any:
     )
 
 
+
+def _set_student_results_visible(teacher: Actor, quiz_id: str, *, hide: bool) -> Any:
+    return teacher.put(
+        f"/courses/{COURSE_ID}/quizzes/{quiz_id}/student-results-visibility",
+        {"hide_results_from_students": hide},
+    )
+
+
 def test_teacher_crud_publish_unpublish_and_edit_gate(teacher: Actor, student: Actor) -> None:
     created = teacher.post(
         f"/courses/{COURSE_ID}/quizzes",
@@ -207,10 +218,15 @@ def test_submit_grades_objective_and_pending_subjective(teacher: Actor, student:
     submitted = _submit(quiz_id, student)
     assert submitted.status_code == 201, submitted.text
     body = submitted.json()
-    assert body["score_objective"] == 3.0
-    assert body["score_max_objective"] == 3.0
-    assert body["grading_status"] == "mixed"
+    assert body["results_visible"] is False
+    assert "score_objective" not in body
+    assert "score_max_objective" not in body
+    assert "grading_status" not in body
     assert body["content_revision"] == 1
+    for answer in body["answers"]:
+        assert set(answer.keys()) <= {"item_id", "choice_ids", "text"}
+        assert "correct" not in answer
+        assert "points_awarded" not in answer
 
     again = _submit(quiz_id, student)
     assert again.status_code == 409
@@ -222,19 +238,36 @@ def test_submit_grades_objective_and_pending_subjective(teacher: Actor, student:
     quiz_rows = [row for row in mine.json() if row["source"] == "quiz"]
     assert len(quiz_rows) >= 1
     assert quiz_rows[0]["quiz_id"] == quiz_id
-    assert quiz_rows[0]["score_objective"] == 3.0
+    assert quiz_rows[0]["results_visible"] is False
+    assert quiz_rows[0].get("score_objective") in (None, )
+    assert "score_objective" not in quiz_rows[0]
 
     teacher_rows = teacher.get(f"/courses/{COURSE_ID}/record-attempts")
     assert teacher_rows.status_code == 200
-    assert any(row["source"] == "quiz" and row["quiz_id"] == quiz_id for row in teacher_rows.json())
+    teacher_quiz = [
+        row
+        for row in teacher_rows.json()
+        if row["source"] == "quiz" and row["quiz_id"] == quiz_id
+    ]
+    assert teacher_quiz and teacher_quiz[0]["score_objective"] == 3.0
+    assert teacher_quiz[0]["grading_status"] == "mixed"
 
 
 def test_wrong_answers_score_zero(teacher: Actor, student: Actor) -> None:
     quiz_id = _create_publish_open(teacher)
     submitted = _submit(quiz_id, student, wrong=True)
     assert submitted.status_code == 201, submitted.text
-    assert submitted.json()["score_objective"] == 0.0
-    assert submitted.json()["score_max_objective"] == 3.0
+    body = submitted.json()
+    assert body["results_visible"] is False
+    assert "score_objective" not in body
+    assert 0 not in (body.get("score_objective"), body.get("score_max_objective"))
+    teacher_rows = [
+        row
+        for row in teacher.get(f"/courses/{COURSE_ID}/record-attempts?quiz_id={quiz_id}").json()
+        if row["source"] == "quiz"
+    ]
+    assert teacher_rows[0]["score_objective"] == 0.0
+    assert teacher_rows[0]["score_max_objective"] == 3.0
 
 
 def test_retest_after_pause_and_restart(teacher: Actor, student: Actor) -> None:

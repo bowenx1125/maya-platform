@@ -18,6 +18,7 @@ from sqlalchemy import select
 
 from tests.test_classroom_quiz_api import (  # noqa: F401
     Actor,
+    _set_student_results_visible,
     actors,
     student,
     teacher,
@@ -222,7 +223,8 @@ def test_submit_does_not_call_llm(teacher: Actor, student: Actor) -> None:
     assert mock_llm is not None
     assert calls == []
     body = submitted.json()
-    assert body["grading_status"] == "pending"
+    assert body["results_visible"] is False
+    assert "grading_status" not in body
     assert calls == []
 
 
@@ -236,7 +238,8 @@ def test_worker_writes_clamped_ai_score_and_updates_status(
     )
     assert submitted.status_code == 201, submitted.text
     attempt_id = submitted.json()["id"]
-    assert submitted.json()["grading_status"] == "pending"
+    assert submitted.json()["results_visible"] is False
+    assert "grading_status" not in submitted.json()
 
     calls = {"n": 0}
 
@@ -261,15 +264,19 @@ def test_worker_writes_clamped_ai_score_and_updates_status(
         assert attempt.grading_status == "complete"
         assert attempt.score_manual == 4.0
 
+    opened = _set_student_results_visible(teacher, quiz_id, hide=False)
+    assert opened.status_code == 200, opened.text
     detail = student.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/{attempt_id}")
     assert detail.status_code == 200, detail.text
     body = detail.json()
+    assert body["results_visible"] is True
     assert body["score_ai"] == 4.0
     item = {row["id"]: row for row in body["items"]}["q_ai"]
     assert item["graded"] is True
     assert item["points_awarded"] == 4.0
     assert item["ai_score"] == 4.0
     assert "grading" not in item
+    assert "answer" not in item
 
     teacher_detail = teacher.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/{attempt_id}")
     assert teacher_detail.status_code == 200, teacher_detail.text
@@ -320,7 +327,8 @@ def test_worker_mixed_when_choice_and_unscored_manual_remain(
         },
     )
     assert submitted.status_code == 201, submitted.text
-    assert submitted.json()["grading_status"] == "mixed"
+    assert submitted.json()["results_visible"] is False
+    assert "grading_status" not in submitted.json()
     attempt_id = submitted.json()["id"]
     run_quiz_ai_grade(
         attempt_id,
