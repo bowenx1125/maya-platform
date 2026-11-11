@@ -2,7 +2,8 @@
 
 import { DismissibleAlert } from "./dismissible-alert";
 import { StatusScreen } from "./status-screen";
-import { LoadingPage, StickerBadge } from "./ui";
+import { LoadingPage, STICKER, StickerBadge } from "./ui";
+import { Button } from "./ui/button";
 import {
   clearLoginQueue,
   loadLoginQueue,
@@ -29,6 +30,9 @@ import {
   type AuthSession,
   type CurrentUser,
   type DemoIdentity,
+  type LoginIdentityChoice,
+  type LoginIdentityChoiceRequest,
+  type LoginResult,
   type RegisterRequest,
 } from "../lib/api";
 import { resetChatRequestIdentity } from "../lib/chat-request-store";
@@ -61,6 +65,9 @@ type SessionContextValue = {
       signal?: AbortSignal;
       ticket?: string;
     },
+  ) => Promise<LoginResult>;
+  chooseLoginIdentity: (
+    body: LoginIdentityChoiceRequest,
   ) => Promise<AuthSession>;
   register: (body: RegisterRequest) => Promise<AuthSession>;
   quickLogin: (userId: string) => Promise<AuthSession>;
@@ -324,8 +331,31 @@ export function SessionProvider({
         try {
           const next = await api.login(username, password, options);
           if ("choice_token" in next) {
-            throw new Error("Choose a login identity to continue.");
+            preserveSessionAfterFailure(epoch);
+            return next;
           }
+          commitAuthenticatedSession(epoch, next);
+          return next;
+        } catch (cause) {
+          preserveSessionAfterFailure(epoch);
+          throw cause;
+        }
+      }),
+    [
+      api,
+      beginSessionOperation,
+      commitAuthenticatedSession,
+      enqueueSessionMutation,
+      preserveSessionAfterFailure,
+    ],
+  );
+
+  const chooseLoginIdentity = useCallback(
+    (body: LoginIdentityChoiceRequest) =>
+      enqueueSessionMutation(async () => {
+        const epoch = beginSessionOperation();
+        try {
+          const next = await api.chooseLoginIdentity(body);
           commitAuthenticatedSession(epoch, next);
           return next;
         } catch (cause) {
@@ -524,6 +554,7 @@ export function SessionProvider({
       error,
       refresh,
       login,
+      chooseLoginIdentity,
       register,
       quickLogin,
       logout,
@@ -536,6 +567,7 @@ export function SessionProvider({
       error,
       identityGeneration,
       login,
+      chooseLoginIdentity,
       register,
       logout,
       quickLogin,
@@ -659,10 +691,21 @@ export function RouteGuard({
 export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
   const t = useT();
   const router = useRouter();
-  const { status, login, quickLogin, api, switchIdentity } = useSession();
+  const {
+    status,
+    login,
+    chooseLoginIdentity,
+    quickLogin,
+    api,
+    switchIdentity,
+  } = useSession();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [choice, setChoice] = useState<LoginIdentityChoice | null>(null);
+  const [studentExpanded, setStudentExpanded] = useState(false);
+  const [entering, setEntering] = useState<string | null>(null);
+  const choiceHeading = useRef<HTMLHeadingElement | null>(null);
   const [queue, setQueue] = useState<LoginQueueNotice | null>(null);
   const [savedQueue, setSavedQueue] = useState<SavedLoginQueue | null>(null);
   const [resumeQueue, setResumeQueue] = useState(false);
@@ -677,6 +720,12 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
   const loginAbort = useRef<AbortController | null>(null);
 
   useEffect(() => () => loginAbort.current?.abort(), []);
+
+  useEffect(() => {
+    if (!choice) return;
+    choiceHeading.current?.focus();
+    setMood("attentive");
+  }, [choice, setMood]);
 
   useEffect(() => {
     // After a refresh, keep the typed name and the place in line. The
@@ -765,6 +814,12 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
       savedQueueRef.current = null;
       setSavedQueue(null);
       setQueue(null);
+      if ("choice_token" in session) {
+        setPassword("");
+        setStudentExpanded(false);
+        setChoice(session);
+        return;
+      }
       router.replace(
         nextPath ||
           (session.user.courses.some((item) => item.role === "teacher")
@@ -784,6 +839,51 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
       setError(cause);
     } finally {
       setBusy(false);
+    }
+  }
+
+  function backToSignIn() {
+    setChoice(null);
+    setPassword("");
+    setStudentExpanded(false);
+    setMood("idle");
+  }
+
+  async function enterIdentity(
+    selection:
+      { identity: "maya" } | { identity: "student"; course_id: string },
+  ) {
+    if (!choice || busy) return;
+    setBusy(true);
+    setEntering(selection.identity === "maya" ? "maya" : selection.course_id);
+    setError(null);
+    setErrorFallback("loginFailed");
+    try {
+      const session = await chooseLoginIdentity({
+        choice_token: choice.choice_token,
+        ...selection,
+      });
+      setChoice(null);
+      router.replace(
+        nextPath ||
+          (session.user.courses.some((item) => item.role === "teacher")
+            ? "/teacher"
+            : "/student"),
+      );
+    } catch (cause) {
+      if (
+        cause &&
+        typeof cause === "object" &&
+        "code" in cause &&
+        (cause.code === "identity_choice_invalid" ||
+          cause.code === "identity_choice_unavailable")
+      ) {
+        backToSignIn();
+      }
+      setError(cause);
+    } finally {
+      setBusy(false);
+      setEntering(null);
     }
   }
 
@@ -821,10 +921,19 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
     emptyField === "loginNeedBoth" || emptyField === "loginNeedPassword";
   return (
     <section className="login-panel" aria-labelledby="login-title">
-      <h2 id="login-title">
-        {hasDemoIdentities ? t("demoIdentity") : t("signIn")}
+      <h2
+        id="login-title"
+        className={choice ? "login-choice-title" : undefined}
+        ref={choiceHeading}
+        tabIndex={choice ? -1 : undefined}
+      >
+        {choice
+          ? t("loginChooseIdentity")
+          : hasDemoIdentities
+            ? t("demoIdentity")
+            : t("signIn")}
       </h2>
-      {hasDemoIdentities ? (
+      {hasDemoIdentities && !choice ? (
         <div className="quick-switch" aria-label={t("demoIdentity")}>
           <div className="chip-row">
             {identities.map((identity) => (
@@ -901,66 +1010,156 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
           {localizeError(error, errorFallback)}
         </DismissibleAlert>
       ) : null}
-      {hasDemoIdentities ? (
-        <div className="login-divider" aria-hidden="true">
-          <span>{t("or")}</span>
-        </div>
-      ) : null}
-      <form className="stack-form login-form" noValidate onSubmit={submit}>
-        <label>
-          <span>{t("username")}</span>
-          <span className="relative block">
-            {nameInvalid ? <StickerBadge n={1} /> : null}
-            <input
-              aria-invalid={nameInvalid || undefined}
-              aria-describedby={nameInvalid ? "login-field-error" : undefined}
-              className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
-              autoComplete="username"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              onFocus={() => setMood("attentive")}
-              onBlur={() => setMood("idle")}
-              required
-            />
-          </span>
-        </label>
-        <label>
-          <span>{t("password")}</span>
-          <span className="relative block">
-            {passwordInvalid ? <StickerBadge n={1} /> : null}
-            <input
-              aria-invalid={passwordInvalid || undefined}
-              aria-describedby={
-                passwordInvalid ? "login-field-error" : undefined
-              }
-              className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
-              autoComplete="current-password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              onFocus={() => setMood("discreet")}
-              onBlur={() => setMood("idle")}
-              required
-            />
-          </span>
-        </label>
-        <button className="primary-action" type="submit" disabled={busy}>
-          {busy ? t("signingIn") : t("signIn")}
-        </button>
-        {onRegister ? (
-          <p className="academy-switch">
-            {t("needAccount")}{" "}
-            <button
-              className="academy-textlink"
-              type="button"
-              disabled={busy}
-              onClick={onRegister}
+      {choice ? (
+        <div className="grid min-w-0 gap-5">
+          <Button
+            variant="neutral"
+            className="h-auto min-h-14 w-full flex-col items-stretch gap-2 rounded-xl border-[3px] p-4 text-left whitespace-normal"
+            disabled={busy}
+            busy={entering === "maya"}
+            onClick={() => void enterIdentity({ identity: "maya" })}
+          >
+            <span className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xl font-extrabold">
+                {entering === "maya" ? t("loginEntering") : t("loginMaya")}
+              </span>{" "}
+              <span className={`${STICKER} bg-[#FF4D8D] px-2 py-0.5 text-xs`}>
+                {t("loginTeacherTag")}
+              </span>
+            </span>{" "}
+            <span className="text-sm font-bold leading-snug">
+              {t("loginMayaDescription")}
+            </span>
+          </Button>
+          <Button
+            variant="neutral"
+            className="h-auto min-h-14 w-full flex-col items-stretch gap-2 rounded-xl border-[3px] p-4 text-left whitespace-normal"
+            disabled={busy}
+            aria-expanded={studentExpanded}
+            aria-controls="login-choice-classes"
+            onClick={() => setStudentExpanded((value) => !value)}
+          >
+            <span className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xl font-extrabold">
+                {t("loginStudent")}
+              </span>{" "}
+              <span className={`${STICKER} bg-[#A3E635] px-2 py-0.5 text-xs`}>
+                {t("loginBowenTag")}
+              </span>
+            </span>{" "}
+            <span className="text-sm font-bold leading-snug">
+              {t("loginStudentDescription")}
+            </span>
+          </Button>
+          {studentExpanded ? (
+            <div
+              id="login-choice-classes"
+              role="group"
+              aria-label={t("loginPickClass")}
+              className="grid min-w-0 gap-4"
             >
-              {t("needAccountLink")}
+              <p className="lede">{t("loginPickClass")}</p>
+              {choice.options.classes.map((course) => (
+                <Button
+                  key={course.course_id}
+                  variant="neutral"
+                  className="h-auto min-h-14 w-full rounded-xl border-[3px] px-4 py-3 whitespace-normal"
+                  disabled={busy}
+                  busy={entering === course.course_id}
+                  onClick={() =>
+                    void enterIdentity({
+                      identity: "student",
+                      course_id: course.course_id,
+                    })
+                  }
+                >
+                  {entering === course.course_id
+                    ? t("loginEntering")
+                    : course.name}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+          <p className="academy-switch">
+            <button
+              type="button"
+              className="academy-textlink"
+              disabled={busy}
+              onClick={() => {
+                backToSignIn();
+                setError(null);
+              }}
+            >
+              {t("loginBackToSignIn")}
             </button>
           </p>
-        ) : null}
-      </form>
+        </div>
+      ) : (
+        <>
+          {hasDemoIdentities ? (
+            <div className="login-divider" aria-hidden="true">
+              <span>{t("or")}</span>
+            </div>
+          ) : null}
+          <form className="stack-form login-form" noValidate onSubmit={submit}>
+            <label>
+              <span>{t("username")}</span>
+              <span className="relative block">
+                {nameInvalid ? <StickerBadge n={1} /> : null}
+                <input
+                  aria-invalid={nameInvalid || undefined}
+                  aria-describedby={
+                    nameInvalid ? "login-field-error" : undefined
+                  }
+                  className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  onFocus={() => setMood("attentive")}
+                  onBlur={() => setMood("idle")}
+                  required
+                />
+              </span>
+            </label>
+            <label>
+              <span>{t("password")}</span>
+              <span className="relative block">
+                {passwordInvalid ? <StickerBadge n={1} /> : null}
+                <input
+                  aria-invalid={passwordInvalid || undefined}
+                  aria-describedby={
+                    passwordInvalid ? "login-field-error" : undefined
+                  }
+                  className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
+                  autoComplete="current-password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  onFocus={() => setMood("discreet")}
+                  onBlur={() => setMood("idle")}
+                  required
+                />
+              </span>
+            </label>
+            <button className="primary-action" type="submit" disabled={busy}>
+              {busy ? t("signingIn") : t("signIn")}
+            </button>
+            {onRegister ? (
+              <p className="academy-switch">
+                {t("needAccount")}{" "}
+                <button
+                  className="academy-textlink"
+                  type="button"
+                  disabled={busy}
+                  onClick={onRegister}
+                >
+                  {t("needAccountLink")}
+                </button>
+              </p>
+            ) : null}
+          </form>
+        </>
+      )}
     </section>
   );
 }
