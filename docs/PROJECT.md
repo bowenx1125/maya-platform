@@ -301,3 +301,6 @@ AGENT.md compiles once (`llm_debate_card`, Debate model,strict schema, 1 ledgere
 attempt, 60s) to identity/position/reasoning/style/voice/dropped, ≤600 Han/400 words.
 Ready→card persona;failure/Mock→fallback (raw AGENT.md); null (old) keeps pinned bytes.
 Round-1 query:stance, else card position. Preview:Check card. Clone TTS instruction=card voice_style,else Debate's. 0 calls;quality unverified.
+
+Nov11: Agents/Teams <768px: single black banner shadow, no orange ring.
+Mock Chromium390/1440+tour; desktop diff0. 1247 UI tests/build passed.

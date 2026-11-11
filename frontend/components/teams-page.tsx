@@ -191,7 +191,11 @@ export function TeamsPage({
   return (
     <>
       <div className={AGENT_PAGE}>
-        <PageBanner title={t("chatTargetTeams")} titleId="studyform-teams">
+        <PageBanner
+          title={t("chatTargetTeams")}
+          titleId="studyform-teams"
+          className="max-[767px]:shadow-[8px_8px_0_#111]"
+        >
           {teams.length && newHref ? (
             <PageAction
               name="new"
