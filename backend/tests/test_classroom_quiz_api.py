@@ -111,8 +111,20 @@ def _create_and_publish(teacher: Actor) -> str:
     return quiz_id
 
 
-def _create_publish_open(teacher: Actor) -> str:
+def _set_results_visible(teacher: Actor, quiz_id: str, show: bool = True) -> None:
+    response = teacher.client.put(
+        f"/api/v1/courses/{COURSE_ID}/quizzes/{quiz_id}/results",
+        json={"show_results": show},
+        headers=teacher.headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["show_results"] is show
+
+
+def _create_publish_open(teacher: Actor, *, show_results: bool = True) -> str:
     quiz_id = _create_and_publish(teacher)
+    if show_results:
+        _set_results_visible(teacher, quiz_id)
     opened = teacher.post(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/start-taking")
     assert opened.status_code == 200, opened.text
     assert opened.json()["taking_open"] is True
@@ -196,6 +208,7 @@ def test_student_get_strips_answer_and_rubric(teacher: Actor, student: Actor) ->
 
 def test_submit_grades_objective_and_pending_subjective(teacher: Actor, student: Actor) -> None:
     quiz_id = _create_and_publish(teacher)
+    _set_results_visible(teacher, quiz_id)
     # Publish alone does not open taking: submission is rejected.
     closed = _submit(quiz_id, student)
     assert closed.status_code == 409

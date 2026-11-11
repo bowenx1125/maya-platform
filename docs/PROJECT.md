@@ -23,14 +23,13 @@ manual review,no keyword/similarity gates.
 
 ## Classroom and accounts
 
-Classroom/Voice≠text-only Chats. Next reuses/intercepts audio;failures keep text.
-Preview polls visibly;Final freezes barrages transactionally. Immerse:Transcript/
-controls/QR/Interact/leases,no manual pause. Conclude versions Report/history;usable
+Classroom/Voice≠text-only Chats. Next:audio reuse/intercept;failure keeps text.
+Preview:visible polling;Final:transactional barrage freeze. Immerse:Transcript/
+controls/QR/Interact/leases,no manual pause. Conclude:Report/history versions;usable
 content ignores model/object/usage. Replay:no input/generation;Devocalize:audio only.
-Rebirth:rounds1–3 kept,new Final IDs,reset Final/classroom/Report,no Preview call.
+Rebirth:keep R1–3,new Final IDs,reset Final/classroom/Report,no Preview call.
 Delete:worker fence,authorized revision removed post-commit,sent calls irretractable.
-Recovery keeps charged/accepted/unknown receipts,explicit retry identity;supplier-
-download SSRF stays.
+Recovery:charged/accepted/unknown receipts,explicit retry identity;supplier-download SSRF kept.
 
 0026:Topic/Background separate;editable frozen Rulesets:
 `backend/app/modules/debates/default_rules/{zh,en}.md`,no hidden Chat instructions.
@@ -62,19 +61,18 @@ Resume v2 Brainform RAG/Knowledge/Memory,canonical Markdown/history kept. RAG/ma
 regeneration replaces manual head only on valid newer success. Actor/source ACL,task
 evaluator,Boundary grants stay. Tool roles:Public+Student or Public+Teacher. Formal
 attempts→Teacher reports despite legacy labels,ordinary Chats excluded. General Chat:
-natural-language attempt actions,no cards/dashboard/lifecycle UI. Owner progress
-phase-safe,history/completed evidence immutable. Oct9 0055 `submitted_at` built,
+natural-language attempt actions,no cards/dashboard/lifecycle UI. Owner progress:
+phase-safe;history/completed evidence immutable. Oct9 0055 `submitted_at` built,
 not real-accepted:survey all if≤3,else half;evaluator-chosen/server-validated follow-ups
 before Boundary. "end" submits answered work;only abandon/redo deletes learning
 records,accounting stays. Boundary/reports:mastery/weak/not-yet-verified. Student-majority
 language;off-topic/progress requests get help,never answers.
 
-Oct5 build30db274/schema0053:ready/integrity/FK passed;backups20261005T110321Z/130151Z
-healthy;sending/pending0,historical unknown3 kept. Synthetic RAG:1 charged Embedding
-+2 accepted charged Knowledge;Gen2/seq3 replaces seq2,history kept. Consent-denied
-sends0;exact fixtures withdrawn;ledger457 operations/457 charged requests same.
-Oct7 authorizes fresh synthetic four-Agent Team/multi-student workflow/reads,excludes
-real learner data/unrelated Private Chat.
+Oct5:build30db274/schema0053 ready/integrity/FK passed;backups20261005T110321Z/130151Z
+healthy;sending/pending0,historical unknown3 kept. Synthetic RAG:1 charged Embedding+2 accepted
+charged Knowledge;Gen2/seq3 replaces seq2,history kept. Consent-denied:sends0;exact
+fixtures withdrawn;ledger457 operations/457 charged unchanged. Oct7 authorizes fresh
+synthetic4-Agent Team/multi-student workflow/reads;no real learner data/unrelated Private Chat.
 
 [UI contract](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) supersedes earlier plans.
 Studyform/Brainform share structure,role permissions differ. Oct9:Studyform creates
@@ -92,11 +90,11 @@ Create AI Knowledge/New Agent unified,Private/Public labels only;Brainform:RAG/
 Knowledge. Teacher Agent Tool→Knowledge question bank/graph;others carry Knowledge/
 AGENT.md only. Team-shared RAG/Knowledge supplements own material;Maya Team/Agent
 versions match. Both roles create Teams;only Teachers publish Maya Teams,label stays.
-Teacher update during old-version assessment:Leader announces change/restart,deletes
-unfinished assessment,keeps completed. Teacher reports:stored answers/statistics,
-student,Maya Team,time,no raw chat. Teacher save/generate/regenerate authorizes exact
-Knowledge generation,no second confirm;ACL/policy/manifest/accounting/idempotency/
-unknown protections stay. Four-Agent,classroom load,real Team/report acceptance open.
+Old-version assessment:Teacher update→Leader announces change/restart,unfinished deleted,
+completed kept. Teacher reports:stored answers/statistics/student/Maya Team/time,no raw chat.
+Teacher save/generate/regenerate authorizes exact Knowledge generation,no second confirm;
+ACL/policy/manifest/accounting/idempotency/unknown kept. Four-Agent/classroom load/real
+Team/report acceptance open.
 
 ## Oct7 closure
 
@@ -186,8 +184,8 @@ PG poll REPEATABLE READ.50-user Mock:p95≤7.85s. Details:Git history.
 
 ## Oct24 chats/deletion/Next/create
 
-#241:Open Team chats follow each new Team version;history,mid-reply chats and unfinished
-attempts keep theirs. Failed uncharged RAG uploads/Voices dropped;empty Agents swept after 1h.
+#241:Open Team chats follow new Team versions;history/mid-reply/unfinished attempts
+keep theirs. Failed uncharged RAG/Voice uploads dropped;empty Agents swept after1h.
 
 #242(supersedes #233)/0080:work hard-deletes with storage;null history FKs/name snapshots preserve
 Records. Agent/Team deletion ends chats and abandons unfinished attempts.
@@ -196,8 +194,8 @@ waits for no holders under a per-voice lock. Prune keeps head+previous/in-use.
 Scripts:backfill_debate_snapshots,backfill_debate_voice_clones,cleanup_soft_deleted
 (dry-run default,--confirm-production).
 
-Next: live prepares up to3 turns ahead after final-ready predecessors;per-Debate lock;
-controller-only next-audio prefetch ticket. Errors name the Agent/Team or show the code.
+Next:live prepares≤3 turns ahead after final-ready predecessors;per-Debate lock;
+controller-only next-audio prefetch ticket. Errors:Agent/Team name or code.
 
 app/modules/purge.py rules every live FK delete/null/protect;unknown refs retain parents;
 unlink after outer commit. Records/answers/Debate copies/ledgers keep null links except
@@ -220,39 +218,35 @@ E:DEBATE_LLM_* (no MAYA_ prefix;unset=previous)/DEBATE_TTS_* freeze into rule_sn
 
 ## Nov2 Chatform lists
 
-0081 adds chat_type agent|team;maya_team=team. Backfill needs entry-kind/binding
-agreement;leftover NULLs logged,typed lists skip them. Separate Agent/Team
-histories;no kind selects Agent history.
+0081:chat_type agent|team;maya_team=team. Backfill requires entry-kind/binding
+agreement;log/skip leftover NULLs. Separate Agent/Team histories;default=Agent.
 
 0082:Enter grants2h teacher_group_access (not roster),renewed20min;Backout;expiry sweeps/min.
 Visits edit group Studyform Agents/public Brainform,not deletion/other groups.
 
-Single Chat: `draft` SSE (unsaved text as written),then delta/text_done after commit;
-ledger keeps the folded completion. Turn runners hold a pg advisory lock;each process
-sweeps per 60s,freeing claims unheld twice (startup with a live peer: only those).
-Team streams wake on committed events;fallback poll ≤2s. Debate default Rulesets: en
-mirrors the spoken zh one (no spoken RAG/I-feel labels or +5/+2),both address a listener
-who missed earlier speeches;a copy mid-paragraph is rewritten,not cut out.
+Single Chat:`draft` SSE unsaved,delta/text_done post-commit;ledger=folded completion.
+Turn runners:pg advisory lock;per-process60s sweeps free claims unheld twice (startup with a
+live peer:only those). Team streams:committed events,≤2s poll fallback. Default en/zh
+Debate Rulesets match:address listeners missing prior speeches,no spoken RAG/I-feel
+labels or +5/+2;rewrite copied paragraphs,never cut them out.
 
 ## Nov3 cleanup and capacity
 
-Visits hide Knowledge,renew every 20 min and end with a notice back to Accounts;Debate
-"?" shows Chinese help on hover. core/locks.py holds every cross-process lock;SQLite gone.
-core/capacity.py scales CPU caps by cores/2;a high load counts only with CPU busy ≥0.8.
-Idle polls 30s;Agent lists carry card label/theme. Debate Rulesets state goals,not bans.
-Accounts: filter;Delete is real (DELETE /courses/{id}/members/{user}). Chat 429 →
-provider_rate_limited,502/503/504/529 → provider_busy (one call). Ordinary Team members
-answer together (≤3;assessment Teams one at a time);history is one read. 390px Brainform fits.
+Visits:hide Knowledge,renew20min,end notice→Accounts. Debate "?":Chinese hover help.
+core/locks.py:all cross-process locks;SQLite gone. core/capacity.py:CPU caps×cores/2,
+high load only if CPU busy≥0.8. Idle polls30s;Agent cards:label/theme. Debate Rulesets:
+goals,not bans. Accounts:filter,real DELETE /courses/{id}/members/{user}. Chat:one call;
+429→provider_rate_limited,502/503/504/529→provider_busy. Ordinary Team:≤3 together;
+assessment:one at a time;history:one read. Brainform fits390px.
 
 ## Nov5–6 Agent Chat, recovery
 
-#337/#338: Agent Chats send the Agent name, AGENT.md, Knowledge and RAG.
-No assessment Tools or attempt;Teams unchanged. Owner-only RAG Details
-shows stored model input;scoring/summary Rubrics remain hidden.
-Nov6 off main70ecfa29 (#356/#357). Replay=Rebirth;Review=playback,not a rebirth lock.
-Revocalize:durable intent,3 workers,Back/F5 reseed/revision reconcile;admission refusal
-retries safely,ambiguous keys kept,definitive failures shown/manual retry. No calls/deploy;
-volume untouched. Stalled needs backend receipt recovery;safety gates kept.
+#337/#338:Agent Chats send name,AGENT.md,Knowledge,RAG;no assessment Tools/attempt;
+Teams unchanged. Owner RAG Details:stored input,scoring/summary Rubrics hidden.
+Nov6 off main70ecfa29 (#356/#357). Replay=Rebirth;Review=playback,no rebirth lock.
+Revocalize:durable intent,3 workers,Back/F5 reseed/revision reconcile;safe admission
+refusal retries,ambiguous keys kept,definitive failures/manual retry shown.
+0 calls/deploy,volume untouched. Stalled needs backend receipt recovery;gates kept.
 
 ## Nov5–8 Classroom Quiz
 
@@ -260,33 +254,35 @@ volume untouched. Stalled needs backend receipt recovery;safety gates kept.
 detail,hand grading,hide;Record→Quiz. #383/4:opt-in AI grading. UI A:1 page/quiz,
 Paper|Submissions,no Chat tests;New/Back/Done 1 style. [Contract](contracts/CLASSROOM_QUIZ_API.md)
 Agent name card;Private→Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)).
-Nov11 in progress:0088_quiz_exemptions_schedule adds epoch deadlines+one-shot taking,
-lazy+10s sweeper(non-test lifespan).Static checks pass;PG/boundary:sandbox EPERM.
-0 calls/deploy.
+0088 in progress:epoch deadlines/one-shot taking,lazy+10s sweeper(non-test lifespan).
+0091_quiz_show_results after0090_bowen_identity_choice:old=true/new=false,revision unchanged.
+#412:V1 switch,no duplicate tooltip/banner;cyan row sticker;student expandable answers-only
+paper;stale submit visibility fixed(server post-commit read/client receipt flag),fail-closed
+UI,draft stickers/DTOs. PUT semantics/1274 UI(13 skipped)/type/lint/format/11 offline backend/
+ruff/mypy/regeneration/routes pass. PG owner-run;boundary EPERM;build stalled,Webpack
+showConfig failed;0 calls/deploy.
 
 ## Nov9 local classes and accounts (in progress)
 
-Integrated 3081da2 (base b6c2047b1549c5d28e84b52c5323a1e655bb596f) onto
-535d2272a9b337e9daec819e89df889d100789a8, then 28b8bf8e8f8ef6169bbe876a281bb93dd031d3ac.
-Class scope covers teacher pages;registration keeps group join/create.
-0086 retains group choice;0087 preserves contributors' work after erasure.
-Hard delete removes student-owned work and grades, including Quiz attempts.
-PR #390 merged. Local upgrade 0082→0087;build, 1187 UI tests, 82 focused passed.
-Full run at 535d227: 3073 pass/139 fail/1 skip. Main reproduced 135;four fixed.
+Integrated3081da2(base b6c2047b1549c5d28e84b52c5323a1e655bb596f) onto
+535d2272a9b337e9daec819e89df889d100789a8,then28b8bf8e8f8ef6169bbe876a281bb93dd031d3ac.
+Teacher pages class-scoped;registration:group join/create.0086:group choice;
+0087:contributors' work survives erasure. Hard delete:student-owned work/grades/Quiz attempts.
+#390 merged;local0082→0087/build/1187 UI/82 focused passed.
+535d227:3073 pass/139 fail/1 skip;main reproduced135,four fixed.
 
-Nov10: classes Maya1002 and Maya1001, stable IDs, student data.
-Teacher scopes corrected. RAG actions follow the class bar.
+Nov10:Maya1002/Maya1001,stable IDs/student data;Teacher scopes fixed;RAG follows class bar.
 47 PG, 1188 UI. Debates/Quizzes/Accounts;optional choice answer;no empty Agents card;large loader;chat omits missing group/editor.
 
 ## Nov10 Debate prompt v4 (supersedes Oct24 contract-in-Ruleset)
 
-ruleset_contract_v4: code contract default_rules/contract/*.md,read-only in the form;
-Ruleset=style+round tasks; System=this round's task+contract. User JSON `task`
-{round_task,max_units,stance?}; no teacher note. Length: target_minutes 3–10 (5)×230 zh
-chars/150 en words×voice rate×0.9/(Agents×4),weights 1.1/0.9/0.9/1.1; >1.25×cap:tail
-sentences cut,no repair. Unspoken R2 question appended; received questions from R3.
-Stump<40% cap or own 5-gram overlap>25% (frozen 35% kept):1 repair. Round-1 query has no Agent.md. v4 drops word
-limits,retrieval_policy_id,frequency_penalty,max_tokens. v3/older bytes pinned.
+ruleset_contract_v4:default_rules/contract/*.md,form read-only;Ruleset=style+round tasks;
+System=round task+contract. User JSON `task`{round_task,max_units,stance?};no teacher note.
+Length:target_minutes3–10(default5)×230 zh chars/150 en words×voice rate×0.9/(Agents×4),
+weights1.1/0.9/0.9/1.1;>1.25×cap:cut tail sentences,no repair. Append unspoken R2 question;
+received questions fromR3. Stump<40% cap or own5-gram overlap>25%(frozen35% kept):1 repair.
+R1 query:no Agent.md. v4 drops word limits/retrieval_policy_id/frequency_penalty/max_tokens;
+v3/older bytes pinned.
 
 ## Nov11 RAG chunks, diagnostics
 
@@ -301,9 +297,12 @@ attempt, 60s) to identity/position/reasoning/style/voice/dropped, ≤600 Han/400
 Ready→card persona;failure/Mock→fallback (raw AGENT.md); null (old) keeps pinned bytes.
 Round-1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style. 0 calls;quality unverified.
 
-Nov11: Agents/Teams <768px: single black banner shadow, no orange ring.
-Mock Chromium390/1440+tour;desktop diff0. 1247 UI tests/build passed.
-Speed:Agent list omits agent_md/docs;early /auth/me;idle Debates poll 15s
+Nov11:Agents/Teams<768px:single black banner shadow,no orange ring.
+Mock Chromium390/1440+tour;desktop diff0;1247 UI/build passed.
+Speed:Agent list omits agent_md/docs;early /auth/me;idle Debate poll15s
 
 Nov11 Bowen:0090_bowen_identity_choice after0089;
 schema-only,UI/security unchanged;acceptance pending.
+
+#412 integration:main8241a9f2 retained;chooser816f7ceca71d2299f20435af0ea1a536ee7a74a4;
+quiz migration renumbered0091;both endpoints/security tests retained. No calls/deploy.

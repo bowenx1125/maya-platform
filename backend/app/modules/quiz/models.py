@@ -44,6 +44,9 @@ class ClassroomQuiz(Base):
         String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    show_results: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     # Publish only freezes the paper; taking opens via start-taking epochs.
     taking_open: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     taking_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

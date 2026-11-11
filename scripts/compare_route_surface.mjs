@@ -23,6 +23,7 @@ const implementedOperationIds = new Set([
   "deleteCourseQuizExemption",
   "clearCourseQuizExemptions",
   "putCourseQuizSchedule",
+  "putCourseQuizResults",
 
   "login",
   "chooseLoginIdentity",

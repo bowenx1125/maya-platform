@@ -49,6 +49,7 @@ export interface QuizSettings {
 }
 
 export interface QuizSummaryDTO {
+  show_results: boolean;
   id: string;
   course_id: string;
   group_id?: string | null;
@@ -107,6 +108,7 @@ export interface QuizAttemptItem {
 }
 
 export interface QuizAttemptDetail {
+  show_results: boolean;
   view: "teacher" | "student";
   id: string;
   quiz_id: string;
@@ -117,15 +119,15 @@ export interface QuizAttemptDetail {
   content_revision: number;
   taking_epoch: number;
   status: "submitted";
-  grading_status: QuizGradingStatusValue;
-  score_objective: number;
-  score_max_objective: number;
-  score_manual: number;
-  score_max_manual: number;
+  grading_status: QuizGradingStatusValue | null;
+  score_objective: number | null;
+  score_max_objective: number | null;
+  score_manual: number | null;
+  score_max_manual: number | null;
   /** Optional aggregate of AI item scores when the API sends it. */
   score_ai?: number | null;
-  points_awarded: number;
-  points_total: number;
+  points_awarded: number | null;
+  points_total: number | null;
   submitted_at: string;
   graded_at?: string | null;
   items: QuizAttemptItem[];
@@ -165,6 +167,10 @@ export interface QuizExemptionsDTO {
 export interface PutQuizExemptionsRequest {
   student_ids: string[];
   deadline_at: string;
+}
+
+export interface PutQuizResultsRequest {
+  show_results: boolean;
 }
 
 export interface PutQuizScheduleRequest {
@@ -411,6 +417,18 @@ export class QuizApi {
     return this.request<void>(
       "DELETE",
       `/api/v1/courses/${courseId}/quizzes/${quizId}/exemptions`,
+    );
+  }
+
+  setResultsVisible(
+    courseId: string,
+    quizId: string,
+    show: boolean,
+  ): Promise<QuizSummaryDTO> {
+    return this.request<QuizSummaryDTO>(
+      "PUT",
+      `/api/v1/courses/${courseId}/quizzes/${quizId}/results`,
+      { show_results: show } satisfies PutQuizResultsRequest,
     );
   }
 

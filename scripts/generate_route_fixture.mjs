@@ -22,6 +22,7 @@ const implemented = new Set([
   "deleteCourseQuizExemption",
   "clearCourseQuizExemptions",
   "putCourseQuizSchedule",
+  "putCourseQuizResults",
 
   "login",
   "chooseLoginIdentity",

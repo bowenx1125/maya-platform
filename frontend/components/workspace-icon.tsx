@@ -31,6 +31,7 @@ export type WorkspaceIconName =
   | "chevronLeft"
   | "chevronRight"
   | "undo"
+  | "eye"
   | "eyeOff"
   | "minus"
   | "close"
@@ -76,6 +77,7 @@ const paths: Record<WorkspaceIconName, string> = {
   chevronLeft: "m15 5-7 7 7 7",
   chevronRight: "m9 5 7 7-7 7",
   undo: "M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3",
+  eye: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z",
   eyeOff:
     "M3 3l18 18M10.6 6.1A9.8 9.8 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-3.2 3.7M6.3 7.6A17 17 0 0 0 3 12s4 6 9 6a9 9 0 0 0 4.1-1",
   minus: "M5 12h14",
