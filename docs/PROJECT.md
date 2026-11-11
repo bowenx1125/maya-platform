@@ -297,7 +297,7 @@ minus other rounds+this round's contract; legacy contract tails stripped.
 User JSON adds `task`{round_task with names,max_units,stance?}; teacher_note withheld
 (manifests forbid exporting it). Length is hard: target_minutes 3–10 (5)×230 zh Han
 chars (measured)/150 en words (unmeasured)×voice rate×0.9/(Agents×4),×1.1/0.9/0.9/1.1,
-down to 5s,min 40/25; >1.25×cap:1 repair,then trailing whole sentences dropped. Copy-strip
+down to 5s,min 40/25; >1.25×cap:tail sentences cut,no repair;R2 question appended. Copy-strip
 stump<40% cap or own 8/5-gram overlap>35%:1 repair,then accepted. Round-1 query:Topic,
 Topic+name+stance,no Agent.md. v4 snapshots drop min/max/target words,retrieval_policy_id,
 frequency_penalty. v3/older keep their bytes (pinned test). Offline tests only;0 provider calls.

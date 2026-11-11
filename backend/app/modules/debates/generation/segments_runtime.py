@@ -65,10 +65,9 @@ SEGMENT_REPAIR_CODES = frozenset(
         "segment_count_invalid",
         "segment_text_invalid",
         "segment_history_copy",
-        # v4 rules; the repair attempt accepts (and trims) what comes back.
+        # v4 repetition rules; the repair attempt accepts what comes back.
         "segment_history_stump",
         "segment_self_repetition",
-        "segment_too_long",
     }
 )
 

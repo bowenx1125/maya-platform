@@ -869,7 +869,6 @@
     "segment_stage_unavailable": "aiStepFailed",
     "segment_structure_invalid": "aiStepFailed",
     "segment_text_invalid": "aiStepFailed",
-    "segment_too_long": "aiStepFailed",
     "self_delete_forbidden": "selfDeleteForbidden",
     "self_prerequisite": "conceptSelfPrerequisite",
     "self_status_forbidden": "selfStatusForbidden",

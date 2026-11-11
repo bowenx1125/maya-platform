@@ -1933,14 +1933,23 @@ def validate_segment_output(
                 code="segment_self_repetition",
                 pointer="/segments",
             )
+        if snapshot.round.number == 2 and usable_question(raw_question) is not None:
+            # The next round answers this question in front of the class, so it
+            # has to be heard: unspoken, it is added as the closing sentence.
+            asked = str(cast(Mapping[str, object], raw_question).get("text") or "").strip()
+            if _copy_key(asked) not in _copy_key(speech_text):
+                last = segments_list[-1]
+                segments_list = [
+                    *segments_list[:-1],
+                    replace(
+                        last, text=f"{last.text.rstrip()}{'' if language == 'zh' else ' '}{asked}"
+                    ),
+                ]
         limit = over_length_limit(cap)
         if _segments_units(segments_list, language) > limit:
-            if repair:
-                raise _error(
-                    "the speech is longer than task.max_units allows.",
-                    code="segment_too_long",
-                    pointer="/segments",
-                )
+            # Trimmed at once rather than sent back: a rewrite for length made
+            # the model fall back on sentences it had already said, and used up
+            # the one repair the repetition rules need.
             segments_list = trim_trailing_sentences(
                 segments_list, limit, language, protected=protected
             )

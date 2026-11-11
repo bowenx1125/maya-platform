@@ -9,6 +9,8 @@ from collections.abc import Mapping
 from fractions import Fraction
 from typing import TYPE_CHECKING, cast
 
+from app.modules.debates.generation_params import uses_code_contract
+
 if TYPE_CHECKING:
     from .types import FinalReadyTurn, GenerationContext
 
@@ -73,27 +75,44 @@ def stance_text(language: str, stance: str | None) -> str:
     return _STANCES["zh" if language == "zh" else "en"].get(stance or "", "")
 
 
-def _round_task(language: str, round_number: int, other: str) -> str:
+def _round_task(language: str, round_number: int, other: str, sentences: int) -> str:
     zh = language == "zh"
+    # A model keeps to a sentence count far better than to a character count:
+    # the first v4 Debate overshot its cap in a quarter of its speeches.
+    limit = f"全文不超过{sentences}句话。" if zh else f" Use at most {sentences} sentences."
     if round_number == 1:
-        return (
+        task = (
             "独立陈述你对题目的判断和理由。"
             if zh
             else "State your own judgment on the Topic and your reason."
         )
-    if round_number == 2:
-        return (
-            f"反驳{other}的开场发言，并向{other}提一个问题。"
+    elif round_number == 2:
+        task = (
+            f"反驳{other}的开场发言，并在发言的最后一句向{other}提一个问题。"
             if zh
-            else f"Rebut {other}'s opening and ask {other} one question."
+            else f"Rebut {other}'s opening and end the speech by asking {other} one question."
         )
-    if round_number == 3:
-        return (
+    elif round_number == 3:
+        task = (
             f"回答{other}向你提的问题，再就一个观点提出反驳。"
             if zh
             else f"Answer {other}'s question, then push back on one point."
         )
-    return "给出你的最终判断。" if zh else "Give your final judgment."
+    else:
+        # Round 4 kept re-answering the round-3 question when told only to conclude.
+        task = (
+            "给出你的最终判断：说出谁的哪个观点说服了你，或你仍然不同意什么。前面回答过的问题不再重答。"
+            if zh
+            else "Give your final judgment: name whose point persuaded you, or what you still "
+            "reject. Do not answer an earlier question again."
+        )
+    return task + limit
+
+
+def sentence_limit(language: str, cap: int) -> int:
+    """How many sentences fit the cap at a spoken sentence length."""
+
+    return max(2, math.ceil(cap / (30 if language == "zh" else 20)))
 
 
 def turn_task(context: GenerationContext, *, minutes: int) -> dict[str, object]:
@@ -117,15 +136,16 @@ def turn_task(context: GenerationContext, *, minutes: int) -> dict[str, object]:
         received = received_questions(context)
         asker = received[0]["from_id"] if received else ids[(index - 1) % len(ids)]
         other = names.get(asker, names[ids[(index - 1) % len(ids)]])
+    cap = turn_unit_cap(
+        language,
+        minutes=minutes,
+        voice_rate=context.voice_rate or 1.0,
+        participants=len(ids),
+        round_number=round_number,
+    )
     task: dict[str, object] = {
-        "round_task": _round_task(language, round_number, other),
-        "max_units": turn_unit_cap(
-            language,
-            minutes=minutes,
-            voice_rate=context.voice_rate or 1.0,
-            participants=len(ids),
-            round_number=round_number,
-        ),
+        "round_task": _round_task(language, round_number, other, sentence_limit(language, cap)),
+        "max_units": cap,
     }
     if context.participant.stance_mode == "assigned":
         stance = stance_text(language, context.participant.initial_stance)
@@ -191,7 +211,11 @@ def discussion_context(context: GenerationContext) -> dict[str, object]:
         "self_id": own,
         "agents": [{"id": item.participant_id, "name": item.agent_name} for item in agents],
         "question_target_id": target,
-        "received_questions": received_questions(context),
+        # A question asked earlier in round 2 is answered in round 3. Shown to
+        # its target during round 2, it was copied out as that Agent's own question.
+        "received_questions": []
+        if context.turn.round_no == 2 and uses_code_contract(context.frozen_llm)
+        else received_questions(context),
         "memories": memories,
     }
 

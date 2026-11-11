@@ -286,17 +286,25 @@ def test_task_group_names_real_targets_and_keeps_cyclic_order() -> None:
     }
     # Bao (index 1) questions the next Agent, exactly as question_target_id says.
     assert payload["discussion"]["question_target_id"] == "participant-2"
-    assert payload["task"]["round_task"] == "Rebut Chen's opening and ask Chen one question."
+    assert payload["task"]["round_task"].startswith(
+        "Rebut Chen's opening and end the speech by asking Chen one question. Use at most "
+    )
+    # A question put to this speaker earlier in round 2 waits for round 3.
+    assert payload["discussion"]["received_questions"] == []
     third = _snapshot(_v4_context(3, "zh", speaker=1))
     assert third.task is not None
-    assert third.task["round_task"] == "回答Ada向你提的问题，再就一个观点提出反驳。"
+    assert third.task["round_task"].startswith(
+        "回答Ada向你提的问题，再就一个观点提出反驳。全文不超过"
+    )
     assert _snapshot(_v4_context(1, speaker=0)).task["round_task"].startswith("State your own")
 
 
 def test_task_group_carries_cap_and_assigned_stance_but_no_teacher_note() -> None:
     snapshot = _snapshot(_v4_context(1, stance="oppose"))
     assert snapshot.task == {
-        "round_task": "State your own judgment on the Topic and your reason.",
+        "round_task": (
+            "State your own judgment on the Topic and your reason. Use at most 3 sentences."
+        ),
         "max_units": 60,
         "stance": "oppose the Topic's claim",
     }
@@ -378,13 +386,15 @@ def _sentences(count: int, word: str = "reason") -> str:
     return " ".join(f"Sentence {index} gives one more {word} here." for index in range(count))
 
 
-def test_over_length_speech_is_repaired_then_trimmed_by_whole_sentences() -> None:
+def test_over_length_speech_is_trimmed_by_whole_sentences_without_a_repair() -> None:
     snapshot = _snapshot(_v4_context(1))  # cap 60 words, limit 75
     long = _output(_sentences(6), _sentences(6, "example"))  # 84 words
-    with pytest.raises(SegmentProtocolError) as caught:
-        validate_segment_output(long, snapshot)
-    assert caught.value.code == "segment_too_long"
-    accepted = validate_segment_output(long, snapshot, allow_history_copy=True)
+    # The first attempt is trimmed at once: a rewrite for length made the
+    # model repeat itself and spent the repair the repetition rules need.
+    accepted = validate_segment_output(long, snapshot)
+    assert validate_segment_output(long, snapshot, allow_history_copy=True).speech == (
+        accepted.speech
+    )
     assert speech_units(accepted.speech, "en") <= 75
     assert accepted.speech.endswith(".")
     # Only whole sentences go: every kept one still ends where it ended.
@@ -465,9 +475,8 @@ def test_self_repetition_is_repaired_once_then_accepted() -> None:
 def test_new_codes_get_the_existing_single_repair() -> None:
     from app.modules.debates.generation.segments_runtime import SEGMENT_REPAIR_CODES
 
-    assert {"segment_too_long", "segment_history_stump", "segment_self_repetition"} <= (
-        SEGMENT_REPAIR_CODES
-    )
+    assert {"segment_history_stump", "segment_self_repetition"} <= SEGMENT_REPAIR_CODES
+    assert "segment_too_long" not in SEGMENT_REPAIR_CODES
 
 
 def test_v3_snapshot_keeps_old_validation() -> None:
@@ -572,3 +581,13 @@ def test_ruleset_endpoint_contract_and_creation_with_minutes(debate_app) -> None
         json={**body, "target_minutes": 6, "expected_revision": 1},
     )
     assert changed.status_code == 409
+
+
+def test_round_two_question_missing_from_the_speech_is_added_as_its_last_sentence() -> None:
+    snapshot = _snapshot(_v4_context(2, speaker=1, speeches={0: "Ada opened with one claim."}))
+    question = "Why would that hold for a case nobody rehearsed?"
+    silent = validate_segment_output(_output(_sentences(2), question=question), snapshot)
+    assert silent.speech.endswith(question)
+    assert silent.lineage[-1].end_offset == len(silent.speech)
+    spoken = _output(f"{_sentences(2)} {question}", question=question)
+    assert validate_segment_output(spoken, snapshot).speech.count(question) == 1
