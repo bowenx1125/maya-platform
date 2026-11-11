@@ -1,0 +1,149 @@
+/* Slots contain the lifted/sunk outline as well as the resting key shadow. */
+.menuSlot {
+  min-width: 0;
+  padding-block: 7px 11px;
+}
+
+/* Only the frame moves; child hit bridges keep both original click zones live. */
+.capsule {
+  container: class-switcher / inline-size;
+  align-items: stretch;
+  max-width: 100%;
+  border-radius: 999px;
+}
+
+.capsule:has(> :focus-visible),
+.roundKey:focus-visible {
+  outline: 3px solid #111;
+  outline-offset: 3px;
+}
+
+/* No preflight: reset native button bevels and keep focus on the moving frame. */
+.capsuleHome,
+.capsuleTrigger {
+  border: 0;
+  outline: none;
+  box-shadow: none;
+}
+
+.capsuleHome {
+  border-radius: 999px 0 0 999px;
+}
+
+.capsuleHome:only-child {
+  border-radius: 999px;
+}
+
+.capsuleTrigger {
+  appearance: none;
+  border-radius: 0 999px 999px 0;
+  border-left: 3px solid #111;
+  padding: 0;
+  background-color: white;
+}
+
+.lockup {
+  display: flex;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.lockupBrand {
+  min-width: 0;
+  max-width: calc(100% - 1ch);
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lockupHyphen {
+  flex-shrink: 0;
+}
+
+.lockupSuffix {
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lockupSuffix[data-numeric="true"] {
+  max-width: calc(100% - 1ch);
+  flex-shrink: 0;
+}
+
+.lockup:has(> [data-numeric="true"]) > .lockupBrand {
+  max-width: none;
+  flex-shrink: 1;
+}
+
+.segmented > .capsuleHome:is([aria-current="page"], [data-lit="true"]) {
+  background-color: #ff4d8d;
+}
+
+.segmented > .capsuleHome:not(:only-child) {
+  min-width: 44px;
+  max-width: calc(100% - 44px);
+  flex: 1 0 auto;
+}
+
+/* Only the class segment yields until the full brand and 44px target cannot fit. */
+.segmentTrigger {
+  max-width: 150px;
+  flex-shrink: 1;
+  padding-inline: 8px;
+}
+
+.segmented:has(> [data-numeric="true"]) > .capsuleHome {
+  min-width: 60px;
+  max-width: none;
+  flex: 1;
+}
+
+.segmentTrigger[data-numeric="true"] {
+  max-width: calc(100% - 60px);
+  flex-shrink: 0;
+}
+
+/* At 150px, long names need compact spacing to fit the wordmark and class hint. */
+@container class-switcher (max-width: 180px) {
+  .capsule[data-long-name="true"] > .capsuleHome {
+    gap: 2px;
+    padding-inline: 4px;
+    font-size: 12px;
+  }
+
+  .capsule[data-long-name="true"] > .capsuleHome > :global(.brand-dot) {
+    width: 12px !important;
+    height: 12px !important;
+  }
+
+  .capsule[data-long-name="true"] > .segmentTrigger {
+    padding-inline: 4px;
+  }
+}
+
+.capsuleTrigger:hover,
+.capsuleTrigger:active {
+  background-color: #fff7cc;
+}
+
+/* The panel follows the page-rise idiom; leave stays mounted for its transition. */
+@starting-style {
+  .menu {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capsule[aria-busy="true"] {
+    translate: none;
+    box-shadow: 0 6px 0 #111;
+  }
+
+  .menu {
+    translate: none;
+    transition-property: opacity, visibility;
+  }
+}

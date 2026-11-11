@@ -322,9 +322,14 @@ describe("teacher account management", () => {
     await waitFor(() =>
       expect(api.createClass).toHaveBeenCalledWith("History 2026"),
     );
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Class History 2026, switch class",
+      }),
+    );
     expect(
-      await screen.findByRole("button", { name: "History 2026" }),
-    ).toHaveProperty("ariaPressed", "true");
+      screen.getByRole("menuitemradio", { name: /History 2026/ }),
+    ).toHaveProperty("ariaChecked", "true");
     await waitFor(() =>
       expect(api.courseRoster).toHaveBeenCalledWith(created.id),
     );
@@ -350,7 +355,7 @@ describe("teacher account management", () => {
     expect(screen.getByText("New Student")).toBeTruthy();
   });
 
-  it("switches the account list using the class buttons", async () => {
+  it("switches the account list using the class menu", async () => {
     const api = apiForTeacher();
     api.courses.mockResolvedValue([
       {
@@ -377,14 +382,20 @@ describe("teacher account management", () => {
     }));
     mount(api, [courseId, "second-class"]);
     expect(await screen.findByText("First class student")).toBeTruthy();
-    fireEvent.click(await screen.findByRole("button", { name: "Maya1002" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Class 1001, switch class" }),
+    );
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Maya1002" }));
     expect(screen.queryByText("First class student")).toBeNull();
     expect(await screen.findByText("Second class student")).toBeTruthy();
     expect(api.courseRoster).toHaveBeenLastCalledWith("second-class");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Class 1002, switch class" }),
+    );
     expect(
       screen
-        .getByRole("button", { name: "Maya1002" })
-        .getAttribute("aria-pressed"),
+        .getByRole("menuitemradio", { name: /Maya1002/ })
+        .getAttribute("aria-checked"),
     ).toBe("true");
   });
 
@@ -406,9 +417,12 @@ describe("teacher account management", () => {
     ]);
     mount(api);
     expect(
-      await screen.findByRole("button", { name: "Maya1001" }),
+      await screen.findByRole("link", { name: "Mayaform-1001" }),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Maya1002" })).toBeNull();
+    expect(screen.queryByTestId("class-switcher-trigger")).toBeNull();
+    expect(
+      screen.queryByRole("menuitemradio", { name: "Maya1002" }),
+    ).toBeNull();
   });
 
   it("keeps Back and Done beside the member form while editing", async () => {

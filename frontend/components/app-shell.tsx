@@ -58,7 +58,7 @@ import {
 } from "./ui/button";
 import { NoticeTraySlot } from "./ui/error-kit";
 import { MusicKey } from "./music-key";
-import { TeacherClassBar } from "./teacher-class-bar";
+import { ClassSwitcher } from "./class-switcher";
 
 type ActionRegistration = {
   owner: string;
@@ -1069,6 +1069,53 @@ export function AppShell({
     activeHref === home;
   const mayaformLit = pendingKey ? pendingKey === "home" : mayaformHere;
 
+  function brandHomeLink(
+    label: ReactNode = t("appName"),
+    switcherClass?: string,
+    title?: string,
+  ) {
+    return (
+      <Link
+        href={home}
+        aria-current={mayaformHere ? "page" : undefined}
+        aria-busy={pendingKey === "home" || undefined}
+        onClick={startNav("home", home)}
+        aria-label={collapsed ? (title ?? t("appName")) : undefined}
+        title={title}
+        data-testid={switcherClass || title ? "class-switcher-home" : undefined}
+        data-tour="home"
+        data-lit={mayaformLit || undefined}
+        className={
+          switcherClass
+            ? `${switcherClass}${mayaformLit ? " is-active" : ""}`
+            : `isolate ${collapsed ? `${ICON_ITEM} ${mayaformLit ? ICON_ITEM_ACTIVE : ICON_ITEM_IDLE}` : mobile ? `${ITEM} w-fit justify-self-start border-transparent font-display text-lg font-extrabold` : `${ITEM} w-fit justify-self-start font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " is-active" : ""}`
+        }
+      >
+        {mayaformLit && !collapsed && !mobile ? pill : null}
+        <span
+          className={`brand-dot size-4 shrink-0 rounded-full border-2 border-border ${(collapsed || mayaformLit) && !mobile ? "bg-[linear-gradient(90deg,#111_50%,var(--color-surface)_50%)]" : "bg-[linear-gradient(90deg,#111_50%,var(--color-main)_50%)]"}`}
+          aria-hidden="true"
+        />
+        {collapsed ? null : (
+          <span className={switcherClass ? "min-w-0 flex-1" : undefined}>
+            {label}
+          </span>
+        )}
+        {collapsed && workspaceMusicOn ? (
+          <span
+            aria-hidden="true"
+            data-testid="sidebar-music-notes"
+            className="sidebar-music-notes"
+          >
+            <b>♪</b>
+            <b>♫</b>
+            <b>♪</b>
+          </span>
+        ) : null}
+      </Link>
+    );
+  }
+
   function renderItem(group: SidebarGroup, item: SidebarItem, index: number) {
     const key = `${group.key}:${item.key}`;
     const here = litKey === key;
@@ -1144,25 +1191,46 @@ export function AppShell({
       <div
         className={`grid min-h-dvh bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px] max-[900px]:grid-cols-1 max-[900px]:content-start transition-[grid-template-columns] duration-[420ms] ease-[cubic-bezier(.34,1.56,.64,1)] motion-reduce:transition-none ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[240px_minmax(0,1fr)]"}`}
       >
-        <div className="sticky top-0 z-30 hidden h-[50px] items-center justify-center border-b-[3px] border-border bg-sidebar px-3 max-[900px]:flex">
-          <button
-            type="button"
-            className={`absolute top-1/2 left-3 grid size-[30px] -translate-y-1/2 place-items-center rounded-[6px] border-border bg-surface text-ink after:absolute after:-inset-[7px] after:content-[''] ${ICON_MOTION}`}
-            aria-label={t("sidebarExpand")}
-            aria-expanded={drawerOpen}
-            aria-controls={SIDEBAR_ID}
-            onClick={() => setDrawerPath(pathname)}
-          >
-            <WorkspaceIcon name="menu" size={18} />
-          </button>
-          <span
-            className="flex items-center gap-2 font-display text-lg font-extrabold text-ink"
-            aria-hidden="true"
-          >
-            <span className="size-4 rounded-full border-2 border-border bg-[linear-gradient(90deg,#111_50%,var(--color-main)_50%)]" />
-            {t("appName")}
-          </span>
-        </div>
+        {teacherSurface && mobile ? (
+          <div className="sticky top-0 z-30 grid grid-cols-[44px_minmax(0,1fr)] items-center gap-x-2 border-b-[3px] border-border bg-sidebar px-3 pt-2 pb-4">
+            <button
+              type="button"
+              className={`relative grid size-11 place-items-center rounded-[10px] border-[3px] border-border bg-surface text-ink focus-visible:outline-[3px] focus-visible:outline-offset-2 ${PRESS_MOTION} ${PRESS_HIT}`}
+              aria-label={t("sidebarExpand")}
+              aria-expanded={drawerOpen}
+              aria-controls={SIDEBAR_ID}
+              onClick={() => setDrawerPath(pathname)}
+            >
+              <WorkspaceIcon name="menu" size={18} />
+            </button>
+            <ClassSwitcher
+              key={`${user?.id}:${pathname}`}
+              collapsed={false}
+              mobile
+              homeLink={brandHomeLink}
+            />
+          </div>
+        ) : (
+          <div className="sticky top-0 z-30 hidden h-[50px] items-center justify-center border-b-[3px] border-border bg-sidebar px-3 max-[900px]:flex">
+            <button
+              type="button"
+              className={`absolute top-1/2 left-3 grid size-[30px] -translate-y-1/2 place-items-center rounded-[6px] border-border bg-surface text-ink after:absolute after:-inset-[7px] after:content-[''] ${ICON_MOTION}`}
+              aria-label={t("sidebarExpand")}
+              aria-expanded={drawerOpen}
+              aria-controls={SIDEBAR_ID}
+              onClick={() => setDrawerPath(pathname)}
+            >
+              <WorkspaceIcon name="menu" size={18} />
+            </button>
+            <span
+              className="flex items-center gap-2 font-display text-lg font-extrabold text-ink"
+              aria-hidden="true"
+            >
+              <span className="size-4 rounded-full border-2 border-border bg-[linear-gradient(90deg,#111_50%,var(--color-main)_50%)]" />
+              {t("appName")}
+            </span>
+          </div>
+        )}
         {drawerOpen ? (
           <div
             aria-hidden="true"
@@ -1213,37 +1281,21 @@ export function AppShell({
                   className={
                     collapsed || mobile
                       ? "contents"
-                      : "flex items-center justify-between gap-2"
+                      : teacherSurface
+                        ? "grid min-w-0 gap-3 [&>button]:justify-self-end"
+                        : "flex items-center justify-between gap-2"
                   }
                 >
-                  <Link
-                    href={home}
-                    aria-current={mayaformHere ? "page" : undefined}
-                    aria-busy={pendingKey === "home" || undefined}
-                    onClick={startNav("home", home)}
-                    aria-label={collapsed ? t("appName") : undefined}
-                    data-tour="home"
-                    data-lit={mayaformLit || undefined}
-                    className={`isolate ${collapsed ? `${ICON_ITEM} ${mayaformLit ? ICON_ITEM_ACTIVE : ICON_ITEM_IDLE}` : mobile ? `${ITEM} w-fit justify-self-start border-transparent font-display text-lg font-extrabold` : `${ITEM} w-fit justify-self-start font-display text-lg font-extrabold ${mayaformLit ? ITEM_ACTIVE : ITEM_IDLE}`}${mayaformLit ? " is-active" : ""}`}
-                  >
-                    {mayaformLit && !collapsed && !mobile ? pill : null}
-                    <span
-                      className={`brand-dot size-4 shrink-0 rounded-full border-2 border-border ${(collapsed || mayaformLit) && !mobile ? "bg-[linear-gradient(90deg,#111_50%,var(--color-surface)_50%)]" : "bg-[linear-gradient(90deg,#111_50%,var(--color-main)_50%)]"}`}
-                      aria-hidden="true"
+                  {teacherSurface && !mobile ? (
+                    <ClassSwitcher
+                      key={`${user?.id}:${pathname}:${collapsed}`}
+                      collapsed={collapsed}
+                      mobile={false}
+                      homeLink={brandHomeLink}
                     />
-                    {collapsed ? null : <span>{t("appName")}</span>}
-                    {collapsed && workspaceMusicOn ? (
-                      <span
-                        aria-hidden="true"
-                        data-testid="sidebar-music-notes"
-                        className="sidebar-music-notes"
-                      >
-                        <b>♪</b>
-                        <b>♫</b>
-                        <b>♪</b>
-                      </span>
-                    ) : null}
-                  </Link>
+                  ) : (
+                    brandHomeLink()
+                  )}
                   {collapsed || mobile ? null : (
                     <MusicKey channel="workspace" />
                   )}
@@ -1410,7 +1462,6 @@ export function AppShell({
               })}
             </div>
           ) : null}
-          {teacherSurface ? <TeacherClassBar key={user?.id} /> : null}
           {status === "loading" ? (
             <LoadingCard />
           ) : (
