@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from app.core.db import Database
 from app.core.errors import PlatformError
-from app.core.models import Agent, Course, CourseMember, GroupMember, SessionRecord, User
+from app.core.models import Agent, Course, CourseMember, Group, GroupMember, SessionRecord, User
 from app.modules.auth.dependencies import get_auth_clock
 from app.modules.auth.identity_choice import consume_choice
 from app.modules.auth.models import LoginIdentityChallenge
@@ -221,6 +221,56 @@ def test_student_enrollment_additive_idempotent_and_active_per_session(
     with database.session() as db:
         assert db.get(CourseMember, (COURSE_ID, BOWEN_ID)) is not None
         assert db.get(CourseMember, (SECOND_CLASS_ID, BOWEN_ID)) is not None
+
+
+@pytest.mark.parametrize(
+    "course_id,group_id", [(SECOND_CLASS_ID, SECOND_CLASS_GROUP_ID), (COURSE_ID, GROUP_DEMO_ID)]
+)
+@pytest.mark.parametrize("moved", [False, True])
+def test_student_login_preserves_revoked_or_changed_group_grants(
+    client, database, course_id, group_id, moved
+):
+    enrolled = choose(client, challenge(client)["choice_token"], "student", course_id)
+    assert enrolled.status_code == 200, enrolled.text
+    with database.session() as db:
+        db.delete(db.get(GroupMember, (group_id, BOWEN_ID)))
+        if moved:
+            group = Group(
+                id=str(uuid4()),
+                course_id=course_id,
+                name="Chosen group",
+                created_at=datetime.now(UTC),
+            )
+            db.add(group)
+            db.flush()
+            db.add(
+                GroupMember(
+                    group_id=group.id, user_id=BOWEN_ID, role="leader", created_at=datetime.now(UTC)
+                )
+            )
+        db.flush()
+        before_groups = {
+            (r.group_id, r.role, r.created_at)
+            for r in db.scalars(select(GroupMember).where(GroupMember.user_id == BOWEN_ID))
+        }
+        before_enrollment = db.get(CourseMember, (course_id, BOWEN_ID)).created_at
+    for _ in range(2):
+        response = choose(client, challenge(client)["choice_token"], "student", course_id)
+        assert response.status_code == 200, response.text
+        assert response.json()["user"]["id"] == BOWEN_ID
+        with database.session() as db:
+            assert db.get(GroupMember, (group_id, BOWEN_ID)) is None
+            assert {
+                (r.group_id, r.role, r.created_at)
+                for r in db.scalars(select(GroupMember).where(GroupMember.user_id == BOWEN_ID))
+            } == before_groups
+            membership = db.get(CourseMember, (course_id, BOWEN_ID))
+            assert membership.role == "student"
+            assert membership.created_at == before_enrollment
+            row = db.get(SessionRecord, session_hash(client.cookies.get("maya_session")))
+            assert row.user_id == BOWEN_ID
+            assert row.active_course_id == course_id
+            assert row.entered_via_user_id == BOWEN_ID
 
 
 @pytest.mark.parametrize("kind", ["garbage", "expired", "other-user", "fingerprint", "consumed"])

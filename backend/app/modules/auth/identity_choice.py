@@ -92,18 +92,20 @@ def consume_choice(
         membership = db.get(CourseMember, (course_id, BOWEN_ID))
         if membership is not None and membership.role != "student":
             raise PlatformError("identity_choice_unavailable", "Login choice is unavailable.", 401)
-        group = default_class_group(db, course_id)
         if membership is None:
+            group = default_class_group(db, course_id)
             db.add(
                 CourseMember(
                     course_id=course_id, user_id=BOWEN_ID, role="student", created_at=timestamp
                 )
             )
-        if db.get(GroupMember, (group.id, BOWEN_ID)) is None:
-            db.add(
-                GroupMember(
-                    group_id=group.id, user_id=BOWEN_ID, role="member", created_at=timestamp
+            # Existing enrollment may have a revoked or changed group grant;
+            # signing in must not restore access to the default group's work.
+            if db.get(GroupMember, (group.id, BOWEN_ID)) is None:
+                db.add(
+                    GroupMember(
+                        group_id=group.id, user_id=BOWEN_ID, role="member", created_at=timestamp
+                    )
                 )
-            )
         db.flush()
     return user
