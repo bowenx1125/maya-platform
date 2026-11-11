@@ -73,7 +73,13 @@ SEGMENT_HISTORY_COPY_KEEP_RATIO = 0.4
 # (share of the turn cap), and how much of a speech may restate the speaker's
 # own earlier speeches (share of its character 8-grams or word 5-grams).
 SEGMENT_STUMP_RATIO = 0.4
-SEGMENT_SELF_REPEAT_RATIO = 0.35
+# The first contracts stated 35% over character 8-grams. Two production v4
+# Debates showed that a reworded repeat ("它没朋友" / "它无朋友") scores 0.07-0.20
+# there, while character 5-grams put every real repeat at 0.26 or more and
+# every fresh speech at 0.14 or less, so the rule is now a quarter over
+# 5-grams. A Debate is held to the number its own frozen contract states.
+SEGMENT_SELF_REPEAT_RATIO = 0.25
+LEGACY_SELF_REPEAT_RATIO = 0.35
 _SENTENCE_END_RE = re.compile(r"[。！？!?；;]+[”’」』\"')）]*|\.(?=\s|$)[”’\"')]*|\n+")
 
 
@@ -1748,25 +1754,27 @@ def _lineage(segments: Sequence[Segment]) -> tuple[SegmentLineage, ...]:
     return tuple(rows)
 
 
-def _gram_set(text: str, language: str) -> set[tuple[str, ...]]:
+def _gram_set(text: str, language: str, *, legacy: bool = False) -> set[tuple[str, ...]]:
     if language == "zh":
         units = [char for char in unicodedata.normalize("NFKC", text).casefold() if char.isalnum()]
-        size = 8
+        size = 8 if legacy else 5
     else:
         units = [word.casefold() for word in ENGLISH_WORD.findall(text)]
         size = 5
     return {tuple(units[index : index + size]) for index in range(len(units) - size + 1)}
 
 
-def self_repetition_ratio(text: str, earlier: Sequence[str], language: str) -> float:
+def self_repetition_ratio(
+    text: str, earlier: Sequence[str], language: str, *, legacy: bool = False
+) -> float:
     """Share of this speech's n-grams already in the speaker's earlier speeches."""
 
-    grams = _gram_set(text, language)
+    grams = _gram_set(text, language, legacy=legacy)
     if not grams or not earlier:
         return 0.0
     seen: set[tuple[str, ...]] = set()
     for item in earlier:
-        seen |= _gram_set(item, language)
+        seen |= _gram_set(item, language, legacy=legacy)
     return len(grams & seen) / len(grams)
 
 
@@ -1927,7 +1935,10 @@ def validate_segment_output(
             if item.participant_id and item.participant_id == discussion_value.get("self_id")
         ]
         speech_text = "\n\n".join(item.text for item in segments_list)
-        if repair and self_repetition_ratio(speech_text, own, language) > SEGMENT_SELF_REPEAT_RATIO:
+        legacy = "35%" in (snapshot.frozen_system_prompt or "")
+        if repair and self_repetition_ratio(speech_text, own, language, legacy=legacy) > (
+            LEGACY_SELF_REPEAT_RATIO if legacy else SEGMENT_SELF_REPEAT_RATIO
+        ):
             raise _error(
                 "the speech repeats the speaker's earlier speeches.",
                 code="segment_self_repetition",

@@ -84,6 +84,7 @@ class GroundingCounts(_Closed):
     quoted: int
     paraphrased: int
     not_found: int
+    other_language: int
 
 
 class AgentDiagnostic(_Closed):
@@ -191,6 +192,7 @@ def _round(
                 measured = measure_grounding(segment.text, sources, language)
                 grounding_counts[measured.grounding_class] += 1
                 matched_total += measured.matched_grams
+                # An unmeasurable paragraph adds nothing to either side of the share.
                 gram_total += measured.total_grams
             else:
                 measured = None
@@ -201,8 +203,12 @@ def _round(
                     cited_sources=len(sources),
                     self_label=segment.support_mode,
                     grounding_class=measured.grounding_class if measured else None,
-                    coverage=round(measured.coverage, 4) if measured else None,
-                    longest_run=measured.longest_run if measured else None,
+                    coverage=round(measured.coverage, 4)
+                    if measured and measured.grounding_class != "other_language"
+                    else None,
+                    longest_run=measured.longest_run
+                    if measured and measured.grounding_class != "other_language"
+                    else None,
                 )
             )
     retrieved = [
@@ -321,6 +327,7 @@ def debate_diagnostics(db: Session, *, actor_user_id: str, debate_id: str) -> De
                         quoted=counts["quoted"],
                         paraphrased=counts["paraphrased"],
                         not_found=counts["not_found"],
+                        other_language=counts["other_language"],
                     ),
                     rounds=rounds,
                 )

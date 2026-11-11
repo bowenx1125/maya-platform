@@ -281,26 +281,25 @@ Teacher scopes corrected. RAG actions follow the class bar.
 ## Nov10 Debate prompt v4 (supersedes Oct24 contract-in-Ruleset)
 
 ruleset_contract_v4: code contract default_rules/contract/*.md,read-only in the form;
-Ruleset=style+round tasks;System=this round's task+contract. User JSON `task`
-{round_task,max_units,stance?};no teacher note. Length: target_minutes 3–10 (5)×230 zh
-chars/150 en words×voice rate×0.9/(Agents×4),weights 1.1/0.9/0.9/1.1;>1.25×cap:tail
-sentences cut,no repair. Unspoken R2 question appended;received questions from R3.
-Stump<40% cap or own-overlap>35%:1 repair. Round-1 query has no Agent.md. v4 drops word
+Ruleset=style+round tasks; System=this round's task+contract. User JSON `task`
+{round_task,max_units,stance?}; no teacher note. Length: target_minutes 3–10 (5)×230 zh
+chars/150 en words×voice rate×0.9/(Agents×4),weights 1.1/0.9/0.9/1.1; >1.25×cap:tail
+sentences cut,no repair. Unspoken R2 question appended; received questions from R3.
+Stump<40% cap or own 5-gram overlap>25% (frozen 35% kept):1 repair. Round-1 query has no Agent.md. v4 drops word
 limits,retrieval_policy_id,frequency_penalty,max_tokens. v3/older bytes pinned.
-Real run ac3df08a:16 speeches 52–103 chars,4m16s.
 
 ## Nov11 RAG chunks, diagnostics
 
-Builds:`markdown-structure-600t-v3`,150–900 tokens,no overlap;v2 snapshots kept
-till republish. Teacher `getDebateDiagnostics`:3-gram grounding.
+Builds:`markdown-structure-600t-v3`,150–900 tokens,no overlap; v2 snapshots kept
+till republish. Teacher `getDebateDiagnostics`:3-gram grounding;other-language unmeasured.
 
 ## Nov11 Debate cards (phase B)
 
 0089: new v4 participants start `compiling`;before an Agent's first turn its frozen
 AGENT.md compiles once (`llm_debate_card`, Debate model,strict schema, 1 ledgered
 attempt, 60s) to identity/position/reasoning/style/voice/dropped, ≤600 Han/400 words.
-Ready→card persona;failure/Mock→fallback (raw AGENT.md);null (old) keeps pinned bytes.
-Round-1 query:stance, else card position. Preview:Check card. Clone TTS instruction=card voice_style,else Debate's. 0 calls;quality unverified.
+Ready→card persona;failure/Mock→fallback (raw AGENT.md); null (old) keeps pinned bytes.
+Round-1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style. 0 calls;quality unverified.
 
 Nov11: Agents/Teams <768px: single black banner shadow, no orange ring.
 Mock Chromium390/1440+tour;desktop diff0. 1247 UI tests/build passed.
