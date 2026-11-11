@@ -132,6 +132,9 @@ export function QuizEditor({
   const [exemptionCount, setExemptionCount] = useState(0);
   const [scheduledStartAt, setScheduledStartAt] = useState<string | null>(null);
   const [scheduledEndAt, setScheduledEndAt] = useState<string | null>(null);
+  const [hideResultsFromStudents, setHideResultsFromStudents] =
+    useState(true);
+  const [visibilityBusy, setVisibilityBusy] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
   const [tab, setTab] = useState<QuizPageTab | null>(initialTab ?? null);
   const [attemptCount, setAttemptCount] = useState(0);
@@ -148,6 +151,9 @@ export function QuizEditor({
         if (!alive) return;
         setTitle(quiz.title);
         setStatus(quiz.status);
+        setHideResultsFromStudents(
+          quiz.hide_results_from_students !== false,
+        );
         setTakingOpen(quiz.taking_open === true);
         setTakingEpoch(quiz.taking_epoch ?? 0);
         setExemptionCount(quiz.exemption_count ?? 0);
@@ -260,6 +266,9 @@ export function QuizEditor({
     try {
       if (!courseId) throw new Error("No teacher course.");
       const id = await save();
+      if (!quizId && !hideResultsFromStudents) {
+        await quizApi.setStudentResultsVisibility(courseId, id, false);
+      }
       await quizApi.publishQuiz(courseId, id);
       celebrate();
       router.push("/teacher/quizzes");
@@ -268,6 +277,30 @@ export function QuizEditor({
       setError(err);
       releaseDoneLock(doneLock);
       setBusy(false);
+    }
+  };
+
+  const onVisibilityChange = async (hide: boolean) => {
+    if (busy || visibilityBusy) return;
+    if (!quizId) {
+      setHideResultsFromStudents(hide);
+      return;
+    }
+    setVisibilityBusy(true);
+    setError(null);
+    try {
+      const updated = await quizApi.setStudentResultsVisibility(
+        courseId,
+        quizId,
+        hide,
+      );
+      setHideResultsFromStudents(
+        updated.hide_results_from_students !== false,
+      );
+    } catch (err) {
+      setError(err);
+    } finally {
+      setVisibilityBusy(false);
     }
   };
 
@@ -423,6 +456,25 @@ export function QuizEditor({
           />
         )}
       </PageBanner>
+
+      <section className="grid gap-2 rounded-[14px] border-[3px] border-border bg-white px-5 py-4 shadow-[4px_4px_0_#C4B5FD]">
+        <label className="flex min-h-8 cursor-pointer items-center gap-3 font-body text-sm font-extrabold text-ink">
+          <input
+            type="checkbox"
+            aria-label={t("quizHideResultsFromStudents")}
+            checked={hideResultsFromStudents}
+            disabled={busy || visibilityBusy}
+            onChange={(event) =>
+              void onVisibilityChange(event.currentTarget.checked)
+            }
+            className="size-5 accent-[#7C3AED]"
+          />
+          {t("quizHideResultsFromStudents")}
+        </label>
+        <p className="m-0 font-body text-sm text-arc-muted">
+          {t("quizResultsHiddenNote")}
+        </p>
+      </section>
 
       <QuizTabs<QuizPageTab>
         label="Quiz"

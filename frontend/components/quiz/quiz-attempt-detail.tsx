@@ -56,7 +56,7 @@ function rowAwarded(item: QuizAttemptItem, teacher: boolean): number | null {
   ) {
     return item.points;
   }
-  return item.points_awarded ?? 0;
+  return item.points_awarded ?? null;
 }
 
 function draftFrom(detail: QuizAttemptDetail): Draft {
@@ -175,12 +175,24 @@ export function QuizAttemptDetailView({
   }
 
   const gradable = teacher && detail.items.some(isText);
+  const resultsVisible = teacher || detail.results_visible === true;
   // Objective points the server stored as wrong, when the paper has no key.
   const openKeyDelta = detail.items.reduce((sum, item) => {
     if (isText(item)) return sum;
-    return sum + (rowAwarded(item, teacher) ?? 0) - (item.points_awarded ?? 0);
+    const awarded = rowAwarded(item, teacher);
+    if (awarded === null || item.points_awarded == null) return sum;
+    return sum + awarded - item.points_awarded;
   }, 0);
-  const headerAwarded = detail.points_awarded + openKeyDelta;
+  const headerAwarded =
+    typeof detail.points_awarded === "number" &&
+    Number.isFinite(detail.points_awarded)
+      ? detail.points_awarded + openKeyDelta
+      : null;
+  const headerTotal =
+    typeof detail.points_total === "number" &&
+    Number.isFinite(detail.points_total)
+      ? detail.points_total
+      : null;
   return (
     // A's "marked paper" (owner pick 2026-11-08): ruled paper with a red
     // margin, right/wrong rows marked like a teacher's pen.
@@ -189,12 +201,14 @@ export function QuizAttemptDetailView({
       data-testid="quiz-attempt-detail"
     >
       {/* Round and grading state are already on the Submissions row. */}
-      <span
-        className="absolute top-3 right-5 inline-block -rotate-3 font-display text-[34px] leading-none font-extrabold text-[#DC2626]"
-        aria-label={`${headerAwarded} / ${detail.points_total}`}
-      >
-        {headerAwarded} / {detail.points_total}
-      </span>
+      {resultsVisible && headerAwarded !== null && headerTotal !== null ? (
+        <span
+          className="absolute top-3 right-5 inline-block -rotate-3 font-display text-[34px] leading-none font-extrabold text-[#DC2626]"
+          aria-label={`${headerAwarded} / ${headerTotal}`}
+        >
+          {headerAwarded} / {headerTotal}
+        </span>
+      ) : null}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[620px] border-collapse font-body text-sm text-ink">
           <thead>
@@ -213,12 +227,16 @@ export function QuizAttemptDetailView({
                   {t("quizAnswerKey")}
                 </th>
               ) : null}
-              <th scope="col" className={HEAD}>
-                {t("overviewPoints")}
-              </th>
-              <th scope="col" className={HEAD}>
-                {t("overviewFeedback")}
-              </th>
+              {resultsVisible ? (
+                <>
+                  <th scope="col" className={HEAD}>
+                    {t("overviewPoints")}
+                  </th>
+                  <th scope="col" className={HEAD}>
+                    {t("overviewFeedback")}
+                  </th>
+                </>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -229,7 +247,7 @@ export function QuizAttemptDetailView({
                 ? item.response_text?.trim() || t("overviewNotAnswered")
                 : choiceLabels(item, item.response_choice_ids) ||
                   t("overviewNotAnswered");
-              const mark = rowMark(item, teacher);
+              const mark = resultsVisible ? rowMark(item, teacher) : "neutral";
               const tint =
                 mark === "correct"
                   ? "bg-[#ECFCCB]"
@@ -264,75 +282,80 @@ export function QuizAttemptDetailView({
                         : choiceLabels(item, item.answer?.choice_ids)}
                     </td>
                   ) : null}
-                  <td
-                    className={`${CELL} font-mono font-bold whitespace-nowrap`}
-                  >
-                    {text && teacher ? (
-                      <span className="inline-flex flex-col items-start gap-1">
-                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                          <input
-                            type="number"
-                            inputMode="decimal"
-                            min={0}
-                            max={item.points}
-                            step="any"
-                            aria-label={t("quizGradePointsFor", { n })}
-                            className="min-h-11 w-16 rounded-arc border-[3px] border-border bg-white px-2 font-mono text-base font-bold focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-main"
-                            value={draft[item.id]?.points ?? ""}
+                  {resultsVisible ? (
+                    <>
+                      <td
+                        className={`${CELL} font-mono font-bold whitespace-nowrap`}
+                      >
+                        {text && teacher ? (
+                          <span className="inline-flex flex-col items-start gap-1">
+                            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                max={item.points}
+                                step="any"
+                                aria-label={t("quizGradePointsFor", { n })}
+                                className="min-h-11 w-16 rounded-arc border-[3px] border-border bg-white px-2 font-mono text-base font-bold focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-main"
+                                value={draft[item.id]?.points ?? ""}
+                                onChange={(event) =>
+                                  setDraft((current) => ({
+                                    ...current,
+                                    [item.id]: {
+                                      feedback:
+                                        current[item.id]?.feedback ?? "",
+                                      points: event.target.value,
+                                    },
+                                  }))
+                                }
+                              />
+                              / {item.points}
+                            </span>
+                            {item.ai_grading ? (
+                              <span
+                                className="font-body text-xs font-bold text-arc-muted"
+                                data-testid={`quiz-item-ai-${item.id}`}
+                              >
+                                {isFiniteScore(item.ai_score)
+                                  ? `AI ${item.ai_score} / ${item.points}`
+                                  : "AI score pending"}
+                              </span>
+                            ) : null}
+                          </span>
+                        ) : text && !item.graded ? (
+                          <span className="font-body font-semibold text-arc-muted">
+                            {t("quizNotGraded")}
+                          </span>
+                        ) : (
+                          (rowAwarded(item, teacher) === null
+                            ? "—"
+                            : `${rowAwarded(item, teacher)} / ${item.points}`)
+                        )}
+                      </td>
+                      <td className={CELL}>
+                        {text && teacher ? (
+                          <textarea
+                            aria-label={t("quizGradeFeedbackFor", { n })}
+                            className="min-h-16 w-full min-w-44 rounded-arc border-[3px] border-border bg-white px-2.5 py-2 font-body text-sm focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-main"
+                            maxLength={4000}
+                            value={draft[item.id]?.feedback ?? ""}
                             onChange={(event) =>
                               setDraft((current) => ({
                                 ...current,
                                 [item.id]: {
-                                  feedback: current[item.id]?.feedback ?? "",
-                                  points: event.target.value,
+                                  points: current[item.id]?.points ?? "",
+                                  feedback: event.target.value,
                                 },
                               }))
                             }
                           />
-                          / {item.points}
-                        </span>
-                        {/* Only AI-graded items say anything about AI;
-                            the teacher's points always win. */}
-                        {item.ai_grading ? (
-                          <span
-                            className="font-body text-xs font-bold text-arc-muted"
-                            data-testid={`quiz-item-ai-${item.id}`}
-                          >
-                            {isFiniteScore(item.ai_score)
-                              ? `AI ${item.ai_score} / ${item.points}`
-                              : "AI score pending"}
-                          </span>
-                        ) : null}
-                      </span>
-                    ) : text && !item.graded ? (
-                      <span className="font-body font-semibold text-arc-muted">
-                        {t("quizNotGraded")}
-                      </span>
-                    ) : (
-                      `${rowAwarded(item, teacher) ?? 0} / ${item.points}`
-                    )}
-                  </td>
-                  <td className={CELL}>
-                    {text && teacher ? (
-                      <textarea
-                        aria-label={t("quizGradeFeedbackFor", { n })}
-                        className="min-h-16 w-full min-w-44 rounded-arc border-[3px] border-border bg-white px-2.5 py-2 font-body text-sm focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-main"
-                        maxLength={4000}
-                        value={draft[item.id]?.feedback ?? ""}
-                        onChange={(event) =>
-                          setDraft((current) => ({
-                            ...current,
-                            [item.id]: {
-                              points: current[item.id]?.points ?? "",
-                              feedback: event.target.value,
-                            },
-                          }))
-                        }
-                      />
-                    ) : (
-                      (item.feedback ?? "")
-                    )}
-                  </td>
+                        ) : (
+                          (item.feedback ?? "")
+                        )}
+                      </td>
+                    </>
+                  ) : null}
                 </tr>
               );
             })}

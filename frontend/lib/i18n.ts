@@ -1102,6 +1102,11 @@ const enMessages = {
   quizRound: "Round {n}",
   quizSubmissions: "Quiz submissions",
   quizNoSubmissions: "No quiz submissions yet.",
+  quizHideResultsFromStudents: "Hide results from students",
+  quizResultsHiddenNote:
+    "Results are hidden from students by default. Turn this off to show students scores, correctness, and feedback.",
+  quizResultsNotAvailable: "Results are not yet available.",
+  quizOwnAnswers: "Your answers",
   quizAnswerKey: "Key",
   quizCorrect: "Correct",
   quizIncorrect: "Incorrect",
