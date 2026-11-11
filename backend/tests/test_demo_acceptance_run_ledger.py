@@ -56,6 +56,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 
+from tests.conftest import complete_student_login
 from tests.postgres_db import named_url
 
 TARGET_AGENT_ID = "11111111-1111-4111-8111-111111111111"
@@ -864,6 +865,9 @@ def test_api_safe_response_and_student_authorization(app_factory: Any) -> None:
             "/api/v1/auth/login",
             json={"username": "bowen", "password": "demo-password"},
         )
+        assert student_login.status_code == 202
+        student_login = complete_student_login(client, student_login)
+        assert student_login.status_code == 200, student_login.text
         student_csrf = student_login.json()["csrf_token"]
         denied = client.get(
             f"/api/v1/demo/acceptance-runs/{body['id']}",

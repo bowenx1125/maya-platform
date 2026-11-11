@@ -21,7 +21,7 @@ silently rewrite either side. Progress and deployment facts live in
 | Item validation       | `backend/app/modules/quiz/document.py`                                                                                                                 |
 | Objective grading     | `backend/app/modules/quiz/grading.py`                                                                                                                  |
 | ZIP export            | `backend/app/modules/quiz/export.py`                                                                                                                   |
-| Tables                | `backend/migrations/versions/0083_classroom_quizzes.py`, `0084_quiz_taking_open_retest.py`, `0085_quiz_manual_grading.py`, `0090_quiz_show_results.py` |
+| Tables                | `backend/migrations/versions/0083_classroom_quizzes.py`, `0084_quiz_taking_open_retest.py`, `0085_quiz_manual_grading.py`, `0091_quiz_show_results.py` |
 | Backend tests         | `backend/tests/test_classroom_quiz_api.py`, `test_classroom_quiz_export.py`, `test_classroom_quiz_attempt_review.py`, `test_classroom_quiz_results.py` |
 | Frontend client/gates | `frontend/lib/api/quiz.ts`, `frontend/lib/quiz-gate.ts`, `frontend/lib/quiz-urls.ts`                                                                   |
 | Frontend tests        | `frontend/tests/quiz-*.test.ts(x)`                                                                                                                     |
@@ -170,7 +170,7 @@ Origin and CSRF checks. The flag lives in `classroom_quizzes.show_results`,
 outside the frozen document/settings, and applies immediately to every
 attempt, including earlier rounds. Turning it off hides results again.
 
-Migration `0090_quiz_show_results` follows `0089_debate_cards`, backfills
+Migration `0091_quiz_show_results` follows `0090_bowen_identity_choice`, backfills
 existing quizzes to true, then sets the database default to false and the
 column to NOT NULL. New quizzes default to false in both SQL and ORM inserts.
 Quiz summaries, student papers, submission receipts, Record rows and attempt

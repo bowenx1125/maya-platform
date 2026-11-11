@@ -31,7 +31,7 @@ from app.modules.auth.credentials import (
     publish_catalog_snapshot,
 )
 from app.modules.auth.models import DemoAccountBinding
-from app.seed import GROUP_DEMO_ID
+from app.seed import BOWEN_ID, GROUP_DEMO_ID
 
 SESSION_COOKIE_NAME = "maya_session"
 
@@ -417,7 +417,14 @@ def _sync_graph_in_session(
                     desired_group_id = selected_group.id
                 else:
                     binding.selected_group_id = None
+            # The chooser enrolls Bowen additively; a replica restart must not
+            # project those memberships away or revoke his existing sessions.
+            preserve_bowen_memberships = (
+                user.id == BOWEN_ID and account.role == "student" and not material_changed
+            )
             desired_courses = {course.id}
+            if preserve_bowen_memberships:
+                desired_courses.update(row.course_id for row in existing_courses)
             if account.role == "teacher":
                 created_class_ids = {
                     item.id for item in courses_by_code.values() if item.code.startswith("class-")
@@ -448,7 +455,9 @@ def _sync_graph_in_session(
             if account.role == "teacher":
                 if existing_groups:
                     material_changed = True
-            elif len(existing_groups) != 1 or prior_group is None:
+            elif not preserve_bowen_memberships and (
+                len(existing_groups) != 1 or prior_group is None
+            ):
                 material_changed = True
 
             # Enforce the complete desired course/group graph. Existing seed
@@ -481,7 +490,9 @@ def _sync_graph_in_session(
                     )
 
             for group_row in existing_groups:
-                if not desired_group_id or group_row is not prior_group:
+                if not preserve_bowen_memberships and (
+                    not desired_group_id or group_row is not prior_group
+                ):
                     session.delete(group_row)
             if desired_group_id and prior_group is None:
                 session.add(

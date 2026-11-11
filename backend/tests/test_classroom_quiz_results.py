@@ -246,7 +246,9 @@ def test_results_migration_preserves_existing_rows_and_changes_insert_defaults(
     database.upgrade_schema()
     with database.engine.begin() as connection:
         connection.execute(text("ALTER TABLE classroom_quizzes DROP COLUMN show_results"))
-        connection.execute(text("UPDATE alembic_version SET version_num = '0089_debate_cards'"))
+        connection.execute(
+            text("UPDATE alembic_version SET version_num = '0090_bowen_identity_choice'")
+        )
     database.upgrade_schema()
     assert database.check_ready()
     with database.engine.begin() as connection:
@@ -300,7 +302,7 @@ def test_results_migration_preserves_existing_rows_and_changes_insert_defaults(
 
 
 def test_results_migration_emits_backfill_before_changing_default() -> None:
-    migration = importlib.import_module("migrations.versions.0090_quiz_show_results")
+    migration = importlib.import_module("migrations.versions.0091_quiz_show_results")
     output = io.StringIO()
     context = MigrationContext.configure(
         url="postgresql://", opts={"as_sql": True, "output_buffer": output}

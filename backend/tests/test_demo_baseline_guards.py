@@ -15,12 +15,15 @@ from app.modules.demo_baseline.service import (
 )
 from fastapi.testclient import TestClient
 
+from tests.conftest import complete_student_login
+
 
 def _login(client: TestClient, username: str) -> str:
     response = client.post(
         "/api/v1/auth/login",
         json={"username": username, "password": "demo-password"},
     )
+    response = complete_student_login(client, response)
     assert response.status_code == 200, response.text
     return response.json()["csrf_token"]
 
