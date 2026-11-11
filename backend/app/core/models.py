@@ -100,10 +100,14 @@ class SessionRecord(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     entered_via_user_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+        String(36),
+        ForeignKey("users.id", name="fk_sessions_entered_via", ondelete="SET NULL"),
+        nullable=True,
     )
     active_course_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("courses.id", ondelete="SET NULL"), nullable=True
+        String(36),
+        ForeignKey("courses.id", name="fk_sessions_active_course", ondelete="SET NULL"),
+        nullable=True,
     )
 
     user: Mapped[User] = relationship(back_populates="sessions", foreign_keys=[user_id])

@@ -293,6 +293,12 @@ export type QuizSummary = {
   taking_open?: boolean;
   /** Current taking round; increments each closed→open. */
   taking_epoch?: number;
+  exemption_count?: number;
+  exemption_deadline_latest?: string | null;
+  exempt_until?: string | null;
+  can_take_now?: boolean;
+  scheduled_start_at?: string | null;
+  scheduled_end_at?: string | null;
   created_by_user_id: string;
   published_at: string | null;
   created_at: string;

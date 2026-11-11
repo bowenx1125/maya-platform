@@ -1,7 +1,11 @@
-/** Student Start is allowed only when taking_open is true. */
+/** Student Start follows the per-viewer can_take_now flag. */
 export function canStudentStartQuiz(quiz: {
+  can_take_now?: boolean | null;
   taking_open?: boolean | null;
 }): boolean {
+  if (quiz.can_take_now !== undefined && quiz.can_take_now !== null) {
+    return quiz.can_take_now === true;
+  }
   return quiz.taking_open === true;
 }
 

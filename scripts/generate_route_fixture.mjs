@@ -15,6 +15,14 @@ const redocly = resolve(root, "node_modules/@redocly/cli/bin/cli.js");
 const frozen = resolve(root, "contracts/openapi-v0.1.yaml");
 const temporary = resolve(output, "..", ".route-fixture-source.json");
 const implemented = new Set([
+  "listCourseQuizzes",
+  "getCourseQuiz",
+  "listCourseQuizExemptions",
+  "putCourseQuizExemptions",
+  "deleteCourseQuizExemption",
+  "clearCourseQuizExemptions",
+  "putCourseQuizSchedule",
+
   "login",
   "chooseLoginIdentity",
   "switchDemoIdentity",

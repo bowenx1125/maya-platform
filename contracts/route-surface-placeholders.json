@@ -16,17 +16,9 @@
       "owner": "M01",
       "reason": "Adaptive admission metrics probe (#101) is infrastructure-only, served on the internal port, and outside the frozen /api/v1 surface."
     },
-    "listCourseQuizzes": {
-      "owner": "T2-QUIZ-M1M3",
-      "reason": "Classroom Quiz M1 list"
-    },
     "createCourseQuiz": {
       "owner": "T2-QUIZ-M1M3",
       "reason": "Classroom Quiz M1 create"
-    },
-    "getCourseQuiz": {
-      "owner": "T2-QUIZ-M1M3",
-      "reason": "Classroom Quiz M1 get"
     },
     "patchCourseQuiz": {
       "owner": "T2-QUIZ-M1M3",

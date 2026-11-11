@@ -21,6 +21,7 @@ import {
   QuizEmpty,
   QuizKey,
 } from "../quizzes/quiz-chrome";
+import { StudentQuizStickers } from "../quizzes/quiz-taking-controls";
 import { Score } from "../quizzes/quiz-submissions";
 import { QuizAttemptDetailView } from "./quiz-attempt-detail";
 
@@ -137,6 +138,7 @@ export function StudentQuizList({
           <span className="min-w-0 flex-[1_1_240px] font-display text-xl leading-tight font-extrabold break-words">
             {quiz.title}
           </span>
+          <StudentQuizStickers quiz={quiz} />
           <QuizKey icon="play" tone="primary" onClick={() => onStart(quiz)}>
             Start
           </QuizKey>
@@ -198,6 +200,7 @@ export function StudentQuizList({
           <span className="min-w-0 flex-[1_1_240px] font-display text-xl leading-tight font-extrabold break-words">
             {quiz.title}
           </span>
+          <StudentQuizStickers quiz={quiz} />
           <span
             className="inline-flex items-center gap-1.5 rounded-full border-2 border-border bg-white px-3 py-1 font-body text-xs font-extrabold text-arc-muted"
             data-testid="quiz-not-open"

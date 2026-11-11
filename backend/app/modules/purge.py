@@ -72,6 +72,8 @@ REFERENCE_RULES: dict[str, Rule] = {
     "chat_provider_standing_grants.confirmed_by_user_id->users": "delete",
     "chat_reports.owner_user_id->users": "delete",
     "classroom_quiz_attempts.actor_user_id->users": "delete",
+    "classroom_quiz_exemptions.student_user_id->users": "delete",
+    "classroom_quiz_exemptions.created_by_user_id->users": "null",
     "classroom_quizzes.created_by_user_id->users": "protect",
     "conversation_attachments.owner_user_id->users": "delete",
     "course_members.user_id->users": "delete",

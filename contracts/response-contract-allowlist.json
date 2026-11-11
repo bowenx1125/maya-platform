@@ -67,6 +67,31 @@
       "429": {
         "reason": "One barrage per audience member per 3 s across backends (2026-10-19); 429 with Retry-After."
       }
+    },
+    "listCourseQuizzes": {
+      "422": {
+        "reason": "FastAPI UUID path-validation response; not a replacement for the frozen authentication, ownership or success responses."
+      }
+    },
+    "getCourseQuiz": {
+      "422": {
+        "reason": "FastAPI UUID path-validation response; not a replacement for the frozen authentication, ownership or success responses."
+      }
+    },
+    "listCourseQuizExemptions": {
+      "422": {
+        "reason": "FastAPI UUID path-validation response; not a replacement for the frozen authentication, ownership or success responses."
+      }
+    },
+    "deleteCourseQuizExemption": {
+      "422": {
+        "reason": "FastAPI UUID path-validation response; not a replacement for the frozen authentication, ownership or success responses."
+      }
+    },
+    "clearCourseQuizExemptions": {
+      "422": {
+        "reason": "FastAPI UUID path-validation response; not a replacement for the frozen authentication, ownership or success responses."
+      }
     }
   }
 }
