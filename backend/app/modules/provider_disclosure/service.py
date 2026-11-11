@@ -377,6 +377,9 @@ _PURPOSES: Mapping[str, str] = {
     ),
     "llm_debate": "Generate the teacher-approved classroom debate speech.",
     "llm_debate_turn": "Generate the teacher-approved classroom debate speech.",
+    "llm_debate_card": (
+        "Compile each debating Agent's frozen AGENT.md once into a bounded persona card."
+    ),
     "llm_maya_report": "Generate the teacher-approved civilization mutual-learning report.",
     LLM_KNOWLEDGE_OPERATION: (
         "Derive editable teaching concepts, questions with rubrics, and notes "

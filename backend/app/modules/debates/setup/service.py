@@ -44,6 +44,7 @@ from app.core.models import (
 )
 from app.core.version_label import agent_version_label
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
+from app.modules.debates.cards import initial_card_status, stored_card
 from app.modules.debates.generation_params import (
     CONTRACT_VERSION,
     UNSTORED_V4_PARAMS,
@@ -709,6 +710,7 @@ def _participant_row(
         teacher_note=item.teacher_note,
         initial_position_summary="",
         current_position_summary="",
+        card_status=initial_card_status(debate.rule_snapshot_json),
         created_at=timestamp,
         updated_at=timestamp,
     )
@@ -1021,6 +1023,8 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                 "initial_stance": row.initial_stance,
                 "current_stance": row.current_stance,
                 "current_position_summary": row.current_position_summary,
+                "card_status": row.card_status,
+                "card": stored_card(row),
             }
         )
         for row in participants

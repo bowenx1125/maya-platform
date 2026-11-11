@@ -434,6 +434,8 @@ class ParticipantContext:
     # Legacy structured inputs remain readable; current adapters send Markdown.
     persona: AgentMarkdown | PersonaSpecVersion | PersonaProviderViewVersionDTO | None = None
     persona_spec_hash: str | None = None
+    # A ready debate card's stated position; empty without one.
+    card_position: str = ""
 
     def __post_init__(self) -> None:
         if self.stance_mode == "assigned" and self.initial_stance is None:
