@@ -152,6 +152,35 @@ try {
       },
     ],
     [
+      "quiz results missing CSRF parameter",
+      (doc) => {
+        const operation =
+          doc.paths["/api/v1/courses/{course_id}/quizzes/{quiz_id}/results"]
+            .put;
+        operation.parameters = operation.parameters.filter(
+          (parameter) => parameter.in !== "header",
+        );
+      },
+      "putCourseQuizResults",
+    ],
+    [
+      "quiz results boolean request drift",
+      (doc) => {
+        doc.components.schemas.PutQuizResultsRequest.properties.show_results.type =
+          "string";
+      },
+      "putCourseQuizResults",
+    ],
+    [
+      "quiz results missing session security",
+      (doc) => {
+        doc.paths[
+          "/api/v1/courses/{course_id}/quizzes/{quiz_id}/results"
+        ].put.security = [];
+      },
+      "putCourseQuizResults",
+    ],
+    [
       "conversation deletion security drift",
       (doc) => {
         doc.paths["/api/v1/conversations/{conversation_id}"].delete.security =

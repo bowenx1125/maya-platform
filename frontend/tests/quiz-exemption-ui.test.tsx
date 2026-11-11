@@ -42,6 +42,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 const base = {
+  show_results: false,
   course_id: "course-1",
   schema_version: 1,
   content_revision: 1,

@@ -788,6 +788,11 @@ def submit_attempt(
                 "This quiz has already been submitted.",
             ) from exc
         raise
+    # The teacher may hide results during submission; expire_on_commit=False
+    # leaves the quiz object's visibility stale after the write.
+    show_results = (
+        db.scalar(select(ClassroomQuiz.show_results).where(ClassroomQuiz.id == quiz.id)) is True
+    )
     return QuizAttemptDTO(
         id=UUID(attempt_id),
         quiz_id=UUID(quiz.id),
@@ -796,13 +801,13 @@ def submit_attempt(
         content_revision=quiz.content_revision,
         taking_epoch=epoch,
         status="submitted",
-        show_results=quiz.show_results,
-        grading_status=grading_status if quiz.show_results else None,  # type: ignore[arg-type]
-        score_objective=score if quiz.show_results else None,
-        score_max_objective=score_max if quiz.show_results else None,
+        show_results=show_results,
+        grading_status=grading_status if show_results else None,  # type: ignore[arg-type]
+        score_objective=score if show_results else None,
+        score_max_objective=score_max if show_results else None,
         answers=(
             normalized
-            if quiz.show_results
+            if show_results
             else [
                 {
                     key: value

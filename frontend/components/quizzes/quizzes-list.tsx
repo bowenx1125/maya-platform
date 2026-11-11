@@ -156,13 +156,13 @@ export function QuizzesList() {
                           endAt={quiz.scheduled_end_at}
                         />
                         <TeacherExtendedSticker count={quiz.exemption_count} />
-                        {quiz.show_results === true ? (
-                          <QuizSticker tone="cyan" icon="eye">
-                            Results shown
-                          </QuizSticker>
-                        ) : null}
                       </>
                     )}
+                    {quiz.show_results === true ? (
+                      <QuizSticker tone="cyan" icon="eye">
+                        Results shown
+                      </QuizSticker>
+                    ) : null}
                     <span aria-hidden="true" className="shrink-0">
                       <WorkspaceIcon name="chevronRight" size={20} stroke={3} />
                     </span>

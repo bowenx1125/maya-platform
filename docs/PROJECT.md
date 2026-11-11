@@ -220,39 +220,35 @@ E:DEBATE_LLM_* (no MAYA_ prefix;unset=previous)/DEBATE_TTS_* freeze into rule_sn
 
 ## Nov2 Chatform lists
 
-0081 adds chat_type agent|team; maya_team=team. Backfill needs entry-kind/binding
-agreement; leftover NULLs logged,typed lists skip them. Separate Agent/Team
-histories; no kind selects Agent history.
+0081:chat_type agent|team;maya_team=team. Backfill requires entry-kind/binding
+agreement;log/skip leftover NULLs. Separate Agent/Team histories;default=Agent.
 
 0082:Enter grants2h teacher_group_access (not roster),renewed20min;Backout;expiry sweeps/min.
 Visits edit group Studyform Agents/public Brainform,not deletion/other groups.
 
-Single Chat: `draft` SSE (unsaved text as written), then delta/text_done after commit;
-ledger keeps the folded completion. Turn runners hold a pg advisory lock; each process
-sweeps per 60s, freeing claims unheld twice (startup with a live peer: only those).
-Team streams wake on committed events; fallback poll ≤2s. Debate default Rulesets: en
-mirrors the spoken zh one (no spoken RAG/I-feel labels or +5/+2), both address a listener
-who missed earlier speeches; a copy mid-paragraph is rewritten, not cut out.
+Single Chat:`draft` SSE unsaved,delta/text_done post-commit;ledger=folded completion.
+Turn runners:pg advisory lock;60s sweeps free claims unheld twice (startup with a
+live peer:only those). Team streams:committed events,≤2s poll fallback. Default en/zh
+Debate Rulesets match:address listeners missing prior speeches,no spoken RAG/I-feel
+labels or +5/+2;rewrite copied paragraphs,never cut them out.
 
 ## Nov3 cleanup and capacity
 
-Visits hide Knowledge, renew every 20 min and end with a notice back to Accounts; Debate
-"?" shows Chinese help on hover. core/locks.py holds every cross-process lock; SQLite gone.
-core/capacity.py scales CPU caps by cores/2; a high load counts only with CPU busy ≥0.8.
-Idle polls 30s; Agent lists carry card label/theme. Debate Rulesets state goals, not bans.
-Accounts: filter; Delete is real (DELETE /courses/{id}/members/{user}). Chat 429 →
-provider_rate_limited, 502/503/504/529 → provider_busy (one call). Ordinary Team members
-answer together (≤3; assessment Teams one at a time); history is one read. 390px Brainform fits.
+Visits:hide Knowledge,renew20min,end notice→Accounts. Debate "?":Chinese hover help.
+core/locks.py:all cross-process locks;SQLite gone. core/capacity.py:CPU caps×cores/2,
+high load only if CPU busy≥0.8. Idle polls30s;Agent cards:label/theme. Debate Rulesets:
+goals,not bans. Accounts:filter,real DELETE /courses/{id}/members/{user}. Chat:one call;
+429→provider_rate_limited,502/503/504/529→provider_busy. Ordinary Team:≤3 together;
+assessment:one at a time;history:one read. Brainform fits390px.
 
 ## Nov5–6 Agent Chat, recovery
 
-#337/#338: Agent Chats send the Agent name, AGENT.md, Knowledge and RAG.
-No assessment Tools or attempt; Teams unchanged. Owner-only RAG Details
-shows stored model input; scoring/summary Rubrics remain hidden.
-Nov6 off main70ecfa29 (#356/#357). Replay=Rebirth;Review=playback,not a rebirth lock.
-Revocalize:durable intent,3 workers,Back/F5 reseed/revision reconcile;admission refusal
-retries safely,ambiguous keys kept,definitive failures shown/manual retry. No calls/deploy;
-volume untouched. Stalled needs backend receipt recovery;safety gates kept.
+#337/#338:Agent Chats send name,AGENT.md,Knowledge,RAG;no assessment Tools/attempt;
+Teams unchanged. Owner RAG Details:stored input,scoring/summary Rubrics hidden.
+Nov6 off main70ecfa29 (#356/#357). Replay=Rebirth;Review=playback,no rebirth lock.
+Revocalize:durable intent,3 workers,Back/F5 reseed/revision reconcile;safe admission
+refusal retries,ambiguous keys kept,definitive failures/manual retry shown.
+0 calls/deploy,volume untouched. Stalled needs backend receipt recovery;gates kept.
 
 ## Nov5–8 Classroom Quiz
 
@@ -261,9 +257,12 @@ detail,hand grading,hide;Record→Quiz. #383/4:opt-in AI grading. UI A:1 page/qu
 Paper|Submissions,no Chat tests;New/Back/Done 1 style. [Contract](contracts/CLASSROOM_QUIZ_API.md)
 Agent name card;Private→Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)).
 0088 in progress:epoch deadlines/one-shot taking,lazy+10s sweeper(non-test lifespan).
-Static checks pass;PG/boundary:sandbox EPERM.0 calls/deploy.
-0090:old=true/new=false,toggle/redaction;7 offline+SQL/ruff/format/mypy pass.
-Test stamps fixture first.PG/boundary EPERM;V1 UI:13/1260 tests,type/lint/format pass;build/screens blocked.
+0090:old=true/new=false,revision unchanged. #412:V1 switch,no tooltip/banner duplicate;
+cyan row sticker;student expandable answers-only paper. Fixed stale submit visibility
+(server post-commit read,client receipt flag),fail-closed UI,draft stickers/DTOs.
+PUT semantics,1274 UI/13 skipped,type/lint/format,11 offline backend,ruff/mypy,
+regeneration/routes pass. PG owner-run;boundary EPERM;build stalled,Webpack showConfig
+failed.0 calls/deploy.
 
 ## Nov9 local classes and accounts (in progress)
 

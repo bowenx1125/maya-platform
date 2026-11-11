@@ -199,7 +199,7 @@ export function QuizTakingControls({
   >(null);
   const busy = Boolean(busyProp || busyAction);
 
-  const shown = quiz.show_results !== false;
+  const shown = quiz.show_results === true;
   const toggleResults = async () => {
     if (busy) return;
     setBusyAction("results");

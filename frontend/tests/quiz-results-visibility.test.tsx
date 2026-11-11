@@ -129,6 +129,16 @@ afterEach(() => {
 });
 
 describe("teacher results visibility", () => {
+  it("defaults the page switch to hidden when visibility is missing", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      json({ ...quiz, show_results: undefined, settings: {}, items: [] }),
+    );
+    render(<QuizEditor quizId={quiz.id} />);
+    const pill = await screen.findByRole("switch");
+    expect(pill.getAttribute("aria-checked")).toBe("false");
+    expect(pill.textContent).toBe("Results hidden");
+  });
+
   it.each([false, true])(
     "optimistically toggles from shown=%s, stays busy until saved, then reverts a failed change",
     async (initial) => {
@@ -204,25 +214,27 @@ describe("teacher results visibility", () => {
     },
   );
 
-  it.each([false, true])(
-    "has only the row sticker when shown=%s",
-    async (shown) => {
-      vi.mocked(fetch).mockResolvedValueOnce(
-        json([{ ...quiz, show_results: shown }]),
-      );
-      render(<QuizzesList />);
-      const row = await screen.findByTestId("quiz-row");
-      expect(screen.queryByRole("switch")).toBeNull();
-      expect(screen.queryByTestId("quiz-results-toggle")).toBeNull();
-      const sticker = within(row).queryByText("Results shown");
-      expect(Boolean(sticker)).toBe(shown);
-      if (sticker) {
-        expect(sticker.className).toContain("bg-[#A5F3FC]");
-        expect(sticker.querySelector("svg")).toBeTruthy();
-      }
-      expect(screen.queryByText("?")).toBeNull();
-    },
-  );
+  it.each([
+    { shown: false, status: "published" },
+    { shown: true, status: "published" },
+    { shown: false, status: "draft" },
+    { shown: true, status: "draft" },
+  ])("has only the row sticker: %j", async ({ shown, status }) => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      json([{ ...quiz, status, show_results: shown }]),
+    );
+    render(<QuizzesList />);
+    const row = await screen.findByTestId("quiz-row");
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.queryByTestId("quiz-results-toggle")).toBeNull();
+    const sticker = within(row).queryByText("Results shown");
+    expect(Boolean(sticker)).toBe(shown);
+    if (sticker) {
+      expect(sticker.className).toContain("bg-[#A5F3FC]");
+      expect(sticker.querySelector("svg")).toBeTruthy();
+    }
+    expect(screen.queryByText("?")).toBeNull();
+  });
 
   it("sends the results PUT with the boolean and CSRF header", async () => {
     await new QuizApi(state.api).setResultsVisible("course-1", quiz.id, true);
@@ -238,7 +250,7 @@ describe("teacher results visibility", () => {
 });
 
 describe("student results visibility", () => {
-  it.each([false, true, undefined])(
+  it.each([false, true, undefined, null, "false", 1])(
     "renders and expands an attempt when show_results=%s",
     async (shown) => {
       vi.stubGlobal(
@@ -260,7 +272,7 @@ describe("student results visibility", () => {
       render(<StudentQuizList courseId="course-1" onStart={vi.fn()} />);
       const row = await screen.findByRole("button", { name: /Week 3 Quiz/ });
       expect(row.getAttribute("aria-expanded")).toBe("false");
-      if (shown === false) {
+      if (shown !== true) {
         const sticker = within(row).getByText("Submitted");
         expect(sticker.className).toContain("bg-[#BEF264]");
         expect(sticker.className).toContain("-rotate-1");
@@ -279,7 +291,7 @@ describe("student results visibility", () => {
       expect(
         within(sheet).queryByRole("columnheader", { name: "Key" }),
       ).toBeNull();
-      if (shown === false) {
+      if (shown !== true) {
         expect(
           within(sheet)
             .getAllByRole("columnheader")
@@ -347,13 +359,19 @@ describe("student results visibility", () => {
   });
 
   it.each([
-    { shown: false, redacted: false },
-    { shown: false, redacted: true },
-    { shown: true, redacted: false },
-    { shown: undefined, redacted: false },
+    { shown: false, receiptShown: false, redacted: false },
+    { shown: false, receiptShown: false, redacted: true },
+    { shown: true, receiptShown: true, redacted: false },
+    { shown: true, receiptShown: false, redacted: false },
+    { shown: true, receiptShown: false, redacted: true },
+    { shown: false, receiptShown: true, redacted: false },
+    { shown: true, receiptShown: undefined, redacted: false },
+    { shown: true, receiptShown: null, redacted: false },
+    { shown: true, receiptShown: "false", redacted: false },
+    { shown: true, receiptShown: 1, redacted: false },
   ])(
-    "uses the fetched quiz flag after submission: %j",
-    async ({ shown, redacted }) => {
+    "uses submission-time visibility even when the fetched flag differs: %j",
+    async ({ shown, receiptShown, redacted }) => {
       vi.stubGlobal(
         "fetch",
         vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
@@ -362,6 +380,7 @@ describe("student results visibility", () => {
               ? {
                   ...attempt,
                   id: "attempt-1",
+                  show_results: receiptShown,
                   ...(redacted
                     ? {
                         score_objective: null,
@@ -380,7 +399,7 @@ describe("student results visibility", () => {
       fireEvent.click(await screen.findByText("API gateway"));
       fireEvent.click(screen.getByRole("button", { name: "Submit" }));
       expect(await screen.findByText("Submitted")).toBeTruthy();
-      if (shown === false) {
+      if (receiptShown !== true) {
         expect(screen.getByText("Your answers are in.")).toBeTruthy();
         expect(screen.queryByText(/Objective score/)).toBeNull();
       } else {
@@ -390,3 +409,52 @@ describe("student results visibility", () => {
     },
   );
 });
+
+it.each([false, true])(
+  "keeps teacher grading and answer keys when show_results=%s",
+  async (shown) => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      json({
+        ...attempt,
+        view: "teacher",
+        show_results: shown,
+        items: items.map((item) => ({
+          ...item,
+          answer:
+            item.type === "short_text"
+              ? { rubric: "Teacher rubric" }
+              : { choice_ids: [item.choices[0].id] },
+        })),
+      }),
+    );
+    render(
+      <QuizAttemptDetailView
+        courseId="course-1"
+        quizId={quiz.id}
+        attemptId="attempt-1"
+        teacher
+      />,
+    );
+    const sheet = await screen.findByTestId("quiz-attempt-detail");
+    expect(within(sheet).getByLabelText("4 / 5")).toBeTruthy();
+    expect(
+      within(sheet).getByRole("columnheader", { name: "Key" }),
+    ).toBeTruthy();
+    expect(within(sheet).getByText("Teacher rubric")).toBeTruthy();
+    expect(
+      within(sheet).getByRole("columnheader", { name: "Points" }),
+    ).toBeTruthy();
+    expect(
+      within(sheet).getByRole("columnheader", { name: "Feedback" }),
+    ).toBeTruthy();
+    expect(
+      within(sheet).getByRole("spinbutton", { name: "Points for question 3" }),
+    ).toBeTruthy();
+    expect(
+      within(sheet).getByRole("textbox", { name: "Feedback for question 3" }),
+    ).toBeTruthy();
+    expect(
+      within(sheet).getByRole("button", { name: "Save grades" }),
+    ).toBeTruthy();
+  },
+);

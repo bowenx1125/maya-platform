@@ -128,9 +128,7 @@ export function QuizEditor({
   const doneLock = useRef(false);
   const [error, setError] = useState<unknown>(null);
   const [takingOpen, setTakingOpen] = useState(false);
-  const [showResults, setShowResults] = useState<boolean | undefined>(
-    undefined,
-  );
+  const [showResults, setShowResults] = useState(false);
   const [takingEpoch, setTakingEpoch] = useState(0);
   const [exemptionCount, setExemptionCount] = useState(0);
   const [scheduledStartAt, setScheduledStartAt] = useState<string | null>(null);

@@ -256,7 +256,7 @@ export type QuizItemStudent = {
 
 /** Types mirror backend/app/modules/quiz/schemas.py (student projections). */
 export type StudentQuizDto = {
-  show_results?: boolean;
+  show_results: boolean;
   id: string;
   course_id: string;
   group_id: string | null;
@@ -278,7 +278,7 @@ export type StudentQuizDto = {
 };
 
 export type QuizSummary = {
-  show_results?: boolean;
+  show_results: boolean;
   id: string;
   course_id: string;
   group_id: string | null;
@@ -304,7 +304,7 @@ export type QuizSummary = {
 };
 
 export type QuizAttemptDto = {
-  show_results?: boolean;
+  show_results: boolean;
   id: string;
   quiz_id: string;
   course_id: string;
@@ -321,7 +321,7 @@ export type QuizAttemptDto = {
 
 /** Unified Record row for Quiz and legacy chat attempts. */
 export type RecordAttemptDto = {
-  show_results?: boolean;
+  show_results: boolean;
   source: "quiz" | "chat";
   attempt_id: string;
   user_id: string;

@@ -201,6 +201,34 @@ def test_results_toggle_requires_course_teacher_and_csrf(teacher, student, datab
     assert teacher.get(_path(quiz_id)).json()["show_results"] is False
 
 
+@pytest.mark.parametrize("initial_show_results", [False, True])
+def test_submit_uses_visibility_changed_during_grading(
+    teacher, student, monkeypatch, initial_show_results
+) -> None:
+    from app.modules.quiz import service
+
+    quiz_id = _create_publish_open(teacher, show_results=initial_show_results)
+    grade = service.grade_objective
+
+    def grade_and_toggle(*args, **kwargs):
+        result = grade(*args, **kwargs)
+        _set_results_visible(teacher, quiz_id, not initial_show_results)
+        return result
+
+    monkeypatch.setattr(service, "grade_objective", grade_and_toggle)
+    submitted = _submit(quiz_id, student)
+    assert submitted.status_code == 201, submitted.text
+    payload = submitted.json()
+    if initial_show_results:
+        _assert_hidden(payload)
+        for answer in payload["answers"]:
+            assert set(answer) <= {"item_id", "type", "choice_ids", "text"}
+    else:
+        assert payload["show_results"] is True
+        assert payload["score_objective"] == 3
+        assert payload["answers"][0]["correct"] is True
+
+
 @pytest.mark.parametrize(
     "body", [{}, {"show_results": None}, {"show_results": "false"}, {"show_results": 1}]
 )
@@ -359,8 +387,11 @@ def test_results_projection_survives_response_union_serialization(
     assert ("answer" in payload["items"][0]) is teacher_view
 
 
-@pytest.mark.parametrize("show_results", [False, True])
-def test_submit_redacts_receipt_without_changing_stored_grading(show_results, monkeypatch) -> None:
+@pytest.mark.parametrize("show_results", [False, True, None])
+@pytest.mark.parametrize("initial_show_results", [False, True])
+def test_submit_redacts_receipt_without_changing_stored_grading(
+    show_results, initial_show_results, monkeypatch
+) -> None:
     from types import SimpleNamespace
     from unittest.mock import Mock
 
@@ -372,7 +403,7 @@ def test_submit_redacts_receipt_without_changing_stored_grading(show_results, mo
     quiz = ClassroomQuiz(
         id=quiz_id,
         course_id=COURSE_ID,
-        show_results=show_results,
+        show_results=initial_show_results,
         status="published",
         taking_open=True,
         taking_epoch=1,
@@ -381,7 +412,14 @@ def test_submit_redacts_receipt_without_changing_stored_grading(show_results, mo
     )
     db = Mock(spec=Session)
     db.get.return_value = quiz
-    db.scalar.return_value = None
+
+    def scalar(statement):
+        if list(statement.selected_columns.keys()) == ["show_results"]:
+            db.commit.assert_called_once()
+            return show_results
+        return None
+
+    db.scalar.side_effect = scalar
     monkeypatch.setattr(service, "_require_member", lambda *_args: "student")
     receipt = service.submit_attempt(
         db,
@@ -405,7 +443,7 @@ def test_submit_redacts_receipt_without_changing_stored_grading(show_results, mo
     assert stored.grading_status == "mixed"
     assert json.loads(stored.answers_json)[0]["correct"] is True
     db.commit.assert_called_once()
-    assert receipt["show_results"] is show_results
+    assert receipt["show_results"] is (show_results is True)
     assert receipt["answers"][2]["text"] == "Own answer"
     assert receipt["answers"][3]["text"] == "Own extra answer"
     if show_results:

@@ -148,7 +148,7 @@ export function StudentQuizList({
         </li>
       ))}
       {results.map((row) => {
-        const hidden = row.show_results === false;
+        const hidden = row.show_results !== true;
         const expanded = openId === row.attempt_id;
         const graded = row.grading_status === "complete";
         const meta = [

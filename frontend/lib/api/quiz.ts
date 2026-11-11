@@ -49,7 +49,7 @@ export interface QuizSettings {
 }
 
 export interface QuizSummaryDTO {
-  show_results?: boolean;
+  show_results: boolean;
   id: string;
   course_id: string;
   group_id?: string | null;
@@ -108,7 +108,7 @@ export interface QuizAttemptItem {
 }
 
 export interface QuizAttemptDetail {
-  show_results?: boolean;
+  show_results: boolean;
   view: "teacher" | "student";
   id: string;
   quiz_id: string;

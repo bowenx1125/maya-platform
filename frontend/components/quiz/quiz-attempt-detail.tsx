@@ -174,7 +174,7 @@ export function QuizAttemptDetailView({
     );
   }
 
-  const resultsHidden = !teacher && detail.show_results === false;
+  const resultsHidden = !teacher && detail.show_results !== true;
   const gradable = teacher && detail.items.some(isText);
   // Objective points the server stored as wrong, when the paper has no key.
   const openKeyDelta = detail.items.reduce((sum, item) => {

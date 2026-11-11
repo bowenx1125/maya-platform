@@ -178,6 +178,8 @@ details carry `show_results` (legacy chat Record rows retain true).
 
 When false, student submission receipts return null aggregate scores and
 grading status; their answers contain only item IDs/types and chosen IDs/text.
+Submission reads visibility again after committing the attempt, so a teacher
+changing it during grading also controls that receipt.
 Student Record rows return null objective/AI scores, points, grading status
 and phase. Student attempt detail returns null scores, points, grading status
 and graded time; item correctness, awarded points, AI scores and feedback are
@@ -187,8 +189,22 @@ regardless of visibility. With true, the previous grading projections apply.
 
 Teacher papers, submissions, grading and ZIP exports retain their complete
 results in either state. Quiz has no notification/event or websocket score
-payload. The frontend visibility controls and null-aware rendering are a
-separate implementation step.
+payload; live and chat reports do not read classroom Quiz attempts.
+
+The teacher's published quiz banner has one optimistic switch capsule after
+Extend time and before Download: `Results hidden` (off, default) or
+`Results shown` (on), with rollback on failure. There is no duplicate banner
+sticker. Teacher list rows have only a cyan `Results shown` sticker with an eye
+icon while shown, including drafts; hidden rows have no visibility sticker.
+There are no question-mark icons or tooltips for this feature.
+
+Hidden student rows show a lime `Submitted` sticker and remain expandable.
+Their paper shows questions and the student's answers without correctness
+marks, row tints, Points/Feedback columns or a score header. Submission shows
+the existing `Submitted` sticker and `Your answers are in.`. The receipt's
+current visibility controls the submit screen; only explicit true enables
+student results, including when a visibility field is missing or malformed.
+Shown student behavior and teacher grading remain unchanged.
 
 ## Student answer isolation
 
