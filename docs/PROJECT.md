@@ -238,7 +238,7 @@ who missed prior speeches;mid-paragraph copies rewritten,not cut.
 
 Visits hide Knowledge,renew every 20 min,end with notice back to Accounts;Debate
 "?" shows Chinese help on hover. core/locks.py:all cross-process locks;SQLite gone.
-core/capacity.py scales CPU caps by cores/2; high load counts only if CPU busy ≥0.8.
+core/capacity.py:CPU caps×cores/2;high load needs CPU busy ≥0.8.
 Idle polls 30s; Agent lists carry card label/theme. Debate Rulesets state goals, not bans.
 Accounts: filter; Delete is real (DELETE /courses/{id}/members/{user}). Chat 429 →
 provider_rate_limited, 502/503/504/529 → provider_busy (one call). Ordinary Team members
@@ -274,12 +274,12 @@ Hard delete removes student-owned work/grades,including Quiz attempts.
 PR #390 merged. Local upgrade 0082→0087;build,1187 UI tests,82 focused passed.
 Full run@535d227:3073 pass/139 fail/1 skip.Main reproduced 135;four fixed.
 
-Nov10: classes Maya1002 and Maya1001, stable IDs, student data.
+Nov10:classes Maya1002/Maya1001,stable IDs,student data.
 Teacher scopes corrected;RAG actions follow class bar.
 47 PG, 1188 UI. Debates/Quizzes/Accounts; optional choice answer; no empty Agents card; large loader; chat omits missing group/editor.
 
-Nov11 code:teacher removals prune empty non-default groups;work FKs protect.
-Ruff/format/mypy pass;PG tests blocked:socket EPERM.0 calls/deploy.
+Nov11 code:teacher removals prune empty non-default groups;work FKs guard.
+Ruff/format/mypy OK;PG tests blocked:socket EPERM.0 calls/deploy.
 
 ## Nov10 Debate prompt v4 (supersedes Oct24 contract-in-Ruleset)
 
