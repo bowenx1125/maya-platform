@@ -146,6 +146,8 @@ _OPERATION_BUCKETS: Mapping[str, str] = MappingProxyType(
         "llm_maya_report": LLM_MAYA_REPORT_BUCKET,
         "llm_agent_chat": LLM_DEBATE_TURN_BUCKET,
         "llm_knowledge_generate": LLM_DEBATE_TURN_BUCKET,
+        # A Debate card is one more Debate model call, accounted beside its turns.
+        "llm_debate_card": LLM_DEBATE_TURN_BUCKET,
         "tts_synthesis": TTS_SYNTHESIS_BUCKET,
         "tts": TTS_SYNTHESIS_BUCKET,
         "voice_enrollment": VOICE_ENROLLMENT_BUCKET,
@@ -840,6 +842,7 @@ _LLM_MODEL_OPERATIONS = frozenset(
     {
         "llm_debate",
         "llm_debate_turn",
+        "llm_debate_card",
         "llm_maya_report",
         "llm_agent_chat",
         "llm_knowledge_generate",
@@ -851,7 +854,7 @@ def authorized_provider_model(provider_operation: str) -> str | None:
     """Embedding and speech stay pinned. LLM calls follow LLM_MODEL, Debates
     DEBATE_LLM_MODEL when it is set."""
 
-    if provider_operation in {"llm_debate", "llm_debate_turn"}:
+    if provider_operation in {"llm_debate", "llm_debate_turn", "llm_debate_card"}:
         # The same setting the Debate adapter sends (DEBATE_LLM_MODEL, else LLM_MODEL).
         from app.core.config import configured_debate_llm_model
 

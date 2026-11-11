@@ -23,6 +23,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.modules.debates.cards import voice_params_with_card
 from app.modules.debates.generation.segments import (
     SegmentProtocolError,
     StoredSegmentTurnResult,
@@ -258,7 +259,7 @@ class SqlAudioRegenerationRepository:
                     "t.publication_status, t.preparation_stage, t.speech, t.structured_json, "
                     "t.retrieval_receipts_json, t.transcript_hash, t.audio_file_id, "
                     "p.effective_voice_kind, "
-                    "p.effective_voice_profile_id "
+                    "p.effective_voice_profile_id, p.card_status, p.card_json "
                     "FROM debates AS d JOIN debate_turns AS t ON t.debate_id=d.id "
                     "JOIN debate_participants AS p ON p.id=t.participant_id "
                     "AND p.debate_id=d.id WHERE d.id=:debate_id AND t.id=:turn_id"
@@ -396,8 +397,11 @@ class SqlAudioRegenerationRepository:
             snapshot = json.loads(row["rule_snapshot_json"] or "{}")
         except ValueError:
             snapshot = {}
-        voice_params = frozen_voice_params(
-            snapshot if isinstance(snapshot, dict) else None, get_settings()
+        # A regenerated speech sounds like the first: the Agent's own card voice line.
+        voice_params = voice_params_with_card(
+            frozen_voice_params(snapshot if isinstance(snapshot, dict) else None, get_settings()),
+            row["card_status"],
+            row["card_json"],
         )
         return CachedSegmentTurn(
             voice_params=voice_params,

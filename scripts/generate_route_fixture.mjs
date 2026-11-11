@@ -125,6 +125,7 @@ const implemented = new Set([
   "replayDebate",
   "connectDebateEvents",
   "getDebateTranscript",
+  "getDebateDiagnostics",
   "streamRetainedTurnAudio",
   "listChatAgents",
   "listConversations",

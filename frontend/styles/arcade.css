@@ -73,7 +73,195 @@
   initial-value: 0%;
 }
 
+/* Unlayered so tile states override the labels' Tailwind shadow utilities. */
+.upload-tile {
+  --upload-rest: 8px 8px 0 #111;
+  --upload-sunk: 0 0 0 #111;
+  --upload-sink: 8px 8px;
+  --upload-spinner-size: 44px;
+  --upload-spinner-border: 5px;
+  --upload-spinner-margin: -22px;
+  --upload-bob: -5px;
+  transition:
+    translate 150ms var(--arc-ease),
+    box-shadow 150ms var(--arc-ease);
+}
+.upload-tile[data-kind="knowledge"] {
+  --upload-rest: 6px 6px 0 #111;
+  --upload-sink: 6px 6px;
+  --upload-spinner-size: 36px;
+  --upload-spinner-border: 4px;
+  --upload-spinner-margin: -18px;
+  --upload-bob: -4px;
+}
+@media (max-width: 960px) {
+  .upload-tile[data-kind="knowledge"] {
+    --upload-spinner-size: 28px;
+    --upload-spinner-border: 3px;
+    --upload-spinner-margin: -14px;
+  }
+}
+.upload-tile[data-has-file="true"] {
+  --upload-rest: 8px 8px 0 #111, 0 0 0 10px #a3e635;
+  --upload-sunk: 0 0 0 0 #111, 0 0 0 10px #a3e635;
+}
+.upload-tile > .upload-tile-disc {
+  transition: filter 150ms var(--arc-ease);
+}
+.upload-tile:not(
+    :has(> input:disabled),
+    [aria-busy="true"],
+    [data-drag="over"]
+  ):hover {
+  translate: 0 -2px;
+}
+.upload-tile:not(
+    :has(> input:disabled),
+    [aria-busy="true"],
+    [data-drag="over"]
+  ):hover
+  > .upload-tile-disc {
+  filter: brightness(1.08);
+}
+.upload-tile:not(
+    :has(> input:disabled),
+    [aria-busy="true"],
+    [data-drag="over"]
+  ):active {
+  translate: var(--upload-sink);
+  box-shadow: var(--upload-sunk);
+  transition-duration: 80ms;
+}
+.upload-tile:not(
+    :has(> input:disabled),
+    [aria-busy="true"],
+    [data-drag="over"]
+  ):active
+  > .upload-tile-disc {
+  filter: brightness(0.94);
+}
+.upload-tile:has(> input:disabled) {
+  cursor: not-allowed;
+}
+.upload-tile:has(> input:focus-visible) {
+  outline: 3px solid #111;
+  outline-offset: 5px;
+}
+.upload-tile[data-has-file="true"]:has(> input:focus-visible) {
+  outline-offset: 16px;
+}
+
+@keyframes upload-tile-pulse {
+  from {
+    outline-offset: 8px;
+  }
+  to {
+    outline-offset: 14px;
+  }
+}
+@keyframes upload-tile-bob {
+  50% {
+    translate: 0 var(--upload-bob);
+  }
+}
+@keyframes upload-tile-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.upload-tile[data-drag="over"]:not(:has(> input:disabled)) {
+  translate: 0 -4px;
+  outline: 4px dashed #111;
+  outline-offset: 10px;
+  animation: upload-tile-pulse 700ms ease-in-out infinite alternate;
+}
+.upload-tile[data-drag="over"] > .upload-tile-disc {
+  background: #a3e635;
+  filter: none;
+}
+.upload-tile[data-drag="over"] > .upload-tile-disc > svg {
+  animation: upload-tile-bob 700ms ease-in-out infinite;
+}
+
+.upload-tile[aria-busy="true"],
+.upload-tile[aria-busy="true"]:hover,
+.upload-tile[aria-busy="true"]:active {
+  translate: var(--upload-sink);
+  box-shadow: var(--upload-sunk);
+  cursor: progress;
+  outline: 0;
+  animation: none;
+}
+.upload-tile[aria-busy="true"] > .upload-tile-disc {
+  position: relative;
+  filter: none;
+  background: linear-gradient(90deg, #ffe14d var(--p, 0%), #fff 0);
+  animation: debate-fill 1.6s ease-in-out infinite;
+}
+.upload-tile[aria-busy="true"] > .upload-tile-disc > svg {
+  opacity: 0;
+}
+.upload-tile[aria-busy="true"] > .upload-tile-disc::after {
+  content: "";
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: var(--upload-spinner-size);
+  height: var(--upload-spinner-size);
+  margin: var(--upload-spinner-margin) 0 0 var(--upload-spinner-margin);
+  border-radius: 50%;
+  border: var(--upload-spinner-border) solid #111;
+  border-top-color: transparent;
+  animation: upload-tile-spin 900ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upload-tile,
+  .upload-tile > .upload-tile-disc {
+    transition: none;
+  }
+  .upload-tile:hover,
+  .upload-tile:active {
+    translate: 0 0 !important;
+    box-shadow: var(--upload-rest) !important;
+  }
+  .upload-tile[data-drag="over"] {
+    translate: 0 0 !important;
+    animation: none;
+    outline-offset: 12px;
+  }
+  .upload-tile[data-drag="over"] > .upload-tile-disc > svg {
+    animation: none;
+  }
+  .upload-tile[aria-busy="true"],
+  .upload-tile[aria-busy="true"]:hover,
+  .upload-tile[aria-busy="true"]:active {
+    translate: var(--upload-sink) !important;
+    box-shadow: var(--upload-sunk) !important;
+  }
+  .upload-tile[aria-busy="true"] > .upload-tile-disc {
+    animation: none;
+    background: #fff7cc;
+  }
+  .upload-tile[aria-busy="true"] > .upload-tile-disc > svg {
+    opacity: 1;
+  }
+  .upload-tile[aria-busy="true"] > .upload-tile-disc::after {
+    display: none;
+  }
+}
+
 @theme inline {
+  --animate-skeleton-pulse: skeleton-pulse 1.2s ease-in-out infinite;
+  @keyframes skeleton-pulse {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
   /* Audience controller (approved 02-audience A). Every use sits under the
      page root's motion-reduce:[&_*]:animate-none. */
   --animate-aud-blink: aud-blink 1.2s steps(2) infinite;

@@ -1763,8 +1763,12 @@ class PlaybackCore:
                 except RuntimeError:
                     pass
 
-    def _voice_params(self, debate: Any) -> dict[str, Any]:
-        """The Debate's frozen rate / instruction / seed (DEBATE_TTS_* if none froze)."""
+    def _voice_params(self, debate: Any, db: Any = None, participant: Any = None) -> dict[str, Any]:
+        """The Debate's frozen rate / instruction / seed (DEBATE_TTS_* if none froze).
+
+        With a participant, its ready debate card's own voice line replaces the
+        Debate-level instruction.
+        """
 
         from app.core.config import Settings, get_settings
         from app.modules.debates.generation_params import frozen_voice_params
@@ -1775,7 +1779,13 @@ class PlaybackCore:
         except ValueError:
             snapshot = None
         settings = self.settings if isinstance(self.settings, Settings) else get_settings()
-        return frozen_voice_params(snapshot if isinstance(snapshot, dict) else None, settings)
+        params = frozen_voice_params(snapshot if isinstance(snapshot, dict) else None, settings)
+        participant_id = self._get(participant, "id", default=None)
+        if db is None or participant_id is None:
+            return params
+        from app.modules.debates.cards import participant_voice_params
+
+        return participant_voice_params(db, participant_id, params)
 
     def _warm_compressed(self, debate_id: str, turn_id: str) -> None:
         """Encode a ready speech's MP3 copy in the background (best effort).

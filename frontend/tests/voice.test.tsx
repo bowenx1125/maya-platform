@@ -1095,6 +1095,196 @@ describe("Agent voice picker", () => {
 });
 
 describe("Voices album create (p2-tab)", () => {
+  it.each([false, true])(
+    "uses the same picked/dropped file and busy state (album=%s)",
+    async (album) => {
+      api.voiceProfiles.mockResolvedValue([]);
+      let finish!: (value: unknown) => void;
+      api.enrollVoice.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      render(
+        <VoiceLibrary groupId="group-a" album={album} embedded={!album} />,
+      );
+      await waitFor(() =>
+        expect(
+          (screen.getByRole("button", { name: "New" }) as HTMLButtonElement)
+            .disabled,
+        ).toBe(false),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "New" }));
+      const input = screen.getByLabelText(/10–20 second/) as HTMLInputElement;
+      const tile = input.closest("label")!;
+      const picked = new File(["sample"], "picked.wav", { type: "audio/wav" });
+      fireEvent.change(input, { target: { files: [picked] } });
+      expect(within(tile).getByText("picked.wav")).toBeTruthy();
+      const dropped = new File(["sample"], "dropped.wav");
+      const dataTransfer = {
+        types: ["Files"],
+        files: [dropped],
+        dropEffect: "none",
+      };
+      fireEvent.dragEnter(tile, { dataTransfer });
+      expect(tile.getAttribute("data-drag")).toBe("over");
+      fireEvent.dragLeave(tile, { dataTransfer, relatedTarget: document.body });
+      expect(tile.hasAttribute("data-drag")).toBe(false);
+      fireEvent.dragOver(tile, { dataTransfer });
+      expect(tile.getAttribute("data-drag")).toBe("over");
+      fireEvent.drop(tile, { dataTransfer });
+      expect(tile.hasAttribute("data-drag")).toBe(false);
+      expect(within(tile).getByText("dropped.wav")).toBeTruthy();
+      expect(within(tile).queryByText("picked.wav")).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", { name: album ? "Done" : CONSENT }),
+      );
+      expect(tile.getAttribute("aria-busy")).toBe("true");
+      expect(tile.getAttribute("data-has-file")).toBe("true");
+      expect(within(tile).queryByText("dropped.wav")).toBeNull();
+      expect(tile.querySelector(".upload-tile-disc > svg")).toBeTruthy();
+      expect(input.disabled).toBe(true);
+      expect(api.enrollVoice.mock.calls.at(-1)?.[1]).toBe(dropped);
+      expect(
+        fireEvent.drop(tile, {
+          dataTransfer: { types: ["Files"], files: [picked] },
+        }),
+      ).toBe(false);
+      expect(within(tile).queryByText("picked.wav")).toBeNull();
+      expect(within(tile).queryByText("dropped.wav")).toBeNull();
+      expect(api.enrollVoice).toHaveBeenCalledTimes(1);
+      expect(api.enrollVoice.mock.calls.at(-1)?.[1]).toBe(dropped);
+      await act(async () => {
+        finish({
+          id: "new-voice",
+          status: "ready",
+          source_filename: dropped.name,
+        });
+      });
+      expect(await screen.findByText("Created")).toBeTruthy();
+    },
+  );
+
+  it.each([false, true])(
+    "rejects invalid audio picks and drops without replacing the file (album=%s)",
+    async (album) => {
+      api.voiceProfiles.mockResolvedValue([]);
+      render(
+        <VoiceLibrary
+          groupId="group-a"
+          album={album}
+          embedded={!album}
+          initialCreate
+        />,
+      );
+      const input = (await screen.findByLabelText(
+        /10–20 second/,
+      )) as HTMLInputElement;
+      const tile = input.closest("label")!;
+      const submit = () =>
+        screen.getByRole("button", { name: album ? "Done" : CONSENT });
+      const picked = new File(["sample"], "picked.wav", { type: "audio/wav" });
+      const invalid = new File(["wrong"], "wrong.pdf", {
+        type: "application/pdf",
+      });
+      for (const method of ["pick", "drop"]) {
+        const reject = () => {
+          if (method === "pick")
+            fireEvent.change(input, { target: { files: [invalid] } });
+          else
+            fireEvent.drop(tile, {
+              dataTransfer: { types: ["Files"], files: [invalid] },
+            });
+        };
+        reject();
+        expect(
+          screen.getByText("Choose a .wav, .mp3, or .m4a audio file."),
+        ).toBeTruthy();
+        expect(within(tile).queryByText("wrong.pdf")).toBeNull();
+        expect((submit() as HTMLButtonElement).disabled).toBe(true);
+        fireEvent.click(submit());
+        expect(api.enrollVoice).not.toHaveBeenCalled();
+
+        fireEvent.change(input, { target: { files: [picked] } });
+        expect(
+          screen.queryByText("Choose a .wav, .mp3, or .m4a audio file."),
+        ).toBeNull();
+        reject();
+        expect(
+          screen.getByText("Choose a .wav, .mp3, or .m4a audio file."),
+        ).toBeTruthy();
+        expect(within(tile).getByText("picked.wav")).toBeTruthy();
+        expect(within(tile).queryByText("wrong.pdf")).toBeNull();
+        expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+        expect(api.enrollVoice).not.toHaveBeenCalled();
+        fireEvent.change(input, { target: { files: [] } });
+        expect(within(tile).queryByText("picked.wav")).toBeNull();
+      }
+    },
+  );
+
+  it.each(["pick", "drop"])(
+    "accepts audio extensions or browser MIME aliases on %s",
+    async (method) => {
+      api.voiceProfiles.mockResolvedValue([]);
+      render(<VoiceLibrary groupId="group-a" album initialCreate />);
+      const input = await screen.findByLabelText(/10–20 second/);
+      const tile = input.closest("label")!;
+      for (const [name, type] of [
+        ["sample.WAV", ""],
+        ["sample.MP3", "application/octet-stream"],
+        ["sample.M4A", ""],
+        ...[
+          "audio/wav",
+          "audio/x-wav",
+          "audio/wave",
+          "audio/mpeg",
+          "audio/mp3",
+          "audio/mp4",
+          "audio/x-m4a",
+          "audio/m4a",
+        ].map((type) => ["sample.unknown", type]),
+      ]) {
+        const file = new File(["sample"], name, { type });
+        if (method === "pick")
+          fireEvent.change(input, { target: { files: [file] } });
+        else
+          fireEvent.drop(tile, {
+            dataTransfer: { types: ["Files"], files: [file] },
+          });
+        expect(within(tile).getByText(name)).toBeTruthy();
+        expect(
+          screen.queryByText("Choose a .wav, .mp3, or .m4a audio file."),
+        ).toBeNull();
+        expect(
+          (screen.getByRole("button", { name: "Done" }) as HTMLButtonElement)
+            .disabled,
+        ).toBe(false);
+      }
+      expect(api.enrollVoice).not.toHaveBeenCalled();
+    },
+  );
+
+  it("ignores drops when the parent disables the Voices create tile", async () => {
+    api.voiceProfiles.mockResolvedValue([]);
+    render(<VoiceLibrary groupId="group-a" album initialCreate disabled />);
+    const input = (await screen.findByLabelText(
+      /10–20 second/,
+    )) as HTMLInputElement;
+    const tile = input.closest("label")!;
+    const dataTransfer = {
+      types: ["Files"],
+      files: [new File(["sample"], "ignored.wav")],
+    };
+    expect(input.disabled).toBe(true);
+    expect(fireEvent.dragOver(tile, { dataTransfer })).toBe(false);
+    expect(tile.hasAttribute("data-drag")).toBe(false);
+    expect(fireEvent.drop(tile, { dataTransfer })).toBe(false);
+    expect(within(tile).queryByText("ignored.wav")).toBeNull();
+    expect(api.enrollVoice).not.toHaveBeenCalled();
+  });
+
   it("labels the sample requirement and wires Done to it and the consent", async () => {
     api.voiceProfiles.mockResolvedValue([]);
     render(

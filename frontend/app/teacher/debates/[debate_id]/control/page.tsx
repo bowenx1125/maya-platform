@@ -1,9 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { DEBATE_BUTTON } from "../../../../../components/debate/debate-chrome";
 import { DebatePreview } from "../../../../../components/debate/preview";
+import { IconEye } from "../../../../../components/quiet-icons";
 import { AppShell } from "../../../../../components/app-shell";
 import { PageAction } from "../../../../../components/page-action";
 import {
@@ -186,6 +189,16 @@ export default function TeacherDebateControlPage() {
             onRetryTurn={(turnIds) => void retryPreviewTurns(turnIds)}
             retryingTurnId={retryingPreviewTurnId}
             openClassroomHref={immerseControlHref(debateId)}
+            actions={
+              <Link
+                className={DEBATE_BUTTON}
+                href={`/teacher/debates/${encodeURIComponent(debateId)}/diagnostics`}
+                data-testid="debate-diagnostics-link"
+              >
+                <IconEye size={18} />
+                Diagnostics
+              </Link>
+            }
           />
         ) : null}
       </AppShell>

@@ -652,6 +652,29 @@ export function VoiceLibrary({
     setFile(null);
   }
 
+  function selectVoiceFile(file: File | undefined) {
+    if (
+      file &&
+      !/\.(wav|mp3|m4a)$/i.test(file.name) &&
+      ![
+        "audio/wav",
+        "audio/x-wav",
+        "audio/wave",
+        "audio/mpeg",
+        "audio/mp3",
+        "audio/mp4",
+        "audio/x-m4a",
+        "audio/m4a",
+      ].includes(file.type)
+    ) {
+      setFailure({ cause: new Error(t("voiceAudioRequired")), retry: null });
+      return;
+    }
+    idempotency.abandon("voice-enroll");
+    setFailure(null);
+    setFile(file ?? null);
+  }
+
   // The album's record player; its consent card is the create button here.
   // No sidebar Done, and the sidebar never changes while this panel is open.
   const form = (
@@ -666,6 +689,9 @@ export function VoiceLibrary({
         />
       ) : null}
       <VoiceAlbumCreate
+        busy={busy}
+        disabled={controlsDisabled}
+        onFile={selectVoiceFile}
         fileName={file?.name ?? null}
         requirement={t("voiceSampleFile")}
         consent={t("voiceConsent")}
@@ -682,13 +708,11 @@ export function VoiceLibrary({
             disabled={controlsDisabled}
             accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
             onChange={(event) => {
-              idempotency.abandon("voice-enroll");
-              setFailure(null);
-              setFile(event.target.files?.[0] ?? null);
+              selectVoiceFile(event.currentTarget.files?.[0]);
               // Browsers fire change only when the chosen path differs, so
               // re-picking an edited file with the same name after a failure
               // would silently keep the stale File. Reset so every pick fires.
-              event.target.value = "";
+              event.currentTarget.value = "";
             }}
             aria-label={t("voiceSampleFile")}
             aria-describedby="voice-sample-req"
@@ -1223,6 +1247,9 @@ export function VoiceLibrary({
             />
           ) : null}
           <VoiceAlbumCreate
+            busy={busy}
+            disabled={controlsDisabled}
+            onFile={selectVoiceFile}
             fileName={file?.name ?? null}
             requirement={t("voiceSampleFile")}
             consent={t("voiceConsent")}
@@ -1233,10 +1260,8 @@ export function VoiceLibrary({
                 disabled={controlsDisabled}
                 accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
                 onChange={(event) => {
-                  idempotency.abandon("voice-enroll");
-                  setFailure(null);
-                  setFile(event.target.files?.[0] ?? null);
-                  event.target.value = "";
+                  selectVoiceFile(event.currentTarget.files?.[0]);
+                  event.currentTarget.value = "";
                 }}
                 aria-label={t("voiceSampleFile")}
                 aria-describedby="voice-sample-req"

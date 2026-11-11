@@ -276,6 +276,33 @@ class RetrievalSource(_ClosedModel):
     chunk_id: UUID = None  # type: ignore[assignment]
 
 
+DebateCardDropReason = Literal[
+    "length_limit",
+    "language_choice",
+    "output_format",
+    "debate_procedure",
+    "duplicate_translation",
+]
+
+
+class DebateCardDrop(_ClosedModel):
+    """AGENT.md content the card left out, and why."""
+
+    excerpt: str
+    reason: DebateCardDropReason
+
+
+class DebateCard(_ClosedModel):
+    """The persona compiled once from the participant's frozen AGENT.md."""
+
+    identity: str
+    position: str
+    reasoning: list[str]
+    speaking_style: str
+    voice_style: str | None
+    dropped: list[DebateCardDrop]
+
+
 class DebateParticipant(_ClosedModel):
     """Frozen participant display projection, without supplier metadata."""
 
@@ -294,6 +321,10 @@ class DebateParticipant(_ClosedModel):
     initial_stance: Stance | None = None
     current_stance: Stance | None = None
     current_position_summary: str = ""
+    # Null for a Debate created before cards. "fallback" means the turns send
+    # the original AGENT.md; only "ready" carries a card.
+    card_status: Literal["compiling", "ready", "fallback"] | None = None
+    card: DebateCard | None = None
 
 
 class DebateStall(_ClosedModel):
