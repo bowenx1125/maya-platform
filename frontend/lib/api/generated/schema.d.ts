@@ -4015,6 +4015,7 @@ export interface components {
             quoted: number;
             paraphrased: number;
             not_found: number;
+            other_language: number;
         };
         AgentDiagnostic: {
             participant_id: string;
@@ -4056,7 +4057,7 @@ export interface components {
             /** @enum {string|null} */
             self_label: "direct" | "contextual" | "no_match" | null;
             /** @enum {string|null} */
-            grounding_class: "quoted" | "paraphrased" | "not_found" | null;
+            grounding_class: "quoted" | "paraphrased" | "not_found" | "other_language" | null;
             coverage: number | null;
             longest_run: number | null;
         };

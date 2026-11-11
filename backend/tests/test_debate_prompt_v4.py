@@ -22,6 +22,7 @@ from app.modules.debates.generation.segments import (
     SegmentInputSnapshot,
     SegmentProtocolError,
     build_segment_input,
+    self_repetition_ratio,
     validate_segment_output,
 )
 from app.modules.debates.generation.types import ParticipantContext
@@ -244,8 +245,9 @@ def test_v4_prompt_has_only_this_rounds_task_and_fields(language: str, round_num
     assert ("B 编号" in system or "B ID" in system) == (round_number == 4)
     assert "{round}" not in system
     # Every rule the server enforces is stated.
-    for token in ("task.max_units", "40%", "35%", "task.round_task"):
+    for token in ("task.max_units", "40%", "task.round_task"):
         assert token in system, token
+    assert "四分之一时" in system or "by more than a quarter" in system
 
 
 @pytest.mark.parametrize("language", ["zh", "en"])
@@ -287,15 +289,13 @@ def test_task_group_names_real_targets_and_keeps_cyclic_order() -> None:
     # Bao (index 1) questions the next Agent, exactly as question_target_id says.
     assert payload["discussion"]["question_target_id"] == "participant-2"
     assert payload["task"]["round_task"].startswith(
-        "Rebut Chen's opening and end the speech by asking Chen one question. Use at most "
+        "Rebut Chen's opening and end the speech by asking Chen one question. Use "
     )
     # A question put to this speaker earlier in round 2 waits for round 3.
     assert payload["discussion"]["received_questions"] == []
     third = _snapshot(_v4_context(3, "zh", speaker=1))
     assert third.task is not None
-    assert third.task["round_task"].startswith(
-        "回答Ada向你提的问题，再就一个观点提出反驳。全文不超过"
-    )
+    assert third.task["round_task"].startswith("回答Ada向你提的问题，再就一个观点提出反驳。写")
     assert _snapshot(_v4_context(1, speaker=0)).task["round_task"].startswith("State your own")
 
 
@@ -303,7 +303,8 @@ def test_task_group_carries_cap_and_assigned_stance_but_no_teacher_note() -> Non
     snapshot = _snapshot(_v4_context(1, stance="oppose"))
     assert snapshot.task == {
         "round_task": (
-            "State your own judgment on the Topic and your reason. Use at most 3 sentences."
+            "State your own judgment on the Topic and your reason. "
+            "Use 3 to 4 sentences and come close to max_units."
         ),
         "max_units": 60,
         "stance": "oppose the Topic's claim",
@@ -591,3 +592,24 @@ def test_round_two_question_missing_from_the_speech_is_added_as_its_last_sentenc
     assert silent.lineage[-1].end_offset == len(silent.speech)
     spoken = _output(f"{_sentences(2)} {question}", question=question)
     assert validate_segment_output(spoken, snapshot).speech.count(question) == 1
+
+
+def test_a_reworded_repeat_is_caught_and_an_older_contract_keeps_its_stated_rule() -> None:
+    own = (
+        "它没朋友、不会痛、不改过，只算闻见之知，非良知。我讲知行合一：真知必能行，做不到就是未知。"
+    )
+    reworded = (
+        "孔子说它没修德行，我补一句：知行合一，做不到就是未知。"
+        "它无朋友、不会痛、不改过，只算闻见之知，非良知。"
+    )
+    ctx = _v4_context(2, speaker=0, language="zh", speeches={0: own})
+    snapshot = _snapshot(ctx)
+    with pytest.raises(SegmentProtocolError) as caught:
+        validate_segment_output(_output(reworded), snapshot)
+    assert caught.value.code == "segment_self_repetition"
+    # A Debate frozen while the contract said 35% over 8-grams is held to that.
+    stated = replace(
+        snapshot, frozen_system_prompt=(snapshot.frozen_system_prompt or "") + " 重合超过 35% 时"
+    )
+    assert self_repetition_ratio(reworded, [own], "zh", legacy=True) <= 0.35
+    assert validate_segment_output(_output(reworded), stated).speech

@@ -40,6 +40,7 @@ const SERVER_LABEL: Record<
   quoted: "Quoted",
   paraphrased: "Paraphrased",
   not_found: "Not found",
+  other_language: "Source in another language, not measured",
 };
 
 const STAT =
@@ -158,6 +159,11 @@ function AgentCard({
           Quoted {counts.quoted} · Paraphrased {counts.paraphrased} · Not found{" "}
           {counts.not_found}
         </span>
+        {counts.other_language > 0 ? (
+          <span className={STAT} data-testid="agent-other-language">
+            {counts.other_language} not measured: source in another language
+          </span>
+        ) : null}
       </div>
 
       {slot ? (
@@ -271,7 +277,9 @@ function RoundRow({ round, unit }: { round: RoundDiagnostic; unit: string }) {
                   : "none recorded"}{" "}
                 · Server:{" "}
                 {paragraph.grounding_class
-                  ? `${SERVER_LABEL[paragraph.grounding_class]} (${percent(paragraph.coverage)})`
+                  ? paragraph.grounding_class === "other_language"
+                    ? SERVER_LABEL.other_language
+                    : `${SERVER_LABEL[paragraph.grounding_class]} (${percent(paragraph.coverage)})`
                   : "no source cited"}
               </li>
             ))}

@@ -10226,12 +10226,15 @@ components:
       - quoted
       - paraphrased
       - not_found
+      - other_language
       properties:
         quoted:
           type: integer
         paraphrased:
           type: integer
         not_found:
+          type: integer
+        other_language:
           type: integer
     AgentDiagnostic:
       type: object
@@ -10382,6 +10385,7 @@ components:
           - quoted
           - paraphrased
           - not_found
+          - other_language
           - null
         coverage:
           anyOf:
