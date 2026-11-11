@@ -45,6 +45,51 @@
   margin-bottom: 16px;
 }
 
+.groupsHead {
+  flex-wrap: wrap;
+}
+
+.groupSort {
+  flex: 0 0 auto;
+  margin-left: auto;
+  text-align: right;
+}
+
+.sortKey {
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 3px solid #111;
+  border-radius: 10px;
+  background: #fff;
+  color: #111;
+  font-family: var(--font-lexend, "Lexend", sans-serif);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sortKey:hover,
+.sortKey:active {
+  background: #fff7cc;
+}
+
+.sortKey:focus-visible {
+  outline: 3px solid var(--ring, #ff4d8d);
+  outline-offset: 3px;
+}
+
+@media (max-width: 390px) {
+  .groupSort {
+    flex-basis: 100%;
+  }
+}
+
 .tapeTitle {
   margin: 0;
   display: inline-block;
@@ -411,7 +456,17 @@
   border: 2px solid #111;
 }
 
+.polarNameRow {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 .polarName {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-family: var(
     --font-display,
     "Bricolage Grotesque",
@@ -421,6 +476,31 @@
   font-size: 16px;
   font-weight: 800;
   text-align: center;
+}
+
+.studentCount {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 42px;
+  padding: 4px 7px;
+  border: 2px solid #111;
+  border-radius: 999px;
+  background: #a3e635;
+  color: #111;
+  font-family: var(
+    --font-display,
+    "Bricolage Grotesque",
+    system-ui,
+    sans-serif
+  );
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .polarArrow {
