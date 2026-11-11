@@ -19,6 +19,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
+from tests.conftest import complete_student_login
 from tests.test_mayaform_team_conversations import _create, _make_agent_version
 
 
@@ -54,6 +55,7 @@ def sign_in(client: TestClient, username: str) -> tuple[dict[str, Any], dict[str
     response = client.post(
         "/api/v1/auth/login", json={"username": username, "password": "test-class-password"}
     )
+    response = complete_student_login(client, response)
     assert response.status_code == 200, response.text
     body = response.json()
     return body, {"Origin": "http://testserver", "X-CSRF-Token": body["csrf_token"]}

@@ -152,6 +152,7 @@ input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
 h2[data-ui-guide]:focus-visible,
+.login-choice-title:focus-visible,
 summary:focus-visible {
   outline: 3px solid rgba(84, 73, 166, 0.35);
   outline-offset: 3px;
@@ -2029,15 +2030,22 @@ dd {
   margin: 0 auto;
 }
 
-/* The page heading is the speech bubble; the forms' own headings stay for
-   screen readers only. */
-.auth-arcade .login-panel > h2 {
+/* The page heading is the speech bubble; credential headings stay for screen
+   readers only. The chooser names a new step, so it stays visible. */
+.auth-arcade .login-panel > h2:not(.login-choice-title) {
   position: absolute;
   width: 1px;
   height: 1px;
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+.login-panel > h2.login-choice-title {
+  color: #111;
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.25;
 }
 
 .auth-arcade .login-panel {

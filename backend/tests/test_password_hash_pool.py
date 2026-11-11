@@ -13,7 +13,7 @@ import pytest
 from app.core import hash_gate
 from app.core.config import Settings
 from app.core.errors import PlatformError
-from app.core.models import Base, SessionRecord, User
+from app.core.models import Base, Course, SessionRecord, User
 from app.modules.auth import profile, registration
 from app.modules.auth.models import UserCredential
 from sqlalchemy import create_engine, select, text
@@ -63,7 +63,13 @@ def password_database(
             with engine.connect() as connection:
                 assert connection.scalar(text("SELECT current_schema()")) == schema_name
         Base.metadata.create_all(
-            engine, tables=[User.__table__, UserCredential.__table__, SessionRecord.__table__]
+            engine,
+            tables=[
+                User.__table__,
+                Course.__table__,
+                UserCredential.__table__,
+                SessionRecord.__table__,
+            ],
         )
         yield engine, sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     finally:

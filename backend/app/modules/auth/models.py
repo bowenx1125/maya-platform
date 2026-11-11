@@ -43,6 +43,20 @@ class DemoAccountBinding(Base):
     )
 
 
+class LoginIdentityChallenge(Base):
+    __tablename__ = "login_identity_challenges"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    client_fingerprint_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_login_identity_challenges_expires_at", "expires_at"),)
+
+
 class UserCredential(Base):
     """Database-stored credential for a registered or updated account.
 

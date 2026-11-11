@@ -27,7 +27,13 @@ def test_wave0_openapi_security_and_contract_surface() -> None:
     }
 
     expected: dict[str, tuple[Any, ...]] = {
-        "/auth/login": ("post", "login", [], {"200", "401", "403", "413", "429"}),
+        "/auth/login": ("post", "login", [], {"200", "202", "401", "403", "413", "429"}),
+        "/auth/identity-choice": (
+            "post",
+            "chooseLoginIdentity",
+            [],
+            {"200", "401", "403", "422", "429"},
+        ),
         "/auth/register": (
             "post",
             "registerStudent",
@@ -79,12 +85,17 @@ def test_wave0_openapi_security_and_contract_surface() -> None:
         assert operation["operationId"] == operation_id
         assert operation["security"] == security
         assert set(operation["responses"]) == statuses
-        for status_code in statuses - {"200", "201", "204"}:
+        for status_code in statuses - {"200", "201", "202", "204"}:
             response = operation["responses"][status_code]
             content = response.get("content")
             if content is not None:
                 assert content["application/json"]["schema"]["$ref"] == "#/components/schemas/Error"
 
+    login_responses = document["paths"]["/auth/login"]["post"]["responses"]
+    for status_code, model in (("200", "AuthSession"), ("202", "LoginIdentityChoice")):
+        assert login_responses[status_code]["content"]["application/json"]["schema"] == {
+            "$ref": f"#/components/schemas/{model}"
+        }
     login_body = document["paths"]["/auth/login"]["post"]["requestBody"]
     assert login_body["required"] is True
     assert (

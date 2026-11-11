@@ -33,25 +33,30 @@ paths:
   /conversations:
     get:
       operationId: listConversations
-      description: >-
-        The caller's own non-withdrawn Chats in courses they belong to, newest
-        first. Optional filters narrow the list; without them the list is
-        unchanged. Invalid filter values return 422 conversation_filter_invalid.
+      description: The caller's own non-withdrawn Chats in courses they belong to, newest first. Optional
+        filters narrow the list; without them the list is unchanged. Invalid filter values return 422
+        conversation_filter_invalid.
       parameters:
       - in: query
         name: entry_kind
         required: false
         description: agent, or team (Team and Maya Team Chats). Omit for all.
         schema:
-          type: [string, 'null']
-          enum: [agent, team]
+          type:
+          - string
+          - 'null'
+          enum:
+          - agent
+          - team
           title: Entry Kind
       - in: query
         name: course_id
         required: false
         description: Only Chats in this course.
         schema:
-          type: [string, 'null']
+          type:
+          - string
+          - 'null'
           format: uuid
           title: Course Id
       responses:
@@ -1184,12 +1189,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthSession'
+        '202':
+          description: Choose the login identity; no session cookie is issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginIdentityChoice'
         '401':
           $ref: '#/components/responses/Error'
         '403':
           $ref: '#/components/responses/Error'
         '413':
           description: The production gateway rejected an oversized authentication request.
+        '429':
+          $ref: '#/components/responses/Error'
+  /auth/identity-choice:
+    post:
+      tags:
+      - Auth
+      security: []
+      operationId: chooseLoginIdentity
+      description: Consume a five-minute, client-bound Bowen login choice once. Maya rejects course_id;
+        student requires one of the two server-provisioned classes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginIdentityChoiceRequest'
+      responses:
+        '200':
+          description: Session created for the chosen identity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSession'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
         '429':
           $ref: '#/components/responses/Error'
   /auth/switch:
@@ -1315,14 +1355,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthSession'
-        '409':
-          $ref: '#/components/responses/Error'
-        '422':
-          $ref: '#/components/responses/Error'
         '403':
+          $ref: '#/components/responses/Error'
+        '409':
           $ref: '#/components/responses/Error'
         '413':
           description: The production gateway rejected an oversized authentication request.
+        '422':
+          $ref: '#/components/responses/Error'
         '429':
           $ref: '#/components/responses/Error'
   /auth/me:
@@ -1379,7 +1419,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: This account's name or group comes from the course's account list, or it is not a student's.
+          description: This account's name or group comes from the course's account list, or it is not
+            a student's.
       security:
       - sessionCookie: []
       summary: Update Current User
@@ -1550,10 +1591,8 @@ paths:
       tags:
       - Organization
       operationId: deleteCourseMember
-      description: >-
-        Delete a self-registered member: the account, its sign-in and memberships,
-        and its private chats, Teams, Agents and RAG. Shared work, grades and
-        records stay.
+      description: 'Delete a self-registered member: the account, its sign-in and memberships, and its
+        private chats, Teams, Agents and RAG. Shared work, grades and records stay.'
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
@@ -1588,10 +1627,9 @@ paths:
       tags:
       - Organization
       operationId: getGroupOverview
-      description: >-
-        Members, formal test results and recent work of a group, for a course teacher.
-        Formal attempts are included without entering the group. Private Agents, Teams,
-        RAG and voices are included only after the teacher enters, and only to read.
+      description: Members, formal test results and recent work of a group, for a course teacher. Formal
+        attempts are included without entering the group. Private Agents, Teams, RAG and voices are included
+        only after the teacher enters, and only to read.
       responses:
         '200':
           description: Members, test results and recent work.
@@ -2140,7 +2178,8 @@ paths:
       - name: expected_base_version_id
         in: query
         required: false
-        description: Published version the editor started from. When another editor has published since, the request is rejected with 409 stale_base_version.
+        description: Published version the editor started from. When another editor has published since,
+          the request is rejected with 409 stale_base_version.
         schema:
           anyOf:
           - format: uuid
@@ -2562,9 +2601,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VoiceProfile'
-        '404':
-          $ref: '#/components/responses/Error'
         '400':
+          $ref: '#/components/responses/Error'
+        '404':
           $ref: '#/components/responses/Error'
     delete:
       tags:
@@ -3014,9 +3053,8 @@ paths:
       tags:
       - Debates
       operationId: prefetchNextDebateAudio
-      description: Controller-only ticket for the ready next turn's audio, so the browser
-        can download it before Next. Honoured only while that turn is still the playing
-        turn's adjacent successor.
+      description: Controller-only ticket for the ready next turn's audio, so the browser can download
+        it before Next. Honoured only while that turn is still the playing turn's adjacent successor.
       parameters:
       - $ref: '#/components/parameters/DebateId'
       - $ref: '#/components/parameters/CsrfToken'
@@ -3245,7 +3283,9 @@ paths:
       tags:
       - Debates
       operationId: getDebateDiagnostics
-      description: Course-teacher-only per-Agent diagnostics computed from the Debate's stored turns, receipts and frozen snapshots. Grounding is a server text measure shown to teachers; it never changes a speech or a Report score.
+      description: Course-teacher-only per-Agent diagnostics computed from the Debate's stored turns,
+        receipts and frozen snapshots. Grounding is a server text measure shown to teachers; it never
+        changes a speech or a Report score.
       parameters:
       - $ref: '#/components/parameters/DebateId'
       responses:
@@ -4722,7 +4762,8 @@ paths:
       - name: group_id
         in: query
         required: false
-        description: One group's Teams. A teacher who has entered the group also sees its private Teams, read-only.
+        description: One group's Teams. A teacher who has entered the group also sees its private Teams,
+          read-only.
         schema:
           anyOf:
           - type: string
@@ -4973,7 +5014,9 @@ paths:
         required: false
         description: A Team member's reply in this turn. Omit for an Agent Chat or every member.
         schema:
-          type: [string, 'null']
+          type:
+          - string
+          - 'null'
           format: uuid
           title: Result Id
       responses:
@@ -5459,8 +5502,7 @@ paths:
       - learning
   /learning/courses/{course_id}/my-assessment-attempts:
     get:
-      description: The signed-in student's own formal attempts, for the student's
-        Record.
+      description: The signed-in student's own formal attempts, for the student's Record.
       operationId: listMyAssessmentAttempts
       parameters:
       - in: path
@@ -5574,9 +5616,9 @@ paths:
       - Telemetry
       operationId: reportClientMetrics
       summary: Report Client Metrics
-      description: Sampled browser timings (Next to first audio, first page render, assessment
-        submit). Each metric is written to the server log with its page's route template; nothing
-        is stored and no user or record id is kept.
+      description: Sampled browser timings (Next to first audio, first page render, assessment submit).
+        Each metric is written to the server log with its page's route template; nothing is stored and
+        no user or record id is kept.
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       requestBody:
@@ -5973,12 +6015,12 @@ paths:
       summary: Put Course Quiz Schedule
       tags:
       - Classroom Quiz
-      description: Replace both one-shot taking times; both keys are required and null clears a time. Times
-        must include a timezone and be strictly in the future (422 quiz_schedule_naive / quiz_schedule_in_past);
-        end must follow start (422 quiz_schedule_order). Draft quizzes return 409 quiz_not_published. Due
-        schedules are applied before replacement. Auto start opens a new epoch and clears exemptions; auto
-        end pauses taking and preserves exemptions. Due actions on drafts or already-matching taking states
-        are skipped and cleared.
+      description: Replace both one-shot taking times; both keys are required and null clears a time.
+        Times must include a timezone and be strictly in the future (422 quiz_schedule_naive / quiz_schedule_in_past);
+        end must follow start (422 quiz_schedule_order). Draft quizzes return 409 quiz_not_published.
+        Due schedules are applied before replacement. Auto start opens a new epoch and clears exemptions;
+        auto end pauses taking and preserves exemptions. Due actions on drafts or already-matching taking
+        states are skipped and cleared.
 components:
   securitySchemes:
     sessionCookie:
@@ -6541,7 +6583,7 @@ components:
           title: Confirm Real Call
           type: boolean
         expected_revision:
-          minimum: 0.0
+          minimum: 0
           title: Expected Revision
           type: integer
         request_id:
@@ -6773,7 +6815,7 @@ components:
       additionalProperties: false
       properties:
         control_version:
-          minimum: 0.0
+          minimum: 0
           title: Control Version
           type: integer
         current_turn_id:
@@ -6783,7 +6825,7 @@ components:
           - type: 'null'
           title: Current Turn Id
         cursor_ms:
-          minimum: 0.0
+          minimum: 0
           title: Cursor Ms
           type: integer
         mode:
@@ -6838,7 +6880,7 @@ components:
       additionalProperties: false
       properties:
         expected_revision:
-          minimum: 0.0
+          minimum: 0
           title: Expected Revision
           type: integer
         message:
@@ -6882,7 +6924,7 @@ components:
           - string
           - 'null'
         expected_revision:
-          minimum: 0.0
+          minimum: 0
           title: Expected Revision
           type: integer
         mode:
@@ -7071,6 +7113,60 @@ components:
           type: string
           maxLength: 128
           format: password
+    LoginIdentityClass:
+      type: object
+      required:
+      - course_id
+      - code
+      - name
+      properties:
+        course_id:
+          $ref: '#/components/schemas/Uuid'
+        code:
+          type: string
+        name:
+          type: string
+    LoginIdentityOptions:
+      type: object
+      required:
+      - classes
+      properties:
+        classes:
+          type: array
+          items:
+            $ref: '#/components/schemas/LoginIdentityClass'
+    LoginIdentityChoice:
+      type: object
+      required:
+      - choice_token
+      - expires_in_seconds
+      - options
+      properties:
+        choice_token:
+          type: string
+        expires_in_seconds:
+          type: integer
+        options:
+          $ref: '#/components/schemas/LoginIdentityOptions'
+    LoginIdentityChoiceRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - choice_token
+      - identity
+      properties:
+        choice_token:
+          type: string
+          maxLength: 256
+        identity:
+          type: string
+          enum:
+          - maya
+          - student
+        course_id:
+          anyOf:
+          - $ref: '#/components/schemas/Uuid'
+          - type: 'null'
     DemoQuickLoginRequest:
       type: object
       required:
@@ -7150,14 +7246,18 @@ components:
           minimum: 0
     CreateClassRequest:
       type: object
-      required: [name]
+      required:
+      - name
       properties:
         name:
           type: string
           maxLength: 200
     RegistrationClass:
       type: object
-      required: [course_id, course_name, group_name]
+      required:
+      - course_id
+      - course_name
+      - group_name
       properties:
         course_id:
           $ref: '#/components/schemas/Uuid'
@@ -7282,7 +7382,8 @@ components:
           - $ref: '#/components/schemas/Uuid'
           - type: 'null'
         student_count:
-          description: Active students (role student, account active) in the course. Course teachers only; null for students.
+          description: Active students (role student, account active) in the course. Course teachers only;
+            null for students.
           oneOf:
           - type: integer
           - type: 'null'
@@ -7634,7 +7735,7 @@ components:
     KnowledgeDocument:
       properties:
         authorization_epoch:
-          minimum: 0.0
+          minimum: 0
           title: Authorization Epoch
           type: integer
         can_manage_visibility:
@@ -7642,7 +7743,7 @@ components:
           title: Can Manage Visibility
           type: boolean
         char_count:
-          minimum: 1.0
+          minimum: 1
           title: Char Count
           type: integer
         content_hash:
@@ -7670,7 +7771,7 @@ components:
           title: Id
           type: string
         index_revision:
-          minimum: 0.0
+          minimum: 0
           title: Index Revision
           type: integer
         index_status:
@@ -7693,20 +7794,24 @@ components:
             type: string
           - type: 'null'
           title: Last Edited At
-          description: created_at of the latest content version (upload or replace); rename and reindex do not change it. Filled on the two library list endpoints; null elsewhere.
+          description: created_at of the latest content version (upload or replace); rename and reindex
+            do not change it. Filled on the two library list endpoints; null elsewhere.
         last_edited_by_user_id:
           anyOf:
           - format: uuid
             type: string
           - type: 'null'
           title: Last Edited By User Id
-          description: Who created the latest content version (upload or replace; the uploader when no version was recorded). Rename and reindex do not change it. Filled on the two library list endpoints; null elsewhere.
+          description: Who created the latest content version (upload or replace; the uploader when no
+            version was recorded). Rename and reindex do not change it. Filled on the two library list
+            endpoints; null elsewhere.
         last_edited_by_username:
           title: Last Edited By Username
           type:
           - string
           - 'null'
-          description: Username of last_edited_by_user_id. Filled on the two library list endpoints; null elsewhere.
+          description: Username of last_edited_by_user_id. Filled on the two library list endpoints; null
+            elsewhere.
         owner_user_id:
           anyOf:
           - type: string
@@ -7719,7 +7824,8 @@ components:
           type:
           - string
           - 'null'
-          description: The uploader's username. Filled on the two library list endpoints (GET /groups/{group_id}/knowledge-documents, GET /courses/{course_id}/workspace-documents); null elsewhere.
+          description: The uploader's username. Filled on the two library list endpoints (GET /groups/{group_id}/knowledge-documents,
+            GET /courses/{course_id}/workspace-documents); null elsewhere.
         safe_error_code:
           title: Safe Error Code
           type:
@@ -7741,7 +7847,9 @@ components:
               $ref: '#/components/schemas/AffectedAgent'
           - type: 'null'
           title: Used By Agents
-          description: Live Agents whose current published version uses this file, limited to Agents the caller may use (same filter as GET /knowledge-documents/{document_id}/affected-agents). Filled on the two library list endpoints; null elsewhere.
+          description: Live Agents whose current published version uses this file, limited to Agents the
+            caller may use (same filter as GET /knowledge-documents/{document_id}/affected-agents). Filled
+            on the two library list endpoints; null elsewhere.
         visibility:
           enum:
           - private
@@ -7897,7 +8005,7 @@ components:
           - string
           - 'null'
         metadata_revision:
-          minimum: 0.0
+          minimum: 0
           title: Metadata Revision
           type: integer
         name:
@@ -8039,7 +8147,7 @@ components:
           - string
           - 'null'
         metadata_revision:
-          minimum: 0.0
+          minimum: 0
           title: Metadata Revision
           type: integer
         name:
@@ -8133,7 +8241,7 @@ components:
           - 'null'
         persona_confirmation_revision:
           anyOf:
-          - minimum: 0.0
+          - minimum: 0
             type: integer
           - type: 'null'
           title: Persona Confirmation Revision
@@ -8177,7 +8285,7 @@ components:
           - string
           - 'null'
         revision:
-          minimum: 0.0
+          minimum: 0
           title: Revision
           type: integer
         state:
@@ -8432,7 +8540,7 @@ components:
           - string
           - 'null'
         expected_metadata_revision:
-          minimum: 0.0
+          minimum: 0
           title: Expected Metadata Revision
           type: integer
         name:
@@ -8609,7 +8717,8 @@ components:
         can_manage:
           type: boolean
           default: true
-          description: Only the creator may rename, preview, confirm or delete; groupmates may select a ready voice.
+          description: Only the creator may rename, preview, confirm or delete; groupmates may select
+            a ready voice.
     RenameVoiceProfileRequest:
       type: object
       required:
@@ -8741,50 +8850,50 @@ components:
           title: Enable Thinking
         frequency_penalty:
           anyOf:
-          - maximum: 2.0
-            minimum: -2.0
+          - maximum: 2
+            minimum: -2
             type: number
           - type: 'null'
           title: Frequency Penalty
         max_tokens:
           anyOf:
-          - maximum: 32768.0
-            minimum: 1.0
+          - maximum: 32768
+            minimum: 1
             type: integer
           - type: 'null'
           title: Max Tokens
         presence_penalty:
           anyOf:
-          - maximum: 2.0
-            minimum: -2.0
+          - maximum: 2
+            minimum: -2
             type: number
           - type: 'null'
           title: Presence Penalty
         repetition_penalty:
           anyOf:
-          - exclusiveMinimum: 0.0
-            maximum: 2.0
+          - exclusiveMinimum: 0
+            maximum: 2
             type: number
           - type: 'null'
           title: Repetition Penalty
         seed:
           anyOf:
-          - maximum: 2147483647.0
-            minimum: 0.0
+          - maximum: 2147483647
+            minimum: 0
             type: integer
           - type: 'null'
           title: Seed
         temperature:
           anyOf:
-          - exclusiveMaximum: 2.0
-            minimum: 0.0
+          - exclusiveMaximum: 2
+            minimum: 0
             type: number
           - type: 'null'
           title: Temperature
         top_p:
           anyOf:
-          - exclusiveMinimum: 0.0
-            maximum: 1.0
+          - exclusiveMinimum: 0
+            maximum: 1
             type: number
           - type: 'null'
           title: Top P
@@ -8912,7 +9021,7 @@ components:
           - 'null'
         rate:
           anyOf:
-          - maximum: 2.0
+          - maximum: 2
             minimum: 0.5
             type: number
           - type: 'null'
@@ -9072,8 +9181,8 @@ components:
     PrefetchNextAudioRequest:
       type: object
       additionalProperties: false
-      description: Name turn_id (any ready speech), or the expected control version and current turn
-        (the adjacent successor).
+      description: Name turn_id (any ready speech), or the expected control version and current turn (the
+        adjacent successor).
       required:
       - controller_epoch
       properties:
@@ -9225,8 +9334,8 @@ components:
           - ready
           - fallback
           - null
-          description: Null for a Debate created before debate cards. fallback means the
-            turns send the original AGENT.md.
+          description: Null for a Debate created before debate cards. fallback means the turns send the
+            original AGENT.md.
         card:
           anyOf:
           - $ref: '#/components/schemas/DebateCard'
@@ -10856,7 +10965,7 @@ components:
       additionalProperties: false
       properties:
         expected_revision:
-          minimum: 0.0
+          minimum: 0
           title: Expected Revision
           type: integer
       required:
@@ -10947,7 +11056,7 @@ components:
     UpdateKnowledgeDocumentVisibility:
       properties:
         expected_authorization_epoch:
-          minimum: 0.0
+          minimum: 0
           title: Expected Authorization Epoch
           type: integer
         visibility:
@@ -10969,7 +11078,7 @@ components:
           title: Agent Id
           type: string
         agent_metadata_revision:
-          minimum: 0.0
+          minimum: 0
           title: Agent Metadata Revision
           type: integer
         sets:
@@ -11035,7 +11144,7 @@ components:
           type: string
         version_seq:
           anyOf:
-          - minimum: 1.0
+          - minimum: 1
             type: integer
           - type: 'null'
           title: Version Seq
@@ -11087,7 +11196,7 @@ components:
           type: string
         version_seq:
           anyOf:
-          - minimum: 1.0
+          - minimum: 1
             type: integer
           - type: 'null'
           title: Version Seq
@@ -11147,7 +11256,7 @@ components:
           - $ref: '#/components/schemas/NoteContent'
           title: Content
         expected_content_revision:
-          minimum: 0.0
+          minimum: 0
           title: Expected Content Revision
           type: integer
       required:
@@ -11176,11 +11285,11 @@ components:
       additionalProperties: false
       properties:
         expected_content_revision:
-          minimum: 0.0
+          minimum: 0
           title: Expected Content Revision
           type: integer
         expected_metadata_revision:
-          minimum: 0.0
+          minimum: 0
           title: Expected Metadata Revision
           type: integer
       required:
@@ -11208,7 +11317,7 @@ components:
           $ref: '#/components/schemas/AssetVersionFullDTO'
         current_version_seq:
           anyOf:
-          - minimum: 1.0
+          - minimum: 1
             type: integer
           - type: 'null'
           title: Current Version Seq
@@ -11263,7 +11372,7 @@ components:
           $ref: '#/components/schemas/AssetVersionStudentDTO'
         current_version_seq:
           anyOf:
-          - minimum: 1.0
+          - minimum: 1
             type: integer
           - type: 'null'
           title: Current Version Seq
@@ -11389,7 +11498,7 @@ components:
       properties:
         accepted_item_count:
           default: 0
-          minimum: 0.0
+          minimum: 0
           title: Accepted Item Count
           type: integer
         created_at:
@@ -11398,7 +11507,7 @@ components:
           type: string
         failed_item_count:
           default: 0
-          minimum: 0.0
+          minimum: 0
           title: Failed Item Count
           type: integer
         job_id:
@@ -11411,7 +11520,7 @@ components:
           type: string
         materialized_item_count:
           default: 0
-          minimum: 0.0
+          minimum: 0
           title: Materialized Item Count
           type: integer
         run_id:
@@ -11451,7 +11560,7 @@ components:
       properties:
         accepted_item_count:
           default: 0
-          minimum: 0.0
+          minimum: 0
           title: Accepted Item Count
           type: integer
         created_at:
@@ -11460,7 +11569,7 @@ components:
           type: string
         failed_item_count:
           default: 0
-          minimum: 0.0
+          minimum: 0
           title: Failed Item Count
           type: integer
         job_id:
@@ -11473,7 +11582,7 @@ components:
           type: string
         materialized_item_count:
           default: 0
-          minimum: 0.0
+          minimum: 0
           title: Materialized Item Count
           type: integer
         provider_manifest_hash:
@@ -11519,7 +11628,7 @@ components:
       properties:
         content_revision:
           anyOf:
-          - minimum: 0.0
+          - minimum: 0
             type: integer
           - type: 'null'
           title: Content Revision
@@ -11582,12 +11691,12 @@ components:
       additionalProperties: false
       properties:
         asset_count:
-          minimum: 0.0
+          minimum: 0
           title: Asset Count
           type: integer
         authorization_epoch:
           anyOf:
-          - minimum: 0.0
+          - minimum: 0
             type: integer
           - type: 'null'
           title: Authorization Epoch
@@ -11596,7 +11705,7 @@ components:
           type: boolean
         content_revision:
           anyOf:
-          - minimum: 0.0
+          - minimum: 0
             type: integer
           - type: 'null'
           title: Content Revision
@@ -11631,7 +11740,7 @@ components:
           type: string
         metadata_revision:
           anyOf:
-          - minimum: 0.0
+          - minimum: 0
             type: integer
           - type: 'null'
           title: Metadata Revision
@@ -11648,7 +11757,7 @@ components:
           title: Ownership Scope
           type: string
         source_count:
-          minimum: 0.0
+          minimum: 0
           title: Source Count
           type: integer
         sources:
@@ -11685,11 +11794,11 @@ components:
       additionalProperties: false
       properties:
         authorization_epoch:
-          minimum: 0.0
+          minimum: 0
           title: Authorization Epoch
           type: integer
         content_revision:
-          minimum: 0.0
+          minimum: 0
           title: Content Revision
           type: integer
         deleted:
@@ -11702,7 +11811,7 @@ components:
           title: Id
           type: string
         metadata_revision:
-          minimum: 0.0
+          minimum: 0
           title: Metadata Revision
           type: integer
         revoked_at:
@@ -11722,7 +11831,7 @@ components:
       properties:
         authorization_epoch:
           anyOf:
-          - minimum: 0.0
+          - minimum: 0
             type: integer
           - type: 'null'
           title: Authorization Epoch
@@ -11731,7 +11840,7 @@ components:
           type: boolean
         char_count:
           anyOf:
-          - minimum: 1.0
+          - minimum: 1
             type: integer
           - type: 'null'
           title: Char Count
@@ -11754,7 +11863,7 @@ components:
           title: Is Active
           type: boolean
         order_index:
-          minimum: 0.0
+          minimum: 0
           title: Order Index
           type: integer
         source_filename:
@@ -11775,12 +11884,12 @@ components:
       additionalProperties: false
       properties:
         asset_count:
-          minimum: 0.0
+          minimum: 0
           title: Asset Count
           type: integer
         authorization_epoch:
           anyOf:
-          - minimum: 0.0
+          - minimum: 0
             type: integer
           - type: 'null'
           title: Authorization Epoch
@@ -11789,7 +11898,7 @@ components:
           type: boolean
         content_revision:
           anyOf:
-          - minimum: 0.0
+          - minimum: 0
             type: integer
           - type: 'null'
           title: Content Revision
@@ -11824,7 +11933,7 @@ components:
           type: string
         metadata_revision:
           anyOf:
-          - minimum: 0.0
+          - minimum: 0
             type: integer
           - type: 'null'
           title: Metadata Revision
@@ -11841,7 +11950,7 @@ components:
           title: Ownership Scope
           type: string
         source_count:
-          minimum: 0.0
+          minimum: 0
           title: Source Count
           type: integer
         updated_at:
@@ -11932,7 +12041,7 @@ components:
       additionalProperties: false
       properties:
         expected_content_revision:
-          minimum: 0.0
+          minimum: 0
           title: Expected Content Revision
           type: integer
       required:
@@ -11943,7 +12052,7 @@ components:
       additionalProperties: false
       properties:
         expected_agent_metadata_revision:
-          minimum: 0.0
+          minimum: 0
           title: Expected Agent Metadata Revision
           type: integer
         set_ids:
@@ -11961,7 +12070,7 @@ components:
       additionalProperties: false
       properties:
         expected_content_revision:
-          minimum: 0.0
+          minimum: 0
           title: Expected Content Revision
           type: integer
         source_document_ids:
@@ -11985,7 +12094,7 @@ components:
           type: array
         total_points:
           anyOf:
-          - minimum: 0.0
+          - minimum: 0
             type: number
           - type: 'null'
           title: Total Points
@@ -12003,7 +12112,7 @@ components:
           title: Label
           type: string
         points:
-          minimum: 0.0
+          minimum: 0
           title: Points
           type: number
       required:
@@ -12016,7 +12125,7 @@ components:
       properties:
         end_offset:
           anyOf:
-          - minimum: 0.0
+          - minimum: 0
             type: integer
           - type: 'null'
           title: End Offset
@@ -12027,7 +12136,7 @@ components:
           - 'null'
         paragraph_index:
           anyOf:
-          - minimum: 0.0
+          - minimum: 0
             type: integer
           - type: 'null'
           title: Paragraph Index
@@ -12038,7 +12147,7 @@ components:
           type: array
         start_offset:
           anyOf:
-          - minimum: 0.0
+          - minimum: 0
             type: integer
           - type: 'null'
           title: Start Offset
@@ -12087,11 +12196,11 @@ components:
           - $ref: '#/components/schemas/NoteContent'
           title: Content
         expected_asset_version_seq:
-          minimum: 1.0
+          minimum: 1
           title: Expected Asset Version Seq
           type: integer
         expected_content_revision:
-          minimum: 0.0
+          minimum: 0
           title: Expected Content Revision
           type: integer
       required:
@@ -12109,7 +12218,7 @@ components:
           - string
           - 'null'
         expected_metadata_revision:
-          minimum: 0.0
+          minimum: 0
           title: Expected Metadata Revision
           type: integer
         visibility:
@@ -12172,7 +12281,7 @@ components:
           title: Avatar Config
         position:
           type: integer
-          minimum: 0.0
+          minimum: 0
           title: Position
         is_leader:
           type: boolean
@@ -12250,7 +12359,7 @@ components:
           title: Shared Knowledge Set Ids
         expected_metadata_revision:
           type: integer
-          minimum: 0.0
+          minimum: 0
           title: Expected Metadata Revision
       additionalProperties: false
       type: object
@@ -12312,11 +12421,11 @@ components:
           title: Visibility
         metadata_revision:
           type: integer
-          minimum: 0.0
+          minimum: 0
           title: Metadata Revision
         authorization_epoch:
           type: integer
-          minimum: 0.0
+          minimum: 0
           title: Authorization Epoch
         current_version_id:
           type: string
@@ -12324,11 +12433,11 @@ components:
           title: Current Version Id
         current_version_seq:
           type: integer
-          minimum: 1.0
+          minimum: 1
           title: Current Version Seq
         member_count:
           type: integer
-          minimum: 2.0
+          minimum: 2
           title: Member Count
         can_edit:
           type: boolean
@@ -12336,13 +12445,15 @@ components:
         can_delete:
           type: boolean
           title: Can Delete
-          description: Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group).
+          description: Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group
+            Team, inside that group).
         last_edited_by_name:
           title: Last Edited By Name
           type:
           - string
           - 'null'
-          description: No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone.
+          description: No per-edit author is stored and only the owner can edit, so this is the owner's
+            display name; null if the owner account is gone.
         created_at:
           type: string
           format: date-time
@@ -12420,7 +12531,7 @@ components:
           title: Avatar Config
         position:
           type: integer
-          minimum: 0.0
+          minimum: 0
           title: Position
         is_leader:
           type: boolean
@@ -12448,7 +12559,7 @@ components:
           default: false
         position:
           type: integer
-          minimum: 0.0
+          minimum: 0
           title: Position
       additionalProperties: false
       type: object
@@ -12519,11 +12630,11 @@ components:
           title: Visibility
         metadata_revision:
           type: integer
-          minimum: 0.0
+          minimum: 0
           title: Metadata Revision
         authorization_epoch:
           type: integer
-          minimum: 0.0
+          minimum: 0
           title: Authorization Epoch
         current_version_id:
           type: string
@@ -12531,11 +12642,11 @@ components:
           title: Current Version Id
         current_version_seq:
           type: integer
-          minimum: 1.0
+          minimum: 1
           title: Current Version Seq
         member_count:
           type: integer
-          minimum: 2.0
+          minimum: 2
           title: Member Count
         can_edit:
           type: boolean
@@ -12543,7 +12654,8 @@ components:
         can_delete:
           type: boolean
           title: Can Delete
-          description: Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group).
+          description: Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group
+            Team, inside that group).
         updated_at:
           type: string
           format: date-time
@@ -12553,14 +12665,16 @@ components:
           type:
           - string
           - 'null'
-          description: No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone.
+          description: No per-edit author is stored and only the owner can edit, so this is the owner's
+            display name; null if the owner account is gone.
         members:
           type: array
           maxItems: 4
           items:
             $ref: '#/components/schemas/TeamFaceMember'
           title: Members
-          description: Up to four members of the current version, Leader first, then by position. Read-only card faces; TeamDetail.members keeps the full list.
+          description: Up to four members of the current version, Leader first, then by position. Read-only
+            card faces; TeamDetail.members keeps the full list.
       additionalProperties: false
       type: object
       required:
@@ -12602,10 +12716,8 @@ components:
       title: PublishedAgentAuthor
       type: object
     UpdateCurrentUserRequest:
-      description: >-
-        Change what is given; an omitted field stays as it is. A null avatar clears it. A group_name
-        moves a student into another existing group of their course, leaving their work where it was
-        made.
+      description: Change what is given; an omitted field stays as it is. A null avatar clears it. A group_name
+        moves a student into another existing group of their course, leaving their work where it was made.
       properties:
         avatar:
           maxLength: 64
@@ -12770,7 +12882,7 @@ components:
           type: string
         version_seq:
           anyOf:
-          - minimum: 1.0
+          - minimum: 1
             type: integer
           - type: 'null'
           title: Version Seq
@@ -13001,7 +13113,7 @@ components:
       additionalProperties: false
       properties:
         expected_version_seq:
-          minimum: 0.0
+          minimum: 0
           title: Expected Version Seq
           type: integer
         markdown:
@@ -13145,7 +13257,7 @@ components:
           title: Created At
           type: string
         question_ordinal:
-          minimum: 0.0
+          minimum: 0
           title: Question Ordinal
           type: integer
         question_version_id:
@@ -13375,7 +13487,7 @@ components:
           title: Id
           type: string
         revision:
-          minimum: 0.0
+          minimum: 0
           title: Revision
           type: integer
         status:
@@ -13400,7 +13512,7 @@ components:
       description: Student-safe progress contains counts and states, never answers or scores.
       properties:
         answered_count:
-          minimum: 0.0
+          minimum: 0
           title: Answered Count
           type: integer
         attempt_id:
@@ -13409,7 +13521,7 @@ components:
           type: string
         current_ordinal:
           anyOf:
-          - minimum: 0.0
+          - minimum: 0
             type: integer
           - type: 'null'
           title: Current Ordinal
@@ -13420,19 +13532,19 @@ components:
           - type: 'null'
           title: Current Question Version Id
         presented_count:
-          minimum: 0.0
+          minimum: 0
           title: Presented Count
           type: integer
         question_count:
-          minimum: 0.0
+          minimum: 0
           title: Question Count
           type: integer
         resolved_count:
-          minimum: 0.0
+          minimum: 0
           title: Resolved Count
           type: integer
         skipped_count:
-          minimum: 0.0
+          minimum: 0
           title: Skipped Count
           type: integer
         status:
@@ -13458,7 +13570,7 @@ components:
       description: The visible question projection intentionally omits Rubric and reference answer.
       properties:
         ordinal:
-          minimum: 0.0
+          minimum: 0
           title: Ordinal
           type: integer
         prompt:
@@ -13581,12 +13693,12 @@ components:
       additionalProperties: false
       properties:
         expected_revision:
-          minimum: 0.0
+          minimum: 0
           title: Expected Revision
           type: integer
         to:
           anyOf:
-          - minimum: 1.0
+          - minimum: 1
             type: integer
           - type: 'null'
           title: To
@@ -13827,8 +13939,8 @@ components:
       additionalProperties: false
       properties:
         rank:
-          maximum: 14.0
-          minimum: 2.0
+          maximum: 14
+          minimum: 2
           title: Rank
           type: integer
         suit:
@@ -13844,7 +13956,6 @@ components:
       - suit
       title: CardView
       type: object
-
     PutQuizExemptionsRequest:
       properties:
         deadline_at:

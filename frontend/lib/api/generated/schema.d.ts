@@ -317,6 +317,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/identity-choice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Consume a five-minute, client-bound Bowen login choice once. Maya rejects course_id; student requires one of the two server-provisioned classes. */
+        post: operations["chooseLoginIdentity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/switch": {
         parameters: {
             query?: never;
@@ -2736,6 +2753,25 @@ export interface components {
             username: string;
             /** Format: password */
             password: string;
+        };
+        LoginIdentityClass: {
+            course_id: components["schemas"]["Uuid"];
+            code: string;
+            name: string;
+        };
+        LoginIdentityOptions: {
+            classes: components["schemas"]["LoginIdentityClass"][];
+        };
+        LoginIdentityChoice: {
+            choice_token: string;
+            expires_in_seconds: number;
+            options: components["schemas"]["LoginIdentityOptions"];
+        };
+        LoginIdentityChoiceRequest: {
+            choice_token: string;
+            /** @enum {string} */
+            identity: "maya" | "student";
+            course_id?: components["schemas"]["Uuid"] | null;
         };
         DemoQuickLoginRequest: {
             user_id: components["schemas"]["Uuid"];
@@ -7688,6 +7724,15 @@ export interface operations {
                     "application/json": components["schemas"]["AuthSession"];
                 };
             };
+            /** @description Choose the login identity; no session cookie is issued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginIdentityChoice"];
+                };
+            };
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             /** @description The production gateway rejected an oversized authentication request. */
@@ -7697,6 +7742,34 @@ export interface operations {
                 };
                 content?: never;
             };
+            429: components["responses"]["Error"];
+        };
+    };
+    chooseLoginIdentity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginIdentityChoiceRequest"];
+            };
+        };
+        responses: {
+            /** @description Session created for the chosen identity. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSession"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
             429: components["responses"]["Error"];
         };
     };

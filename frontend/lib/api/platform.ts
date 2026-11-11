@@ -10,6 +10,10 @@ import { invalidateRequestCache } from "../request-cache";
 import type { ClientMetric } from "../client-metrics";
 
 export type AuthSession = components["schemas"]["AuthSession"];
+export type LoginIdentityChoice = components["schemas"]["LoginIdentityChoice"];
+export type LoginIdentityChoiceRequest =
+  components["schemas"]["LoginIdentityChoiceRequest"];
+export type LoginResult = AuthSession | LoginIdentityChoice;
 export type CurrentUser = components["schemas"]["CurrentUser"];
 export type Course = components["schemas"]["Course"];
 export type CourseDetail = components["schemas"]["CourseDetail"];
@@ -1245,7 +1249,7 @@ export class PlatformApi {
       /** Upper bound for riding out a network drop while holding a ticket. */
       reconnectWindowMs?: number;
     },
-  ): Promise<AuthSession> {
+  ): Promise<LoginResult> {
     let ticket: string | undefined = options?.ticket;
     let last: LoginQueueNotice | null = null;
     let offlineSince: number | null = null;
@@ -1282,7 +1286,8 @@ export class PlatformApi {
         continue;
       }
       try {
-        const session = await unwrap<AuthSession>(result);
+        const session = await unwrap<LoginResult>(result);
+        if ("choice_token" in session) return session;
         this.setCsrfToken(session.csrf_token);
         return session;
       } catch (cause) {
@@ -1294,6 +1299,16 @@ export class PlatformApi {
         await waitForQueue(queued.retryAfterSeconds * 1000, options?.signal);
       }
     }
+  }
+
+  async chooseLoginIdentity(
+    body: LoginIdentityChoiceRequest,
+  ): Promise<AuthSession> {
+    const session = await unwrap<AuthSession>(
+      await this.client.POST("/auth/identity-choice", { body }),
+    );
+    this.setCsrfToken(session.csrf_token);
+    return session;
   }
 
   async me(): Promise<AuthSession> {
