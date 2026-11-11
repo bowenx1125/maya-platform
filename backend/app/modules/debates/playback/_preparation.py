@@ -386,7 +386,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                 raise PlatformError(
                     "provider_unavailable", "The service is temporarily unavailable.", 503
                 )
-        if getattr(self.tts_provider, "key", "mock") not in {"mock", "dashscope"}:
+        if getattr(self.tts_provider, "key", "mock") not in {"mock", "dashscope", "cosyvoice"}:
             raise PlatformError(
                 "provider_unavailable", "The service is temporarily unavailable.", 503
             )

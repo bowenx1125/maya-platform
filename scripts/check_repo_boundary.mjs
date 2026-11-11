@@ -198,6 +198,12 @@ function walk(directory) {
       relativePath === "backend/app/providers/dashscope.py" ||
       relativePath === "backend/app/providers/control.py" ||
       relativePath === "backend/app/modules/knowledge/providers/adapters.py" ||
+      // The reviewed CosyVoice adapter reaches the supplier only through the
+      // dashscope SDK; no endpoint literal lives in this file.
+      relativePath === "backend/app/providers/cosyvoice_tts.py" ||
+      // uv.lock records the dashscope SDK package (name and PyPI URLs) as a
+      // pinned dependency; that is dependency metadata, not a leaked endpoint.
+      relativePath === "backend/uv.lock" ||
       relativePath === "backend/tests/test_wave1b_voices.py" ||
       // Fake upload-policy fixture carries the supplier's object-store host
       // shape so the upload-host check has something real to accept.

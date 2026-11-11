@@ -171,6 +171,19 @@ class Settings(BaseSettings):
     )
     # Speech model for voices bound to no model; a clone keeps its own.
     debate_tts_model: str | None = Field(default=None, validation_alias="DEBATE_TTS_MODEL")
+    # Debate speech engine within the DashScope selector: qwen3 keeps today's
+    # HTTP path; cosyvoice streams over WebSocket and adds word timestamps for
+    # the 3D performance compiler. Voice profiles still resolve to a voice id;
+    # when it is not a CosyVoice voice the configured default voice is used.
+    debate_tts_engine: Literal["qwen3", "cosyvoice"] = Field(
+        default="qwen3", validation_alias="DEBATE_TTS_ENGINE"
+    )
+    debate_tts_cosyvoice_voice: str = Field(
+        default="longanyang", validation_alias="DEBATE_TTS_COSYVOICE_VOICE"
+    )
+    # Degrade debate speech from CosyVoice back to qwen3, but only on
+    # pre-request refusals; a charged in-flight failure is never retried.
+    debate_tts_fallback: bool = Field(default=False, validation_alias="DEBATE_TTS_FALLBACK")
     # Voice defaults for cloned voices (qwen-audio-*-tts-flash only; preset
     # voices are never sent these). The speaking rate replaces the browser
     # playback rate: every Debate plays at 1.0.

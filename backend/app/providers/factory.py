@@ -17,6 +17,7 @@ from app.modules.knowledge.providers import (
     HttpxEmbeddingTransport,
     MockEmbeddingProvider,
 )
+from app.providers.cosyvoice_tts import CosyVoiceConfig, CosyVoiceTTSProvider
 from app.providers.dashscope import (
     DashScopeConfig,
     DashScopeTTSProvider,
@@ -31,7 +32,7 @@ from app.providers.llm import (
     LLMTransport,
 )
 from app.providers.llm import llm_provider as select_llm_provider
-from app.providers.tts import MockTTSProvider, TTSProvider
+from app.providers.tts import FallbackTTSProvider, MockTTSProvider, TTSProvider
 from app.providers.voice import MockVoiceCloneProvider, VoiceCloneProvider
 
 
@@ -71,7 +72,22 @@ def tts_provider(settings: Settings) -> TTSProvider:
             if settings.debate_tts_model not in ALLOWED_TTS_TARGET_MODELS:
                 raise RuntimeError("DEBATE_TTS_MODEL is not a supported speech model")
             config = replace(config, target_model_key=settings.debate_tts_model)
-        return DashScopeTTSProvider(config)
+        qwen: TTSProvider = DashScopeTTSProvider(config)
+        # CosyVoice rides the same DashScope key/workspace: the debate engine
+        # switch swaps the adapter, not the provider selector or policy hash.
+        if settings.debate_tts_engine == "cosyvoice":
+            cosy = CosyVoiceTTSProvider(
+                CosyVoiceConfig(
+                    api_key=config.api_key,
+                    workspace_id=config.workspace_id,
+                    region=config.region,
+                    voice=settings.debate_tts_cosyvoice_voice,
+                )
+            )
+            if settings.debate_tts_fallback:
+                return FallbackTTSProvider(cosy, qwen)
+            return cosy
+        return qwen
     raise RuntimeError("tts provider is not supported")
 
 

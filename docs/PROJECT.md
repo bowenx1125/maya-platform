@@ -268,15 +268,11 @@ lazy+10s sweeper(non-test lifespan).Static checks pass;PG/boundary:sandbox EPERM
 
 Integrated 3081da2 (base b6c2047b1549c5d28e84b52c5323a1e655bb596f) onto
 535d2272a9b337e9daec819e89df889d100789a8, then 28b8bf8e8f8ef6169bbe876a281bb93dd031d3ac.
-Class scope covers teacher pages; registration keeps group join/create.
-0086 retains group choice; 0087 preserves contributors' work after erasure.
-Hard delete removes student-owned work and grades, including Quiz attempts.
-PR #390 merged. Local upgrade 0082→0087; build, 1187 UI tests, 82 focused passed.
-Full run at 535d227: 3073 pass/139 fail/1 skip. Main reproduced 135; four fixed.
+Class scope covers teacher pages; registration keeps group join/create (0086 choice, 0087 erasure keeps contributors' work). Hard delete removes student-owned work/grades incl. Quiz attempts.
+PR #390 merged; 0082→0087 local. Full run at 535d227: 3073 pass/139 fail/1 skip
+(main reproduced 135; four fixed).
 
-Nov10: classes Maya1002 and Maya1001, stable IDs, student data.
-Teacher scopes corrected. RAG actions follow the class bar.
-47 PG, 1188 UI. Debates/Quizzes/Accounts; optional choice answer; no empty Agents card; large loader; chat omits missing group/editor.
+Nov10: teacher scopes corrected; RAG follows class bar (47 PG, 1188 UI). Choice-answer quizzes; no empty Agents card; chat omits missing group/editor.
 
 ## Nov10 Debate prompt v4 (supersedes Oct24 contract-in-Ruleset)
 
@@ -290,8 +286,7 @@ limits,retrieval_policy_id,frequency_penalty,max_tokens. v3/older bytes pinned.
 
 ## Nov11 RAG chunks, diagnostics
 
-Builds:`markdown-structure-600t-v3`,150–900 tokens,no overlap; v2 snapshots kept
-till republish. Teacher `getDebateDiagnostics`:3-gram grounding;other-language unmeasured.
+Builds:`markdown-structure-600t-v3`,150–900 tokens,no overlap (v2 kept till republish); `getDebateDiagnostics`:3-gram grounding,other-language unmeasured.
 
 ## Nov11 Debate cards (phase B)
 
@@ -301,5 +296,12 @@ attempt, 60s) to identity/position/reasoning/style/voice/dropped, ≤600 Han/400
 Ready→card persona;failure/Mock→fallback (raw AGENT.md); null (old) keeps pinned bytes.
 Round-1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style. 0 calls;quality unverified.
 
-Nov11: Agents/Teams <768px: single black banner shadow, no orange ring.
-Mock Chromium390/1440+tour; desktop diff0. 1247 UI tests/build passed.
+Nov11: Agents/Teams <768px: single black banner, no orange ring; desktop diff0 (1247 UI).
+
+## Nov12 3D performance engine (in progress)
+
+DEBATE_TTS_ENGINE=cosyvoice swaps the debate TTS adapter (same DashScope key/
+workspace; qwen3 default, fallback on pre-request refusals only). TTSResult.
+word_timestamps feeds debates/performance (turn text+timelines: gesture
+anchors, viseme windows). 18 tests, ruff/mypy clean. Stage/media wiring
+pending. 0 calls/deploy.

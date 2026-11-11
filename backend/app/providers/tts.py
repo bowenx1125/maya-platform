@@ -9,7 +9,7 @@ import struct
 import wave
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, TypedDict
 
 TTS_UNAVAILABLE_CODES = frozenset(
     {
@@ -97,6 +97,61 @@ class TTSResult:
     audio_bytes: bytes
     content_type: str = "audio/wav"
     request_id: str | None = None
+    # CosyVoice-only: character-level timestamps over the returned audio, used
+    # by the debate performance compiler for gesture anchoring and lip visemes.
+    word_timestamps: tuple[WordTimestamp, ...] | None = None
+
+
+class WordTimestamp(TypedDict):
+    text: str | None
+    begin_index: int | None
+    end_index: int | None
+    begin_ms: float
+    end_ms: float
+
+
+# Only pre-request refusals may degrade to the fallback provider. A failure
+# after the supplier may have started synthesis (timeout, invalid audio) was
+# potentially charged and is never auto-retried.
+FALLBACK_BEFORE_REQUEST_CODES = frozenset({"tts_provider_unavailable", "tts_voice_unavailable"})
+
+
+class FallbackTTSProvider:
+    """Debate TTS that degrades from CosyVoice to qwen3 on pre-request refusals."""
+
+    def __init__(self, primary: TTSProvider, fallback: TTSProvider) -> None:
+        self._primary = primary
+        self._fallback = fallback
+        self.key = primary.key
+        self.target_model_key = primary.target_model_key
+
+    def synthesize(
+        self,
+        text: str,
+        external_voice_id: str,
+        *,
+        language: str = "en",
+        target_model_key: str | None = None,
+        voice_params: Mapping[str, object] | None = None,
+    ) -> TTSResult:
+        try:
+            return self._primary.synthesize(
+                text,
+                external_voice_id,
+                language=language,
+                target_model_key=target_model_key,
+                voice_params=voice_params,
+            )
+        except TTSProviderError as exc:
+            if exc.safe_code not in FALLBACK_BEFORE_REQUEST_CODES:
+                raise
+        return self._fallback.synthesize(
+            text,
+            external_voice_id,
+            language=language,
+            target_model_key=target_model_key,
+            voice_params=voice_params,
+        )
 
 
 class TTSProvider(Protocol):
