@@ -78,8 +78,14 @@ def stance_text(language: str, stance: str | None) -> str:
 def _round_task(language: str, round_number: int, other: str, sentences: int) -> str:
     zh = language == "zh"
     # A model keeps to a sentence count far better than to a character count:
-    # the first v4 Debate overshot its cap in a quarter of its speeches.
-    limit = f"全文不超过{sentences}句话。" if zh else f" Use at most {sentences} sentences."
+    # the first v4 Debate overshot its cap in a quarter of its speeches. An
+    # upper bound alone then gave speeches as short as 23 characters and a
+    # Debate a third under its target, hence a range and the cap as the aim.
+    limit = (
+        f"写{sentences - 1}到{sentences}句话，总字数接近 max_units。"
+        if zh
+        else f" Use {sentences - 1} to {sentences} sentences and come close to max_units."
+    )
     if round_number == 1:
         task = (
             "独立陈述你对题目的判断和理由。"
@@ -112,7 +118,8 @@ def _round_task(language: str, round_number: int, other: str, sentences: int) ->
 def sentence_limit(language: str, cap: int) -> int:
     """How many sentences fit the cap at a spoken sentence length."""
 
-    return max(2, math.ceil(cap / (30 if language == "zh" else 20)))
+    # Spoken sentences in the two v4 Debates ran about 22 Han characters.
+    return max(3, math.ceil(cap / (22 if language == "zh" else 18)))
 
 
 def turn_task(context: GenerationContext, *, minutes: int) -> dict[str, object]:

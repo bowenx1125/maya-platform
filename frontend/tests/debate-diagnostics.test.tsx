@@ -62,7 +62,12 @@ const v4: DebateDiagnostics = {
       distinct_chunks: 1,
       cited_chunks: 1,
       traced_share: 0.083,
-      grounding_counts: { quoted: 1, paraphrased: 0, not_found: 2 },
+      grounding_counts: {
+        quoted: 1,
+        paraphrased: 0,
+        not_found: 2,
+        other_language: 0,
+      },
       rounds: [
         {
           turn_id: "turn-a1",
@@ -127,7 +132,12 @@ const v4: DebateDiagnostics = {
       distinct_chunks: 0,
       cited_chunks: 0,
       traced_share: null,
-      grounding_counts: { quoted: 0, paraphrased: 0, not_found: 0 },
+      grounding_counts: {
+        quoted: 0,
+        paraphrased: 0,
+        not_found: 0,
+        other_language: 0,
+      },
       rounds: [],
     },
   ],
