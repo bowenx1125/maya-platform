@@ -23,7 +23,7 @@ manual review,no keyword/similarity gates.
 
 ## Classroom and accounts
 
-Classroom/Voice≠text-only Chats. Next reuses/intercepts audio; failures keep text.
+Classroom/Voice≠text-only Chats.Next reuses/intercepts audio;failures keep text.
 Preview polls visibly; Final freezes barrages transactionally. Immerse:Transcript/
 controls/QR/Interact/leases,no manual pause. Conclude versions Report/history; usable
 content ignores model/object/usage. Replay:no input/generation; Devocalize:audio only.
@@ -227,27 +227,27 @@ histories; no kind selects Agent history.
 0082:Enter grants2h teacher_group_access (not roster),renewed20min;Backout;expiry sweeps/min.
 Visits edit group Studyform Agents/public Brainform,not deletion/other groups.
 
-Single Chat: `draft` SSE (unsaved text as written), then delta/text_done after commit;
-ledger keeps the folded completion. Turn runners hold a pg advisory lock; each process
-sweeps per 60s, freeing claims unheld twice (startup with a live peer: only those).
+Single Chat: `draft` SSE (unsaved text as written), then delta/text_done post-commit;
+ledger keeps folded completion. Turn runners:pg advisory lock;processes
+sweep/60s,free claims unheld twice (startup with live peer:only those).
 Team streams wake on committed events; fallback poll ≤2s. Debate default Rulesets: en
-mirrors the spoken zh one (no spoken RAG/I-feel labels or +5/+2), both address a listener
-who missed earlier speeches; a copy mid-paragraph is rewritten, not cut out.
+mirrors spoken zh (no spoken RAG/I-feel labels or +5/+2),both address listeners
+who missed prior speeches;mid-paragraph copies rewritten,not cut.
 
 ## Nov3 cleanup and capacity
 
-Visits hide Knowledge, renew every 20 min and end with a notice back to Accounts; Debate
-"?" shows Chinese help on hover. core/locks.py holds every cross-process lock; SQLite gone.
-core/capacity.py scales CPU caps by cores/2; a high load counts only with CPU busy ≥0.8.
+Visits hide Knowledge,renew every 20 min,end with notice back to Accounts;Debate
+"?" shows Chinese help on hover. core/locks.py:all cross-process locks;SQLite gone.
+core/capacity.py scales CPU caps by cores/2; high load counts only if CPU busy ≥0.8.
 Idle polls 30s; Agent lists carry card label/theme. Debate Rulesets state goals, not bans.
 Accounts: filter; Delete is real (DELETE /courses/{id}/members/{user}). Chat 429 →
 provider_rate_limited, 502/503/504/529 → provider_busy (one call). Ordinary Team members
-answer together (≤3; assessment Teams one at a time); history is one read. 390px Brainform fits.
+answer together (≤3;assessment Teams sequential);history=one read. 390px Brainform fits.
 
 ## Nov5–6 Agent Chat, recovery
 
 #337/#338: Agent Chats send the Agent name, AGENT.md, Knowledge and RAG.
-No assessment Tools or attempt; Teams unchanged. Owner-only RAG Details
+No assessment Tools/attempt;Teams unchanged. Owner-only RAG Details
 shows stored model input; scoring/summary Rubrics remain hidden.
 Nov6 off main70ecfa29 (#356/#357). Replay=Rebirth;Review=playback,not a rebirth lock.
 Revocalize:durable intent,3 workers,Back/F5 reseed/revision reconcile;admission refusal
@@ -268,18 +268,18 @@ lazy+10s sweeper(non-test lifespan).Static checks pass;PG/boundary:sandbox EPERM
 
 Integrated 3081da2 (base b6c2047b1549c5d28e84b52c5323a1e655bb596f) onto
 535d2272a9b337e9daec819e89df889d100789a8, then 28b8bf8e8f8ef6169bbe876a281bb93dd031d3ac.
-Class scope covers teacher pages; registration keeps group join/create.
-0086 retains group choice; 0087 preserves contributors' work after erasure.
-Hard delete removes student-owned work and grades, including Quiz attempts.
-PR #390 merged. Local upgrade 0082→0087; build, 1187 UI tests, 82 focused passed.
-Full run at 535d227: 3073 pass/139 fail/1 skip. Main reproduced 135; four fixed.
+Class-scoped teacher pages;registration keeps group join/create.
+0086 keeps group choice;0087 keeps contributors' work after erasure.
+Hard delete removes student-owned work/grades,including Quiz attempts.
+PR #390 merged. Local upgrade 0082→0087;build,1187 UI tests,82 focused passed.
+Full run@535d227:3073 pass/139 fail/1 skip.Main reproduced 135;four fixed.
 
 Nov10: classes Maya1002 and Maya1001, stable IDs, student data.
-Teacher scopes corrected. RAG actions follow the class bar.
+Teacher scopes corrected;RAG actions follow class bar.
 47 PG, 1188 UI. Debates/Quizzes/Accounts; optional choice answer; no empty Agents card; large loader; chat omits missing group/editor.
 
-Nov11 code: teacher removals prune empty non-default groups; work FKs protect.
-Ruff/format/mypy pass; PG tests blocked: socket EPERM. No calls/deploy.
+Nov11 code:teacher removals prune empty non-default groups;work FKs protect.
+Ruff/format/mypy pass;PG tests blocked:socket EPERM.0 calls/deploy.
 
 ## Nov10 Debate prompt v4 (supersedes Oct24 contract-in-Ruleset)
 
@@ -304,5 +304,5 @@ attempt, 60s) to identity/position/reasoning/style/voice/dropped, ≤600 Han/400
 Ready→card persona;failure/Mock→fallback (raw AGENT.md); null (old) keeps pinned bytes.
 Round-1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style. 0 calls;quality unverified.
 
-Nov11: Agents/Teams <768px: single black banner shadow, no orange ring.
+Nov11:Agents/Teams <768px:one black banner shadow,no orange ring.
 Mock Chromium390/1440+tour; desktop diff0. 1247 UI tests/build passed.
