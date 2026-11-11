@@ -138,7 +138,7 @@ def test_database_at_the_baseline_runs_no_ddl_and_keeps_its_version(tmp_path: Pa
         )
 
 
-def test_upgrade_0087_keeps_existing_student_session_and_adds_choice_metadata(
+def test_upgrade_0088_keeps_existing_student_session_and_adds_choice_metadata(
     tmp_path: Path,
 ) -> None:
     from app.core.models import SessionRecord, User
@@ -162,7 +162,7 @@ def test_upgrade_0087_keeps_existing_student_session_and_adds_choice_metadata(
         connection.execute(text("ALTER TABLE sessions DROP COLUMN active_course_id"))
         connection.execute(text("ALTER TABLE sessions DROP COLUMN entered_via_user_id"))
         connection.execute(
-            text("UPDATE alembic_version SET version_num = '0087_account_author_links'")
+            text("UPDATE alembic_version SET version_num = '0088_quiz_exemptions_schedule'")
         )
     db.upgrade_schema()
     assert db.check_ready()
