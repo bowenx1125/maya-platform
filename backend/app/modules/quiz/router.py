@@ -21,6 +21,7 @@ from .schemas import (
     PatchQuizRequest,
     PutQuizExemptionsRequest,
     PutQuizScheduleRequest,
+    StudentResultsVisibilityRequest,
     QuizAttemptDTO,
     QuizExemptionsDTO,
     QuizSummaryDTO,
@@ -103,6 +104,29 @@ def patch_course_quiz(
     db: Session = Depends(get_db),
 ) -> TeacherQuizDTO:
     return service.patch_quiz(db, actor, str(course_id), str(quiz_id), body)
+
+
+@router.put(
+    "/courses/{course_id}/quizzes/{quiz_id}/student-results-visibility",
+    response_model=TeacherQuizDTO,
+    operation_id="setQuizStudentResultsVisibility",
+    responses={
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+    },
+)
+def set_course_quiz_student_results_visibility(
+    course_id: UUID,
+    quiz_id: UUID,
+    body: StudentResultsVisibilityRequest,
+    _csrf: CsrfHeader,
+    actor: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> TeacherQuizDTO:
+    return service.set_student_results_visibility(
+        db, actor, str(course_id), str(quiz_id), body
+    )
 
 
 @router.post(
@@ -215,6 +239,7 @@ def pause_course_quiz_taking(
 @router.post(
     "/courses/{course_id}/quizzes/{quiz_id}/attempts",
     response_model=QuizAttemptDTO,
+    response_model_exclude_none=True,
     status_code=201,
     operation_id="submitCourseQuizAttempt",
     responses={
@@ -334,6 +359,7 @@ def grade_course_quiz_attempt(
 @router.get(
     "/courses/{course_id}/my-record-attempts",
     response_model=list[RecordAttemptDTO],
+    response_model_exclude_none=True,
     operation_id="listMyRecordAttempts",
     responses={401: {"model": Error}, 404: {"model": Error}},
 )

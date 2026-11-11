@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete, func, select
@@ -44,6 +44,7 @@ from .schemas import (
     QuizExemptionsDTO,
     QuizExemptionStudentDTO,
     QuizSettings,
+    StudentResultsVisibilityRequest,
     QuizSummaryDTO,
     RecordAttemptDTO,
     StudentQuizAttemptDetailDTO,
@@ -178,6 +179,7 @@ def _summary(
         taking_epoch=quiz.taking_epoch,
         scheduled_start_at=quiz.scheduled_start_at,
         scheduled_end_at=quiz.scheduled_end_at,
+        hide_results_from_students=_hide_results_from_students(quiz),
         created_by_user_id=UUID(quiz.created_by_user_id),
         published_at=quiz.published_at,
         created_at=quiz.created_at,
@@ -328,6 +330,7 @@ def create_quiz(
         created_by_user_id=str(actor.user.id),
         taking_open=False,
         taking_epoch=0,
+        hide_results_from_students=True,
         published_at=None,
         created_at=now,
         updated_at=now,
@@ -696,6 +699,102 @@ def delete_exemptions(
         query = query.where(ClassroomQuizExemption.student_user_id == student_id)
     db.execute(query)
     db.commit()
+def _hide_results_from_students(quiz: ClassroomQuiz | None) -> bool:
+    """Fail-closed: missing quiz or column counts as hidden."""
+
+    if quiz is None:
+        return True
+    return bool(getattr(quiz, "hide_results_from_students", True))
+
+
+_HIDDEN_RESULT_KEYS = (
+    "score_objective",
+    "score_max_objective",
+    "score_manual",
+    "score_max_manual",
+    "score_ai",
+    "points_awarded",
+    "points_total",
+    "grading_status",
+    "phase",
+)
+_HIDDEN_ITEM_KEYS = (
+    "correct",
+    "points_awarded",
+    "graded",
+    "feedback",
+    "ai_score",
+    "ai_feedback",
+)
+
+
+def _own_answer_only(answer: dict[str, Any]) -> dict[str, Any]:
+    row: dict[str, Any] = {"item_id": answer["item_id"]}
+    if "choice_ids" in answer:
+        row["choice_ids"] = answer["choice_ids"]
+    if "text" in answer:
+        row["text"] = answer["text"]
+    return row
+
+
+def _student_results_view(
+    quiz: ClassroomQuiz | None,
+    payload: dict[str, Any],
+    *,
+    shape: Literal["submit", "record", "detail"],
+) -> dict[str, Any]:
+    """Single projection for student submit / list_my / get_attempt."""
+
+    visible = not _hide_results_from_students(quiz)
+    view = dict(payload)
+    view["results_visible"] = visible
+    if visible:
+        if shape == "submit":
+            cleaned = []
+            for answer in view.get("answers") or []:
+                row = dict(answer)
+                for key in ("answer", "rubric", "grading"):
+                    row.pop(key, None)
+                cleaned.append(row)
+            view["answers"] = cleaned
+        return view
+    for key in _HIDDEN_RESULT_KEYS:
+        if key in view:
+            view[key] = None
+    if shape == "submit":
+        view["answers"] = [_own_answer_only(answer) for answer in (view.get("answers") or [])]
+    elif shape == "detail":
+        items = []
+        for item in view.get("items") or []:
+            raw = item.model_dump() if hasattr(item, "model_dump") else dict(item)
+            for key in _HIDDEN_ITEM_KEYS:
+                raw[key] = None
+            raw.pop("answer", None)
+            raw.pop("rubric", None)
+            raw.pop("grading", None)
+            items.append(raw)
+        view["items"] = items
+    return view
+
+
+def set_student_results_visibility(
+    db: Session,
+    actor: AuthContext,
+    course_id: str,
+    quiz_id: str,
+    body: StudentResultsVisibilityRequest,
+) -> TeacherQuizDTO:
+    """Toggle student result visibility without mutating the frozen paper."""
+
+    role = _require_member(db, actor, course_id)
+    if role != "teacher":
+        raise forbidden("Only teachers can change student results visibility.")
+    quiz = _get_quiz(db, course_id, quiz_id)
+    quiz.hide_results_from_students = body.hide_results_from_students
+    quiz.updated_at = _now()
+    db.commit()
+    db.refresh(quiz)
+    return _teacher_dto(db, quiz)
 
 
 def submit_attempt(
@@ -768,18 +867,24 @@ def submit_attempt(
             ) from exc
         raise
     return QuizAttemptDTO(
-        id=UUID(attempt_id),
-        quiz_id=UUID(quiz.id),
-        course_id=UUID(course_id),
-        actor_user_id=UUID(actor_user_id),
-        content_revision=quiz.content_revision,
-        taking_epoch=epoch,
-        status="submitted",
-        grading_status=grading_status,  # type: ignore[arg-type]
-        score_objective=score,
-        score_max_objective=score_max,
-        answers=normalized,
-        submitted_at=now,
+        **_student_results_view(
+            quiz,
+            {
+                "id": UUID(attempt_id),
+                "quiz_id": UUID(quiz.id),
+                "course_id": UUID(course_id),
+                "actor_user_id": UUID(actor_user_id),
+                "content_revision": quiz.content_revision,
+                "taking_epoch": epoch,
+                "status": "submitted",
+                "grading_status": grading_status,
+                "score_objective": score,
+                "score_max_objective": score_max,
+                "answers": normalized,
+                "submitted_at": now,
+            },
+            shape="submit",
+        )
     )
 
 
@@ -812,7 +917,13 @@ def list_my_record_attempts(
         quiz_query = quiz_query.where(ClassroomQuizAttempt.quiz_id == quiz_id)
     quiz_attempts = db.scalars(quiz_query.order_by(ClassroomQuizAttempt.submitted_at.desc())).all()
     for attempt in quiz_attempts:
-        rows.append(_quiz_record_row(db, attempt))
+        quiz = db.get(ClassroomQuiz, attempt.quiz_id)
+        row = _quiz_record_row(db, attempt)
+        rows.append(
+            RecordAttemptDTO(
+                **_student_results_view(quiz, row.model_dump(), shape="record")
+            )
+        )
 
     # Legacy chat attempts stay readable.
     if quiz_id is not None:
@@ -1138,9 +1249,14 @@ def _attempt_detail(
         "items": rows,
     }
     if teacher:
+        payload["results_visible"] = True
         return TeacherQuizAttemptDetailDTO(**payload)
     # Rebuilt through the student DTO: its items carry no answer field.
-    detail = StudentQuizAttemptDetailDTO(**payload)
+    # Real scores stay in payload until the shared student projection strips
+    # them; teacher callers never enter this branch.
+    quiz = db.get(ClassroomQuiz, attempt.quiz_id)
+    projected = _student_results_view(quiz, payload, shape="detail")
+    detail = StudentQuizAttemptDetailDTO(**projected)
     assert_no_answer_keys(detail.model_dump(mode="json"))
     return detail
 

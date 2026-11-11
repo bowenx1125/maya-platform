@@ -49,6 +49,10 @@ class ClassroomQuiz(Base):
     taking_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     scheduled_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     scheduled_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Operational switch, not part of the frozen paper / QuizSettings.
+    hide_results_from_students: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

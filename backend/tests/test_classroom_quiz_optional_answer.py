@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from tests.test_classroom_quiz_api import (  # noqa: F401
     SAMPLE_ITEMS,
     Actor,
+    _set_student_results_visible,
     actors,
     student,
     teacher,
@@ -84,14 +85,34 @@ def test_quiz_no_standard_answer(
         },
     )
     assert response.status_code == 201, response.text
-    assert response.json()["score_objective"] == score
-    for actor in (teacher, student):
-        detail = actor.get(f"{base}/attempts/{response.json()['id']}")
-        assert detail.status_code == 200, detail.text
-        for item in detail.json()["items"][:2]:
-            assert item["correct"] is correct
-            assert item["points_awarded"] == (item["points"] if correct else 0)
+    body = response.json()
+    assert body["results_visible"] is False
+    assert "score_objective" not in body
+    attempt_id = body["id"]
+    teacher_detail = teacher.get(f"{base}/attempts/{attempt_id}")
+    assert teacher_detail.status_code == 200, teacher_detail.text
+    assert teacher_detail.json()["score_objective"] == score
+    for item in teacher_detail.json()["items"][:2]:
+        assert item["correct"] is correct
+        assert item["points_awarded"] == (item["points"] if correct else 0)
+    hidden = student.get(f"{base}/attempts/{attempt_id}")
+    assert hidden.status_code == 200, hidden.text
+    assert hidden.json()["results_visible"] is False
+    assert hidden.json().get("score_objective") is None
+    for item in hidden.json()["items"][:2]:
+        assert item.get("correct") is None
+        assert item.get("points_awarded") is None
+    opened = _set_student_results_visible(teacher, created.json()["id"], hide=False)
+    assert opened.status_code == 200, opened.text
+    detail = student.get(f"{base}/attempts/{attempt_id}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["results_visible"] is True
+    assert detail.json()["score_objective"] == score
+    for item in detail.json()["items"][:2]:
+        assert item["correct"] is correct
+        assert item["points_awarded"] == (item["points"] if correct else 0)
     for key in ("answer", "rubric", "grading"):
+        assert f'"{key}"' not in hidden.text
         assert f'"{key}"' not in detail.text
 
 
@@ -140,6 +161,8 @@ def test_quiz_historical_keyless_scores_preserve_manual_and_answers(
         original_answers = attempt.answers_json
         original_grades = attempt.manual_grades_json
         db.commit()
+    opened = _set_student_results_visible(teacher, quiz_id, hide=False)
+    assert opened.status_code == 200, opened.text
     for actor in (teacher, student):
         detail = actor.get(path).json()
         assert detail["score_objective"] == expected_score
