@@ -323,6 +323,9 @@ export function SessionProvider({
         const epoch = beginSessionOperation();
         try {
           const next = await api.login(username, password, options);
+          if ("choice_token" in next) {
+            throw new Error("Choose a login identity to continue.");
+          }
           commitAuthenticatedSession(epoch, next);
           return next;
         } catch (cause) {

@@ -16,6 +16,7 @@ const frozen = resolve(root, "contracts/openapi-v0.1.yaml");
 const temporary = resolve(output, "..", ".route-fixture-source.json");
 const implemented = new Set([
   "login",
+  "chooseLoginIdentity",
   "switchDemoIdentity",
   "listDemoIdentities",
   "quickLogin",

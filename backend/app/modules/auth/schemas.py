@@ -14,6 +14,30 @@ class LoginRequest(BaseModel):
     password: str = Field(max_length=128, json_schema_extra={"format": "password"})
 
 
+class LoginIdentityClass(BaseModel):
+    course_id: UUID
+    code: str
+    name: str
+
+
+class LoginIdentityOptions(BaseModel):
+    classes: list[LoginIdentityClass]
+
+
+class LoginIdentityChoice(BaseModel):
+    choice_token: str
+    expires_in_seconds: int
+    options: LoginIdentityOptions
+
+
+class LoginIdentityChoiceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    choice_token: str = Field(max_length=256)
+    identity: Literal["maya", "student"]
+    course_id: UUID | None = None
+
+
 class CourseMembership(BaseModel):
     course_id: UUID
     role: Literal["teacher", "student"]

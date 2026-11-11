@@ -1047,6 +1047,7 @@ def create_app(
                                         "pattern": r"^[A-Za-z0-9_-]{43}$",
                                     }
                         if operation_id not in {
+                            "chooseLoginIdentity",
                             "uploadKnowledgeDocument",
                             "replaceKnowledgeDocument",
                             "saveKnowledgeMarkdown",

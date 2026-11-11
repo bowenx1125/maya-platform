@@ -48,7 +48,7 @@ def test_alembic_upgrade_is_idempotent_and_readiness_checks_head(tmp_path: Path)
     db.upgrade_schema()
     db.upgrade_schema()
     assert db.using_migrations
-    assert ALEMBIC_HEAD == "0087_account_author_links"
+    assert ALEMBIC_HEAD == "0088_bowen_identity_choice"
     assert db.check_ready()
     with db.engine.connect() as connection:
         assert (
@@ -129,10 +129,51 @@ def test_database_at_the_baseline_runs_no_ddl_and_keeps_its_version(tmp_path: Pa
     finally:
         event.remove(db.engine, "before_cursor_execute", record)
     assert MIGRATION_BASELINE == "0080_drop_playback_rate"
-    assert ALEMBIC_HEAD == "0087_account_author_links"
+    assert ALEMBIC_HEAD == "0088_bowen_identity_choice"
     assert not {"CREATE", "ALTER", "DROP", "INSERT", "UPDATE", "DELETE"} & set(statements)
     with db.engine.connect() as connection:
         assert (
             connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
             == ALEMBIC_HEAD
         )
+
+
+def test_upgrade_0087_keeps_existing_student_session_and_adds_choice_metadata(
+    tmp_path: Path,
+) -> None:
+    from app.core.models import SessionRecord, User
+    from app.modules.auth.service import create_rotated_session
+    from app.modules.org.classes import ensure_classes
+    from app.seed import BOWEN_ID, seed_demo_data
+
+    db = Database(named_url(f"{tmp_path / 'bowen-upgrade'}"))
+    db.upgrade_schema()
+    settings = Settings(maya_env="test", session_secret="x" * 32)
+    with db.session() as session:
+        seed_demo_data(session)
+        ensure_classes(session)
+        _, row, _ = create_rotated_session(session, session.get(User, BOWEN_ID), settings)
+        saved_hash = row.id_hash
+        saved_courses = session.execute(
+            text("SELECT id, name, code FROM courses ORDER BY id")
+        ).all()
+    with db.engine.begin() as connection:
+        connection.execute(text("DROP TABLE login_identity_challenges"))
+        connection.execute(text("ALTER TABLE sessions DROP COLUMN active_course_id"))
+        connection.execute(text("ALTER TABLE sessions DROP COLUMN entered_via_user_id"))
+        connection.execute(
+            text("UPDATE alembic_version SET version_num = '0087_account_author_links'")
+        )
+    db.upgrade_schema()
+    assert db.check_ready()
+    with db.session() as session:
+        row = session.get(SessionRecord, saved_hash)
+        assert row.user_id == BOWEN_ID
+        assert row.revoked_at is None
+        assert row.entered_via_user_id is None
+        assert row.active_course_id is None
+        assert (
+            session.execute(text("SELECT id, name, code FROM courses ORDER BY id")).all()
+            == saved_courses
+        )
+    assert "login_identity_challenges" in inspect(db.engine).get_table_names()
