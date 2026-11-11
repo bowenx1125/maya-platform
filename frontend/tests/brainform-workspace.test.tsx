@@ -617,6 +617,186 @@ describe("Brainform workspace actions", () => {
     ).toBeNull();
   });
 
+  it.each(["pick", "drop"])(
+    "fills the Knowledge album create tile from a %s and preserves Markdown after invalid files",
+    async (method) => {
+      state.role = "teacher";
+      render(<BrainformWorkspace role="teacher" knowledgePage />);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "New Knowledge" }),
+      );
+      const input = screen.getByLabelText(
+        "Upload a Markdown file as Knowledge",
+      );
+      const tile = input.closest("label")!;
+      expect(tile).toHaveClass("upload-tile");
+      expect(tile).toHaveAttribute("data-kind", "knowledge");
+      expect(tile).toHaveAttribute("aria-busy", "false");
+      expect(input).toHaveAttribute("accept", ".md,text/markdown");
+      const dataTransfer = { types: ["Files"], files: [] as File[] };
+      fireEvent.dragEnter(tile, { dataTransfer });
+      expect(tile).toHaveAttribute("data-drag", "over");
+      fireEvent.dragLeave(tile, { dataTransfer, relatedTarget: document.body });
+      expect(tile).not.toHaveAttribute("data-drag");
+      const select = (file: File) => {
+        if (method === "pick")
+          fireEvent.change(input, { target: { files: [file] } });
+        else {
+          fireEvent.dragEnter(tile, { dataTransfer });
+          fireEvent.drop(tile, {
+            dataTransfer: { types: ["Files"], files: [file] },
+          });
+          expect(tile).not.toHaveAttribute("data-drag");
+        }
+      };
+      select(
+        markdownUpload(
+          "Form A.md",
+          Promise.resolve(new TextEncoder().encode("# Form A").buffer),
+        ),
+      );
+      await waitFor(() =>
+        expect(screen.getByLabelText("Content")).toHaveValue("# Form A"),
+      );
+      expect(screen.getByLabelText("File Name")).toHaveValue("Form A");
+      for (const name of ["wrong.txt", "wrong.pdf"]) {
+        select(new File(["wrong"], name));
+        expect(
+          screen.getByText(
+            "Choose a .md, .pdf, or .docx file, or enter non-empty Markdown.",
+          ),
+        ).toBeTruthy();
+        expect(screen.getByLabelText("Content")).toHaveValue("# Form A");
+        expect(screen.getByLabelText("File Name")).toHaveValue("Form A");
+      }
+    },
+  );
+
+  it("returns from the Knowledge album create tile to the busy New action on Done", async () => {
+    state.role = "teacher";
+    let finish!: (value: object) => void;
+    state.api.createKnowledgeSet = vi.fn().mockResolvedValue({ id: "set-new" });
+    state.api.saveKnowledgeMarkdown = vi.fn(
+      () => new Promise((resolve) => (finish = resolve)),
+    );
+    render(<BrainformWorkspace role="teacher" knowledgePage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "New Knowledge" }),
+    );
+    fireEvent.change(screen.getByLabelText("File Name"), {
+      target: { value: "Form A" },
+    });
+    fireEvent.change(screen.getByLabelText("Content"), {
+      target: { value: "# Form A" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() =>
+      expect(state.api.saveKnowledgeMarkdown).toHaveBeenCalledWith(
+        "set-new",
+        { expected_version_seq: 0, markdown: "# Form A" },
+        expect.anything(),
+      ),
+    );
+    expect(
+      screen.queryByLabelText("Upload a Markdown file as Knowledge"),
+    ).toBeNull();
+    const newAction = screen.getByRole("button", { name: "New Knowledge" });
+    expect(newAction).toHaveAttribute("aria-busy", "true");
+    expect(newAction).toBeDisabled();
+    fireEvent.click(newAction);
+    expect(
+      screen.queryByLabelText("Upload a Markdown file as Knowledge"),
+    ).toBeNull();
+    await act(async () => finish({}));
+    await waitFor(() => expect(newAction).not.toHaveAttribute("aria-busy"));
+  });
+
+  it("imports Knowledge album edits and ignores drops while saving the canonical set", async () => {
+    state.role = "teacher";
+    state.userId = "40500000-0000-4000-8000-000000000001";
+    const row = {
+      canonical_set_id: "set-1",
+      source_agent_display_name: "Socrates",
+      knowledge_display_name: "Socrates Knowledge",
+      version_seq: 1,
+      can_read: true,
+      can_edit: true,
+    };
+    const markdown = {
+      ...row,
+      audience: "full",
+      markdown: "# Original",
+      projection_available: true,
+    };
+    state.api.brainformKnowledge.mockResolvedValue([row]);
+    state.api.knowledgeMarkdown.mockResolvedValue(markdown);
+    let finish!: (value: object) => void;
+    state.api.saveKnowledgeMarkdown = vi.fn(
+      () => new Promise((resolve) => (finish = resolve)),
+    );
+    render(
+      <BrainformWorkspace
+        role="teacher"
+        knowledgePage
+        initialMode="knowledge-edit"
+        initialSetId="set-1"
+      />,
+    );
+    const input = await screen.findByLabelText(
+      "Upload a Markdown file as Knowledge",
+    );
+    const tile = input.closest("label")!;
+    expect(tile).toHaveAttribute("aria-busy", "false");
+    fireEvent.change(input, {
+      target: {
+        files: [
+          markdownUpload(
+            "Picked.md",
+            Promise.resolve(new TextEncoder().encode("# Picked").buffer),
+          ),
+        ],
+      },
+    });
+    await waitFor(() =>
+      expect(screen.getByLabelText("Content")).toHaveValue("# Picked"),
+    );
+    fireEvent.drop(tile, {
+      dataTransfer: {
+        types: ["Files"],
+        files: [
+          markdownUpload(
+            "Dropped.md",
+            Promise.resolve(new TextEncoder().encode("# Dropped").buffer),
+          ),
+        ],
+      },
+    });
+    await waitFor(() =>
+      expect(screen.getByLabelText("Content")).toHaveValue("# Dropped"),
+    );
+    fireEvent.dragEnter(tile, { dataTransfer: { types: ["Files"] } });
+    expect(tile).toHaveAttribute("data-drag", "over");
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(state.api.saveKnowledgeMarkdown).toHaveBeenCalledWith(
+      "set-1",
+      { expected_version_seq: 1, markdown: "# Dropped" },
+      expect.anything(),
+    );
+    expect(tile).toHaveAttribute("aria-busy", "true");
+    expect(tile).not.toHaveAttribute("data-drag");
+    expect(input).toBeDisabled();
+    const ignored = new File(["# Ignored"], "Ignored.md");
+    const read = vi.fn();
+    Object.defineProperty(ignored, "arrayBuffer", { value: read });
+    const dataTransfer = { types: ["Files"], files: [ignored] };
+    expect(fireEvent.dragOver(tile, { dataTransfer })).toBe(false);
+    expect(tile).not.toHaveAttribute("data-drag");
+    expect(fireEvent.drop(tile, { dataTransfer })).toBe(false);
+    expect(read).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Content")).toHaveValue("# Dropped");
+    await act(async () => finish({ ...markdown, markdown: "# Dropped" }));
+  });
+
   it("leaves a new Knowledge unsaved on Back", async () => {
     state.role = "teacher";
     state.api.createKnowledgeSet = vi.fn();

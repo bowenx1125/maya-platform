@@ -77,9 +77,29 @@
 .upload-tile {
   --upload-rest: 8px 8px 0 #111;
   --upload-sunk: 0 0 0 #111;
+  --upload-sink: 8px 8px;
+  --upload-spinner-size: 44px;
+  --upload-spinner-border: 5px;
+  --upload-spinner-margin: -22px;
+  --upload-bob: -5px;
   transition:
     translate 150ms var(--arc-ease),
     box-shadow 150ms var(--arc-ease);
+}
+.upload-tile[data-kind="knowledge"] {
+  --upload-rest: 6px 6px 0 #111;
+  --upload-sink: 6px 6px;
+  --upload-spinner-size: 36px;
+  --upload-spinner-border: 4px;
+  --upload-spinner-margin: -18px;
+  --upload-bob: -4px;
+}
+@media (max-width: 960px) {
+  .upload-tile[data-kind="knowledge"] {
+    --upload-spinner-size: 28px;
+    --upload-spinner-border: 3px;
+    --upload-spinner-margin: -14px;
+  }
 }
 .upload-tile[data-has-file="true"] {
   --upload-rest: 8px 8px 0 #111, 0 0 0 10px #a3e635;
@@ -108,7 +128,7 @@
     [aria-busy="true"],
     [data-drag="over"]
   ):active {
-  translate: 8px 8px;
+  translate: var(--upload-sink);
   box-shadow: var(--upload-sunk);
   transition-duration: 80ms;
 }
@@ -141,7 +161,7 @@
 }
 @keyframes upload-tile-bob {
   50% {
-    translate: 0 -5px;
+    translate: 0 var(--upload-bob);
   }
 }
 @keyframes upload-tile-spin {
@@ -167,7 +187,7 @@
 .upload-tile[aria-busy="true"],
 .upload-tile[aria-busy="true"]:hover,
 .upload-tile[aria-busy="true"]:active {
-  translate: 8px 8px;
+  translate: var(--upload-sink);
   box-shadow: var(--upload-sunk);
   cursor: progress;
   outline: 0;
@@ -186,11 +206,11 @@
   content: "";
   position: absolute;
   inset: 50% auto auto 50%;
-  width: 44px;
-  height: 44px;
-  margin: -22px 0 0 -22px;
+  width: var(--upload-spinner-size);
+  height: var(--upload-spinner-size);
+  margin: var(--upload-spinner-margin) 0 0 var(--upload-spinner-margin);
   border-radius: 50%;
-  border: 5px solid #111;
+  border: var(--upload-spinner-border) solid #111;
   border-top-color: transparent;
   animation: upload-tile-spin 900ms linear infinite;
 }
@@ -216,7 +236,7 @@
   .upload-tile[aria-busy="true"],
   .upload-tile[aria-busy="true"]:hover,
   .upload-tile[aria-busy="true"]:active {
-    translate: 8px 8px !important;
+    translate: var(--upload-sink) !important;
     box-shadow: var(--upload-sunk) !important;
   }
   .upload-tile[aria-busy="true"] > .upload-tile-disc {

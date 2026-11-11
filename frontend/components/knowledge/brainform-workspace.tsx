@@ -1711,6 +1711,16 @@ function BrainformWorkspaceBody({
     onFile: selectRagFile,
   });
 
+  function selectKnowledgeFile(file: File) {
+    if (pane?.kind === "knowledge-new") void importNewKnowledge(file);
+    else if (pane?.kind === "knowledge-edit") void importKnowledgeEdit(file);
+  }
+
+  const knowledgeFileDrop = useFileDrop({
+    disabled: Boolean(busyKey),
+    onFile: selectKnowledgeFile,
+  });
+
   async function saveNewRag() {
     const draft = newRag;
     const name = draft.name.trim().replace(/\.(md|pdf|docx)$/i, "");
@@ -3624,6 +3634,8 @@ function BrainformWorkspaceBody({
                 (markdown?.can_edit && markdown.audience === "full") ? (
                   <label
                     className={kAlbum.pack}
+                    data-kind="knowledge"
+                    {...knowledgeFileDrop}
                     aria-busy={
                       pane?.kind === "knowledge-new"
                         ? busyKey === "knowledge-new"
@@ -3643,10 +3655,7 @@ function BrainformWorkspaceBody({
                       onChange={(event) => {
                         const file = event.currentTarget.files?.[0];
                         event.currentTarget.value = "";
-                        if (!file) return;
-                        if (pane?.kind === "knowledge-new")
-                          void importNewKnowledge(file);
-                        else void importKnowledgeEdit(file);
+                        if (file) selectKnowledgeFile(file);
                       }}
                     />
                   </label>

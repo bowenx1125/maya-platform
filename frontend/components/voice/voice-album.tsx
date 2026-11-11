@@ -355,7 +355,7 @@ export function VoiceAlbumCreate({
           <span
             className={`upload-tile-disc grid h-[150px] w-[150px] @max-[48rem]:h-[88px] @max-[48rem]:w-[88px] @max-[48rem]:p-[8px] place-items-center rounded-[50%] border-4 border-solid border-[#111] p-[14px] text-center ${hasFile ? "bg-[#ff4d8d]" : "bg-[#ffe14d]"}`}
           >
-            {fileName ? (
+            {fileName && !busy ? (
               <b
                 className="[font:800_15px/1.25_var(--font-lexend,'Lexend')] @max-[48rem]:text-[12px] [overflow-wrap:anywhere]"
                 aria-live="polite"

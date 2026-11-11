@@ -653,6 +653,23 @@ export function VoiceLibrary({
   }
 
   function selectVoiceFile(file: File | undefined) {
+    if (
+      file &&
+      !/\.(wav|mp3|m4a)$/i.test(file.name) &&
+      ![
+        "audio/wav",
+        "audio/x-wav",
+        "audio/wave",
+        "audio/mpeg",
+        "audio/mp3",
+        "audio/mp4",
+        "audio/x-m4a",
+        "audio/m4a",
+      ].includes(file.type)
+    ) {
+      setFailure({ cause: new Error(t("voiceAudioRequired")), retry: null });
+      return;
+    }
     idempotency.abandon("voice-enroll");
     setFailure(null);
     setFile(file ?? null);
