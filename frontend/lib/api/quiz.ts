@@ -61,6 +61,15 @@ export interface QuizSummaryDTO {
   taking_open?: boolean;
   /** Current taking round; increments each closed→open. */
   taking_epoch?: number;
+  /** Teacher view: active current-epoch exemptions. */
+  exemption_count?: number;
+  exemption_deadline_latest?: string | null;
+  /** Per-viewer: the student's active deadline, if any. */
+  exempt_until?: string | null;
+  /** Per-viewer: published and (open or exempt) and not already submitted. */
+  can_take_now?: boolean;
+  scheduled_start_at?: string | null;
+  scheduled_end_at?: string | null;
   created_by_user_id: string;
   published_at?: string | null;
   created_at: string;
@@ -126,6 +135,41 @@ export interface QuizItemGrade {
   item_id: string;
   points_awarded: number;
   feedback?: string;
+}
+
+export interface QuizExemptionDTO {
+  id: string;
+  student_id: string;
+  username: string;
+  display_name: string;
+  deadline_at: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuizExemptionStudentDTO {
+  student_id: string;
+  username: string;
+  display_name: string;
+  submitted: boolean;
+  exempt_until?: string | null;
+}
+
+export interface QuizExemptionsDTO {
+  taking_epoch: number;
+  exemptions: QuizExemptionDTO[];
+  students: QuizExemptionStudentDTO[];
+}
+
+export interface PutQuizExemptionsRequest {
+  student_ids: string[];
+  deadline_at: string;
+}
+
+export interface PutQuizScheduleRequest {
+  start_at: string | null;
+  end_at: string | null;
 }
 
 export interface CreateQuizRequest {
@@ -330,6 +374,55 @@ export class QuizApi {
     return this.request<void>(
       "DELETE",
       `/api/v1/${quizAttemptPath(courseId, quizId, attemptId)}`,
+    );
+  }
+
+  listExemptions(courseId: string, quizId: string): Promise<QuizExemptionsDTO> {
+    return this.request<QuizExemptionsDTO>(
+      "GET",
+      `/api/v1/courses/${courseId}/quizzes/${quizId}/exemptions`,
+    );
+  }
+
+  putExemptions(
+    courseId: string,
+    quizId: string,
+    payload: PutQuizExemptionsRequest,
+  ): Promise<QuizExemptionsDTO> {
+    return this.request<QuizExemptionsDTO>(
+      "PUT",
+      `/api/v1/courses/${courseId}/quizzes/${quizId}/exemptions`,
+      payload,
+    );
+  }
+
+  deleteExemption(
+    courseId: string,
+    quizId: string,
+    studentId: string,
+  ): Promise<void> {
+    return this.request<void>(
+      "DELETE",
+      `/api/v1/courses/${courseId}/quizzes/${quizId}/exemptions/${studentId}`,
+    );
+  }
+
+  clearExemptions(courseId: string, quizId: string): Promise<void> {
+    return this.request<void>(
+      "DELETE",
+      `/api/v1/courses/${courseId}/quizzes/${quizId}/exemptions`,
+    );
+  }
+
+  putSchedule(
+    courseId: string,
+    quizId: string,
+    payload: PutQuizScheduleRequest,
+  ): Promise<TeacherQuizDTO> {
+    return this.request<TeacherQuizDTO>(
+      "PUT",
+      `/api/v1/courses/${courseId}/quizzes/${quizId}/schedule`,
+      payload,
     );
   }
 

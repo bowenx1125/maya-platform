@@ -19,6 +19,11 @@ import {
   QuizStatus,
   quizState,
 } from "./quiz-chrome";
+import {
+  QuizTakingControls,
+  TeacherExtendedSticker,
+  TeacherScheduleStickers,
+} from "./quiz-taking-controls";
 
 /**
  * Teacher Quizzes (option A, 2026-11-08): one row per quiz with its state
@@ -37,6 +42,7 @@ export function QuizzesList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [deleteError, setDeleteError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const loadSequence = useRef(0);
   // Set before the request, so a second click cannot send another delete
@@ -112,6 +118,7 @@ export function QuizzesList() {
       {loading ? <LoadingCard /> : null}
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       {deleteError ? <ErrorNotice error={deleteError} /> : null}
+      {actionError ? <ErrorNotice error={actionError} /> : null}
       {!loading && !error ? (
         quizzes.length === 0 ? (
           <QuizEmpty title={t("noQuizzes")} kind="quiz" />
@@ -128,7 +135,7 @@ export function QuizzesList() {
               return (
                 <li key={quiz.id} className={`${QUIZ_ROW} ${LIST_CARD_LIFT}`}>
                   <Link
-                    className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3.5 gap-y-2.5 text-ink no-underline"
+                    className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3.5 gap-y-2.5 text-ink no-underline max-[600px]:basis-full"
                     data-testid="quiz-row"
                     href={`/teacher/quizzes/${quiz.id}`}
                   >
@@ -141,23 +148,62 @@ export function QuizzesList() {
                         {t("quizAttempts", { count: quiz.attempt_count ?? 0 })}
                       </QuizChip>
                     )}
+                    {state === "draft" ? null : (
+                      <>
+                        <TeacherScheduleStickers
+                          startAt={quiz.scheduled_start_at}
+                          endAt={quiz.scheduled_end_at}
+                        />
+                        <TeacherExtendedSticker count={quiz.exemption_count} />
+                      </>
+                    )}
                     <span aria-hidden="true" className="shrink-0">
                       <WorkspaceIcon name="chevronRight" size={20} stroke={3} />
                     </span>
                   </Link>
-                  <QuizKey
-                    icon="trash"
-                    busy={deletingId === quiz.id}
-                    disabled={deletingId !== null}
-                    testId="quiz-delete"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      void onDelete(quiz);
-                    }}
-                  >
-                    {t("quizDelete")}
-                  </QuizKey>
+                  {state === "draft" ? (
+                    <QuizKey
+                      icon="trash"
+                      busy={deletingId === quiz.id}
+                      disabled={deletingId !== null}
+                      testId="quiz-delete"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void onDelete(quiz);
+                      }}
+                    >
+                      {t("quizDelete")}
+                    </QuizKey>
+                  ) : (
+                    <QuizTakingControls
+                      courseId={courseId}
+                      quiz={quiz}
+                      onQuizUpdated={(next) =>
+                        setQuizzes((prev) =>
+                          prev.map((row) =>
+                            row.id === next.id ? { ...row, ...next } : row,
+                          ),
+                        )
+                      }
+                      onError={setActionError}
+                      trailing={
+                        <QuizKey
+                          icon="trash"
+                          busy={deletingId === quiz.id}
+                          disabled={deletingId !== null}
+                          testId="quiz-delete"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            void onDelete(quiz);
+                          }}
+                        >
+                          {t("quizDelete")}
+                        </QuizKey>
+                      }
+                    />
+                  )}
                 </li>
               );
             })}

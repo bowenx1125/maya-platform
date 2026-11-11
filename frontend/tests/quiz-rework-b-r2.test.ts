@@ -40,7 +40,17 @@ describe("taking paths", () => {
 });
 
 describe("canStudentStartQuiz", () => {
-  it("allows Start only when taking_open is true", () => {
+  it("allows Start when can_take_now is true, including a paused exemption", () => {
+    expect(
+      canStudentStartQuiz({ can_take_now: true, taking_open: false }),
+    ).toBe(true);
+    expect(
+      canStudentStartQuiz({ can_take_now: false, taking_open: true }),
+    ).toBe(false);
+    expect(canStudentStartQuiz({ can_take_now: false })).toBe(false);
+  });
+
+  it("falls back to taking_open when can_take_now is absent", () => {
     expect(canStudentStartQuiz({ taking_open: true })).toBe(true);
     expect(canStudentStartQuiz({ taking_open: false })).toBe(false);
     expect(canStudentStartQuiz({})).toBe(false);

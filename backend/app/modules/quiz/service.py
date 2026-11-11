@@ -469,9 +469,7 @@ def delete_quiz(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -
     db.commit()
 
 
-def _get_quiz_for_update(db: Session, course_id: str, quiz_id: str) -> ClassroomQuiz:
-    """Load the quiz row with a write lock for taking open/close RMW."""
-
+def _lock_quiz_row(db: Session, course_id: str, quiz_id: str) -> ClassroomQuiz:
     quiz = db.scalar(
         select(ClassroomQuiz)
         .where(ClassroomQuiz.id == quiz_id, ClassroomQuiz.course_id == course_id)
@@ -480,9 +478,21 @@ def _get_quiz_for_update(db: Session, course_id: str, quiz_id: str) -> Classroom
     )
     if quiz is None:
         raise not_found()
-    if _apply_due_if_needed(db, quiz):
-        return _get_quiz_for_update(db, course_id, quiz_id)
     return quiz
+
+
+def _get_quiz_for_update(db: Session, course_id: str, quiz_id: str) -> ClassroomQuiz:
+    """Load the quiz row with a write lock for taking open/close RMW.
+
+    A due schedule is applied once (that helper re-locks), then this reloads
+    the row. It does not recurse, so a stuck due row cannot loop forever.
+    """
+
+    quiz = _lock_quiz_row(db, course_id, quiz_id)
+    if not _schedule_due(quiz, _now()):
+        return quiz
+    apply_due_schedules(db, quiz.id, _now())
+    return _lock_quiz_row(db, course_id, quiz_id)
 
 
 def start_taking(db: Session, actor: AuthContext, course_id: str, quiz_id: str) -> TeacherQuizDTO:
@@ -703,12 +713,15 @@ def submit_attempt(
     - ``document_snapshot_json`` reuses ``quiz.document_json`` as-is (no
       re-serialize). Document is parsed once for objective grading only.
     - Skip ``db.refresh`` after commit; expire_on_commit=False keeps fields.
+    - The quiz row is read without a lock. Lazy schedule apply only takes
+      the row lock when a start or end time is actually due.
     """
 
     role = _require_member(db, actor, course_id)
     if role == "teacher":
         raise forbidden("Teachers cannot submit quiz attempts.")
-    quiz = _get_quiz_for_update(db, course_id, quiz_id)
+    quiz = _get_quiz(db, course_id, quiz_id)
+    _apply_due_if_needed(db, quiz)
     if quiz.status != "published":
         raise not_found()
     deadline = _exemption_deadline(db, quiz, str(actor.user.id))
