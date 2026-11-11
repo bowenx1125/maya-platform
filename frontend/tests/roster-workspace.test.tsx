@@ -165,7 +165,7 @@ describe("teacher account management", () => {
         created,
       ]);
     });
-    fireEvent.click(await screen.findByRole("button", { name: "Add class" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add Class" }));
     fireEvent.change(screen.getByLabelText("Class name"), {
       target: { value: "History 2026" },
     });
@@ -188,7 +188,7 @@ describe("teacher account management", () => {
     api.createClass.mockRejectedValue(new Error("unavailable"));
     mount(api);
     expect(await screen.findByText("New Student")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Add class" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Class" }));
     fireEvent.change(screen.getByLabelText("Class name"), {
       target: { value: "History 2026" },
     });

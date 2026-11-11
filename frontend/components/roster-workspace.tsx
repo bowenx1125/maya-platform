@@ -16,7 +16,8 @@ import {
   teacherLeavesSettled,
 } from "../lib/teacher-visit";
 import { useT } from "../lib/i18n";
-import { PageAction } from "./page-action";
+import { PageAction, pageActionClass } from "./page-action";
+import { WorkspaceIcon } from "./workspace-icon";
 import {
   IconArrowRight,
   IconEdit,
@@ -71,17 +72,18 @@ export function RosterWorkspace() {
   return (
     <div className={`account-layout ${styles.layout}`}>
       <PageBanner title={t("accounts")}>
-        <Button
-          variant="neutral"
-          className={WORKSPACE_ACTION_SIZE}
+        <button
+          type="button"
+          className={pageActionClass("new")}
           disabled={creating}
           onClick={() => {
             setAdding(true);
             setCreateError(null);
           }}
         >
-          Add class
-        </Button>
+          <WorkspaceIcon name="new" size={16} />
+          <span>Add Class</span>
+        </button>
       </PageBanner>
       {adding ? (
         <Card className="px-5">
