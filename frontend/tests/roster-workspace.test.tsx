@@ -24,6 +24,7 @@ import { useSession } from "../components/session-provider";
 import { RosterWorkspace } from "../components/roster-workspace";
 import { AppShell } from "../components/app-shell";
 import { endTeacherEnter } from "../lib/teacher-visit";
+import { GROUP_SORT_STORAGE_KEY } from "../lib/group-sort";
 
 const mockedUseSession = vi.mocked(useSession);
 const courseId = "course-id";
@@ -131,13 +132,161 @@ function mount(api: ReturnType<typeof apiForTeacher>, courseIds = [courseId]) {
   return view;
 }
 
+function apiForGroupSort() {
+  const api = apiForTeacher();
+  const groups: Group[] = [
+    { id: "g10", course_id: courseId, name: "Group 10" },
+    { id: "g2", course_id: courseId, name: "Group 2" },
+    { id: "alpha", course_id: courseId, name: "Alpha" },
+    { id: "empty", course_id: courseId, name: "Zulu" },
+  ];
+  api.groups.mockResolvedValue(groups);
+  api.courseRoster.mockResolvedValue({
+    course_id: courseId,
+    entries: [
+      entry({ groups: [groups[0], groups[1], groups[0]] }),
+      entry({ groups: [groups[0], groups[1]] }),
+      entry({ groups: [groups[2]] }),
+      entry({ role: "teacher", groups: [groups[2]] }),
+      entry({ role: "teacher", groups: [groups[2]] }),
+      entry({ status: "inactive", groups: [groups[2]] }),
+      entry({ groups: [] }),
+    ].map((item, index) => ({ ...item, user_id: `sort-member-${index}` })),
+  });
+  return api;
+}
+
+function groupCardIds() {
+  return within(screen.getByRole("region", { name: "Groups" }))
+    .getAllByRole("button", { name: "Enter" })
+    .map((card) => card.id);
+}
+
+const nameOrder = [
+  "roster-group-alpha",
+  "roster-group-g2",
+  "roster-group-g10",
+  "roster-group-empty",
+];
+const membersOrder = [
+  "roster-group-g2",
+  "roster-group-g10",
+  "roster-group-alpha",
+  "roster-group-empty",
+];
+
 describe("teacher account management", () => {
   afterEach(() => {
     endTeacherEnter();
     cleanup();
     vi.restoreAllMocks();
+    localStorage.removeItem(GROUP_SORT_STORAGE_KEY);
     push.mockReset();
   });
+
+  it("shows student counts on naturally ordered cards, excluding teachers and inactive students", async () => {
+    mount(apiForGroupSort());
+    await screen.findByTestId("group-sort");
+    expect(groupCardIds()).toEqual(nameOrder);
+    const cards = within(
+      screen.getByRole("region", { name: "Groups" }),
+    ).getAllByRole("button", { name: "Enter" });
+    expect(
+      cards.map(
+        (card) => within(card).getByTestId("group-student-count").textContent,
+      ),
+    ).toEqual(["1", "2", "2", "0"]);
+    expect(
+      within(cards[0]).getByRole("img", { name: "1 student" }),
+    ).toBeTruthy();
+    expect(
+      within(cards[1]).getByRole("img", { name: "2 students" }),
+    ).toBeTruthy();
+    expect(
+      within(cards[3]).getByRole("img", { name: "0 students" }),
+    ).toBeTruthy();
+    for (const card of cards) {
+      expect(card.getAttribute("data-ui-guide")).toBe("roster.openGroup");
+    }
+  });
+
+  it("toggles the current-order label and sorts by student count with natural name ties", async () => {
+    mount(apiForGroupSort());
+    const key = await screen.findByRole("button", { name: "Sort groups: A–Z" });
+    expect(key.textContent).toBe("A–Z");
+    expect(key).toBe(screen.getByTestId("group-sort"));
+    fireEvent.click(key);
+    expect(key.getAttribute("aria-label")).toBe("Sort groups: Most members");
+    expect(key.textContent).toBe("Most members");
+    expect(groupCardIds()).toEqual(membersOrder);
+    expect(localStorage.getItem(GROUP_SORT_STORAGE_KEY)).toBe("members");
+    fireEvent.click(key);
+    expect(key.getAttribute("aria-label")).toBe("Sort groups: A–Z");
+    expect(key.textContent).toBe("A–Z");
+    expect(groupCardIds()).toEqual(nameOrder);
+    expect(localStorage.getItem(GROUP_SORT_STORAGE_KEY)).toBe("name");
+  });
+
+  it("keeps card counts and group sorting independent of the Members search", async () => {
+    mount(apiForGroupSort());
+    fireEvent.click(await screen.findByTestId("group-sort"));
+    fireEvent.change(
+      screen.getByRole("searchbox", {
+        name: "Filter by name, username or group",
+      }),
+      {
+        target: { value: "nobody-like-this" },
+      },
+    );
+    expect(screen.getByText("No members match.")).toBeTruthy();
+    expect(groupCardIds()).toEqual(membersOrder);
+    expect(
+      screen
+        .getAllByTestId("group-student-count")
+        .map((count) => count.textContent),
+    ).toEqual(["2", "2", "1", "0"]);
+  });
+
+  it("restores the saved members order after a toggle and remount", async () => {
+    const api = apiForGroupSort();
+    const view = mount(api);
+    fireEvent.click(await screen.findByTestId("group-sort"));
+    view.unmount();
+    mount(api);
+    expect(
+      await screen.findByRole("button", { name: "Sort groups: Most members" }),
+    ).toBeTruthy();
+    expect(groupCardIds()).toEqual(membersOrder);
+  });
+
+  it.each(["name", "invalid", "MEMBERS", ""])(
+    "defaults to natural name order for stored value %j",
+    async (value) => {
+      localStorage.setItem(GROUP_SORT_STORAGE_KEY, value);
+      mount(apiForGroupSort());
+      expect(
+        await screen.findByRole("button", { name: "Sort groups: A–Z" }),
+      ).toBeTruthy();
+      expect(groupCardIds()).toEqual(nameOrder);
+    },
+  );
+
+  it.each(["getItem", "setItem"] as const)(
+    "keeps sorting usable when storage %s throws",
+    async (method) => {
+      vi.spyOn(Storage.prototype, method).mockImplementation(() => {
+        throw new Error("Storage unavailable");
+      });
+      mount(apiForGroupSort());
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Sort groups: A–Z" }),
+      );
+      expect(
+        screen.getByRole("button", { name: "Sort groups: Most members" }),
+      ).toBeTruthy();
+      expect(groupCardIds()).toEqual(membersOrder);
+    },
+  );
 
   it("creates a named class, refreshes access and opens its account list", async () => {
     const api = apiForTeacher();
