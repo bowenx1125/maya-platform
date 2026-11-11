@@ -50,6 +50,38 @@ const base = {
   updated_at: "2026-11-08T00:00:00Z",
 };
 
+const pausedQuiz = {
+  ...base,
+  id: "q-paused",
+  title: "Week 8",
+  status: "published",
+  taking_open: false,
+  taking_epoch: 2,
+  exemption_count: 0,
+  attempt_count: 1,
+};
+
+const exemptions = {
+  taking_epoch: 2,
+  exemptions: [],
+  students: [
+    {
+      student_id: "s-1",
+      username: "alice",
+      display_name: "Alice Chen",
+      submitted: false,
+      exempt_until: null,
+    },
+    {
+      student_id: "s-2",
+      username: "bram",
+      display_name: "Bram Okafor",
+      submitted: true,
+      exempt_until: null,
+    },
+  ],
+};
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -126,42 +158,12 @@ describe("teacher list extend and schedule", () => {
     state.routes.push(
       {
         match: /\/quizzes$/,
-        body: [
-          {
-            ...base,
-            id: "q-paused",
-            title: "Week 8",
-            status: "published",
-            taking_open: false,
-            taking_epoch: 2,
-            exemption_count: 0,
-            attempt_count: 1,
-          },
-        ],
+        body: [pausedQuiz],
       },
       {
         match: /\/exemptions$/,
         method: "GET",
-        body: {
-          taking_epoch: 2,
-          exemptions: [],
-          students: [
-            {
-              student_id: "s-1",
-              username: "alice",
-              display_name: "Alice Chen",
-              submitted: false,
-              exempt_until: null,
-            },
-            {
-              student_id: "s-2",
-              username: "bram",
-              display_name: "Bram Okafor",
-              submitted: true,
-              exempt_until: null,
-            },
-          ],
-        },
+        body: exemptions,
       },
     );
     render(<QuizzesList />);
@@ -187,6 +189,54 @@ describe("teacher list extend and schedule", () => {
       ).disabled,
     ).toBe(true);
   });
+
+  it.each([200, 500])(
+    "shows four decorative skeleton rows until exemptions settle with status %i",
+    async (status) => {
+      state.routes.push({ match: /\/quizzes$/, body: [pausedQuiz] });
+      render(<QuizzesList />);
+      const extend = await screen.findByTestId("quiz-extend");
+      let settle!: (response: Response) => void;
+      const pending = new Promise<Response>((resolve) => {
+        settle = resolve;
+      });
+      vi.mocked(fetch).mockImplementationOnce(() => pending);
+      fireEvent.click(extend);
+
+      const skeletons = screen.getAllByTestId("exemption-skeleton-row");
+      expect(skeletons).toHaveLength(4);
+      const list = skeletons[0].closest("ul")!;
+      expect(list.getAttribute("aria-busy")).toBe("true");
+      for (const row of skeletons) {
+        expect(row.tagName).toBe("LI");
+        expect(row.getAttribute("aria-hidden")).toBe("true");
+      }
+      expect(within(list).queryAllByRole("listitem")).toHaveLength(0);
+      expect(within(list).queryAllByRole("checkbox")).toHaveLength(0);
+      await waitFor(() =>
+        expect(fetch).toHaveBeenCalledWith(
+          expect.stringMatching(/\/exemptions$/),
+          expect.anything(),
+        ),
+      );
+
+      settle(jsonResponse(status === 200 ? exemptions : {}, status));
+      await waitFor(() => {
+        expect(screen.queryAllByTestId("exemption-skeleton-row")).toHaveLength(
+          0,
+        );
+        expect(list.getAttribute("aria-busy")).toBe("false");
+      });
+      if (status === 200) {
+        expect(within(list).getByText("Alice Chen")).toBeTruthy();
+        expect(within(list).getByText("@alice")).toBeTruthy();
+        expect(within(list).getByText("Bram Okafor")).toBeTruthy();
+        expect(within(list).getAllByRole("checkbox")).toHaveLength(2);
+      } else {
+        expect(within(list).queryAllByRole("listitem")).toHaveLength(0);
+      }
+    },
+  );
 
   it("disables Extend time before the first start, with a reason", async () => {
     state.routes.push({
