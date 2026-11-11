@@ -16,6 +16,14 @@ const responseAllowlistPath = resolve(
 );
 const redocly = resolve(root, "node_modules/@redocly/cli/bin/cli.js");
 const implementedOperationIds = new Set([
+  "listCourseQuizzes",
+  "getCourseQuiz",
+  "listCourseQuizExemptions",
+  "putCourseQuizExemptions",
+  "deleteCourseQuizExemption",
+  "clearCourseQuizExemptions",
+  "putCourseQuizSchedule",
+
   "login",
   "switchDemoIdentity",
   "listDemoIdentities",

@@ -19,7 +19,10 @@ from .schemas import (
     CreateQuizRequest,
     GradeQuizAttemptRequest,
     PatchQuizRequest,
+    PutQuizExemptionsRequest,
+    PutQuizScheduleRequest,
     QuizAttemptDTO,
+    QuizExemptionsDTO,
     QuizSummaryDTO,
     RecordAttemptDTO,
     StudentQuizAttemptDetailDTO,
@@ -360,3 +363,113 @@ def list_course_record_attempts(
     return service.list_course_record_attempts(
         db, actor, str(course_id), quiz_id=str(quiz_id) if quiz_id else None
     )
+
+
+@router.get(
+    "/courses/{course_id}/quizzes/{quiz_id}/exemptions",
+    response_model=QuizExemptionsDTO,
+    operation_id="listCourseQuizExemptions",
+    responses={
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+    },
+)
+def list_course_quiz_exemptions(
+    course_id: UUID,
+    quiz_id: UUID,
+    actor: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> QuizExemptionsDTO:
+    return service.list_exemptions(db, actor, str(course_id), str(quiz_id))
+
+
+@router.put(
+    "/courses/{course_id}/quizzes/{quiz_id}/exemptions",
+    response_model=QuizExemptionsDTO,
+    operation_id="putCourseQuizExemptions",
+    responses={
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": Error},
+        422: {"model": Error},
+    },
+)
+def put_course_quiz_exemptions(
+    course_id: UUID,
+    quiz_id: UUID,
+    body: PutQuizExemptionsRequest,
+    _csrf: CsrfHeader,
+    actor: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> QuizExemptionsDTO:
+    return service.put_exemptions(db, actor, str(course_id), str(quiz_id), body)
+
+
+@router.delete(
+    "/courses/{course_id}/quizzes/{quiz_id}/exemptions/{student_id}",
+    status_code=204,
+    operation_id="deleteCourseQuizExemption",
+    responses={
+        204: {"description": "Exemptions removed."},
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+    },
+)
+def delete_course_quiz_exemption(
+    course_id: UUID,
+    quiz_id: UUID,
+    student_id: UUID,
+    _csrf: CsrfHeader,
+    actor: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> Response:
+    service.delete_exemptions(db, actor, str(course_id), str(quiz_id), str(student_id))
+    return Response(status_code=204)
+
+
+@router.delete(
+    "/courses/{course_id}/quizzes/{quiz_id}/exemptions",
+    status_code=204,
+    operation_id="clearCourseQuizExemptions",
+    responses={
+        204: {"description": "Exemptions removed."},
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+    },
+)
+def clear_course_quiz_exemptions(
+    course_id: UUID,
+    quiz_id: UUID,
+    _csrf: CsrfHeader,
+    actor: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> Response:
+    service.delete_exemptions(db, actor, str(course_id), str(quiz_id))
+    return Response(status_code=204)
+
+
+@router.put(
+    "/courses/{course_id}/quizzes/{quiz_id}/schedule",
+    response_model=TeacherQuizDTO,
+    operation_id="putCourseQuizSchedule",
+    responses={
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": Error},
+        422: {"model": Error},
+    },
+)
+def put_course_quiz_schedule(
+    course_id: UUID,
+    quiz_id: UUID,
+    body: PutQuizScheduleRequest,
+    _csrf: CsrfHeader,
+    actor: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> TeacherQuizDTO:
+    return service.put_schedule(db, actor, str(course_id), str(quiz_id), body)
