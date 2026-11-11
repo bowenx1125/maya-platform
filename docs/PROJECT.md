@@ -69,12 +69,10 @@ before Boundary. "end" submits answered work; only abandon/redo deletes learning
 records,accounting stays. Boundary/reports:mastery/weak/not-yet-verified. Student-majority
 language; off-topic/progress requests get help,never answers.
 
-Oct5 build30db274/schema0053:ready/integrity/FK passed; backups20261005T110321Z/130151Z
-healthy;sending/pending0,historical unknown3 kept. Synthetic RAG:1 charged Embedding
-+2 accepted charged Knowledge;Gen2/seq3 replaces seq2,history kept. Consent-denied
-sends0;exact fixtures withdrawn;ledger457 operations/457 charged requests same.
-Oct7 authorizes fresh synthetic four-Agent Team/multi-student workflow/reads,excludes
-real learner data/unrelated Private Chat.
+Oct5 build30db274/schema0053 healthy; backups20261005T110321Z/130151Z verified.
+Synthetic RAG/Knowledge receipts kept; consent-denied sends0; ledger457/457.
+Oct7 authorizes fresh synthetic four-Agent Team/multi-student workflow/reads,
+excludes real learner data/unrelated Private Chat.
 
 [UI contract](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) supersedes earlier plans.
 Studyform/Brainform share structure,role permissions differ. Oct9:Studyform creates
@@ -103,7 +101,7 @@ unknown protections stay. Four-Agent,classroom load,real Team/report acceptance 
 Teacher generate_agent_knowledge:accepted receipts reused,post-commit wake;first
 publish needs no Set. RAG pending-save lock/draft fence. Production:no Demo/quick-
 login/auto-confirm;exact HTTPS,strong Teacher creds,isolated mounts,abuse bounds only.
-C1 Mock:60 registrations,parallel send/replay/SSE,0 calls. Backup113435Z/0053→0054:
+C1 Mock:60 registrations,parallel send/replay/SSE,0 calls. Backup113435Z verified;
 Provider records kept,0 charges. Pose e9b000a:one canvas;preset voice b8f65e7=0056;
 TTS bar054f420 excluded.
 
@@ -303,5 +301,7 @@ Nov11: Agents/Teams <768px: single black banner, no orange ring; desktop diff0 (
 DEBATE_TTS_ENGINE=cosyvoice swaps the debate TTS adapter (same DashScope key/
 workspace; qwen3 default, fallback on pre-request refusals only). TTSResult.
 word_timestamps feeds debates/performance (turn text+timelines: gesture
-anchors, viseme windows). 18 tests, ruff/mypy clean. Stage/media wiring
-pending. 0 calls/deploy.
+anchors, viseme windows). 18 tests, ruff/mypy clean. AudioStore stores each
+turn's timeline as a WAV-sibling performance.json (staged/promoted/discarded/
+removed with the audio; enhancement-only, never blocks audio). +8 tests.
+Route/stage wiring pending. 0 calls/deploy.

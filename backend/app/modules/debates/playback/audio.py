@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
+import logging
 import re
 import secrets
 import shutil
@@ -21,6 +23,7 @@ from uuid import UUID, uuid4
 
 from app.core.errors import PlatformError
 from app.core.llm_admission import debate_llm_slot
+from app.modules.debates.performance import compile_performance
 from app.modules.knowledge.files import (
     contained_path,
     promote_atomic,
@@ -35,6 +38,8 @@ from app.providers.tts import (
     TTSProviderUnavailableError,
     TTSResult,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 MEDIA_TICKET_TTL = timedelta(minutes=5)
 MEDIA_TICKET_GRACE = timedelta(seconds=60)
@@ -86,6 +91,31 @@ def audio_staging_relative_path(
     )
 
 
+def performance_relative_path(
+    course_id: str | UUID, debate_id: str | UUID, turn_id: str | UUID
+) -> str:
+    """Sibling JSON timeline for one turn's canonical WAV."""
+
+    return (
+        f"courses/{_uuid_part(course_id)}/current-debate-audio/"
+        f"{_uuid_part(debate_id)}/{_uuid_part(turn_id)}.performance.json"
+    )
+
+
+def performance_staging_relative_path(
+    course_id: str | UUID,
+    debate_id: str | UUID,
+    turn_id: str | UUID,
+    operation_id: str | UUID,
+) -> str:
+    """Staging sibling of one operation's performance timeline."""
+
+    return (
+        f"staging/debate-turn-tts/{_uuid_part(course_id)}/"
+        f"{_uuid_part(debate_id)}/{_uuid_part(turn_id)}/{_uuid_part(operation_id)}.performance.json"
+    )
+
+
 @dataclass(frozen=True)
 class AudioMetadata:
     course_id: str
@@ -116,6 +146,9 @@ class StagedAudio:
     sha256: str
     size_bytes: int
     duration_ms: int
+    # Staged performance timeline sibling, present only when the provider
+    # returned word timestamps for this synthesis.
+    performance_relative_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -507,6 +540,33 @@ class AudioStore:
                 "speech admission refused", safe_code="tts_provider_unavailable"
             ) from exc
 
+    def _performance_payload(
+        self,
+        speech: str,
+        result: TTSResult,
+        duration_ms: int,
+    ) -> bytes | None:
+        """Compile the stage timeline when the provider returned word timestamps.
+
+        Only CosyVoice carries timestamps; qwen3 and Mock audio simply have no
+        timeline and the stage keeps its procedural motion. A compile or write
+        failure must never block the turn's audio, so the whole path is best
+        effort and logs a bounded code-free message.
+        """
+        timestamps = result.word_timestamps
+        if not timestamps:
+            return None
+        try:
+            compiled = compile_performance(
+                speech,
+                audio_duration_sec=duration_ms / 1000.0,
+                words=list(timestamps),
+            )
+            return json.dumps(compiled, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        except Exception:
+            LOGGER.exception("debate performance compile failed")
+            return None
+
     def synthesize_and_store(
         self,
         *,
@@ -536,6 +596,13 @@ class AudioStore:
         raw = result.audio_bytes
         relative = self.relative_path(course_id, debate_id, turn_id)
         digest, size = write_atomic(self.data_root, relative, raw)
+        performance = self._performance_payload(speech, result, wav_duration_ms(raw))
+        if performance is not None:
+            write_atomic(
+                self.data_root,
+                performance_relative_path(course_id, debate_id, turn_id),
+                performance,
+            )
         duration = wav_duration_ms(raw)
         metadata = AudioMetadata(
             course_id=course_id,
@@ -600,6 +667,17 @@ class AudioStore:
         except Exception:
             self.discard_staged_audio(relative)
             raise
+        performance_rel: str | None = None
+        performance = self._performance_payload(speech, result, duration)
+        if performance is not None:
+            candidate = performance_staging_relative_path(course_id, debate_id, turn_id, operation)
+            try:
+                stage_atomic(self.data_root, candidate, performance)
+                performance_rel = candidate
+            except Exception:
+                # Timelines are enhancement-only: a staged WAV without its JSON
+                # still promotes as plain audio.
+                LOGGER.exception("debate performance staging failed")
         return StagedAudio(
             operation_id=operation,
             course_id=_uuid_part(course_id),
@@ -610,6 +688,7 @@ class AudioStore:
             sha256=digest,
             size_bytes=size,
             duration_ms=duration,
+            performance_relative_path=performance_rel,
         )
 
     def promote_staged_audio(self, staged: StagedAudio) -> AudioMetadata:
@@ -629,6 +708,25 @@ class AudioStore:
         if target.exists():
             raise FileExistsError("audio promotion target is already occupied")
         verify_staged(self.data_root, staged.relative_path, staged.sha256, staged.size_bytes)
+        # The timeline promotes before the WAV: a WAV promotion failure then
+        # leaves only a staged pair behind, never a canonical JSON without
+        # its audio. A staged pair without JSON is plain audio.
+        if staged.performance_relative_path is not None:
+            performance_target = performance_relative_path(
+                staged.course_id, staged.debate_id, staged.turn_id
+            )
+            performance_source = self._non_symlink_path(staged.performance_relative_path)
+            performance_target_path = self._non_symlink_path(performance_target)
+            if (
+                performance_source is None
+                or performance_target_path is None
+                or performance_source.is_symlink()
+                or performance_target_path.is_symlink()
+                or not performance_source.is_file()
+                or performance_target_path.exists()
+            ):
+                raise TTSProviderError("performance promotion path is unavailable")
+            promote_atomic(self.data_root, staged.performance_relative_path, performance_target)
         promote_atomic(self.data_root, staged.relative_path, staged.target_relative_path)
         promoted = self._non_symlink_path(staged.target_relative_path)
         if promoted is None or promoted.is_symlink() or not promoted.is_file():
@@ -655,11 +753,21 @@ class AudioStore:
         return metadata
 
     def discard_staged_audio(self, relative_path: str | StagedAudio) -> None:
-        """Remove exactly one stage file and no sibling or canonical file."""
+        """Remove one stage file, plus its staged timeline when one was paired."""
 
-        relative = (
-            relative_path.relative_path if isinstance(relative_path, StagedAudio) else relative_path
-        )
+        if isinstance(relative_path, StagedAudio):
+            relative = relative_path.relative_path
+            performance = relative_path.performance_relative_path
+        else:
+            relative = relative_path
+            performance = None
+        path = self._non_symlink_path(relative)
+        if path is not None and not path.is_symlink() and path.is_file():
+            path.unlink(missing_ok=True)
+        if performance is not None:
+            self._discard_staged_relative(performance)
+
+    def _discard_staged_relative(self, relative: str) -> None:
         path = self._non_symlink_path(relative)
         if path is None or path.is_symlink() or not path.is_file():
             return
@@ -680,11 +788,21 @@ class AudioStore:
         if hashlib.sha256(raw).hexdigest() != staged.sha256 or len(raw) != staged.size_bytes:
             return False
         path.unlink(missing_ok=True)
+        # The promoted timeline is owned by the same stage: it promoted with
+        # this WAV and only exists alongside it, so it leaves with it.
+        self._discard_promoted_performance(staged)
         with self._lock:
             current = self._metadata.get((staged.debate_id, staged.turn_id))
             if current is not None and current.sha256 == staged.sha256:
                 self._metadata.pop((staged.debate_id, staged.turn_id), None)
         return True
+
+    def _discard_promoted_performance(self, staged: StagedAudio) -> None:
+        relative = performance_relative_path(staged.course_id, staged.debate_id, staged.turn_id)
+        path = self._non_symlink_path(relative)
+        if path is None or path.is_symlink() or not path.is_file():
+            return
+        path.unlink(missing_ok=True)
 
     def store_bytes(
         self,
@@ -727,6 +845,26 @@ class AudioStore:
         if metadata is None:
             return None
         path = self._non_symlink_path(metadata.relative_path)
+        if path is None:
+            return None
+        try:
+            return path.read_bytes()
+        except OSError:
+            return None
+
+    def read_performance(self, debate_id: str, turn_id: str) -> bytes | None:
+        """Read one turn's timeline only while its audio metadata is present.
+
+        The JSON is never served on its own: metadata presence is the same
+        gate as the WAV's, so a timeline without audio behaves as no timeline.
+        """
+
+        metadata = self.metadata(debate_id, turn_id)
+        if metadata is None:
+            return None
+        path = self._non_symlink_path(
+            performance_relative_path(metadata.course_id, debate_id, turn_id)
+        )
         if path is None:
             return None
         try:
@@ -782,6 +920,13 @@ class AudioStore:
             path.unlink(missing_ok=True)
         elif path.is_file():
             path.unlink()
+        performance = self.path_for(
+            performance_relative_path(metadata.course_id, debate_id, turn_id)
+        )
+        if performance.is_symlink():
+            performance.unlink(missing_ok=True)
+        elif performance.is_file():
+            performance.unlink()
 
     def stage_debate_directory(
         self,
