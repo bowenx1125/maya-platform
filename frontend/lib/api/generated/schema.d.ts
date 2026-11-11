@@ -1413,6 +1413,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/debates/{debate_id}/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Course-teacher-only per-Agent diagnostics computed from the Debate's stored turns, receipts and frozen snapshots. Grounding is a server text measure shown to teachers; it never changes a speech or a Report score. */
+        get: operations["getDebateDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/debates/{debate_id}/interaction": {
         parameters: {
             query?: never;
@@ -3869,6 +3886,64 @@ export interface components {
             debate_id: components["schemas"]["Uuid"];
             turns: components["schemas"]["DebateTurn"][];
             audio_retained: boolean;
+        };
+        DebateDiagnostics: {
+            debate_id: string;
+            /** @enum {string} */
+            output_language: "zh" | "en";
+            /** @enum {string} */
+            unit: "han_chars" | "words";
+            length_capped: boolean;
+            agents: components["schemas"]["AgentDiagnostic"][];
+        };
+        GroundingCounts: {
+            quoted: number;
+            paraphrased: number;
+            not_found: number;
+        };
+        AgentDiagnostic: {
+            participant_id: string;
+            agent_name: string;
+            slot: string;
+            agent_md_chars: number | null;
+            knowledge_documents: number;
+            knowledge_chunks: number;
+            retrievals: number;
+            distinct_chunks: number;
+            cited_chunks: number;
+            traced_share: number | null;
+            grounding_counts: components["schemas"]["GroundingCounts"];
+            rounds: components["schemas"]["RoundDiagnostic"][];
+        };
+        RoundDiagnostic: {
+            turn_id: string;
+            round_no: number;
+            turn_index: number;
+            speech_units: number;
+            unit_cap: number | null;
+            repaired: boolean;
+            retrieved: components["schemas"]["RetrievedChunkDiagnostic"][];
+            paragraphs: components["schemas"]["ParagraphDiagnostic"][] | null;
+            traced_share: number | null;
+            repeats_earlier_share: number | null;
+        };
+        RetrievedChunkDiagnostic: {
+            chunk_id: string;
+            source_filename: string;
+            rank: number;
+            score: number;
+            chunk_chars: number;
+            cited: boolean;
+        };
+        ParagraphDiagnostic: {
+            units: number;
+            cited_sources: number;
+            /** @enum {string|null} */
+            self_label: "direct" | "contextual" | "no_match" | null;
+            /** @enum {string|null} */
+            grounding_class: "quoted" | "paraphrased" | "not_found" | null;
+            coverage: number | null;
+            longest_run: number | null;
         };
         VoteAggregate: {
             participant_id: components["schemas"]["Uuid"];
@@ -9427,6 +9502,31 @@ export interface operations {
             };
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
+        };
+    };
+    getDebateDiagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                debate_id: components["parameters"]["DebateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One entry per participating Agent with cross-round numbers and a per-round breakdown. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DebateDiagnostics"];
+                };
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     getTeacherInteraction: {

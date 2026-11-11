@@ -58,6 +58,7 @@ from app.modules.avatars.router import router as avatars_router
 from app.modules.cardroom.router import router as cardroom_router
 from app.modules.debates.cleanup import resume_cleanup_journals
 from app.modules.debates.cleanup_router import router as debate_cleanup_router
+from app.modules.debates.diagnostics_router import router as debate_diagnostics_router
 from app.modules.debates.playback.audio import AudioStore, playback_transcoder
 from app.modules.debates.playback.audio_regeneration import (
     discard_unjournaled_audio_stages,
@@ -832,6 +833,7 @@ def create_app(
     app.include_router(voices_router, prefix="/api/v1")
     app.include_router(debate_setup_router, prefix="/api/v1")
     app.include_router(debate_cleanup_router, prefix="/api/v1")
+    app.include_router(debate_diagnostics_router, prefix="/api/v1")
     app.include_router(debate_playback_router, prefix="/api/v1")
     app.include_router(interaction_router, prefix="/api/v1")
     app.include_router(reports_router, prefix="/api/v1")

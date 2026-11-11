@@ -744,7 +744,8 @@ def test_complete_accepted_stages_resume_without_provider_call(tmp_path: Path) -
 
 
 def test_partial_accepted_stages_continue_only_not_sent_batches(tmp_path: Path) -> None:
-    source = "\n\n".join(f"# Section {index}\n\n" + "x " * 600 for index in range(11)).encode()
+    # Each section is large enough to be its own chunk, so the build needs two batches.
+    source = "\n\n".join(f"# Section {index}\n\n" + "x " * 2_000 for index in range(11)).encode()
     fixture = _make_fixture(tmp_path, source=source)
     build = _build(fixture)
     policy = _policy()
@@ -830,7 +831,8 @@ def test_partial_accepted_stages_continue_only_not_sent_batches(tmp_path: Path) 
 def test_bound_snapshot_multibatch_fails_before_operation_or_provider(
     tmp_path: Path,
 ) -> None:
-    source = "\n\n".join(f"# Section {index}\n\n" + "x " * 600 for index in range(11)).encode()
+    # Each section is large enough to be its own chunk, so the build needs two batches.
+    source = "\n\n".join(f"# Section {index}\n\n" + "x " * 2_000 for index in range(11)).encode()
     fixture = _make_fixture(tmp_path, source=source)
     build = _build(fixture)
     policy = _policy()

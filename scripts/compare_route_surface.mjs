@@ -99,6 +99,7 @@ const implementedOperationIds = new Set([
   "replayDebate",
   "connectDebateEvents",
   "getDebateTranscript",
+  "getDebateDiagnostics",
   "streamRetainedTurnAudio",
   "listChatAgents",
   "listConversations",

@@ -16,9 +16,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from uuid import NAMESPACE_URL, uuid5
 
-from app.modules.knowledge.markdown import MarkdownDocument, chunk_markdown, normalize_markdown
+from app.modules.knowledge.markdown import (
+    CHUNKING_VERSION,
+    MarkdownDocument,
+    chunk_markdown,
+    normalize_markdown,
+)
 
-DEFAULT_CHUNKING_VERSION = "markdown-heading-paragraph-v2"
+DEFAULT_CHUNKING_VERSION = CHUNKING_VERSION
 
 # Embedding identity is deliberately closed.  In particular, the Mock and
 # real resources do not share a model name with a dimension-based switch: a
@@ -559,7 +564,10 @@ class SnapshotBuildV1:
             raise SnapshotBuildError("documents must be ordered from zero")
         output: list[SnapshotBuildDocumentV1] = []
         for document in normalized:
-            raw_chunks = chunk_markdown(document.text)
+            try:
+                raw_chunks = chunk_markdown(document.text, chunking_version)
+            except ValueError as exc:
+                raise SnapshotBuildError("chunking version is not supported") from exc
             chunks = tuple(
                 SnapshotBuildChunkV1(
                     chunk_id=str(

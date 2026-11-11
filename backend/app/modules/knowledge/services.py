@@ -90,9 +90,15 @@ from app.modules.knowledge.files import (
     verify_staged,
 )
 from app.modules.knowledge.markdown import (
+    CHUNK_MAX_TOKENS,
+    CHUNK_MIN_TOKENS,
+    CHUNK_TARGET_TOKENS,
+    CHUNKING_VERSION,
     EMBEDDING_DIMENSION,
     EMBEDDING_KEY,
+    LEGACY_CHUNKING_VERSION,
     MAX_CHUNK_UTF8_BYTES,
+    chunk_markdown,
     normalize_markdown,
     query_embedding,
 )
@@ -100,10 +106,7 @@ from app.modules.knowledge.mock_lexical import (
     MOCK_LEXICAL_ANCHOR_POLICY_ID,
     MockLexicalAnchorV2,
 )
-from app.modules.knowledge.providers.snapshot_build import (
-    DEFAULT_CHUNKING_VERSION,
-    SnapshotPublishCandidateV1,
-)
+from app.modules.knowledge.providers.snapshot_build import SnapshotPublishCandidateV1
 from app.modules.knowledge.schemas import AffectedAgentDTO, JobStatus
 from app.modules.knowledge.schemas import KnowledgeDocument as KnowledgeDocumentDTO
 from app.modules.knowledge.source_versions import source_version_filename
@@ -1955,6 +1958,37 @@ def parse_json_payload_hash(
     return request_hash(operation, context.user.id, scope, body)
 
 
+def _mock_chunking_record(captured: list[dict[str, Any]]) -> dict[str, object]:
+    """Name the chunker that made a Mock snapshot's copied document index.
+
+    A Mock snapshot copies each document's upload-time index, which may predate
+    the current chunker; it is labelled current only when every copied index is
+    exactly what the current chunker makes.
+    """
+
+    current = all(
+        [(chunk[1], chunk[2], chunk[3], chunk[4]) for chunk in item["chunks"]]
+        == [tuple(row) for row in chunk_markdown(item["normalized"])]
+        for item in captured
+    )
+    if not current:
+        return {
+            "version": LEGACY_CHUNKING_VERSION,
+            "token_target": 600,
+            "token_hard": 800,
+            "overlap": 100,
+            "max_chunk_utf8_bytes": MAX_CHUNK_UTF8_BYTES,
+        }
+    return {
+        "version": CHUNKING_VERSION,
+        "token_target": CHUNK_TARGET_TOKENS,
+        "token_min": CHUNK_MIN_TOKENS,
+        "token_hard": CHUNK_MAX_TOKENS,
+        "overlap": 0,
+        "max_chunk_utf8_bytes": MAX_CHUNK_UTF8_BYTES,
+    }
+
+
 def _source_marker(document: KnowledgeDocument) -> str:
     return f"<!-- source: {document.source_filename}; document_id: {document.id} -->"
 
@@ -2503,13 +2537,7 @@ def create_snapshot(
                 )
                 if embedding_candidate is not None
                 else json.dumps(
-                    {
-                        "version": DEFAULT_CHUNKING_VERSION,
-                        "token_target": 600,
-                        "token_hard": 800,
-                        "overlap": 100,
-                        "max_chunk_utf8_bytes": MAX_CHUNK_UTF8_BYTES,
-                    },
+                    _mock_chunking_record(captured),
                     sort_keys=True,
                     separators=(",", ":"),
                 )

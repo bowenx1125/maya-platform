@@ -187,9 +187,7 @@ Per-sign-in Studyform/Brainform/Chat/Voices cache:6 parallel,10s reuse,429/503 b
 Students use teachers' public Agents only in Teams; old chats read-only. Oct19:
 uploaded Voices ready at once (0073);▷ listens only;Team model call12 rows.
 
-## Oct20–23 releases
-
-#225–#239/0076:answer guard,public editing/audit,Chat-independent Record,cascade
+Oct20–23 #225–#239/0076:answer guard,public editing/audit,Chat-independent Record,cascade
 recovery/no auto-retry,login fences,stale_base_version,constant history SELECTs,
 PG poll REPEATABLE READ.50-user Mock:p95≤7.85s. Details:Git history.
 
@@ -225,9 +223,7 @@ loop (offload.py);per-Debate lock;tickets in Postgres (0079);Next 103→35 SQL.
 E:DEBATE_LLM_* (no MAYA_ prefix;unset=previous)/DEBATE_TTS_* freeze into rule_snapshot_json
 (null=not sent);v3 contract lived in the Ruleset,pre-v3 keep legacy;playback rate 1.0 (0080).
 
-## Oct27 UI (#305)
-
-Agents4-col,Teams3-col;sign-in38v3;one39C LoadingCard;fixed key hit area.
+Oct27 UI#305:Agents4-col,Teams3-col;sign-in38v3;one39C LoadingCard;fixed key hit area.
 
 ## Nov2 Chatform, visits, chat speed
 
@@ -255,15 +251,12 @@ Accounts: filter; Delete is real (DELETE /courses/{id}/members/{user}). Chat 429
 provider_rate_limited, 502/503/504/529 → provider_busy (one call). Ordinary Team members
 answer together (≤3; assessment Teams one at a time); history is one read. 390px Brainform fits.
 
-## Nov5 Agent Chat identity
+## Nov5–6 Agent Chat, recovery
 
 #337/#338: Agent Chats send the Agent name, AGENT.md, Knowledge and RAG.
 No assessment Tools or attempt; Teams unchanged. Owner-only RAG Details
 shows stored model input; scoring/summary Rubrics remain hidden.
-
-## Nov6 recovery
-
-Off main70ecfa29 (#356/#357). Replay=Rebirth;Review=playback,not a rebirth lock.
+Nov6 off main70ecfa29 (#356/#357). Replay=Rebirth;Review=playback,not a rebirth lock.
 Revocalize:durable intent,3 workers,Back/F5 reseed/revision reconcile;admission refusal
 retries safely,ambiguous keys kept,definitive failures shown/manual retry. No calls/deploy;
 volume untouched. Stalled needs backend receipt recovery;safety gates kept.
@@ -289,17 +282,18 @@ Nov10: classes Maya1002 and Maya1001, stable IDs, student data.
 Teacher scopes corrected. RAG actions follow the class bar.
 47 PG, 1188 UI. Debates/Quizzes/Accounts; optional choice answer; no empty Agents card; large loader; chat omits missing group/editor.
 
-## Nov10 Debate prompt v4 (A1 backend, A2 UI; supersedes Oct24 contract-in-Ruleset)
+## Nov10 Debate prompt v4 (supersedes Oct24 contract-in-Ruleset)
 
-New Debates freeze ruleset_contract_v4: code contract default_rules/contract/{zh,en}.md
-(read-only debate-ruleset `contract`); Ruleset=style+one task per round; System=Ruleset
-minus other rounds+this round's contract; legacy contract tails stripped.
-User JSON adds `task`{round_task with names,max_units,stance?}; teacher_note withheld
-(manifests forbid exporting it). Length is hard: target_minutes 3–10 (5)×230 zh Han
-chars (measured)/150 en words (unmeasured)×voice rate×0.9/(Agents×4),×1.1/0.9/0.9/1.1,
-down to 5s,min 40/25; >1.25×cap:tail sentences cut,no repair;R2 question appended. Copy-strip
-stump<40% cap or own 8/5-gram overlap>35%:1 repair,then accepted. Round-1 query:Topic,
-Topic+name+stance,no Agent.md. v4 snapshots drop min/max/target words,retrieval_policy_id,
-frequency_penalty. v3/older keep their bytes (pinned test). Offline tests only;0 provider calls.
-A2 form:read-only contract,sends {zh,en};Target length=target_minutes;temperature+voice,
-rest Advanced;frequency_penalty/max_tokens/teacher note not sent.
+ruleset_contract_v4: code contract default_rules/contract/*.md,read-only in the form;
+Ruleset=style+round tasks; System=this round's task+contract. User JSON `task`
+{round_task,max_units,stance?}; no teacher note. Length: target_minutes 3–10 (5)×230 zh
+chars/150 en words×voice rate×0.9/(Agents×4),weights 1.1/0.9/0.9/1.1; >1.25×cap:tail
+sentences cut,no repair. Unspoken R2 question appended; received questions from R3.
+Stump<40% cap or own-overlap>35%:1 repair. Round-1 query has no Agent.md. v4 drops word
+limits,retrieval_policy_id,frequency_penalty,max_tokens. v3/older bytes pinned.
+Real run ac3df08a:16 speeches 52–103 chars,4m16s.
+
+## Nov11 RAG chunks, diagnostics
+
+Builds:`markdown-structure-600t-v3`,150–900 tokens,no overlap; v2 snapshots kept
+till republish. Teacher `getDebateDiagnostics`:3-gram grounding.
