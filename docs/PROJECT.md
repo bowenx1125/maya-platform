@@ -291,7 +291,7 @@ limits,retrieval_policy_id,frequency_penalty,max_tokens. v3/older bytes pinned.
 ## Nov11 RAG chunks, diagnostics
 
 Builds:`markdown-structure-600t-v3`,150–900 tokens,no overlap; v2 snapshots kept
-till republish. Teacher `getDebateDiagnostics`:3-gram grounding;other-language unmeasured.
+till republish. Diagnostics:3-gram grounding.
 
 ## Nov11 Debate cards (phase B)
 
@@ -303,3 +303,4 @@ Round-1 query:stance,else card position. Preview:Check card. Clone TTS instructi
 
 Nov11: Agents/Teams <768px: single black banner shadow, no orange ring.
 Mock Chromium390/1440+tour; desktop diff0. 1247 UI tests/build passed.
+Speed:Agent list omits agent_md/docs;early /auth/me;idle Debates poll 15s

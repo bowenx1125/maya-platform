@@ -511,6 +511,26 @@ export type ChatTurn = Omit<components["schemas"]["ChatTurn"], "state"> & {
   assessment_result?: AssessmentRuntimeResult | null;
 };
 
+// The root layout starts GET /auth/me while the scripts are still loading.
+// Its answer serves the first session read only; anything but a signed-in
+// answer falls through to the ordinary request, which reports the real error.
+async function takeEarlySession(): Promise<AuthSession | null> {
+  if (typeof window === "undefined") return null;
+  const holder = window as unknown as {
+    __mayaEarlySession?: Promise<Response | null>;
+  };
+  const pending = holder.__mayaEarlySession;
+  if (!pending) return null;
+  delete holder.__mayaEarlySession;
+  try {
+    const response = await pending;
+    if (!response || !response.ok) return null;
+    return (await response.json()) as AuthSession;
+  } catch {
+    return null;
+  }
+}
+
 export class ChatRequestPendingError extends Error {
   constructor() {
     super("The Chat request is still pending.");
@@ -1277,6 +1297,11 @@ export class PlatformApi {
   }
 
   async me(): Promise<AuthSession> {
+    const early = await takeEarlySession();
+    if (early) {
+      this.setCsrfToken(early.csrf_token);
+      return early;
+    }
     const result = await this.client.GET("/auth/me");
     const session = await unwrap<AuthSession>(result);
     this.setCsrfToken(session.csrf_token);
