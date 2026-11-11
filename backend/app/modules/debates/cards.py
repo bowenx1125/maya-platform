@@ -79,6 +79,23 @@ CARD_MAX_LINE_CHARS: Final = 120
 # for as long as a turn may take.
 CARD_TIMEOUT_SECONDS: Final = 60.0
 DROP_REASONS: Final[tuple[str, ...]] = get_args(DebateCardDropReason)
+# Every reason a card falls back; stored on the participant and logged.
+CARD_FALLBACK_CODES: Final = (
+    "debate_card_mock_provider",
+    "debate_card_failed",
+    "debate_card_agent_md_missing",
+    "debate_card_preflight_blocked",
+    "debate_card_budget_invalid",
+    "debate_card_attempt_used",
+    "debate_card_admission_refused",
+    "debate_card_ledger_failed",
+    "debate_card_not_sent",
+    "debate_card_acceptance_unknown",
+    "debate_card_transport_failed",
+    "debate_card_http_rejected",
+    "debate_card_invalid",
+    "debate_card_too_long",
+)
 _FIELDS: Final = (
     "identity",
     "position",

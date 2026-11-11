@@ -188,9 +188,7 @@ def test_the_size_bound_is_one_constant_per_language(language: str) -> None:
 @pytest.mark.parametrize("language", ["zh", "en"])
 def test_the_compile_prompt_states_every_rule_the_server_enforces(language: str) -> None:
     prompt = card_system_prompt(language)
-    expected = (
-        "600 Han characters (count only Han characters" if language == "zh" else "400 words"
-    )
+    expected = "600 Han characters (count only Han characters" if language == "zh" else "400 words"
     for token in (
         expected,
         "exactly the fields identity, position, reasoning, speaking_style, voice_style and dropped",
@@ -610,6 +608,7 @@ def test_every_failure_is_a_fallback_with_its_ledger_state(
     debate_id = _create(client, database, key=f"provider-{code[-12:]}")
     result, transport, operations = _compile(database, debate_id, outcome)
     assert result == CardOutcome("fallback", safe_error_code=code)
+    assert code in cards.CARD_FALLBACK_CODES
     assert len(transport.calls) == 1
     [operation] = operations
     assert operation.state == state
