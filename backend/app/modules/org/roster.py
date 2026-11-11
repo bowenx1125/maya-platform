@@ -43,6 +43,7 @@ from app.core.models import (
 from app.modules.auth.models import DemoAccountBinding
 from app.modules.auth.service import lock_user_profile, revoke_user_sessions
 from app.modules.org.access import WorkspaceMember
+from app.modules.org.groups import prune_empty_groups
 from app.modules.org.names import resolve_named_group
 
 ACTIVE = "active"
@@ -252,7 +253,15 @@ def update_member(
             # is revoked.
             revoke_user_sessions(db, row.user.id, datetime.now(UTC))
     if group_name is not None:
+        previous_groups = list(
+            db.scalars(
+                select(GroupMember.group_id)
+                .join(Group, Group.id == GroupMember.group_id)
+                .where(Group.course_id == course_id, GroupMember.user_id == user_id)
+            )
+        )
         move_to_group(db, course_id, row.user, normalize_group_name(group_name))
+        prune_empty_groups(db, course_id, previous_groups)
 
     db.flush()
     return _roster_row(db, course_id, user_id)
@@ -316,6 +325,13 @@ def delete_member(
     ):
         raise conflict("teacher_delete_forbidden", "Teacher accounts cannot be deleted here.")
     lock_password_identity(db, user_id)
+    previous_groups = list(
+        db.scalars(
+            select(GroupMember.group_id)
+            .join(Group, Group.id == GroupMember.group_id)
+            .where(Group.course_id == course_id, GroupMember.user_id == user_id)
+        )
+    )
     taught = set(
         db.scalars(
             select(CourseMember.course_id).where(
@@ -440,4 +456,5 @@ def delete_member(
             "This account still has protected references. Nothing was deleted.",
         )
     db.flush()
+    prune_empty_groups(db, course_id, previous_groups)
     return profile_ids
