@@ -13,6 +13,7 @@ from app.core.config import Settings
 from app.core.errors import PlatformError, conflict, unprocessable
 from app.core.hash_gate import hash_slot, run_hash
 from app.core.identity import group_name_key
+from app.core.locks import xact_lock
 from app.core.models import CourseMember, Group, User
 from app.modules.auth.credentials import verify_password
 from app.modules.auth.models import DemoAccountBinding, UserCredential
@@ -88,6 +89,9 @@ def change_group(db: Session, user: User, raw: str) -> None:
         key = group_name_key(raw)
     except ValueError:
         raise unprocessable("group_not_found", "Choose one of the course's groups.") from None
+    # Keep the existing-only choice and catalog binding valid through the move.
+    for course_id in sorted(course_ids):
+        xact_lock(db, f"course-groups:{course_id}")
     groups = db.scalars(
         select(Group).where(Group.course_id.in_(course_ids), Group.name_key == key)
     ).all()

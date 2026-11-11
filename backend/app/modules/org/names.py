@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.identity import group_name_key, normalize_group_name
+from app.core.locks import xact_lock
 from app.core.models import Group
 from app.core.sqlutil import dialect_insert
 
@@ -14,6 +15,9 @@ from app.core.sqlutil import dialect_insert
 def resolve_named_group(db: Session, course_id: str, name: str) -> Group:
     normalized = normalize_group_name(name)
     key = group_name_key(normalized)
+    # Keep pruning from deleting a resolved row before its caller inserts the
+    # membership; after a prune commits, the upsert instead creates a fresh row.
+    xact_lock(db, f"course-groups:{course_id}")
     # The unique key arbitrates simultaneous first joins, including Unicode variants.
     db.execute(
         dialect_insert(db, Group)

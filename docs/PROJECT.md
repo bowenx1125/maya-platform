@@ -278,6 +278,9 @@ Nov10: classes Maya1002 and Maya1001, stable IDs, student data.
 Teacher scopes corrected. RAG actions follow the class bar.
 47 PG, 1188 UI. Debates/Quizzes/Accounts; optional choice answer; no empty Agents card; large loader; chat omits missing group/editor.
 
+Nov11 code: teacher removals prune empty non-default groups; work FKs protect.
+Ruff/format/mypy pass; PG tests blocked: socket EPERM. No calls/deploy.
+
 ## Nov10 Debate prompt v4 (supersedes Oct24 contract-in-Ruleset)
 
 ruleset_contract_v4: code contract default_rules/contract/*.md,read-only in the form;
