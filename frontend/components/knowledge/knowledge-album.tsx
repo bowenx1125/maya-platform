@@ -46,8 +46,8 @@ export const knowledgeAlbum = {
     "w-[180px] h-[70px] border-[3px] border-solid border-[#111] rounded-[8px] overflow-hidden",
   spread: `grid grid-cols-[240px_minmax(0,1fr)] gap-[34px] items-start max-[960px]:grid-cols-[minmax(0,1fr)] max-[960px]:gap-[22px]`,
   lcol: "flex flex-col gap-[22px]",
-  pack: `relative grid place-items-center h-[310px] border-[3px] border-solid border-[#111] border-y-[14px] rounded-[10px] shadow-[6px_6px_0_#111] [transform:rotate(-1.5deg)] cursor-pointer [background:repeating-conic-gradient(from_0deg_at_50%_50%,#ff4d8d_0_10deg,#ff8db5_10deg_20deg)] max-[960px]:h-[170px]`,
-  disc: `grid place-items-center w-[96px] h-[96px] rounded-full bg-[#ffe14d] border-[3px] border-solid border-[#111] shadow-[4px_4px_0_#111] max-[960px]:w-[72px] max-[960px]:h-[72px]`,
+  pack: `upload-tile relative grid place-items-center h-[310px] border-[3px] border-solid border-[#111] border-y-[14px] rounded-[10px] shadow-[6px_6px_0_#111] [transform:rotate(-1.5deg)] cursor-pointer [background:repeating-conic-gradient(from_0deg_at_50%_50%,#ff4d8d_0_10deg,#ff8db5_10deg_20deg)] max-[960px]:h-[170px]`,
+  disc: `upload-tile-disc grid place-items-center w-[96px] h-[96px] rounded-full bg-[#ffe14d] border-[3px] border-solid border-[#111] shadow-[4px_4px_0_#111] max-[960px]:w-[72px] max-[960px]:h-[72px]`,
   req: "relative py-[14px] px-[16px] bg-[#fff1d6] border-[2.5px] border-solid border-[#111] border-l-[12px] border-l-[#ff4d8d] rounded-[6px] shadow-[5px_5px_0_#111] [transform:rotate(-1.2deg)] [font:700_14px/1.45_var(--font-lexend,'Lexend')]",
   blank:
     "p-[12px] bg-[#67e8f9] border-[3px] border-solid border-[#111] rounded-[12px] shadow-[7px_7px_0_#111]",

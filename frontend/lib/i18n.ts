@@ -849,6 +849,7 @@ const enMessages = {
   voiceSampleFile:
     "Upload a 10–20 second clip of yourself reading aloud (16-bit WAV, MP3, or M4A; max 10 MB).",
   voiceSelectFileFirst: "Select an audio file (.wav, .mp3 or .m4a) first.",
+  voiceAudioRequired: "Choose a .wav, .mp3, or .m4a audio file.",
   voiceConsent:
     "I confirm this is my voice and authorize this course to create a reusable profile.",
   voiceProfileCreatedNotice: "Created",

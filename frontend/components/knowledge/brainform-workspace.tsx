@@ -79,6 +79,7 @@ import {
   knowledgeAlbum as kAlbum,
 } from "./knowledge-album";
 import { Button } from "../ui/button";
+import { useFileDrop } from "../ui/use-file-drop";
 import { cn } from "../../lib/utils";
 
 /**
@@ -1699,6 +1700,26 @@ function BrainformWorkspaceBody({
       file: null,
     }));
   }
+
+  function selectRagFile(file: File) {
+    if (pane?.kind === "rag-new") void importNewRag(file);
+    else if (pane?.kind === "rag-edit") void importRag(pane.draftKey, file);
+  }
+
+  const ragFileDrop = useFileDrop({
+    disabled: Boolean(busyKey),
+    onFile: selectRagFile,
+  });
+
+  function selectKnowledgeFile(file: File) {
+    if (pane?.kind === "knowledge-new") void importNewKnowledge(file);
+    else if (pane?.kind === "knowledge-edit") void importKnowledgeEdit(file);
+  }
+
+  const knowledgeFileDrop = useFileDrop({
+    disabled: Boolean(busyKey),
+    onFile: selectKnowledgeFile,
+  });
 
   async function saveNewRag() {
     const draft = newRag;
@@ -3412,6 +3433,8 @@ function BrainformWorkspaceBody({
             ) : (
               <label
                 className={album.pack}
+                data-kind="rag"
+                {...ragFileDrop}
                 aria-busy={
                   pane.kind === "rag-new"
                     ? busyKey === "rag-new"
@@ -3441,9 +3464,7 @@ function BrainformWorkspaceBody({
                     const file = event.currentTarget.files?.[0];
                     event.currentTarget.value = "";
                     if (!file) return;
-                    if (pane.kind === "rag-new") void importNewRag(file);
-                    else if (pane.kind === "rag-edit")
-                      void importRag(pane.draftKey, file);
+                    selectRagFile(file);
                   }}
                 />
               </label>
@@ -3613,6 +3634,8 @@ function BrainformWorkspaceBody({
                 (markdown?.can_edit && markdown.audience === "full") ? (
                   <label
                     className={kAlbum.pack}
+                    data-kind="knowledge"
+                    {...knowledgeFileDrop}
                     aria-busy={
                       pane?.kind === "knowledge-new"
                         ? busyKey === "knowledge-new"
@@ -3632,10 +3655,7 @@ function BrainformWorkspaceBody({
                       onChange={(event) => {
                         const file = event.currentTarget.files?.[0];
                         event.currentTarget.value = "";
-                        if (!file) return;
-                        if (pane?.kind === "knowledge-new")
-                          void importNewKnowledge(file);
-                        else void importKnowledgeEdit(file);
+                        if (file) selectKnowledgeFile(file);
                       }}
                     />
                   </label>
