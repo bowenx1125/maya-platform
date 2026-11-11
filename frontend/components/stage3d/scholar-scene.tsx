@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import type { AvatarState } from "../avatar";
+import type { PerformancePlayer } from "./performance-player";
 import type {
   StageAnchor,
   StageCameraCommand,
@@ -27,6 +28,13 @@ export type ScholarSceneProps = {
   resting: boolean;
   /** Whose head carries the bubble, if anyone is speaking. */
   speakingId?: string | null;
+  /**
+   * Compiled animation timeline for the speaking participant, when the turn's
+   * TTS returned word timestamps; null keeps the stage's procedural motion.
+   */
+  speakingPerformance?: { id: string; player: PerformancePlayer } | null;
+  /** Latest audio-clock position for the speaking participant. */
+  speakingClock?: { id: string; time: number } | null;
   /** The spoken line, already trimmed for the bubble. */
   bubbleText?: string;
   /** Mount the bubble shell while audio is starting, even before text arrives. */
@@ -54,6 +62,8 @@ export function ScholarScene({
   visuals,
   resting,
   speakingId,
+  speakingPerformance = null,
+  speakingClock = null,
   bubbleText,
   bubbleOpen = false,
   loadingLabel,
@@ -67,6 +77,8 @@ export function ScholarScene({
   const latestCharactersRef = useRef(characters);
   const latestVisualsRef = useRef(visuals);
   const latestRestingRef = useRef(resting);
+  const latestPerformanceRef = useRef(speakingPerformance);
+  const latestClockRef = useRef(speakingClock);
   const [status, setStatus] = useState<SceneStatus>("loading");
   const onSceneSettledRef = useRef(onSceneSettled);
   useEffect(() => {
@@ -97,7 +109,9 @@ export function ScholarScene({
     latestCharactersRef.current = characters;
     latestVisualsRef.current = visuals;
     latestRestingRef.current = resting;
-  }, [characters, resting, visuals]);
+    latestPerformanceRef.current = speakingPerformance;
+    latestClockRef.current = speakingClock;
+  }, [characters, resting, visuals, speakingPerformance, speakingClock]);
 
   const handleAnchors = useCallback((next: StageAnchor[]) => {
     setAnchors(next);
@@ -125,9 +139,35 @@ export function ScholarScene({
       stage.setCharacters(latestCharactersRef.current);
       applyStageVisuals(stage);
       stage.setResting(latestRestingRef.current);
+      // The stage may have finished loading after these props arrived, so the
+      // ready sync re-applies the latest timeline instead of dropping it.
+      if (latestPerformanceRef.current) {
+        stage.setPerformance(
+          latestPerformanceRef.current.id,
+          latestPerformanceRef.current.player,
+        );
+      }
+      if (latestClockRef.current) {
+        stage.setPerformanceTime(
+          latestClockRef.current.id,
+          latestClockRef.current.time,
+        );
+      }
     },
     [applyStageVisuals],
   );
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || !speakingPerformance) return;
+    stage.setPerformance(speakingPerformance.id, speakingPerformance.player);
+  }, [speakingPerformance]);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || !speakingClock) return;
+    stage.setPerformanceTime(speakingClock.id, speakingClock.time);
+  }, [speakingClock]);
 
   useEffect(() => {
     let active = true;

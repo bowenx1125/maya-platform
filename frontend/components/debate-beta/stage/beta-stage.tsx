@@ -93,6 +93,11 @@ import type {
   VisiblePlaybackTurn,
 } from "../../debate/stage/types";
 import { useImmerseAudioQueue } from "../../debate/stage/next-audio-prefetch";
+import {
+  createPerformancePlayer,
+  parsePerformanceTimeline,
+  type PerformancePlayer,
+} from "../../stage3d/performance-player";
 
 type ControlAction = "start" | "next" | "replay" | "pause" | "resume";
 
@@ -740,6 +745,16 @@ export function BetaDebateStage({
   const [audioPlayingTurnId, setAudioPlayingTurnId] = useState<string | null>(
     null,
   );
+  /** Participant behind the audio element's current turn, for stage sync. */
+  const audioParticipantRef = useRef<string | null>(null);
+  const [speakingPerformance, setSpeakingPerformance] = useState<{
+    id: string;
+    player: PerformancePlayer;
+  } | null>(null);
+  const [speakingClock, setSpeakingClock] = useState<{
+    id: string;
+    time: number;
+  } | null>(null);
   // Barrage and the join card are beta-only stage state. Both setters are
   // stable, so the socket handler below needs no extra dependency.
   const beta = betaLabels ?? defaultBetaStageLabels;
@@ -1345,6 +1360,7 @@ export function BetaDebateStage({
           published?.participant_id ??
           undefined;
         audioTurnRef.current = turnId;
+        audioParticipantRef.current = participantId ?? null;
         if (participantId) setActiveParticipant(participantId);
         setBubblePlayback({
           turnId,
@@ -1698,6 +1714,7 @@ export function BetaDebateStage({
             published?.participant_id ??
             undefined;
           if (participantId) setActiveParticipant(participantId);
+          audioParticipantRef.current = participantId ?? null;
           setBubblePlayback({
             turnId: preparedTurnId,
             elapsed: Math.max(0, current.cursor_ms / 1000),
@@ -1711,6 +1728,39 @@ export function BetaDebateStage({
           const audio = audioRef.current;
           if (!audio) return;
           const mediaUrl = message.media_url;
+          // The performance timeline is a sibling of the audio bytes: same
+          // ticket, same debate/turn. A 404 (plain-audio turn) keeps the
+          // stage on its procedural motion, so failures stay invisible.
+          const performanceUrl = mediaUrl
+            .replace("/audio/", "/performance/")
+            .replace(/&format=mp3$/, "");
+          void fetch(performanceUrl, { credentials: "same-origin" })
+            .then((response) => (response.ok ? response.json() : null))
+            .then((json: unknown) => {
+              if (
+                !mountedRef.current ||
+                mediaGenerationRef.current !== mediaGeneration
+              ) {
+                return;
+              }
+              const timeline = parsePerformanceTimeline(json);
+              setSpeakingPerformance(
+                timeline && participantId
+                  ? {
+                      id: participantId,
+                      player: createPerformancePlayer(timeline),
+                    }
+                  : null,
+              );
+            })
+            .catch(() => {
+              if (
+                mountedRef.current &&
+                mediaGenerationRef.current === mediaGeneration
+              ) {
+                setSpeakingPerformance(null);
+              }
+            });
           const early = earlyStartRef.current;
           earlyStartRef.current = null;
           cursorMsRef.current = current.cursor_ms;
@@ -3147,6 +3197,12 @@ export function BetaDebateStage({
       if (Number.isFinite(currentTime) && currentTime >= 0) {
         cursorMsRef.current = Math.floor(currentTime * 1000);
         const turnId = audioTurnRef.current;
+        const participantId = audioParticipantRef.current;
+        if (participantId) {
+          // The stage interpolates between these coarse updates; the resync
+          // keeps its timeline clock honest.
+          setSpeakingClock({ id: participantId, time: currentTime });
+        }
         if (turnId && turnId === playbackRef.current.current_turn_id) {
           setBubblePlayback((previous) =>
             previous?.turnId === turnId && previous.failed
@@ -3900,6 +3956,8 @@ export function BetaDebateStage({
           bubblePlayback?.participantId ??
           currentParticipantId
         }
+        speakingPerformance={speakingPerformance}
+        speakingClock={speakingClock}
         unavailableLabel={beta.sceneUnavailable}
         visuals={stageVisuals}
       />

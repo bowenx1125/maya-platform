@@ -58,16 +58,13 @@ claims/exact Provider stages; K2b2/K3-A materialization/publication committed.
 ## Oct7 MayaForm
 
 feat/mayaform-v14:learning/Tools checkpoints (Git refs),foreign Debate/Voice/UI,
-Resume v2 Brainform RAG/Knowledge/Memory,canonical Markdown/history kept. RAG/manual
-regeneration replaces manual head only on valid newer success. Actor/source ACL,task
-evaluator,Boundary grants stay. Tool roles:Public+Student or Public+Teacher. Formal
-attempts→Teacher reports despite legacy labels,ordinary Chats excluded. General Chat:
-natural-language attempt actions,no cards/dashboard/lifecycle UI. Owner progress
-phase-safe,history/completed evidence immutable. Oct9 0055 `submitted_at` built,
-not real-accepted:survey all if≤3,else half; evaluator-chosen/server-validated follow-ups
-before Boundary. "end" submits answered work; only abandon/redo deletes learning
-records,accounting stays. Boundary/reports:mastery/weak/not-yet-verified. Student-majority
-language; off-topic/progress requests get help,never answers.
+Resume v2 Brainform RAG/Knowledge/Memory kept. RAG/manual regen replaces head
+only on newer valid success. ACL/task evaluator/Boundary stay. Tool roles
+Public+Student|Teacher. Formal attempts→Teacher reports;ordinary Chats excluded.
+Owner progress phase-safe,evidence immutable. Oct9 0055 `submitted_at` built:
+survey all if≤3 else half;follow-ups before Boundary."end" submits;abandon/redo
+deletes learning records,accounting stays. Boundary/reports:mastery/weak/
+not-yet-verified. Off-topic gets help,never answers.
 
 Oct5 build30db274/schema0053 healthy; backups20261005T110321Z/130151Z verified.
 Synthetic RAG/Knowledge receipts kept; consent-denied sends0; ledger457/457.
@@ -300,8 +297,11 @@ Nov11: Agents/Teams <768px: single black banner, no orange ring; desktop diff0 (
 DEBATE_TTS_ENGINE=cosyvoice swaps the debate TTS adapter (same DashScope key/
 workspace; qwen3 default, fallback on pre-request refusals only). TTSResult.
 word_timestamps feeds debates/performance (gesture anchors, viseme windows).
-18 compiler/adapter tests. AudioStore stores each turn's timeline as a WAV-
-sibling performance.json (staged/promoted/discarded/removed with the audio;
+AudioStore stores each turn's compiled timeline as a WAV-sibling
+performance.json (staged/promoted/discarded/removed with the audio;
 enhancement-only; +8 tests). Ticket-gated GET /debates/{id}/performance/
-{turn} serves it; 404 = plain audio, stage keeps procedural motion.
-0 calls/deploy.
+{turn} serves it; 404 = plain audio. Stage: beta-stage fetches the sibling
+(media.prepared, generation-guarded), ScholarScene forwards timeline + audio
+clock, scholar-stage layers viseme mouth and head/neck/torso gesture clips on
+the procedural frame (player closed-parses the JSON; 8 vitest). Rigs have no
+finger bones, so clips use big bones only. 18 backend +8 vitest. 0 calls/deploy.

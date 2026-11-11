@@ -29,6 +29,11 @@ import {
   stageScenePack,
   type StageScenePack,
 } from "./scene-packs";
+import type {
+  BoneOffset,
+  PerformancePlayer,
+  PerformanceSample,
+} from "./performance-player";
 
 export type StageCharacter = {
   id: string;
@@ -205,6 +210,18 @@ type Character = {
   hasSpeechMorph: boolean;
   state: AvatarState;
   stateStartedAt: number;
+  /** Compiled turn timeline, when the TTS provider returned word timestamps. */
+  performance: CharacterPerformance | null;
+};
+
+/**
+ * The timeline advances with the render loop between coarse audio-element
+ * timeupdates; syncTime carries the latest authoritative audio position.
+ */
+type CharacterPerformance = {
+  player: PerformancePlayer;
+  time: number;
+  syncTime: number | null;
 };
 
 /** Bone naming differs between the two purchased figures. */
@@ -623,6 +640,26 @@ export class ScholarStage {
     character.state = state;
     character.stateStartedAt = performance.now();
     this.applyExpression(character);
+  }
+
+  /** Attach (or clear) one participant's compiled timeline for its turns. */
+  setPerformance(id: string, player: PerformancePlayer | null): void {
+    const character = this.characters.find((item) => item.spec.id === id);
+    if (!character) return;
+    if (player === null) {
+      character.performance = null;
+      return;
+    }
+    // A fresh turn always starts its timeline at the first audio sample;
+    // timeupdates resync before the render loop drifts anywhere noticeable.
+    character.performance = { player, time: 0, syncTime: 0 };
+  }
+
+  /** Resync a timeline clock with the audio element's currentTime. */
+  setPerformanceTime(id: string, audioTimeSec: number): void {
+    const character = this.characters.find((item) => item.spec.id === id);
+    if (!character?.performance) return;
+    character.performance.syncTime = audioTimeSec;
   }
 
   moveStageCamera(command: StageCameraCommand): void {
@@ -1331,6 +1368,7 @@ export class ScholarStage {
         ),
         state: "idle",
         stateStartedAt: performance.now(),
+        performance: null,
       };
       this.applyExpression(character);
       this.scene.add(root);
@@ -1516,29 +1554,73 @@ export class ScholarStage {
       character.spec.config.motion_style,
     );
 
+    // Timelines are enhancement-only: while one is attached and its owner
+    // speaks, it drives the mouth and layers small gesture offsets on the
+    // procedural frame; every other case falls through to the old path.
+    let sample: PerformanceSample | null = null;
+    const timeline = character.performance;
+    if (timeline && character.state === "speaking" && !this.reducedMotion) {
+      if (timeline.syncTime !== null) {
+        timeline.time = THREE.MathUtils.clamp(
+          timeline.syncTime,
+          0,
+          timeline.player.duration,
+        );
+        timeline.syncTime = null;
+      } else {
+        timeline.time = Math.min(
+          timeline.time + delta,
+          timeline.player.duration,
+        );
+      }
+      sample = timeline.player.sample(timeline.time);
+    }
+
     const calm = this.reducedMotion ? 0 : this.resting ? 0.45 : 1;
+    const layer = (
+      offset: BoneOffset | null,
+      x: number,
+      y: number,
+      z: number,
+    ): [number, number, number] => [
+      x + (offset?.[0] ?? 0),
+      y + (offset?.[1] ?? 0),
+      z + (offset?.[2] ?? 0),
+    ];
     this.setRotation(
       character.torsoBone,
       character.torsoRest,
-      frame.rotationX * 0.35 * calm,
-      frame.rotationY * 0.5 * calm,
-      frame.rotationZ * calm,
+      ...layer(
+        sample?.torso ?? null,
+        frame.rotationX * 0.35 * calm,
+        frame.rotationY * 0.5 * calm,
+        frame.rotationZ * calm,
+      ),
     );
     this.setRotation(
       character.neckBone,
       character.neckRest,
-      frame.rotationX * 0.5 * calm,
-      frame.rotationY * 0.6 * calm,
-      0,
+      ...layer(
+        sample?.neck ?? null,
+        frame.rotationX * 0.5 * calm,
+        frame.rotationY * 0.6 * calm,
+        0,
+      ),
     );
     this.setRotation(
       character.headBone,
       character.headRest,
-      frame.rotationX * calm,
-      frame.rotationY * calm,
-      frame.rotationZ * 0.6 * calm,
+      ...layer(
+        sample?.head ?? null,
+        frame.rotationX * calm,
+        frame.rotationY * calm,
+        frame.rotationZ * 0.6 * calm,
+      ),
     );
 
+    // A timed viseme window wins over the procedural mouth while speaking;
+    // a timeline without visemes (mouth null) keeps the procedural one.
+    const timedMouth = sample && sample.mouth !== null ? sample.mouth : null;
     for (const mesh of character.meshes) {
       const dictionary = mesh.morphTargetDictionary;
       const influences = mesh.morphTargetInfluences;
@@ -1546,8 +1628,13 @@ export class ScholarStage {
       const mouth = dictionary.mouthOpen;
       const jaw = dictionary.jawOpen;
       if (character.state === "speaking") {
-        if (mouth !== undefined) influences[mouth] = frame.mouthOpen;
-        if (jaw !== undefined) influences[jaw] = frame.jawOpen;
+        if (timedMouth !== null) {
+          if (mouth !== undefined) influences[mouth] = timedMouth;
+          if (jaw !== undefined) influences[jaw] = timedMouth;
+        } else {
+          if (mouth !== undefined) influences[mouth] = frame.mouthOpen;
+          if (jaw !== undefined) influences[jaw] = frame.jawOpen;
+        }
       } else {
         if (mouth !== undefined) influences[mouth] *= 0.8;
         if (jaw !== undefined) influences[jaw] *= 0.8;
@@ -1561,7 +1648,7 @@ export class ScholarStage {
         this.setRotation(
           character.jawBone,
           character.jawRest,
-          frame.jawOpen * JAW_OPEN_ANGLE,
+          (timedMouth ?? frame.jawOpen) * JAW_OPEN_ANGLE,
           0,
           0,
         );
