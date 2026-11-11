@@ -27,6 +27,11 @@ Do not add unrequested features, speculative extension points or dependencies
 that existing code can reasonably replace. Keep single-use code in place;
 introduce an abstraction only for a concrete shared need. UI redesigns preserve
 existing wording unless a copy change is explicitly requested.
+Do not add unnecessary secondary labels, helper text, teaching paragraphs or
+always-visible help. Layout, visual hierarchy, spacing and a clear primary
+action should explain themselves; if extra information is truly needed, use an
+info icon and tooltip. Never put hint or tip text above a New (or similar
+page-action) button.
 The UI is English only: write new copy in English and add no Chinese UI copy.
 A Debate's output language (Chinese or English content) is a separate setting.
 Teaching and attribution guidance belongs in editable Rulesets; do not silently

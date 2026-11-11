@@ -477,6 +477,9 @@ def create_app(
             background_leader = runtime_database.try_background_leader()
         else:
             background_leader = False
+        from app.modules.quiz.schedules import QuizScheduleSweeper
+
+        quiz_schedule_sweeper: QuizScheduleSweeper | None = None
         presence: ReplicaPresence | None = None
         peers_alive = False
         if initialize_database:
@@ -577,6 +580,8 @@ def create_app(
             if not runtime_settings.is_test:
                 # Every process sweeps: the leader may be the one that died.
                 orphan_chat_task = asyncio.create_task(_orphan_chat_sweeper(runtime_database))
+                quiz_schedule_sweeper = QuizScheduleSweeper(runtime_database.session_factory)
+                quiz_schedule_sweeper.start()
         try:
             yield
         finally:
@@ -586,6 +591,8 @@ def create_app(
                 orphan_chat_task.cancel()
             if cascade_task is not None:
                 cascade_task.cancel()
+            if quiz_schedule_sweeper is not None:
+                quiz_schedule_sweeper.close()
             if presence is not None:
                 presence.close()
             assessment_finalizer.close()

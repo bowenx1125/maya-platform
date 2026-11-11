@@ -1124,6 +1124,38 @@ const enMessages = {
   quizHideAttemptNamed: "Hide {name}'s attempt",
   quizHideConfirm:
     "Hide this attempt? It leaves Records and the export, for the student too.",
+  quizExtendTime: "Extend time",
+  quizExtendCount: "{count} extended",
+  quizExtendUntil: "Extend until",
+  quizExtendStudents: "Extend {n} student",
+  quizExtendStudentsPlural: "Extend {n} students",
+  quizExtendNone: "Extend",
+  quizSearchStudents: "Search students",
+  quizSubmitted: "Submitted",
+  quizCurrentlyExtended: "Currently extended",
+  quizUntilTime: "until {time}",
+  quizRemoveAll: "Remove all",
+  quizRemoveNamed: "Remove {name}",
+  quizNoOneExtended: "No one is extended.",
+  quizCancel: "Cancel",
+  quizUtc8: "UTC+8",
+  quizSchedule: "Schedule",
+  quizStartEvaluationAt: "Start evaluation at",
+  quizPauseEvaluationAt: "Pause evaluation at",
+  quizClearNamed: "Clear {label}",
+  quizSaveSchedule: "Save schedule",
+  quizOpensAt: "Opens {time}",
+  quizClosesAt: "Closes {time}",
+  quizExtendedUntil: "Extended until {time} UTC+8",
+  quizOpensUntil: "Opens {time} UTC+8",
+  quizClosesUntil: "Closes {time} UTC+8",
+  quizExtendHelp:
+    "Students you pick can keep taking this quiz after you pause it, until the deadline. Students who already submitted this round cannot take it again. Starting a new round clears all extensions.",
+  quizScheduleHelp:
+    "Set either time or both. Each runs once. Starting on schedule opens a new round, the same as Start evaluation. Pressing a key yourself cancels its scheduled time.",
+  quizExtendNotStarted: "Start taking once before extending time.",
+  quizAboutExtendTime: "About Extend time",
+  quizAboutSchedule: "About Schedule",
 } as const;
 
 export type MessageKey = keyof typeof enMessages;
