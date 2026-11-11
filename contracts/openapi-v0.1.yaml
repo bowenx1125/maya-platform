@@ -8828,6 +8828,67 @@ components:
           - null
         current_position_summary:
           type: string
+        card_status:
+          type:
+          - string
+          - 'null'
+          enum:
+          - compiling
+          - ready
+          - fallback
+          - null
+          description: Null for a Debate created before debate cards. fallback means the
+            turns send the original AGENT.md.
+        card:
+          anyOf:
+          - $ref: '#/components/schemas/DebateCard'
+          - type: 'null'
+    DebateCardDrop:
+      type: object
+      additionalProperties: false
+      required:
+      - excerpt
+      - reason
+      properties:
+        excerpt:
+          type: string
+        reason:
+          type: string
+          enum:
+          - length_limit
+          - language_choice
+          - output_format
+          - debate_procedure
+          - duplicate_translation
+    DebateCard:
+      type: object
+      additionalProperties: false
+      required:
+      - identity
+      - position
+      - reasoning
+      - speaking_style
+      - voice_style
+      - dropped
+      properties:
+        identity:
+          type: string
+        position:
+          type: string
+        reasoning:
+          type: array
+          items:
+            type: string
+        speaking_style:
+          type: string
+        voice_style:
+          type:
+          - string
+          - 'null'
+        dropped:
+          type: array
+          items:
+            $ref: '#/components/schemas/DebateCardDrop'
     DebateStall:
       type: object
       additionalProperties: false

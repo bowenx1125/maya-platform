@@ -3574,6 +3574,25 @@ export interface components {
             /** @enum {string|null} */
             current_stance?: "support" | "oppose" | "neutral" | null;
             current_position_summary?: string;
+            /**
+             * @description Null for a Debate created before debate cards. fallback means the turns send the original AGENT.md.
+             * @enum {string|null}
+             */
+            card_status?: "compiling" | "ready" | "fallback" | null;
+            card?: components["schemas"]["DebateCard"] | null;
+        };
+        DebateCardDrop: {
+            excerpt: string;
+            /** @enum {string} */
+            reason: "length_limit" | "language_choice" | "output_format" | "debate_procedure" | "duplicate_translation";
+        };
+        DebateCard: {
+            identity: string;
+            position: string;
+            reasoning: string[];
+            speaking_style: string;
+            voice_style: string | null;
+            dropped: components["schemas"]["DebateCardDrop"][];
         };
         DebateStall: {
             turn_id: components["schemas"]["Uuid"];

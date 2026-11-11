@@ -30,7 +30,13 @@ from app.core.models import (
     ProviderPolicySnapshot,
     SnapshotDocument,
 )
-from app.modules.agents.markdown import AgentMarkdown, markdown_hash
+from app.modules.agents.markdown import markdown_hash
+from app.modules.debates.cards import (
+    CardOutcome,
+    card_persona,
+    compile_card_with_provider,
+    ensure_card_terminal,
+)
 from app.modules.debates.generation import (
     FinalReadyTurn,
     GenerationContext,
@@ -1309,7 +1315,19 @@ class SqlTurnPreparer:
         current = next((row for row in turn_rows if row.id == str(turn.id)), None)
         if current is None:
             raise ValueError("planned turn is unavailable")
-        participants = tuple(self._participant(db, row) for row in participant_rows)
+        speaker_row = next(
+            (row for row in participant_rows if str(row.id) == str(current.participant_id)), None
+        )
+        if speaker_row is not None and speaker_row.card_status == "compiling":
+            # The speaker's first turn: its card becomes terminal here, before
+            # anything is generated, and stays that way for every later round.
+            ensure_card_terminal(
+                db, speaker_row, lambda: self._compile_card(db, debate, speaker_row)
+            )
+        language = debate_output_language(debate)
+        participants = tuple(
+            self._participant(db, row, language=language) for row in participant_rows
+        )
         participant = next(
             (item for item in participants if item.participant_id == current.participant_id),
             None,
@@ -1817,8 +1835,27 @@ class SqlTurnPreparer:
             raise ValueError("generation fencing starts at attempt one")
         return generation_fence(db, debate, turn)
 
+    def _compile_card(self, db: Session, debate: Any, row: DebateParticipant) -> CardOutcome:
+        if self.llm_runtime is not None or not isinstance(self.llm, DashScopeLLMAdapter):
+            # Mock and injected runtimes make no provider call, so the turn
+            # keeps the original Agent.md.
+            return CardOutcome("fallback", safe_error_code="debate_card_mock_provider")
+        policy_hash = self.llm_runtime_options.get("policy_hash") or _provider_policy_hash(
+            self.settings, "llm"
+        )
+        return compile_card_with_provider(
+            db,
+            debate=debate,
+            row=row,
+            adapter=self.llm,
+            policy_hash=policy_hash if isinstance(policy_hash, str) else None,
+            settings=self.settings,
+        )
+
     @staticmethod
-    def _participant(db: Session, row: DebateParticipant) -> ParticipantContext:
+    def _participant(
+        db: Session, row: DebateParticipant, *, language: str = "en"
+    ) -> ParticipantContext:
         # The Debate owns its AGENT.md copy (2026-10-20); the live version row
         # may be pruned or deleted. Older rows without a copy still read it.
         agent_md = row.agent_md_snapshot
@@ -1829,7 +1866,8 @@ class SqlTurnPreparer:
             if str(version.knowledge_snapshot_id or "") != str(row.knowledge_snapshot_id):
                 raise ValueError("frozen AgentVersion snapshot does not match participant")
             agent_md = version.agent_md
-        authored = AgentMarkdown(name=row.agent_name, markdown=agent_md)
+        # A ready card replaces the raw text; every other state sends it as before.
+        authored, card_position = card_persona(row, agent_md, language)
         return ParticipantContext(
             participant_id=row.id,
             agent_id=row.agent_id,
@@ -1845,7 +1883,8 @@ class SqlTurnPreparer:
             current_position_summary=row.current_position_summary,
             teacher_note=row.teacher_note,
             persona=authored,
-            persona_spec_hash=markdown_hash(agent_md),
+            persona_spec_hash=markdown_hash(authored.markdown),
+            card_position=card_position,
         )
 
     @staticmethod

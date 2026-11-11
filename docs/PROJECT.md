@@ -162,14 +162,9 @@ reference answers/word-joiner replies unspoken. Casual chat resumes; assessment_
 doesn't end turn:Guide answers,omit empty replies,keep Scorer text/scores. Student send
 locks executor before model call; parallel call→chat_busy.
 
-Oct17 admission:adaptive login/create/write/LLM queue. Danger:load≥6 or Mem<500;
-clear load≤4/Mem≥550,or120s at load<6. Runs2 slots,scoring first (Mem:1 if idle),
-release+1/5s. AIMD×0.7 on danger/load≥4/Mem<900/30s write-pool p95>500ms; hold
-load3–4/Mem900–1100/threads≥90%,else+4/+2; start/idle72. 1s brake (10s write-pool p95,
-running writes,CPU) halves/clamps. Queue-full/180s-wait/chat_busy stores nothing;
-only `messages:stream`. Per process:LLM/write/create8,max128,in-flight48,sync256+
-asyncio96 threads,pool15+25. Separate ready limiter;nested backstop wait fresh;
-refused Debate segments not_sent; hung backend autoheal≈100s.
+Oct17 admission:adaptive login/create/write/LLM queue,danger brake,AIMD,scoring first;
+queue-full/180s-wait/chat_busy stores nothing; refused Debate segments not_sent;
+hung backend autoheal≈100s (thresholds: code/Git history).
 
 Oct17:Record replaces Memory:assessment Teams→student attempt/
 score/sheet/report,one cached read/test (0068). Accounts/group visits omit Test results;
@@ -223,9 +218,9 @@ loop (offload.py);per-Debate lock;tickets in Postgres (0079);Next 103→35 SQL.
 E:DEBATE_LLM_* (no MAYA_ prefix;unset=previous)/DEBATE_TTS_* freeze into rule_snapshot_json
 (null=not sent);v3 contract lived in the Ruleset,pre-v3 keep legacy;playback rate 1.0 (0080).
 
-Oct27 UI#305:Agents4-col,Teams3-col;sign-in38v3;one39C LoadingCard;fixed key hit area.
+## Oct27 UI (#305): Agents4/Teams3 cols,one LoadingCard.
 
-## Nov2 Chatform, visits, chat speed
+## Nov2 Chatform lists
 
 0081 adds chat_type agent|team; maya_team=team. Backfill needs entry-kind/binding
 agreement; leftover NULLs logged,typed lists skip them. Separate Agent/Team
@@ -297,3 +292,11 @@ Real run ac3df08a:16 speeches 52–103 chars,4m16s.
 
 Builds:`markdown-structure-600t-v3`,150–900 tokens,no overlap; v2 snapshots kept
 till republish. Teacher `getDebateDiagnostics`:3-gram grounding.
+
+## Nov11 Debate cards (phase B)
+
+0088: new v4 participants start `compiling`; before an Agent's first turn its frozen
+AGENT.md compiles once (`llm_debate_card`, Debate model,strict schema, 1 ledgered
+attempt, 60s) to identity/position/reasoning/style/voice/dropped, ≤600 Han/400 words.
+Ready→card persona;failure/Mock→fallback (raw AGENT.md); null (old) keeps pinned bytes.
+Round-1 query:stance, else card position. Preview:Check card. 0 calls;quality unverified.
