@@ -682,7 +682,27 @@ function ExtendPanel({
             onChange={(event) => setQuery(event.target.value)}
             aria-label={t("quizSearchStudents")}
           />
-          <ul className="m-0 grid max-h-[272px] list-none gap-1.5 overflow-auto rounded-xl border-[3px] border-border bg-white p-2">
+          <ul
+            className="m-0 grid max-h-[272px] list-none gap-1.5 overflow-auto rounded-xl border-[3px] border-border bg-white p-2"
+            aria-busy={data === null && !error}
+          >
+            {data === null && !error
+              ? [0, 1, 2, 3].map((row) => (
+                  <li
+                    key={row}
+                    aria-hidden="true"
+                    data-testid="exemption-skeleton-row"
+                  >
+                    <div className="flex animate-skeleton-pulse items-center gap-2.5 rounded-lg px-2 py-1.5 motion-reduce:animate-none">
+                      <span className="size-[18px] shrink-0 rounded-[4px] border-2 border-border bg-[#FFF3C4]" />
+                      <span className="flex min-w-0 flex-1 items-center gap-2">
+                        <span className="h-5 w-[45%] rounded-[4px] border-2 border-border bg-[#FFF3C4]" />
+                        <span className="h-5 w-[25%] rounded-[4px] border-2 border-border bg-[#FFF3C4]" />
+                      </span>
+                    </div>
+                  </li>
+                ))
+              : null}
             {rows.map((student) => {
               const on = picked.includes(student.student_id);
               return (
