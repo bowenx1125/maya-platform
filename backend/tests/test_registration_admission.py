@@ -40,7 +40,7 @@ def _body(name: str) -> dict[str, str]:
 
 def test_registration_is_admitted_through_the_login_class(client: TestClient) -> None:
     before = aa.adaptive_admission_snapshot()["classes"]["login"]["admitted"]
-    response = client.post("/api/v1/auth/register", json=_body("queued-student"))
+    response = client.post("/api/v1/auth/register", json=_body("queuedstudent"))
     assert response.status_code == 201, response.text
     after = aa.adaptive_admission_snapshot()["classes"]["login"]["admitted"]
     assert after == before + 1
@@ -68,7 +68,7 @@ def test_concurrent_registrations_take_one_writer_turn_at_a_time(
                 peak["now"] -= 1
 
     monkeypatch.setattr("app.modules.auth.router.register_student", tracked)
-    names = [f"crowd-student-{index}" for index in range(8)]
+    names = [f"crowdstudent{index}" for index in range(8)]
     with ThreadPoolExecutor(max_workers=8) as pool:
         statuses = list(
             pool.map(
@@ -102,7 +102,7 @@ def test_registration_turn_wait_timeout_is_a_retryable_busy_503(
     thread.start()
     try:
         assert held.wait(5)
-        response = client.post("/api/v1/auth/register", json=_body("late-student"))
+        response = client.post("/api/v1/auth/register", json=_body("latestudent"))
     finally:
         release.set()
         thread.join()
@@ -114,4 +114,4 @@ def test_registration_turn_wait_timeout_is_a_retryable_busy_503(
     assert payload["details"]["retryable"] is True
     # Nothing was stored: the student can simply send the form again.
     with database.session() as db:
-        assert db.scalar(select(User.id).where(User.username == "late-student")) is None
+        assert db.scalar(select(User.id).where(User.username == "latestudent")) is None

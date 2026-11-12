@@ -41,6 +41,12 @@ import {
 import { useT } from "../lib/i18n";
 import { AgentWorkbench } from "./agent-workspace";
 import { useSession } from "./session-provider";
+import {
+  bowenLandingGroup,
+  bowenStudentClassId,
+  rememberBowenStudentClass,
+} from "../lib/bowen-student";
+import { useBowenLandingGroupId } from "./use-bowen-landing-group";
 import { UserAvatar } from "./user-avatar";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
 import { ModuleTiles, VersionTile } from "./studyform-layout";
@@ -180,13 +186,30 @@ export function StudentDashboard() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+  const classId = bowenStudentClassId(user);
+  useEffect(() => {
+    if (classId) rememberBowenStudentClass(classId);
+  }, [classId]);
 
   if (loading) return <LoadingCard />;
   if (error)
     return <ErrorNotice inline error={error} onRetry={() => void load()} />;
 
   const name = user?.display_name ?? "";
-  const primary = groups[0];
+  // Bowen stays in every class he has entered. The home, the guide and the
+  // default group are the class chosen at login, not the other class and not
+  // the protected Students shell when a real group exists.
+  const scoped = classId
+    ? groups.filter((overview) => overview.group.course_id === classId)
+    : groups;
+  const landing = classId
+    ? bowenLandingGroup(
+        scoped.map((overview) => overview.group),
+        classId,
+      )
+    : scoped[0]?.group;
+  const primary =
+    scoped.find((overview) => overview.group.id === landing?.id) ?? scoped[0];
   const guide = primary
     ? [
         {
@@ -244,7 +267,7 @@ export function StudentDashboard() {
           </HomeAgentRow>
         </section>
       ) : null}
-      {groups.length === 0 ? (
+      {scoped.length === 0 ? (
         <EmptyCard title={t("noGroup")} />
       ) : (
         <div
@@ -267,7 +290,7 @@ export function StudentDashboard() {
               </div>
             </div>
           </section>
-          {groups.map((overview, index) => (
+          {scoped.map((overview, index) => (
             <section
               className={`home-panel ${HOME_CARD_CLASS} shadow-[0_0_0_3px_#FDBA74,8px_8px_0_3px_#111]`}
               key={overview.group.id}
@@ -322,7 +345,12 @@ export function StudentDashboard() {
 /** The Agents page; ?group_id picks the group, else the first membership. */
 export function StudentAgentsPage({ groupId }: { groupId?: string }) {
   const { user } = useSession();
-  const target = groupId ?? user?.groups?.[0]?.group_id;
+  const landing = useBowenLandingGroupId();
+  const bowen = user?.username === "bowen";
+  if (bowen && !groupId && !landing.ready) return <LoadingCard />;
+  const target =
+    groupId ??
+    (bowen ? (landing.groupId ?? undefined) : user?.groups?.[0]?.group_id);
   if (!target) return <LoadingCard />;
   return <GroupWorkspace key={target} groupId={target} view="agents" />;
 }
@@ -354,7 +382,12 @@ export function StudentTeamsPage({
   teamId?: string;
 }) {
   const { user } = useSession();
-  const target = groupId ?? user?.groups?.[0]?.group_id;
+  const landing = useBowenLandingGroupId();
+  const bowen = user?.username === "bowen";
+  if (bowen && !groupId && !landing.ready) return <LoadingCard />;
+  const target =
+    groupId ??
+    (bowen ? (landing.groupId ?? undefined) : user?.groups?.[0]?.group_id);
   if (!target) return <LoadingCard />;
   return (
     <GroupWorkspace

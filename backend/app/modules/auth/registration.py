@@ -39,7 +39,8 @@ from app.modules.auth.models import UserCredential
 from app.modules.auth.service import revoke_user_sessions
 from app.modules.org.names import resolve_named_group
 
-USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$")
+# Registration only. Sign-in still accepts accounts created when `.` `_` `-` were legal.
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9]{3,64}$")
 USERNAME_MIN = 3
 USERNAME_MAX = 64
 PASSWORD_MIN = 5
@@ -64,9 +65,7 @@ def normalize_username(raw: str) -> str:
     value = unicodedata.normalize("NFKC", raw).strip()
     if not USERNAME_PATTERN.fullmatch(value):
         raise _invalid(
-            "A username must be 3 to 64 characters and may contain only "
-            "letters, digits, dot, underscore and hyphen, starting with a "
-            "letter or digit."
+            "A username must be 3 to 64 characters and may contain only letters and digits."
         )
     return value
 

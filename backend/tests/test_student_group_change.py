@@ -29,7 +29,7 @@ def test_a_student_moves_into_an_existing_group_and_leaves_their_work(
 ) -> None:
     app, database, _settings = app_factory()
     with TestClient(app) as other:
-        joined = register(other, username="borealis-one", group_name="Team Borealis")
+        joined = register(other, username="borealisone", group_name="Team Borealis")
         assert joined.status_code == 201, joined.text
     with TestClient(app) as student:
         registration = register(student)
@@ -98,7 +98,7 @@ def test_catalog_student_can_choose_an_existing_group_but_teacher_cannot(app_fac
 
     app, database, settings = app_factory()
     with TestClient(app) as client:
-        registration = register(client, username="another-student", group_name="Team Borealis")
+        registration = register(client, username="anotherstudent", group_name="Team Borealis")
         assert registration.status_code == 201
         _, csrf = login(client, "bowen")
         moved = client.patch(
@@ -117,6 +117,52 @@ def test_catalog_student_can_choose_an_existing_group_but_teacher_cannot(app_fac
         )
         assert denied.status_code == 409
         assert denied.json()["code"] == "group_change_forbidden"
+
+
+def test_bowen_moves_inside_the_class_he_entered_when_the_name_exists_twice(
+    app_factory: Any,
+) -> None:
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from app.modules.org.classes import SECOND_CLASS_ID
+    from app.seed import BOWEN_ID
+
+    from tests.test_bowen_identity_choice import challenge, choose
+
+    app, database, _settings = app_factory()
+    with TestClient(app) as client:
+        # Startup seeds the classes; the groups have to land after that.
+        with database.session() as db:
+            for course_id in (COURSE_ID, SECOND_CLASS_ID):
+                db.add(
+                    Group(
+                        id=str(uuid4()),
+                        course_id=course_id,
+                        name="Shared Name",
+                        created_at=datetime.now(UTC),
+                    )
+                )
+            db.commit()
+        assert (
+            choose(
+                client, challenge(client)["choice_token"], "student", SECOND_CLASS_ID
+            ).status_code
+            == 200
+        )
+        entered = choose(client, challenge(client)["choice_token"], "student", COURSE_ID)
+        assert entered.status_code == 200, entered.text
+        moved = client.patch(
+            "/api/v1/auth/me",
+            json={"group_name": "Shared Name"},
+            headers=_headers(entered.json()["csrf_token"]),
+        )
+        assert moved.status_code == 200, moved.text
+        with database.session() as db:
+            shared = db.scalars(select(Group).where(Group.name == "Shared Name")).all()
+            by_course = {row.course_id: row.id for row in shared}
+            assert db.get(GroupMember, (by_course[COURSE_ID], BOWEN_ID)) is not None
+            assert db.get(GroupMember, (by_course[SECOND_CLASS_ID], BOWEN_ID)) is not None
 
 
 def test_only_students_choose_their_own_group(app_factory: Any) -> None:

@@ -249,6 +249,26 @@ describe("class switcher", () => {
     },
   );
 
+  it("closes when the open trigger is pressed again after focus moved into the menu", async () => {
+    mount();
+    const button = await trigger();
+    fireEvent.click(button);
+    const item = screen.getByTestId("class-switcher-item-a");
+    expect(document.activeElement).toBe(item);
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    // The press blurs the focused menu item before click. relatedTarget is
+    // null in that blur, and React flushes the close before the click handler
+    // runs. The click must still leave the menu closed.
+    fireEvent.pointerDown(button);
+    fireEvent.blur(item, { relatedTarget: null });
+    fireEvent.click(button);
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    const menu = screen.getByTestId("class-switcher-menu");
+    expect(menu.className).toContain("invisible");
+    expect(menu.hasAttribute("inert")).toBe(true);
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("closes on Tab, outside pointerdown and focus leaving the switcher", async () => {
     mount();
     const button = await trigger();
@@ -330,7 +350,7 @@ describe("teacher shell integration", () => {
     );
   }
 
-  it("places the switcher before MusicKey and navigation, outside the content", async () => {
+  it("places the switcher in navigation, outside the content, with no music key", async () => {
     shell();
     const button = await trigger();
     expect(button.closest("nav")).toBeTruthy();
@@ -338,13 +358,33 @@ describe("teacher shell integration", () => {
       within(screen.getByRole("main")).queryByTestId("class-switcher-home"),
     ).toBeNull();
     expect(screen.queryByRole("group", { name: "Classes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /music/i })).toBeNull();
     const brandBlock = button.closest("[data-class-switcher]")?.parentElement;
-    expect(brandBlock?.className).toContain("[&>button]:justify-self-end");
-    expect(brandBlock?.lastElementChild?.tagName).toBe("BUTTON");
+    expect(brandBlock?.className).not.toContain("justify-self-end");
+    expect(brandBlock?.querySelector("[data-music-key]")).toBeNull();
     fireEvent.click(button);
     expect(screen.getByRole("menu").parentElement?.className).not.toContain(
       "absolute",
     );
+  });
+
+  it("keeps the class label when the route changes and the class does not", async () => {
+    const view = shell();
+    const button = await trigger();
+    expect(button.textContent).toContain("1001");
+    const calls = state.api.courses.mock.calls.length;
+    state.pathname = "/teacher/rag";
+    view.rerender(
+      <AppShell role="teacher">
+        <p>Content</p>
+      </AppShell>,
+    );
+    const again = await screen.findByRole("button", {
+      name: "Class 1001, switch class",
+    });
+    expect(again.textContent).toContain("1001");
+    expect(again.getAttribute("aria-expanded")).toBe("false");
+    expect(state.api.courses.mock.calls.length).toBe(calls);
   });
 
   it("preserves home navigation, active state, brand dot and pending feedback", async () => {
@@ -406,6 +446,7 @@ describe("teacher shell integration", () => {
     expect(screen.getByRole("menu").parentElement?.className).not.toContain(
       "absolute",
     );
+    expect(screen.queryByRole("button", { name: /music/i })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
     expect(
       within(screen.getByRole("navigation")).queryByTestId(
@@ -413,5 +454,19 @@ describe("teacher shell integration", () => {
       ),
     ).toBeNull();
     expect(screen.getAllByTestId("class-switcher-home")).toHaveLength(1);
+  });
+
+  it("keeps the music key on the student sidebar", async () => {
+    state.user = {
+      ...state.user,
+      courses: [{ course_id: "student-class", role: "student" }],
+    };
+    render(
+      <AppShell role="student">
+        <p>Content</p>
+      </AppShell>,
+    );
+    expect(await screen.findByRole("button", { name: /music/i })).toBeTruthy();
+    expect(screen.queryByTestId("class-switcher-trigger")).toBeNull();
   });
 });

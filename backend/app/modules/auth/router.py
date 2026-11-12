@@ -432,7 +432,12 @@ def update_current_user(
             raise PlatformError("registration_invalid", "Change class and group separately.", 422)
         change_class(db, context.user, str(payload.course_id))
     if payload.group_name is not None:
-        change_group(db, context.user, payload.group_name)
+        change_group(
+            db,
+            context.user,
+            payload.group_name,
+            course_id=context.session.active_course_id,
+        )
         # The move withdraws this student's old-group voices; commit it, then
         # finish their supplier delete (best effort).
         db.commit()

@@ -139,7 +139,7 @@ def test_registration_chooses_class_and_rejects_invalid_groups(class_app: Any) -
     ]
     chosen = next(item for item in options["classes"] if item["course_id"] == SECOND_CLASS_ID)
     body = {
-        "username": "new-class-two",
+        "username": "newclasstwo",
         "password": "student-password",
         "course_id": SECOND_CLASS_ID,
         "group_name": chosen["group_name"],
@@ -161,9 +161,9 @@ def test_registration_chooses_class_and_rejects_invalid_groups(class_app: Any) -
     assert response.json()["user"]["courses"] == [{"course_id": SECOND_CLASS_ID, "role": "student"}]
     assert client.get(f"/api/v1/courses/{COURSE_ID}").status_code == 404
     _, _ = sign_in(client, "Maya1002")
-    assert "new-class-two" not in client.get(f"/api/v1/courses/{COURSE_ID}/roster").text
+    assert "newclasstwo" not in client.get(f"/api/v1/courses/{COURSE_ID}/roster").text
     sign_in(client, "Maya1001")
-    assert "new-class-two" in client.get(f"/api/v1/courses/{SECOND_CLASS_ID}/roster").text
+    assert "newclasstwo" in client.get(f"/api/v1/courses/{SECOND_CLASS_ID}/roster").text
 
 
 def test_profile_switch_is_immediate_and_survives_catalog_restart(class_app: Any) -> None:
@@ -206,7 +206,7 @@ def test_registration_creates_or_joins_group_only_in_chosen_class(class_app: Any
         original_id = original.id
         group_count = db.scalar(select(func.count()).select_from(Group))
     body = {
-        "username": "class-two-group-one",
+        "username": "classtwogroupone",
         "password": "student-password",
         "course_id": SECOND_CLASS_ID,
         "group_name": "Demo Group",
@@ -217,7 +217,7 @@ def test_registration_creates_or_joins_group_only_in_chosen_class(class_app: Any
     assert group_id != original_id
     second = client.post(
         "/api/v1/auth/register",
-        json={**body, "username": "class-two-group-two", "group_name": "  demo   GROUP "},
+        json={**body, "username": "classtwogrouptwo", "group_name": "  demo   GROUP "},
     )
     assert second.status_code == 201, second.text
     assert second.json()["user"]["groups"][0]["group_id"] == group_id
@@ -255,7 +255,7 @@ def test_teacher_creates_named_class_visible_at_registration_and_restart(class_a
     joined = client.post(
         "/api/v1/auth/register",
         json={
-            "username": "history-student",
+            "username": "historystudent",
             "password": "student-password",
             "course_id": course_id,
             "group_name": "History team",
@@ -280,7 +280,7 @@ def test_teacher_creates_named_class_visible_at_registration_and_restart(class_a
             200 if course_id in expected else 404
         )
     sign_in(client, "Maya1002")
-    assert "history-student" in client.get(f"/api/v1/courses/{course_id}/roster").text
+    assert "historystudent" in client.get(f"/api/v1/courses/{course_id}/roster").text
 
 
 def test_class_creation_rejects_students_and_missing_csrf(class_app: Any) -> None:
@@ -328,7 +328,7 @@ def test_unrelated_course_is_not_a_class_or_catalog_teacher_scope(class_app: Any
     refused = client.post(
         "/api/v1/auth/register",
         json={
-            "username": "foreign-join",
+            "username": "foreignjoin",
             "password": "test-password",
             "course_id": foreign_id,
             "group_name": "Other group",
@@ -336,7 +336,7 @@ def test_unrelated_course_is_not_a_class_or_catalog_teacher_scope(class_app: Any
     )
     assert refused.status_code == 422
     with database.session() as db:
-        assert db.scalar(select(User).where(User.username == "foreign-join")) is None
+        assert db.scalar(select(User).where(User.username == "foreignjoin")) is None
 
 
 def test_registered_students_work_and_password_survive_class_change(class_app: Any) -> None:
@@ -344,7 +344,7 @@ def test_registered_students_work_and_password_survive_class_change(class_app: A
     response = client.post(
         "/api/v1/auth/register",
         json={
-            "username": "class-move-student",
+            "username": "classmovestudent",
             "password": "student-password",
             "course_id": COURSE_ID,
             "group_name": "Demo Group",
@@ -378,7 +378,7 @@ def test_registered_students_work_and_password_survive_class_change(class_app: A
         assert db.get(UserCredential, user_id).password_hash == password_hash
     login = client.post(
         "/api/v1/auth/login",
-        json={"username": "class-move-student", "password": "student-password"},
+        json={"username": "classmovestudent", "password": "student-password"},
     )
     assert login.status_code == 200, login.text
     assert login.json()["user"]["courses"] == [{"course_id": SECOND_CLASS_ID, "role": "student"}]
@@ -442,7 +442,7 @@ def test_class_teacher_cannot_erase_another_class_history(class_app: Any) -> Non
     registered = client.post(
         "/api/v1/auth/register",
         json={
-            "username": "history-owner",
+            "username": "historyowner",
             "password": "student-password",
             "course_id": COURSE_ID,
             "group_name": "Historical group",

@@ -41,6 +41,7 @@ import {
   setClientMetricsTransport,
 } from "../lib/client-metrics";
 import { localizeError, roleLabel, type MessageKey } from "../lib/i18n";
+import { rememberBowenStudentClass } from "../lib/bowen-student";
 import { sanitizeNextPath } from "../lib/navigation";
 import { publicRuntime } from "../lib/runtime";
 import { endTeacherEnter } from "../lib/teacher-visit";
@@ -863,6 +864,8 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
         choice_token: choice.choice_token,
         ...selection,
       });
+      if (selection.identity === "student")
+        rememberBowenStudentClass(selection.course_id);
       setChoice(null);
       router.replace(
         nextPath ||

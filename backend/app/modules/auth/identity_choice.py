@@ -3,11 +3,11 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import delete, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError
-from app.core.models import Course, CourseMember, GroupMember, User
+from app.core.models import Course, CourseMember, Group, GroupMember, User
 from app.modules.auth.models import LoginIdentityChallenge
 from app.modules.auth.schemas import (
     LoginIdentityChoice,
@@ -16,8 +16,8 @@ from app.modules.auth.schemas import (
     LoginIdentityOptions,
 )
 from app.modules.auth.service import lock_user_profile, new_raw_session_token, session_hash
-from app.modules.org.classes import SECOND_CLASS_ID, default_class_group
-from app.seed import BOWEN_ID, COURSE_ID, TEACHER_ID
+from app.modules.org.classes import SECOND_CLASS_GROUP_ID, SECOND_CLASS_ID
+from app.seed import BOWEN_ID, COURSE_ID, GROUP_DEMO_ID, TEACHER_ID, seed_uuid
 
 CHOICE_COURSE_IDS = (SECOND_CLASS_ID, COURSE_ID)
 CHOICE_TTL_SECONDS = 300
@@ -52,6 +52,31 @@ def issue_choice(db: Session, client: str, now: datetime | None = None) -> Login
         expires_in_seconds=CHOICE_TTL_SECONDS,
         options=LoginIdentityOptions(classes=classes),
     )
+
+
+def _student_landing_group(db: Session, course_id: str) -> Group | None:
+    """Group Bowen joins when he first enters a class as a student.
+
+    The Students row is the protected shell (Maya1001's default, and
+    ``class-students-{course}`` on later classes). Auto-enrolment into that
+    shell is what left him listed there alone. The original class's catalog
+    group is the real cohort. Existing memberships are not removed.
+    """
+
+    rows = db.scalars(
+        select(Group).where(Group.course_id == course_id).order_by(Group.name, Group.id)
+    ).all()
+    if course_id == COURSE_ID:
+        demo = next((row for row in rows if row.id == GROUP_DEMO_ID), None)
+        if demo is not None:
+            return demo
+    protected = (
+        SECOND_CLASS_GROUP_ID
+        if course_id == SECOND_CLASS_ID
+        else seed_uuid(f"class-students-{course_id}")
+    )
+    ordinary = [row for row in rows if row.id != protected]
+    return ordinary[0] if ordinary else None
 
 
 def consume_choice(
@@ -93,15 +118,15 @@ def consume_choice(
         if membership is not None and membership.role != "student":
             raise PlatformError("identity_choice_unavailable", "Login choice is unavailable.", 401)
         if membership is None:
-            group = default_class_group(db, course_id)
             db.add(
                 CourseMember(
                     course_id=course_id, user_id=BOWEN_ID, role="student", created_at=timestamp
                 )
             )
-            # Existing enrollment may have a revoked or changed group grant;
-            # signing in must not restore access to the default group's work.
-            if db.get(GroupMember, (group.id, BOWEN_ID)) is None:
+            # A revoked or changed grant is left alone: this only runs when he
+            # has no course row yet. The Students shell is not a landing group.
+            group = _student_landing_group(db, course_id)
+            if group is not None and db.get(GroupMember, (group.id, BOWEN_ID)) is None:
                 db.add(
                     GroupMember(
                         group_id=group.id, user_id=BOWEN_ID, role="member", created_at=timestamp

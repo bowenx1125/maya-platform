@@ -90,8 +90,11 @@ describe("background music", () => {
     expect(musicStateForTests("workspace").wanted).toBe(false);
   });
 
-  it("starts the workspace music by default and buffers ahead", async () => {
+  it("leaves workspace music off until a key turns it on", async () => {
     startDefaultMusic();
+    expect(musicStateForTests("workspace").wanted).toBe(false);
+    expect(FakeAudio.made).toHaveLength(0);
+    toggleMusic("workspace");
     const audio = player("workspace");
     expect(audio.preload).toBe("auto");
     expect(musicStateForTests("workspace").wanted).toBe(true);
@@ -102,7 +105,7 @@ describe("background music", () => {
 
   it("keeps the key on when autoplay is refused and plays on the first gesture", async () => {
     refuse = "autoplay";
-    startDefaultMusic();
+    toggleMusic("workspace");
     await settle();
     expect(musicStateForTests("workspace")).toMatchObject({
       wanted: true,
@@ -122,7 +125,7 @@ describe("background music", () => {
 
   it("treats a press on the waiting key as the gesture, not as off", async () => {
     refuse = "autoplay";
-    startDefaultMusic();
+    toggleMusic("workspace");
     await settle();
     refuse = false;
     toggleMusic("workspace");
@@ -131,21 +134,24 @@ describe("background music", () => {
     expect(player("workspace").paused).toBe(false);
   });
 
-  it("remembers workspace off per account, not across accounts", async () => {
+  it("remembers an explicit workspace choice per account and stays off by default", async () => {
     startDefaultMusic();
+    expect(musicStateForTests("workspace").wanted).toBe(false);
+    toggleMusic("workspace");
     await settle();
+    expect(window.localStorage.getItem("maya.bgm.off.workspace.u1")).toBe("on");
     toggleMusic("workspace");
     expect(window.localStorage.getItem("maya.bgm.off.workspace.u1")).toBe("1");
     resetBackgroundMusicForTests({ workspace: WORKSPACE, stage: STAGE });
     setMusicAccountId("u1");
     startDefaultMusic();
     expect(musicStateForTests("workspace").wanted).toBe(false);
-    // Another account on the same browser still auto-starts.
+    // Another account that never chose also stays silent.
     resetBackgroundMusicForTests({ workspace: WORKSPACE, stage: STAGE });
     setMusicAccountId("u2");
     startDefaultMusic();
-    expect(musicStateForTests("workspace").wanted).toBe(true);
-    // Turning it back on forgets the choice for that account.
+    expect(musicStateForTests("workspace").wanted).toBe(false);
+    // Turning it back on is remembered for that account only.
     resetBackgroundMusicForTests({ workspace: WORKSPACE, stage: STAGE });
     setMusicAccountId("u1");
     toggleMusic("workspace");
@@ -196,7 +202,7 @@ describe("background music", () => {
   });
 
   it("keeps the workspace preference across logout", async () => {
-    startDefaultMusic();
+    toggleMusic("workspace");
     await settle();
     toggleMusic("workspace");
     stopBackgroundMusic();
@@ -207,11 +213,11 @@ describe("background music", () => {
     expect(musicStateForTests("workspace").wanted).toBe(false);
   });
 
-  it("ignores the legacy unscoped workspace off key", async () => {
+  it("ignores the legacy unscoped workspace off key and stays off", async () => {
     window.localStorage.setItem("maya.bgm.off.workspace", "1");
     setMusicAccountId("u1");
     startDefaultMusic();
-    expect(musicStateForTests("workspace").wanted).toBe(true);
+    expect(musicStateForTests("workspace").wanted).toBe(false);
     expect(window.localStorage.getItem("maya.bgm.off.workspace")).toBeNull();
   });
 
@@ -317,7 +323,7 @@ describe("background music", () => {
   it("reports playing only while the element really plays and no fade-out began", async () => {
     const { result } = renderHook(() => useMusicPlaying("workspace"));
     refuse = "autoplay";
-    act(() => startDefaultMusic());
+    act(() => toggleMusic("workspace"));
     await act(settle);
     // Wanted but blocked: not playing.
     expect(musicStateForTests("workspace").wanted).toBe(true);

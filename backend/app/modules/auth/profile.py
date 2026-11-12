@@ -68,7 +68,7 @@ def update_display_name(db: Session, user: User, raw: str) -> None:
     user.display_name = value
 
 
-def change_group(db: Session, user: User, raw: str) -> None:
+def change_group(db: Session, user: User, raw: str, *, course_id: str | None = None) -> None:
     """Move a student into another of their course's existing groups.
 
     Only the membership moves. Agents, Teams, RAG and voices belong to the
@@ -92,9 +92,16 @@ def change_group(db: Session, user: User, raw: str) -> None:
     # Keep the existing-only choice and catalog binding valid through the move.
     for course_id in sorted(course_ids):
         xact_lock(db, f"course-groups:{course_id}")
-    groups = db.scalars(
-        select(Group).where(Group.course_id.in_(course_ids), Group.name_key == key)
-    ).all()
+    groups = list(
+        db.scalars(
+            select(Group).where(Group.course_id.in_(course_ids), Group.name_key == key)
+        ).all()
+    )
+    # Bowen is a student of both classes, so one name can match twice. The
+    # session's class is the one he is in; a same-named group elsewhere must
+    # not reject the move or pull him into the other class.
+    if course_id is not None:
+        groups = [group for group in groups if group.course_id == course_id]
     # Students pick from the groups that exist; a new name never creates one.
     if len(groups) != 1:
         raise unprocessable("group_not_found", "Choose one of the course's groups.")

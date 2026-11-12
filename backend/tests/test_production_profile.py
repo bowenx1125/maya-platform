@@ -373,7 +373,7 @@ def test_production_auth_requires_exact_origin_before_hash_or_session_write(
             client.post(
                 "/api/v1/auth/register",
                 json={
-                    "username": "foreign-origin",
+                    "username": "foreignorigin",
                     "password": "student-password-1",
                     "group_name": "Class A",
                     "course_id": COURSE_ID,
@@ -384,7 +384,7 @@ def test_production_auth_requires_exact_origin_before_hash_or_session_write(
         )
     with database.session() as session:
         assert session.scalar(select(func.count(SessionRecord.id_hash))) == 0
-        assert session.scalar(select(User.id).where(User.username == "foreign-origin")) is None
+        assert session.scalar(select(User.id).where(User.username == "foreignorigin")) is None
 
 
 def test_auth_inputs_are_bounded_before_password_verification(tmp_path: Path) -> None:
@@ -414,7 +414,7 @@ def test_login_failures_preserve_account_not_found_and_password_incorrect_then_l
         register = client.post(
             "/api/v1/auth/register",
             json={
-                "username": "known-student",
+                "username": "knownstudent",
                 "password": "student-password-1",
                 "group_name": "Class A",
                 "course_id": COURSE_ID,
@@ -422,7 +422,7 @@ def test_login_failures_preserve_account_not_found_and_password_incorrect_then_l
             headers=_origin_headers(),
         )
         assert register.status_code == 201
-        assert _post_login(client, "known-student", "wrong-password-1").json()["code"] == (
+        assert _post_login(client, "knownstudent", "wrong-password-1").json()["code"] == (
             "password_incorrect"
         )
         client.cookies.clear()
@@ -458,7 +458,7 @@ def test_successful_logins_from_many_accounts_do_not_consume_shared_client_failu
             response = client.post(
                 "/api/v1/auth/register",
                 json={
-                    "username": f"classmate-{index:02d}",
+                    "username": f"classmate{index:02d}",
                     "password": "student-password-1",
                     "group_name": "Class A",
                     "course_id": COURSE_ID,
@@ -468,7 +468,7 @@ def test_successful_logins_from_many_accounts_do_not_consume_shared_client_failu
             assert response.status_code == 201, response.text
         for index in range(12):
             client.cookies.clear()
-            response = _post_login(client, f"classmate-{index:02d}", "student-password-1")
+            response = _post_login(client, f"classmate{index:02d}", "student-password-1")
             assert response.status_code == 200, response.text
 
 
@@ -501,7 +501,7 @@ def test_signup_limit_denial_does_not_create_an_account_or_session(tmp_path: Pat
         first = client.post(
             "/api/v1/auth/register",
             json={
-                "username": "first-student",
+                "username": "firststudent",
                 "password": "student-password-1",
                 "group_name": "Class A",
                 "course_id": COURSE_ID,
@@ -512,7 +512,7 @@ def test_signup_limit_denial_does_not_create_an_account_or_session(tmp_path: Pat
         limited = client.post(
             "/api/v1/auth/register",
             json={
-                "username": "second-student",
+                "username": "secondstudent",
                 "password": "student-password-1",
                 "group_name": "Class A",
                 "course_id": COURSE_ID,
@@ -524,7 +524,7 @@ def test_signup_limit_denial_does_not_create_an_account_or_session(tmp_path: Pat
             int(limited.headers["retry-after"]) == limited.json()["details"]["retry_after_seconds"]
         )
     with database.session() as session:
-        assert session.scalar(select(User.id).where(User.username == "second-student")) is None
+        assert session.scalar(select(User.id).where(User.username == "secondstudent")) is None
         assert session.scalar(select(func.count(SessionRecord.id_hash))) == 1
 
 
@@ -564,9 +564,9 @@ def test_signup_over_its_limit_gets_429_without_entering_the_pressure_queue(
 
     monkeypatch.setattr(auth_router, "adaptive_slot", tracked_slot)
     with TestClient(app, base_url=PUBLIC_ORIGIN) as client:
-        assert _register(client, "first-student").status_code == 201
+        assert _register(client, "firststudent").status_code == 201
         assert entered == ["login"]
-        limited = _register(client, "second-student")
+        limited = _register(client, "secondstudent")
     assert limited.status_code == 429
     assert entered == ["login"]
 
@@ -584,7 +584,7 @@ def test_signup_rejects_a_bad_group_name_before_hashing(
         lambda password, settings: hashed.append(password) or "unused",
     )
     with TestClient(app, base_url=PUBLIC_ORIGIN) as client:
-        response = _register(client, "valid-student", group_name="   ")
+        response = _register(client, "validstudent", group_name="   ")
     assert response.status_code == 422, response.text
     assert hashed == []
 
@@ -612,12 +612,12 @@ def test_signup_busy_refusal_does_not_spend_the_client_allowance(
 
     monkeypatch.setattr(auth_router, "registration_turn", busy_once)
     with TestClient(app, base_url=PUBLIC_ORIGIN) as client:
-        assert _register(client, "retrying-student").status_code == 503
+        assert _register(client, "retryingstudent").status_code == 503
         # The one allowed attempt is still available for the retry.
-        assert _register(client, "retrying-student").status_code == 201
-        assert _register(client, "third-student").status_code == 429
+        assert _register(client, "retryingstudent").status_code == 201
+        assert _register(client, "thirdstudent").status_code == 429
     with database.session() as session:
-        assert session.scalar(select(User.id).where(User.username == "retrying-student"))
+        assert session.scalar(select(User.id).where(User.username == "retryingstudent"))
 
 
 def test_limiter_recovery_expiry_concurrency_and_bounded_memory() -> None:

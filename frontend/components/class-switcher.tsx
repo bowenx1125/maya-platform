@@ -173,6 +173,14 @@ export function ClassSwitcher({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const pendingFocus = useRef(false);
+  // open in state lags a blur that flushes before click. The ref is the
+  // value the trigger click toggles, including that same press.
+  const openRef = useRef(false);
+  // Set for the whole trigger press. Focus sits in the menu after open, so
+  // the press blurs that item (relatedTarget is often null) and the root
+  // blur would close and re-render before click, which then saw open=false
+  // and opened the menu again.
+  const pressedTrigger = useRef(false);
   const id = useId();
   const name = current ? suffix(current.name) : "";
   const numericName = /^\d+$/.test(name);
@@ -181,11 +189,13 @@ export function ClassSwitcher({
 
   function close(returnFocus = false) {
     pendingFocus.current = false;
+    openRef.current = false;
     setOpen(false);
     if (returnFocus) triggerRef.current?.focus();
   }
   function show(focus: boolean) {
     pendingFocus.current = focus;
+    openRef.current = true;
     setPresent(true);
     setOpen(true);
   }
@@ -199,14 +209,14 @@ export function ClassSwitcher({
   useEffect(() => {
     if (!open) return;
     function outside(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (pressedTrigger.current) return;
+      if (!rootRef.current?.contains(event.target as Node)) close();
     }
     function escape(event: globalThis.KeyboardEvent) {
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
-      setOpen(false);
-      triggerRef.current?.focus();
+      close(true);
     }
     document.addEventListener("pointerdown", outside);
     document.addEventListener("keydown", escape);
@@ -252,9 +262,20 @@ export function ClassSwitcher({
           ? `${styles.capsuleTrigger} ${styles.segmentTrigger} relative flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1 text-sm font-extrabold ${PRESS_HIT}`
           : `${KEY} ${BUSY_MOTION} ${styles.roundKey} rounded-full flex h-11 w-11 flex-col items-center justify-center gap-0 text-[10px] leading-tight`
       }
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        pressedTrigger.current = true;
+      }}
+      onPointerUp={() => {
+        pressedTrigger.current = false;
+      }}
+      onPointerCancel={() => {
+        pressedTrigger.current = false;
+      }}
       onClick={() => {
+        pressedTrigger.current = false;
         if (busy) return;
-        if (open) close();
+        if (openRef.current) close();
         else show(true);
       }}
       onKeyDown={(event) => {
@@ -281,6 +302,7 @@ export function ClassSwitcher({
       data-class-switcher
       className={`relative min-w-0 ${mobile ? "contents" : "w-full"}`}
       onBlur={(event) => {
+        if (pressedTrigger.current) return;
         if (!event.currentTarget.contains(event.relatedTarget as Node | null))
           close();
       }}

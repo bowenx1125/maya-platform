@@ -49,7 +49,7 @@ def test_roster_separates_editable_and_provisioned_accounts(
         assert response.status_code == 200, response.text
         payload = response.json()
 
-    student = _entry(payload, "new-student")
+    student = _entry(payload, "newstudent")
     assert student["source"] == "database"
     assert student["editable"] is True
     assert student["status"] == "active"
@@ -75,8 +75,8 @@ def test_teacher_renames_a_self_registered_student(app_factory: Any) -> None:
 
 def test_teacher_moves_a_student_into_an_existing_group(app_factory: Any) -> None:
     app, _database, _settings = app_factory()
-    first = _register_student(app, username="student-one", group_name="Team Aurora")
-    second = _register_student(app, username="student-two", group_name="Team Borealis")
+    first = _register_student(app, username="studentone", group_name="Team Aurora")
+    second = _register_student(app, username="studenttwo", group_name="Team Borealis")
     with TestClient(app) as teacher:
         _payload, csrf = login(teacher)
         # The name is the address: a different case and spacing must land in
@@ -87,7 +87,7 @@ def test_teacher_moves_a_student_into_an_existing_group(app_factory: Any) -> Non
         assert len(moved) == 1
 
         roster = _roster(teacher).json()
-        target = _entry(roster, "student-one")["groups"][0]["id"]
+        target = _entry(roster, "studentone")["groups"][0]["id"]
         assert moved[0]["id"] == target
         assert first != second
 
@@ -98,7 +98,7 @@ def test_deactivation_ends_the_session_and_blocks_login(app_factory: Any) -> Non
     with TestClient(app) as student:
         student.post(
             "/api/v1/auth/login",
-            json={"username": "new-student", "password": "correct-horse-1"},
+            json={"username": "newstudent", "password": "correct-horse-1"},
         )
         assert student.get("/api/v1/auth/me").status_code == 200
 
@@ -115,7 +115,7 @@ def test_deactivation_ends_the_session_and_blocks_login(app_factory: Any) -> Non
         assert (
             blocked.post(
                 "/api/v1/auth/login",
-                json={"username": "new-student", "password": "correct-horse-1"},
+                json={"username": "newstudent", "password": "correct-horse-1"},
             ).status_code
             == 401
         )
@@ -132,7 +132,7 @@ def test_reactivation_restores_login(app_factory: Any) -> None:
         assert (
             student.post(
                 "/api/v1/auth/login",
-                json={"username": "new-student", "password": "correct-horse-1"},
+                json={"username": "newstudent", "password": "correct-horse-1"},
             ).status_code
             == 200
         )

@@ -67,9 +67,9 @@ def test_concurrent_username_claim_has_one_winner_and_preserves_login(app_factor
 def test_registration_and_move_share_unicode_group_identity(app_factory: Any) -> None:
     app, database, _settings = app_factory()
     with TestClient(app) as client:
-        first = register(client, username="unicode-one", group_name="  Équipe   Straße ").json()
-        second = register(client, username="unicode-two", group_name="ÉQUIPE STRASSE").json()
-        third = register(client, username="unicode-three", group_name="Elsewhere").json()
+        first = register(client, username="unicodeone", group_name="  Équipe   Straße ").json()
+        second = register(client, username="unicodetwo", group_name="ÉQUIPE STRASSE").json()
+        third = register(client, username="unicodethree", group_name="Elsewhere").json()
         assert first["user"]["groups"] == second["user"]["groups"]
         _, csrf = login(client)
         response = client.patch(
@@ -99,7 +99,7 @@ def test_concurrent_first_group_joins_use_one_group(app_factory: Any) -> None:
             return response.json()
 
         with ThreadPoolExecutor(max_workers=2) as pool:
-            first, second = pool.map(claim, ["group-race-one", "group-race-two"])
+            first, second = pool.map(claim, ["groupraceone", "groupracetwo"])
         assert first["user"]["groups"] == second["user"]["groups"]
     with database.session() as session:
         assert session.scalar(select(func.count(Group.id)).where(Group.name_key == "équipe")) == 1

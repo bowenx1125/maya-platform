@@ -59,6 +59,7 @@ import {
 import { NoticeTraySlot } from "./ui/error-kit";
 import { MusicKey } from "./music-key";
 import { ClassSwitcher } from "./class-switcher";
+import { useBowenLandingGroupId } from "./use-bowen-landing-group";
 
 type ActionRegistration = {
   owner: string;
@@ -231,6 +232,7 @@ export function AppShell({
   const t = useT();
   const { api, user, logout, refresh, identityGeneration, status } =
     useSession();
+  const bowenLanding = useBowenLandingGroupId();
   const router = useRouter();
   const pathname = usePathname();
   const [locationHash, setLocationHash] = useState("");
@@ -318,11 +320,15 @@ export function AppShell({
       ? agentGroup?.scope === agentScope
         ? agentGroup.groupId
         : undefined
-      : membershipGroupIds.length === 1
-        ? membershipGroupIds[0]
-        : undefined);
+      : user?.username === "bowen"
+        ? bowenLanding.ready
+          ? (bowenLanding.groupId ?? undefined)
+          : undefined
+        : membershipGroupIds.length === 1
+          ? membershipGroupIds[0]
+          : undefined);
 
-  // Workspace music follows this account's last on/off choice.
+  // Workspace music stays off unless this account has turned it on.
   useEffect(() => {
     if (!user?.id) return;
     setMusicAccountId(user.id);
@@ -1204,7 +1210,7 @@ export function AppShell({
               <WorkspaceIcon name="menu" size={18} />
             </button>
             <ClassSwitcher
-              key={`${user?.id}:${pathname}`}
+              key={`${user?.id ?? ""}`}
               collapsed={false}
               mobile
               homeLink={brandHomeLink}
@@ -1247,12 +1253,15 @@ export function AppShell({
         >
           <div data-sidebar-pin className="sticky top-0 h-dvh">
             {mobile ? (
-              // Mobile (2026-11-03): the drawer's corner key plays the
-              // workspace music; the backdrop, Esc or navigating closes it.
-              <MusicKey
-                channel="workspace"
-                className="absolute top-4 right-3 z-10"
-              />
+              // Mobile (2026-11-03): the student's drawer corner key plays
+              // the workspace music. Teachers have no music key. The
+              // backdrop, Esc or navigating closes the drawer.
+              teacherSurface ? null : (
+                <MusicKey
+                  channel="workspace"
+                  className="absolute top-4 right-3 z-10"
+                />
+              )
             ) : (
               <button
                 type="button"
@@ -1282,13 +1291,13 @@ export function AppShell({
                     collapsed || mobile
                       ? "contents"
                       : teacherSurface
-                        ? "grid min-w-0 gap-3 [&>button]:justify-self-end"
+                        ? "grid min-w-0"
                         : "flex items-center justify-between gap-2"
                   }
                 >
                   {teacherSurface && !mobile ? (
                     <ClassSwitcher
-                      key={`${user?.id}:${pathname}:${collapsed}`}
+                      key={`${user?.id ?? ""}:${collapsed}`}
                       collapsed={collapsed}
                       mobile={false}
                       homeLink={brandHomeLink}
@@ -1296,7 +1305,7 @@ export function AppShell({
                   ) : (
                     brandHomeLink()
                   )}
-                  {collapsed || mobile ? null : (
+                  {collapsed || mobile || teacherSurface ? null : (
                     <MusicKey channel="workspace" />
                   )}
                 </div>
