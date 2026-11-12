@@ -247,8 +247,8 @@ Teacher pages:class-scoped;register:group join/create.0086:group choice;
 Nov10:Maya1002/Maya1001,stable IDs/student data;Teacher scopes fixed;RAG actions follow class bar.
 47 PG,1188 UI. Debates/Quizzes/Accounts;optional choice answer;no empty Agents card;large loader;chat omits missing group/editor.
 
-Nov11:teacher removals prune empty non-default groups;work FKs guard.
-Ruff/format/mypy pass;PG tests blocked:socket EPERM;0 calls/deploy.
+Nov12:removals/deactivation prune empty/inactive-only non-default groups;
+work FKs guard,accounts kept;course locks ordered;0 calls/deploy.
 
 ## Nov10 Debate prompt v4(replaces Oct24 contract-in-Ruleset)
 
