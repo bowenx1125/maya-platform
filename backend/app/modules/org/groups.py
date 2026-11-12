@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import registered_metadata
 from app.core.locks import xact_lock
-from app.core.models import Group, GroupMember
+from app.core.models import Group, GroupMember, User
 from app.modules.org.classes import SECOND_CLASS_GROUP_ID, default_class_group
 from app.seed import GROUP_DEMO_ID, seed_uuid
 
@@ -41,10 +41,16 @@ def prune_empty_groups(db: Session, course_id: str, group_ids: Iterable[str]) ->
         if group is None or group.id in protected:
             continue
         # Account purges can remove memberships by database cascade, leaving
-        # loaded ORM collections stale. Only the current real roster counts.
+        # loaded ORM collections stale. Only explicitly inactive accounts can
+        # be ignored; an unexpected status must still protect its group.
         db.expire(group, ["memberships"])
         if (
-            db.scalar(select(GroupMember.group_id).where(GroupMember.group_id == group.id).limit(1))
+            db.scalar(
+                select(GroupMember.group_id)
+                .join(User, User.id == GroupMember.user_id)
+                .where(GroupMember.group_id == group.id, User.status != "inactive")
+                .limit(1)
+            )
             is not None
         ):
             continue

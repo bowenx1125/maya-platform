@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError, conflict, not_found, unprocessable
 from app.core.identity import normalize_group_name as canonical_group_name
+from app.core.locks import xact_lock
 from app.core.models import (
     Agent,
     CourseMember,
@@ -253,6 +254,19 @@ def update_member(
             # is revoked.
             revoke_user_sessions(db, row.user.id, datetime.now(UTC))
     if group_name is not None:
+        if status is not None and row.user.status == INACTIVE:
+            # The move must not lock one course before cross-course pruning
+            # acquires an earlier course held by another deactivation.
+            course_ids = set(
+                db.scalars(
+                    select(Group.course_id)
+                    .join(GroupMember, GroupMember.group_id == Group.id)
+                    .where(GroupMember.user_id == user_id)
+                )
+            )
+            course_ids.add(course_id)
+            for member_course_id in sorted(course_ids):
+                xact_lock(db, f"course-groups:{member_course_id}")
         previous_groups = list(
             db.scalars(
                 select(GroupMember.group_id)
@@ -262,6 +276,19 @@ def update_member(
         )
         move_to_group(db, course_id, row.user, normalize_group_name(group_name))
         prune_empty_groups(db, course_id, previous_groups)
+
+    if status is not None and row.user.status == INACTIVE:
+        # Status belongs to the account, so deactivation affects every class.
+        # Collect after a possible move to include its destination as well.
+        groups_by_course: dict[str, list[str]] = {}
+        for member_course_id, group_id in db.execute(
+            select(Group.course_id, GroupMember.group_id)
+            .join(Group, Group.id == GroupMember.group_id)
+            .where(GroupMember.user_id == user_id)
+        ):
+            groups_by_course.setdefault(member_course_id, []).append(group_id)
+        for member_course_id in sorted(groups_by_course):
+            prune_empty_groups(db, member_course_id, groups_by_course[member_course_id])
 
     db.flush()
     return _roster_row(db, course_id, user_id)

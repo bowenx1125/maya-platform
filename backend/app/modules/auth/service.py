@@ -31,6 +31,7 @@ from app.modules.auth.credentials import (
     publish_catalog_snapshot,
 )
 from app.modules.auth.models import DemoAccountBinding
+from app.modules.org.groups import prune_empty_groups
 from app.seed import BOWEN_ID, GROUP_DEMO_ID
 
 SESSION_COOKIE_NAME = "maya_session"
@@ -532,6 +533,7 @@ def _sync_graph_in_session(
         # Only users owned by a durable catalog binding can be disabled. A
         # seeded/non-Demo application user is intentionally left untouched.
         disabled_count = 0
+        groups_to_prune: dict[str, set[str]] = {}
         for binding in bindings:
             if binding.account_key in desired_keys:
                 continue
@@ -548,9 +550,14 @@ def _sync_graph_in_session(
             for course_row in course_members_by_user.get(user.id, []):
                 session.delete(course_row)
             for group_row in group_members_by_user.get(user.id, []):
+                groups_to_prune.setdefault(groups[group_row.group_id].course_id, set()).add(
+                    group_row.group_id
+                )
                 session.delete(group_row)
 
         session.flush()
+        for course_id in sorted(groups_to_prune):
+            prune_empty_groups(session, course_id, groups_to_prune[course_id])
         return _SyncOutcome(
             result=AccountSyncResult(
                 active_count=len(graph.accounts),
