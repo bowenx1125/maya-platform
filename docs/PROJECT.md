@@ -17,7 +17,7 @@ metadata dropped,exact sources/bindings kept. Unreadable:≤1 authorized frozen 
 one-call adds none;unknown never resent. Questions≠reply_to. Memory excludes speech/
 TTS/Agent.md/version/KB;R4/Report:separate session_discussion_memory. Own KB/Persona+
 others' public speeches only,no private receipts/Persona.0024:drops speaker/snapshot
-FK only. Support≠accuracy:direct+5/contextual+2/no_match+0.
+FK only. Support≠accuracy:+5/+2/0.
 [Prompts](contracts/FOUR_ROUND_PROMPTS.md)/[examples](contracts/four-round-example.json):
 manual review,no keyword/similarity gates.
 
@@ -303,7 +303,7 @@ timeline+clock; scholar-stage layers viseme mouth and gesture clips on the
 procedural frame. Bones resolve per rig family (UE spine_02/neck_01, AdvSkel
 Chest_M/Neck_M, Mixamo Spine2/Neck); the old head-only list clipped collars
 — fixed; watermark mesh hidden. Tripo-refined Mixamo-rigged figures live as
-elder-scholar.glb + female_1.glb.
+elder-scholar.glb, noble-scholar.glb (noble2) + female_1.glb.
 
 Gesture library v2: arm channels (upper/forearm/hand) are figure-space
 axis-angle steps; scholar-stage converts per rig against captured parent
@@ -312,5 +312,5 @@ bone-local axes differ. Postures: hand_behind_back (right behind back, left
 at chest), hand_on_chest (mirror), open_palm_listening; clips emphasis,
 settle_calm, doubt_shrug, invite_present, chin_stroke, palm_open_sweep,
 lean_in, object_raise gesture with the free left arm. Compiler defaults
-thoughtful/friendly to hand_on_chest. Headless-render QA on elder+female;
-153 frontend files / 1259 tests green.
+thoughtful/friendly to hand_on_chest. Headless-render QA on all three; 153
+frontend files / 1259 tests green.
