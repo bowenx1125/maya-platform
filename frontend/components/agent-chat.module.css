@@ -127,6 +127,11 @@
     position: relative;
     z-index: 1;
   }
+  /* Decorative layers must not cover the full-card history button. */
+  .historyRow > :first-child[aria-hidden="true"],
+  .historyMeta {
+    pointer-events: none;
+  }
 
   .historySelectTitle {
     display: block;
@@ -174,6 +179,7 @@
   /* Always-visible pin + delete (final-v2b); keep a11y names */
   .historyPin,
   .historyDelete {
+    pointer-events: auto;
     display: grid;
     width: 28px;
     height: 28px;

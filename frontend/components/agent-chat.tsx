@@ -3675,6 +3675,15 @@ function AgentChatScope({
                 <form
                   ref={setComposerElement}
                   className={styles.composer}
+                  onClick={(event) => {
+                    if (!(event.target instanceof Element)) return;
+                    const control = event.target.closest(
+                      'button, a[href], input, textarea, select, label, [role="button"], [role="menu"], [contenteditable], [tabindex]',
+                    );
+                    if (control && event.currentTarget.contains(control))
+                      return;
+                    messageRef.current?.focus();
+                  }}
                   onSubmit={(event) => submitMessage(event)}
                 >
                   {canMention && teamRecipientMenu ? (
