@@ -269,6 +269,17 @@ describe("class switcher", () => {
     expect(button.getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("does not keep the trigger press after the pointer is released outside", async () => {
+    mount();
+    const button = await trigger();
+    fireEvent.click(button);
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.pointerDown(button, { button: 0 });
+    fireEvent.pointerUp(document.body);
+    fireEvent.pointerDown(document.body);
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("closes on Tab, outside pointerdown and focus leaving the switcher", async () => {
     mount();
     const button = await trigger();

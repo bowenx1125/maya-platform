@@ -90,8 +90,10 @@ def change_group(db: Session, user: User, raw: str, *, course_id: str | None = N
     except ValueError:
         raise unprocessable("group_not_found", "Choose one of the course's groups.") from None
     # Keep the existing-only choice and catalog binding valid through the move.
-    for course_id in sorted(course_ids):
-        xact_lock(db, f"course-groups:{course_id}")
+    # The loop must not reuse the session course parameter: sorted ids end on
+    # the later course, and a session in the earlier one would follow that.
+    for locked_course_id in sorted(course_ids):
+        xact_lock(db, f"course-groups:{locked_course_id}")
     groups = list(
         db.scalars(
             select(Group).where(Group.course_id.in_(course_ids), Group.name_key == key)

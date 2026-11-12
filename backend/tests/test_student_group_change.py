@@ -119,6 +119,62 @@ def test_catalog_student_can_choose_an_existing_group_but_teacher_cannot(app_fac
         assert denied.json()["code"] == "group_change_forbidden"
 
 
+def test_bowen_moves_inside_the_earlier_sorted_class_when_the_name_exists_twice(
+    app_factory: Any,
+) -> None:
+    """The session class (74db…) sorts before the other class (b1ae…).
+
+    A move must stay in that session. Filtering with the last locked course
+    would 422 or land him in the later class.
+    """
+
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from app.modules.org.classes import SECOND_CLASS_ID
+    from app.seed import BOWEN_ID
+
+    from tests.test_bowen_identity_choice import challenge, choose
+
+    assert SECOND_CLASS_ID < COURSE_ID
+    app, database, _settings = app_factory()
+    with TestClient(app) as client:
+        with database.session() as db:
+            for course_id, name in (
+                (SECOND_CLASS_ID, "Home Group"),
+                (SECOND_CLASS_ID, "Shared Name"),
+                (COURSE_ID, "Shared Name"),
+            ):
+                db.add(
+                    Group(
+                        id=str(uuid4()),
+                        course_id=course_id,
+                        name=name,
+                        created_at=datetime.now(UTC),
+                    )
+                )
+            db.commit()
+        entered = choose(client, challenge(client)["choice_token"], "student", SECOND_CLASS_ID)
+        assert entered.status_code == 200, entered.text
+        moved = client.patch(
+            "/api/v1/auth/me",
+            json={"group_name": "Shared Name"},
+            headers=_headers(entered.json()["csrf_token"]),
+        )
+        assert moved.status_code == 200, moved.text
+        with database.session() as db:
+            rows = db.scalars(
+                select(Group).where(Group.name.in_(("Shared Name", "Home Group")))
+            ).all()
+            by_key = {(row.course_id, row.name): row.id for row in rows}
+            assert (
+                db.get(GroupMember, (by_key[(SECOND_CLASS_ID, "Shared Name")], BOWEN_ID))
+                is not None
+            )
+            assert db.get(GroupMember, (by_key[(SECOND_CLASS_ID, "Home Group")], BOWEN_ID)) is None
+            assert db.get(GroupMember, (by_key[(COURSE_ID, "Shared Name")], BOWEN_ID)) is None
+
+
 def test_bowen_moves_inside_the_class_he_entered_when_the_name_exists_twice(
     app_factory: Any,
 ) -> None:

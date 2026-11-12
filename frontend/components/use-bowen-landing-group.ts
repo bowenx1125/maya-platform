@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import {
   bowenLandingGroup,
   bowenStudentClassId,
-  rememberBowenStudentClass,
   type BowenGroup,
 } from "../lib/bowen-student";
 import { useSession } from "./session-provider";
@@ -31,7 +30,6 @@ export function useBowenLandingGroupId(): {
 
   useEffect(() => {
     if (user?.username !== "bowen" || !classId) return;
-    rememberBowenStudentClass(classId);
     let active = true;
     const groupIds = ids ? ids.split(",") : [];
     void Promise.all(

@@ -41,11 +41,7 @@ import {
 import { useT } from "../lib/i18n";
 import { AgentWorkbench } from "./agent-workspace";
 import { useSession } from "./session-provider";
-import {
-  bowenLandingGroup,
-  bowenStudentClassId,
-  rememberBowenStudentClass,
-} from "../lib/bowen-student";
+import { bowenLandingGroup, bowenStudentClassId } from "../lib/bowen-student";
 import { useBowenLandingGroupId } from "./use-bowen-landing-group";
 import { UserAvatar } from "./user-avatar";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
@@ -187,9 +183,6 @@ export function StudentDashboard() {
     return () => window.clearTimeout(timer);
   }, [load]);
   const classId = bowenStudentClassId(user);
-  useEffect(() => {
-    if (classId) rememberBowenStudentClass(classId);
-  }, [classId]);
 
   if (loading) return <LoadingCard />;
   if (error)

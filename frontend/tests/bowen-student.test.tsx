@@ -1,12 +1,7 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  bowenLandingGroup,
-  bowenStudentClassId,
-  readBowenStudentClass,
-  rememberBowenStudentClass,
-} from "../lib/bowen-student";
+import { bowenLandingGroup, bowenStudentClassId } from "../lib/bowen-student";
 
 const state = vi.hoisted(() => ({
   user: {
@@ -87,12 +82,8 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-describe("Bowen student class memory", () => {
-  it("lets an explicit class choice replace the stored class", () => {
-    rememberBowenStudentClass("maya1002");
-    expect(readBowenStudentClass()).toBe("maya1002");
-    rememberBowenStudentClass("maya1001");
-    expect(readBowenStudentClass()).toBe("maya1001");
+describe("Bowen student class", () => {
+  it("uses the first student course the session lists", () => {
     expect(
       bowenStudentClassId({
         username: "bowen",
@@ -129,6 +120,5 @@ describe("Bowen student home", () => {
     expect(screen.getByRole("heading", { name: "Demo Group" })).toBeTruthy();
     expect(screen.getByText("Bowen1")).toBeTruthy();
     expect(screen.queryByText("Other Class")).toBeNull();
-    await waitFor(() => expect(readBowenStudentClass()).toBe("maya1001"));
   });
 });

@@ -265,12 +265,15 @@ export function ClassSwitcher({
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         pressedTrigger.current = true;
-      }}
-      onPointerUp={() => {
-        pressedTrigger.current = false;
-      }}
-      onPointerCancel={() => {
-        pressedTrigger.current = false;
+        // pointerup on the button does not fire when the pointer is
+        // released outside it, which left this flag stuck true.
+        const end = () => {
+          pressedTrigger.current = false;
+          window.removeEventListener("pointerup", end);
+          window.removeEventListener("pointercancel", end);
+        };
+        window.addEventListener("pointerup", end);
+        window.addEventListener("pointercancel", end);
       }}
       onClick={() => {
         pressedTrigger.current = false;

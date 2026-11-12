@@ -87,8 +87,8 @@ def _make_public(client: TestClient, csrf: str, agent_id: str, revision: int = 0
     )
 
 
-def test_creator_groupmate_and_teacher_can_make_a_private_agent_public(client: TestClient) -> None:
-    """Edit roles may switch Private → Public. The creator stays the owner."""
+def test_only_the_creator_can_make_a_private_agent_public(client: TestClient) -> None:
+    """A caller who cannot read a private Agent cannot publish it either."""
 
     from app.core.models import Agent
     from app.modules.org.classes import SECOND_CLASS_ID
@@ -98,24 +98,39 @@ def test_creator_groupmate_and_teacher_can_make_a_private_agent_public(client: T
 
     _, owner_csrf = login(client, "bowen")
     creator_id, _version = _agent(client, owner_csrf, "Creator publishes", "private")
-    made = _make_public(client, owner_csrf, creator_id)
+    before = client.get(f"/api/v1/agents/{creator_id}")
+    assert before.status_code == 200, before.text
+    assert before.json()["can_manage_visibility"] is True
+    made = _make_public(client, owner_csrf, creator_id, before.json()["metadata_revision"])
     assert made.status_code == 200, made.text
     assert made.json()["visibility"] == "public"
     assert made.json()["is_creator"] is True
-    assert made.json()["can_manage_visibility"] is True
+    assert made.json()["can_manage_visibility"] is False
 
     _, owner_csrf = login(client, "bowen")
     groupmate_id, _version = _agent(client, owner_csrf, "Groupmate publishes", "private")
     client.cookies.clear()
     _, kaikai_csrf = login(client, "kaikai")
     detail = client.get(f"/api/v1/agents/{groupmate_id}")
-    # A private Agent is not readable by a groupmate; the switch itself is.
     assert detail.status_code == 404
-    made = _make_public(client, kaikai_csrf, groupmate_id)
-    assert made.status_code == 200, made.text
-    assert made.json()["visibility"] == "public"
-    assert made.json()["is_creator"] is False
-    assert made.json()["can_manage_visibility"] is True
+    made = client.patch(
+        f"/api/v1/agents/{groupmate_id}",
+        headers=_headers(kaikai_csrf),
+        json={
+            "expected_metadata_revision": 0,
+            "visibility": "public",
+            "name": "Stolen",
+            "description": "Not the groupmate's draft.",
+        },
+    )
+    assert made.status_code in {403, 404}, made.text
+    client.cookies.clear()
+    _, owner_csrf = login(client, "bowen")
+    kept = client.get(f"/api/v1/agents/{groupmate_id}")
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["visibility"] == "private"
+    assert kept.json()["name"] == "Groupmate publishes"
+    assert kept.json()["description"] == ""
     with client.app.state.database.session() as db:
         assert db.get(Agent, groupmate_id).owner_user_id == BOWEN_ID
 
@@ -123,12 +138,9 @@ def test_creator_groupmate_and_teacher_can_make_a_private_agent_public(client: T
     teacher_id, _version = _agent(client, owner_csrf, "Teacher publishes", "private")
     client.cookies.clear()
     _, maya_csrf = login(client, "maya")
+    assert client.get(f"/api/v1/agents/{teacher_id}").status_code == 404
     made = _make_public(client, maya_csrf, teacher_id)
-    assert made.status_code == 200, made.text
-    assert made.json()["is_creator"] is False
-    assert made.json()["visibility"] == "public"
-    with client.app.state.database.session() as db:
-        assert db.get(Agent, teacher_id).owner_user_id == BOWEN_ID
+    assert made.status_code in {403, 404}, made.text
 
     # Bowen signed in as Maya is that same teacher account.
     _, owner_csrf = login(client, "bowen")
@@ -145,10 +157,10 @@ def test_creator_groupmate_and_teacher_can_make_a_private_agent_public(client: T
     assert chosen.status_code == 200, chosen.text
     assert chosen.json()["user"]["username"] == "maya"
     made = _make_public(client, chosen.json()["csrf_token"], via_id)
-    assert made.status_code == 200, made.text
+    assert made.status_code in {403, 404}, made.text
     with client.app.state.database.session() as db:
         assert db.get(Agent, via_id).owner_user_id == BOWEN_ID
-        assert db.get(Agent, via_id).visibility == "public"
+        assert db.get(Agent, via_id).visibility == "private"
 
     _, owner_csrf = login(client, "bowen")
     foreign_id, _version = _agent(client, owner_csrf, "Other group cannot", "private")

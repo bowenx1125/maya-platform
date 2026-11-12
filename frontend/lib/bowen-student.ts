@@ -6,8 +6,6 @@
  * class has a real group.
  */
 
-const LAST_CLASS_KEY = "maya.bowen.student-class";
-
 export type BowenCourse = { course_id: string; role: string };
 
 export type BowenGroup = { id: string; name: string; course_id: string };
@@ -22,26 +20,9 @@ export function isProtectedStudentsShell(name: string): boolean {
   return name === "Students";
 }
 
-export function rememberBowenStudentClass(courseId: string): void {
-  try {
-    window.localStorage.setItem(LAST_CLASS_KEY, courseId);
-  } catch {
-    // Private mode: the session's course order still names the class.
-  }
-}
-
-export function readBowenStudentClass(): string | null {
-  try {
-    return window.localStorage.getItem(LAST_CLASS_KEY);
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Class for this student session. The server puts the class chosen at login
- * first; that choice wins and is what we remember. A stored id is only a
- * record of that choice, not a second source that can disagree with it.
+ * first, and that order is the class.
  */
 export function bowenStudentClassId(user: BowenUser): string | undefined {
   if (user?.username !== "bowen") return undefined;

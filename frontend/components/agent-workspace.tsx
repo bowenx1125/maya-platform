@@ -1842,8 +1842,8 @@ export function AgentWorkbench({
                       />
                     </label>
                     <div className="agent-identity">
-                      {/* Private can become Public (anyone who may edit it, once);
-                          Public never goes back. */}
+                      {/* Private can become Public for the edit role while it is
+                          private; Public never goes back. */}
                       <div
                         className="visibility-toggle"
                         role="group"

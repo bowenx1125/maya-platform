@@ -283,8 +283,8 @@ def test_public_agent_never_goes_back_to_private(
     assert joined.status_code == 200, joined.text
     private_id, private_version = agents["private"]
     public_id, public_version = agents["public"]
-    # The entered teacher can edit both, and that same role turns Private public.
-    # Public still does not go back.
+    # The entered teacher can edit both. Publishing stays with the edit role
+    # on a private Agent, which a visit is not, so Private stays private.
     assert client.get(f"/api/v1/agent-versions/{private_version}").status_code == 200
     assert client.get(f"/api/v1/agent-versions/{public_version}").status_code == 200
     assert client.get(f"/api/v1/agents/{public_id}").json()["visibility"] == "public"
@@ -292,25 +292,14 @@ def test_public_agent_never_goes_back_to_private(
     assert observed.status_code == 200, observed.text
     assert observed.json()["visibility"] == "private"
     assert observed.json()["can_edit"] is True
-    assert observed.json()["can_manage_visibility"] is True
+    assert observed.json()["can_manage_visibility"] is False
     flipped = client.patch(
         f"/api/v1/agents/{private_id}",
         headers=_headers(teacher_csrf),
-        json={"expected_metadata_revision": 1, "visibility": "public"},
+        json={"expected_metadata_revision": 1, "visibility": "public", "name": "Taken"},
     )
-    assert flipped.status_code == 200, flipped.text
-    assert flipped.json()["visibility"] == "public"
-    assert flipped.json()["is_creator"] is False
-    back = client.patch(
-        f"/api/v1/agents/{private_id}",
-        headers=_headers(teacher_csrf),
-        json={
-            "expected_metadata_revision": flipped.json()["metadata_revision"],
-            "visibility": "private",
-        },
-    )
-    assert back.status_code == 409, back.text
-    assert back.json()["code"] == "agent_public_is_final"
+    assert flipped.status_code in {403, 404}, flipped.text
+    assert client.get(f"/api/v1/agents/{private_id}").json()["name"] != "Taken"
 
 
 def test_owner_history_survives_sharing_an_active_private_source(

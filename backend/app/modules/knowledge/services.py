@@ -722,20 +722,13 @@ def public_agent_editor_role(
     db: Session,
     actor: AuthContext | str,
     agent: Agent,
-    *,
-    allow_private: bool = False,
 ) -> str | None:
     """Who may edit/publish/delete an Agent.
 
     The creator always ("owner"). A *public*, live Agent is also editable by
     the teachers of its own course ("course_teacher") and by student members
-    of its own group ("groupmate"). Private Agents stay creator-only for
-    content; nobody outside the course or group gains anything here.
-
-    ``allow_private`` is only the one-way Private → Public switch. It uses
-    these same roles for an Agent that is not public yet, and a course
-    teacher does not need a published version: that switch is what makes the
-    Agent public. Content routes keep the default.
+    of its own group ("groupmate"). Private Agents stay creator-only; nobody
+    outside the course or group gains anything here.
     """
 
     user_id = _actor_user_id(actor)
@@ -746,13 +739,12 @@ def public_agent_editor_role(
         return None
     if agent.owner_user_id == user_id:
         return "owner" if _agent_workspace_role(db, user_id, agent) == "owner" else None
-    if agent.status != "active" or (not allow_private and agent.visibility != "public"):
+    if agent.visibility != "public" or agent.status != "active":
         return None
     if role == "teacher":
         # Teachers meet a student's public Agent once it is published; an
         # unpublished draft stays undiscoverable to them (pre-publication rule).
-        # The visibility switch is the exception: it is how the draft becomes public.
-        if not allow_private and agent.current_published_version_id is None:
+        if agent.current_published_version_id is None:
             return None
         return "course_teacher"
     if (
@@ -1892,10 +1884,9 @@ def agent_summary(
         ownership_scope=cast(Literal["group", "personal"], agent.ownership_scope),
         visibility=cast(Literal["private", "public"], agent.visibility),
         can_edit=editor is not None or visit_edit,
-        can_manage_visibility=(
-            context is not None
-            and public_agent_editor_role(db, context, agent, allow_private=True) is not None
-        ),
+        # Same edit role as can_edit, and only while the Agent is still private.
+        # A visit can edit content without being that role, so it cannot publish.
+        can_manage_visibility=editor is not None and agent.visibility == "private",
         # Delete stays with the creator and the public-agent editors. A visit
         # can change the Agent's content without removing it.
         can_delete=editor is not None,

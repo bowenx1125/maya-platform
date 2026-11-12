@@ -404,7 +404,7 @@ def load_login_ci_config(path: Path | None = None) -> LoginCiConfig:
 def login_ci_attempt(
     base_url: str, account_prefix: str, password: str, index: int, timeout: float
 ) -> LoginCiAttempt:
-    username = f"{account_prefix}-{index:03d}"
+    username = f"{account_prefix}{index:03d}"
     started = time.perf_counter()
     try:
         result = Client(base_url, timeout).call(
@@ -540,7 +540,7 @@ def run_login_ci(
 
 def ensure_account(plan: Plan, index: int) -> None:
     client = Client(plan.base_url, plan.timeout)
-    username = f"{plan.account_prefix}-{index:03d}"
+    username = f"{plan.account_prefix}{index:03d}"
     result = client.call(
         "POST",
         "/api/v1/auth/register",
@@ -588,7 +588,7 @@ def run_student(
     stop: threading.Event,
 ) -> None:
     client = Client(plan.base_url, plan.timeout)
-    username = f"{plan.account_prefix}-{index:03d}"
+    username = f"{plan.account_prefix}{index:03d}"
     try:
         start.wait(timeout=120)
     except threading.BrokenBarrierError:
@@ -821,7 +821,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-url", required=True)
     parser.add_argument(
         "--profile",
-        help="login-ci uses existing <prefix>-000..019 accounts; otherwise classroom",
+        help="login-ci uses existing <prefix>000..<prefix>019 accounts; otherwise classroom",
     )
     parser.add_argument("--json-out", help="write the login-ci report to this path")
     parser.add_argument(
@@ -886,7 +886,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     steps = [int(v) for v in args.steps.split(",") if v]
     largest = args.sweep_students if args.sweep else max(steps)
-    print(f"preparing {largest} accounts ({args.account_prefix}-NNN)", flush=True)
+    print(f"preparing {largest} accounts ({args.account_prefix}NNN)", flush=True)
     for index in range(largest):
         ensure_account(plan, index)
 

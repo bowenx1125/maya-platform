@@ -248,14 +248,9 @@ def main() -> int:
         parser.error("Use 1..100 accounts and 1..8 registration workers")
     if args.account_file.exists():
         parser.error("Refusing to overwrite an existing credential file")
-    prefix = (
-        "load-"
-        + time.strftime("%Y%m%d%H%M%S", time.gmtime())
-        + "-"
-        + secrets.token_hex(2)
-    )
+    prefix = "load" + time.strftime("%Y%m%d%H%M%S", time.gmtime()) + secrets.token_hex(2)
     accounts = [
-        {"username": f"{prefix}-{index:03d}", "password": secrets.token_urlsafe(24)}
+        {"username": f"{prefix}{index:03d}", "password": secrets.token_urlsafe(24)}
         for index in range(args.accounts)
     ]
     registration_results: list[dict[str, Any]] = []
