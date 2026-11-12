@@ -1,9 +1,10 @@
 /**
  * Stage assets for Debates (beta).
  *
- * Two purchased figures, shared by every speaker on the stage and cloned per
- * Agent so a five-Agent stage costs two downloads. Both figures have jaw
- * bones, which the stage animates for first-pass mouth movement.
+ * Two rigged figures, shared by every speaker on the stage and cloned per
+ * Agent so a five-Agent stage costs two downloads. Both figures follow the
+ * Mixamo bone naming the stage maps, and the stage drives first-pass mouth
+ * movement through the bone and morph-target fallbacks.
  */
 
 export const STAGE_ASSET_ROOT = "/avatars/";
