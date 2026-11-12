@@ -34,6 +34,9 @@ class AgentSummary(BaseModel):
     visibility: Literal["private", "public"]
     # Creator; for a public Agent also same-group students and course teachers.
     can_edit: bool
+    # Same roles as edit, including a still-private Agent: they may switch it
+    # to Public. Public stays final, so this does not grant Public → Private.
+    can_manage_visibility: bool = False
     name: str
     description: str = ""
     metadata_revision: int = Field(ge=0)
@@ -169,7 +172,7 @@ class AgentCreateRequest(BaseModel):
 
 
 class UpdateAgentMetadataRequest(BaseModel):
-    """CAS payload for mutable Agent metadata and owner-controlled visibility.
+    """CAS payload for mutable Agent metadata and editor-controlled visibility.
 
     ``description`` is intentionally nullable on the wire so clients can
     clear an older/null value explicitly.  The database stores a non-null

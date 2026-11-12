@@ -90,6 +90,7 @@ from app.modules.knowledge.providers.product_publication import (
     run_confirmed_real_embedding_publication,
 )
 from app.modules.knowledge.services import (
+    ScopedAgent,
     _enabled_documents,
     _visit_edits_agent,
     abandon_claim,
@@ -1266,7 +1267,22 @@ def update_agent_metadata(
 
     reject_baseline_agent_mutation(str(agent_id))
     new_name = _clean_agent_name(payload.name) if payload.name is not None else None
-    scoped = visible_student_agent(db, context, str(agent_id))
+    # Visibility uses the edit roles (creator, course teacher, same-group
+    # student), including while the Agent is still private. Content edits
+    # keep visible_student_agent, so a groupmate still cannot rewrite a
+    # private draft.
+    if "visibility" in payload.model_fields_set:
+        current_row = db.get(Agent, str(agent_id))
+        editor = (
+            public_agent_editor_role(db, context, current_row, allow_private=True)
+            if current_row is not None
+            else None
+        )
+        if current_row is None or editor is None:
+            raise not_found()
+        scoped = ScopedAgent(current_row, editor)
+    else:
+        scoped = visible_student_agent(db, context, str(agent_id))
     # Close the authorization read snapshot before taking the final writer
     # lock, so concurrent updates resolve to one deterministic winner.
     _begin_immediate(db, str(agent_id))
@@ -1291,10 +1307,9 @@ def update_agent_metadata(
                     "current_metadata_revision": latest,
                 },
             )
-        if "visibility" in payload.model_fields_set and current.owner_user_id != context.user.id:
-            raise not_found()
-        # Private can become Public (owner only, above); Public is final, so
-        # the group never loses an Agent it was given.
+        # Private can become Public for anyone who may edit it; Public is
+        # final, so the group never loses an Agent it was given. A caller
+        # outside those roles already 404'd above.
         if payload.visibility is not None and payload.visibility != current.visibility:
             if current.visibility == "public":
                 db.rollback()

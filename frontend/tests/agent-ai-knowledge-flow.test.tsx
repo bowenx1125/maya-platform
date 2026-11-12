@@ -74,6 +74,7 @@ const agent: AgentDetail = {
   ownership_scope: "personal",
   visibility: "private",
   can_edit: true,
+  can_manage_visibility: true,
   name: "Teacher-created Agent",
   description: "",
   metadata_revision: 0,

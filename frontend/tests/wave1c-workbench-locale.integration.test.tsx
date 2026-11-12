@@ -123,6 +123,7 @@ function makeAgent(): AgentDetail {
     ownership_scope: "group",
     visibility: "public",
     can_edit: true,
+    can_manage_visibility: true,
     name: "Agent",
     description: "A stable Agent description",
     metadata_revision: 0,

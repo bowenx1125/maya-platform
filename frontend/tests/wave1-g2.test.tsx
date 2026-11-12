@@ -145,6 +145,7 @@ describe("G2 idempotency key lifecycle", () => {
       ownership_scope: "group",
       visibility: "public",
       can_edit: true,
+      can_manage_visibility: true,
       name: "Agent",
       status: "active",
       description: "",

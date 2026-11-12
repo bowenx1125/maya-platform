@@ -83,6 +83,7 @@ function agent(): AgentDetail {
     ownership_scope: "group",
     visibility: "public",
     can_edit: false,
+    can_manage_visibility: false,
     name: "Published Agent",
     description: "A released classroom perspective.",
     metadata_revision: 0,

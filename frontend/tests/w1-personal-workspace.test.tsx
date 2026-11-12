@@ -662,7 +662,11 @@ describe("Agent Name card", () => {
   }
 
   it("makes a private Agent public once, after a confirm", async () => {
-    const api = editorApi({ is_creator: true, visibility: "private" });
+    const api = editorApi({
+      is_creator: true,
+      can_manage_visibility: true,
+      visibility: "private",
+    });
     const group = await screen.findByRole("group", { name: "Visibility" });
     const makePublic = within(group).getByRole("button", { name: "Public" });
     const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
@@ -684,8 +688,12 @@ describe("Agent Name card", () => {
     confirm.mockRestore();
   });
 
-  it("keeps a public Agent public and lets only its creator flip a private one", async () => {
-    editorApi({ is_creator: true, visibility: "public" });
+  it("keeps a public Agent public and follows edit permission for Private", async () => {
+    editorApi({
+      is_creator: true,
+      can_manage_visibility: true,
+      visibility: "public",
+    });
     const shared = await screen.findByRole("group", { name: "Visibility" });
     const back = within(shared).getByRole("button", {
       name: "Private",
@@ -693,7 +701,25 @@ describe("Agent Name card", () => {
     expect(back.disabled).toBe(true);
     expect(back.title).toBe("A public Agent stays public.");
     cleanup();
-    editorApi({ is_creator: false, visibility: "private" });
+    editorApi({
+      is_creator: false,
+      can_manage_visibility: true,
+      visibility: "private",
+    });
+    const editor = await screen.findByRole("group", { name: "Visibility" });
+    expect(
+      (
+        within(editor).getByRole("button", {
+          name: "Public",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+    cleanup();
+    editorApi({
+      is_creator: false,
+      can_manage_visibility: false,
+      visibility: "private",
+    });
     const group = await screen.findByRole("group", { name: "Visibility" });
     expect(
       (
