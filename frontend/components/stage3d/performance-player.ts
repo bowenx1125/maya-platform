@@ -37,6 +37,16 @@ export type PerformanceTimeline = {
 
 export type BoneOffset = readonly [number, number, number];
 
+/**
+ * One rotation step for an arm channel: an axis in figure space (the rig's
+ * root-local frame — +Y up, +Z facing forward, +X the figure's left; it need
+ * not be normalized) plus an angle in radians. Steps compose in list order,
+ * each rotating about figure-fixed axes, so "swing back, then lower" reads as
+ * [[1,0,0,a],[0,0,1,b]] regardless of how the rig's bone-local axes are
+ * oriented.
+ */
+export type ArmStep = readonly [number, number, number, number];
+
 export type PerformanceSample = {
   /** 0..1 mouth openness; null tells the stage to keep its procedural mouth. */
   mouth: number | null;
@@ -44,6 +54,12 @@ export type PerformanceSample = {
   head: BoneOffset | null;
   neck: BoneOffset | null;
   torso: BoneOffset | null;
+  upperArmL: readonly ArmStep[] | null;
+  upperArmR: readonly ArmStep[] | null;
+  forearmL: readonly ArmStep[] | null;
+  forearmR: readonly ArmStep[] | null;
+  handL: readonly ArmStep[] | null;
+  handR: readonly ArmStep[] | null;
 };
 
 const NO_SAMPLE: PerformanceSample = {
@@ -51,24 +67,91 @@ const NO_SAMPLE: PerformanceSample = {
   head: null,
   neck: null,
   torso: null,
+  upperArmL: null,
+  upperArmR: null,
+  forearmL: null,
+  forearmR: null,
+  handL: null,
+  handR: null,
 };
 
 /**
- * Gestures the two purchased figures can actually perform: their rigs expose
- * head, neck and torso bones but no fingers, so clips are choreographed on
- * those bones only. Amplitudes stay small; each returns null outside its
- * envelope so layers never fight the rest pose.
+ * The rigged figures expose arm chains (mixamorig LeftArm/RightArm and their
+ * forearms and hands), so clips choreograph head, torso and arms. Amplitudes
+ * stay small; each returns null outside its envelope so layers never fight
+ * the rest pose. Arm channels are figure-space rotation steps (see ArmStep)
+ * the stage converts per rig, so the same clip works across skeleton families;
+ * figures without arm bones skip every channel.
  */
 type ClipFrame = {
   head?: BoneOffset;
   neck?: BoneOffset;
   torso?: BoneOffset;
+  upperArmL?: readonly ArmStep[];
+  upperArmR?: readonly ArmStep[];
+  forearmL?: readonly ArmStep[];
+  forearmR?: readonly ArmStep[];
+  handL?: readonly ArmStep[];
+  handR?: readonly ArmStep[];
+};
+
+const ARM_CHANNELS = [
+  "upperArmL",
+  "upperArmR",
+  "forearmL",
+  "forearmR",
+  "handL",
+  "handR",
+] as const;
+
+/**
+ * Turn-long base poses the compiler selects per emotion. Arm channels are
+ * figure-space steps applied on top of the stage's relaxed hanging pose
+ * (arms down and slightly out): [1,0,0,a] swings an arm back (negative
+ * forward), [0,0,1,a] adducts the right arm toward the midline (negative
+ * the left, positive raises it outward). They hold for the whole timeline
+ * underneath transient clips, so they stay well inside the joints'
+ * comfortable range — a held pose near the limit reads as stiffness within
+ * seconds.
+ */
+const POSTURES: Record<string, ClipFrame> = {
+  // Right hand rests behind the back while the left sits at the chest — the
+  // classic composed debate stance, free arm ready to gesture.
+  hand_behind_back: {
+    upperArmR: [[1, 0, 0, 0.25]],
+    forearmR: [[1, 0, 0, 0.7]],
+    upperArmL: [[0, 0, 1, -0.35]],
+    forearmL: [
+      [0, 0, 1, -0.2],
+      [1, 0, 0, -0.9],
+    ],
+  },
+  open_palm_listening: {
+    upperArmL: [
+      [0, 0, 1, -0.3],
+      [1, 0, 0, -0.25],
+    ],
+    forearmL: [[1, 0, 0, -1.1]],
+    upperArmR: [[1, 0, 0, 0.15]],
+    forearmR: [[1, 0, 0, -0.15]],
+  },
+  hand_on_chest: {
+    upperArmR: [[0, 0, 1, 0.3]],
+    forearmR: [
+      [0, 0, 1, 0.2],
+      [1, 0, 0, -0.95],
+    ],
+  },
 };
 
 const CLIPS: Record<string, (phase: number) => ClipFrame> = {
   emphasis: (p) => {
     const n = Math.sin(p * Math.PI);
-    return { head: [0.16 * n, 0, 0], neck: [0.06 * n, 0, 0] };
+    return {
+      head: [0.16 * n, 0, 0],
+      neck: [0.06 * n, 0, 0],
+      forearmL: [[1, 0, 0, -0.45 * n]],
+    };
   },
   nod: (p) => {
     const n = Math.sin(p * Math.PI);
@@ -80,7 +163,14 @@ const CLIPS: Record<string, (phase: number) => ClipFrame> = {
   },
   settle_calm: (p) => {
     const n = Math.sin(p * Math.PI);
-    return { head: [0.05 * n, 0, 0], torso: [0.05 * n, 0, 0] };
+    return {
+      head: [0.05 * n, 0, 0],
+      torso: [0.05 * n, 0, 0],
+      upperArmL: [[0, 0, 1, 0.1 * n]],
+      upperArmR: [[0, 0, 1, -0.1 * n]],
+      forearmL: [[1, 0, 0, -0.12 * n]],
+      forearmR: [[1, 0, 0, -0.12 * n]],
+    };
   },
   doubt_shrug: (p) => {
     const n = Math.sin(p * Math.PI);
@@ -88,6 +178,10 @@ const CLIPS: Record<string, (phase: number) => ClipFrame> = {
       head: [0, 0, 0.14 * n],
       neck: [0, 0, 0.08 * n],
       torso: [0, 0, 0.05 * n],
+      upperArmL: [[0, 0, 1, 0.35 * n]],
+      upperArmR: [[0, 0, 1, -0.35 * n]],
+      forearmL: [[1, 0, 0, -0.4 * n]],
+      forearmR: [[1, 0, 0, -0.4 * n]],
     };
   },
   invite_present: (p) => {
@@ -96,15 +190,62 @@ const CLIPS: Record<string, (phase: number) => ClipFrame> = {
       head: [0.02 * n, 0.24 * n, 0.08 * n],
       neck: [0, 0.1 * n, 0],
       torso: [0, 0.1 * n, 0],
+      upperArmL: [
+        [1, 0, 0, -0.5 * n],
+        [0, 0, 1, 0.15 * n],
+      ],
+      forearmL: [[1, 0, 0, -0.25 * n]],
     };
   },
   chin_stroke: (p) => {
     const n = Math.sin(p * Math.PI);
-    return { head: [0.12 * n, 0, 0.1 * n], neck: [0.05 * n, 0, 0] };
+    return {
+      head: [0.12 * n, 0, 0.1 * n],
+      neck: [0.05 * n, 0, 0],
+      upperArmL: [[0, 0, 1, -0.4 * n]],
+      forearmL: [[1, 0, 0, -1.35 * n]],
+      handL: [[0, 1, 0, -0.2 * n]],
+    };
   },
   turn_ack: (p) => {
     const n = Math.sin(p * Math.PI);
     return { head: [0.2 * n, 0, 0], neck: [0.08 * n, 0, 0] };
+  },
+  palm_open_sweep: (p) => {
+    const n = Math.sin(p * Math.PI);
+    const sweep = Math.sin(p * Math.PI * 2);
+    return {
+      head: [0.03 * n, 0.18 * sweep, 0],
+      neck: [0, 0.06 * sweep, 0],
+      torso: [0, 0.12 * sweep, 0],
+      upperArmL: [
+        [1, 0, 0, -0.45 * n],
+        [0, 1, 0, -0.2 * sweep * n],
+      ],
+      forearmL: [[1, 0, 0, -0.3 * n]],
+    };
+  },
+  lean_in: (p) => {
+    const n = Math.sin(p * Math.PI);
+    return {
+      head: [0.12 * n, 0, 0],
+      neck: [0.06 * n, 0, 0],
+      torso: [0.22 * n, 0, 0],
+      upperArmL: [[1, 0, 0, 0.15 * n]],
+      upperArmR: [[1, 0, 0, 0.15 * n]],
+    };
+  },
+  object_raise: (p) => {
+    const n = Math.sin(p * Math.PI);
+    return {
+      head: [0.04 * n, -0.1 * n, 0],
+      torso: [0, -0.08 * n, 0],
+      upperArmL: [
+        [0, 0, 1, -0.5 * n],
+        [1, 0, 0, -0.3 * n],
+      ],
+      forearmL: [[1, 0, 0, -0.5 * n]],
+    };
   },
 };
 
@@ -193,6 +334,7 @@ export function createPerformancePlayer(
 ): PerformancePlayer {
   const events = timeline.events ?? [];
   const windows = timeline.visemes ?? [];
+  const posture = POSTURES[timeline.posture] ?? null;
   return {
     duration: timeline.duration,
     sample(audioTimeSec: number): PerformanceSample {
@@ -223,19 +365,44 @@ export function createPerformancePlayer(
             ? smoothstep(0, fadeSec, audioTimeSec - event.t) *
               smoothstep(event.dur, event.dur - fadeSec, audioTimeSec - event.t)
             : 1;
-        const scale = (offset: BoneOffset): BoneOffset => [
-          offset[0] * env,
-          offset[1] * env,
-          offset[2] * env,
-        ];
-        return {
-          mouth,
-          head: frame.head ? scale(frame.head) : null,
-          neck: frame.neck ? scale(frame.neck) : null,
-          torso: frame.torso ? scale(frame.torso) : null,
-        };
+        const sample: PerformanceSample = { ...NO_SAMPLE, mouth };
+        for (const channel of [
+          "head",
+          "neck",
+          "torso",
+        ] as const) {
+          const base = posture?.[channel];
+          const gesture = frame[channel];
+          if (!base && !gesture) continue;
+          // Posture holds underneath; the transient clip layers on top, so a
+          // free arm can still move while the other stays behind the back.
+          sample[channel] = [
+            (base?.[0] ?? 0) + (gesture?.[0] ?? 0) * env,
+            (base?.[1] ?? 0) + (gesture?.[1] ?? 0) * env,
+            (base?.[2] ?? 0) + (gesture?.[2] ?? 0) * env,
+          ];
+        }
+        for (const channel of ARM_CHANNELS) {
+          const base = posture?.[channel];
+          const gesture = frame[channel];
+          if (!base && !gesture) continue;
+          // Posture steps apply first; the clip's steps layer on top with
+          // their angles scaled by the gesture envelope.
+          const steps: ArmStep[] = base ? [...base] : [];
+          if (gesture) {
+            for (const [x, y, z, a] of gesture) steps.push([x, y, z, a * env]);
+          }
+          sample[channel] = steps;
+        }
+        return sample;
       }
-      return { ...NO_SAMPLE, mouth };
+      if (!posture) return { ...NO_SAMPLE, mouth };
+      const sample: PerformanceSample = { ...NO_SAMPLE, mouth };
+      for (const channel of ARM_CHANNELS) {
+        const base = posture[channel];
+        if (base) sample[channel] = [...base];
+      }
+      return sample;
     },
   };
 }

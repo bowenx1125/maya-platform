@@ -32,7 +32,7 @@ GESTURE_DUR = {
     "settle_calm": 1.6,
     "turn_ack": 0.8,
 }
-POSTURES = ("hand_behind_back", "open_palm_listening")
+POSTURES = ("hand_behind_back", "open_palm_listening", "hand_on_chest")
 EMOTIONS = ("calm", "firm", "thoughtful", "friendly", "skeptical")
 
 _CHARS_PER_SEC = 4.3
@@ -183,6 +183,8 @@ def compile_performance(
         posture = (
             "hand_behind_back"
             if perf["emotion"] in ("skeptical", "firm")
+            else "hand_on_chest"
+            if perf["emotion"] in ("thoughtful", "friendly")
             else "open_palm_listening"
         )
 

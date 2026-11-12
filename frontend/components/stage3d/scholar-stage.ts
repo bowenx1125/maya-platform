@@ -30,6 +30,7 @@ import {
   type StageScenePack,
 } from "./scene-packs";
 import type {
+  ArmStep,
   BoneOffset,
   PerformancePlayer,
   PerformanceSample,
@@ -205,6 +206,30 @@ type Character = {
   neckRest: THREE.Quaternion | null;
   torsoBone: THREE.Object3D | null;
   torsoRest: THREE.Quaternion | null;
+  upperArmLBone: THREE.Object3D | null;
+  upperArmLRest: THREE.Quaternion | null;
+  upperArmRBone: THREE.Object3D | null;
+  upperArmRRest: THREE.Quaternion | null;
+  forearmLBone: THREE.Object3D | null;
+  forearmLRest: THREE.Quaternion | null;
+  forearmRBone: THREE.Object3D | null;
+  forearmRRest: THREE.Quaternion | null;
+  handLBone: THREE.Object3D | null;
+  handLRest: THREE.Quaternion | null;
+  handRBone: THREE.Object3D | null;
+  handRRest: THREE.Quaternion | null;
+  /**
+   * Parent-chain rest orientation per arm bone, in the figure's own frame
+   * (root yaw removed). The player emits figure-space rotation steps; the
+   * stage converts them to bone-local quaternions against these captures, so
+   * one clip works across rig families with differently oriented bones.
+   */
+  upperArmLParentRest: THREE.Quaternion | null;
+  upperArmRParentRest: THREE.Quaternion | null;
+  forearmLParentRest: THREE.Quaternion | null;
+  forearmRParentRest: THREE.Quaternion | null;
+  handLParentRest: THREE.Quaternion | null;
+  handRParentRest: THREE.Quaternion | null;
   jawBone: THREE.Object3D | null;
   jawRest: THREE.Quaternion | null;
   hasSpeechMorph: boolean;
@@ -247,6 +272,35 @@ const BONE_ALIASES = {
     /^spine$/i,
   ],
   jaw: [/^bone_jaw$/i, /^jawjoint_m$/i, /^mixamorig:?jaw$/i],
+  // Arm chains only exist on the rigged Mixamo figures; the legacy purchased
+  // pair has no matching bones, so these channels simply never resolve there
+  // and its figures keep the head-only choreography.
+  upperArmL: [
+    /^mixamorig:?leftarm$/i,
+    /^upperarm_l$/i,
+    /^leftarm$/i,
+    /^shoulder_?l$/i,
+  ],
+  upperArmR: [
+    /^mixamorig:?rightarm$/i,
+    /^upperarm_r$/i,
+    /^rightarm$/i,
+    /^shoulder_?r$/i,
+  ],
+  forearmL: [
+    /^mixamorig:?leftforearm$/i,
+    /^lowerarm_l$/i,
+    /^leftforearm$/i,
+    /^elbow_?l$/i,
+  ],
+  forearmR: [
+    /^mixamorig:?rightforearm$/i,
+    /^lowerarm_r$/i,
+    /^rightforearm$/i,
+    /^elbow_?r$/i,
+  ],
+  handL: [/^mixamorig:?lefthand$/i, /^hand_?l$/i, /^lefthand$/i],
+  handR: [/^mixamorig:?righthand$/i, /^hand_?r$/i, /^righthand$/i],
 } as const;
 
 type StageBone = keyof typeof BONE_ALIASES;
@@ -550,6 +604,8 @@ export class ScholarStage {
   private readonly projection = new THREE.Vector3();
   private readonly offsetEuler = new THREE.Euler();
   private readonly offsetQuat = new THREE.Quaternion();
+  private readonly armQuat = new THREE.Quaternion();
+  private readonly armAxis = new THREE.Vector3();
   private readonly clock = new THREE.Clock();
   private readonly resizeHandler = () => this.resize();
   private readonly canvasClickHandler = () => {
@@ -1373,6 +1429,34 @@ export class ScholarStage {
       const neckBone = findBone(root, "neck");
       const torsoBone = findBone(root, "torso");
       const jawBone = findBone(root, "jaw");
+      const upperArmLBone = findBone(root, "upperArmL");
+      const upperArmRBone = findBone(root, "upperArmR");
+      const forearmLBone = findBone(root, "forearmL");
+      const forearmRBone = findBone(root, "forearmR");
+      const handLBone = findBone(root, "handL");
+      const handRBone = findBone(root, "handR");
+
+      // Figure-frame (root-yaw removed) parent orientation per arm bone; the
+      // player's figure-space steps convert to bone-local against these.
+      const rootRestQ = root.getWorldQuaternion(new THREE.Quaternion());
+      const figureParent = (
+        bone: THREE.Object3D | null,
+        rest: THREE.Quaternion | null,
+      ): THREE.Quaternion | null => {
+        if (!bone || !rest) return null;
+        const world = bone.getWorldQuaternion(new THREE.Quaternion());
+        return rootRestQ
+          .clone()
+          .invert()
+          .multiply(world)
+          .multiply(rest.clone().invert());
+      };
+      const upperArmLRest = upperArmLBone?.quaternion.clone() ?? null;
+      const upperArmRRest = upperArmRBone?.quaternion.clone() ?? null;
+      const foreArmLRest = forearmLBone?.quaternion.clone() ?? null;
+      const foreArmRRest = forearmRBone?.quaternion.clone() ?? null;
+      const handLRestQ = handLBone?.quaternion.clone() ?? null;
+      const handRRestQ = handRBone?.quaternion.clone() ?? null;
 
       const character: Character = {
         spec,
@@ -1385,6 +1469,24 @@ export class ScholarStage {
         neckRest: neckBone?.quaternion.clone() ?? null,
         torsoBone,
         torsoRest: torsoBone?.quaternion.clone() ?? null,
+        upperArmLBone,
+        upperArmLRest,
+        upperArmLParentRest: figureParent(upperArmLBone, upperArmLRest),
+        upperArmRBone,
+        upperArmRRest,
+        upperArmRParentRest: figureParent(upperArmRBone, upperArmRRest),
+        forearmLBone,
+        forearmLRest: foreArmLRest,
+        forearmLParentRest: figureParent(forearmLBone, foreArmLRest),
+        forearmRBone,
+        forearmRRest: foreArmRRest,
+        forearmRParentRest: figureParent(forearmRBone, foreArmRRest),
+        handLBone,
+        handLRest: handLRestQ,
+        handLParentRest: figureParent(handLBone, handLRestQ),
+        handRBone,
+        handRRest: handRRestQ,
+        handRParentRest: figureParent(handRBone, handRRestQ),
         jawBone,
         jawRest: jawBone?.quaternion.clone() ?? null,
         hasSpeechMorph: meshes.some(
@@ -1644,6 +1746,46 @@ export class ScholarStage {
         frame.rotationZ * 0.6 * calm,
       ),
     );
+    // Timeline arm channels are figure-space step lists converted per rig
+    // against the captures taken at load; the procedural frame never moves
+    // the arms, so there is nothing to blend against here. Figures without
+    // arm bones skip every channel.
+    this.setArmRotation(
+      character.upperArmLBone,
+      character.upperArmLRest,
+      character.upperArmLParentRest,
+      sample?.upperArmL ?? null,
+    );
+    this.setArmRotation(
+      character.upperArmRBone,
+      character.upperArmRRest,
+      character.upperArmRParentRest,
+      sample?.upperArmR ?? null,
+    );
+    this.setArmRotation(
+      character.forearmLBone,
+      character.forearmLRest,
+      character.forearmLParentRest,
+      sample?.forearmL ?? null,
+    );
+    this.setArmRotation(
+      character.forearmRBone,
+      character.forearmRRest,
+      character.forearmRParentRest,
+      sample?.forearmR ?? null,
+    );
+    this.setArmRotation(
+      character.handLBone,
+      character.handLRest,
+      character.handLParentRest,
+      sample?.handL ?? null,
+    );
+    this.setArmRotation(
+      character.handRBone,
+      character.handRRest,
+      character.handRParentRest,
+      sample?.handR ?? null,
+    );
 
     // A timed viseme window wins over the procedural mouth while speaking;
     // a timeline without visemes (mouth null) keeps the procedural one.
@@ -1698,6 +1840,43 @@ export class ScholarStage {
     this.offsetEuler.set(x, y, z, "XYZ");
     this.offsetQuat.setFromEuler(this.offsetEuler);
     bone.quaternion.multiply(this.offsetQuat);
+  }
+
+  /**
+   * Apply figure-space rotation steps (see ArmStep) to an arm bone. The steps
+   * compose about figure-fixed axes; converting them through the parent's
+   * rest orientation yields the bone-local quaternion, so clips read the same
+   * on rigs whose bone-local axes are oriented differently. Steps compose in
+   * list order — the first step rotates the rested limb, each later step
+   * rotates the result further.
+   */
+  private setArmRotation(
+    bone: THREE.Object3D | null,
+    rest: THREE.Quaternion | null,
+    parentRest: THREE.Quaternion | null,
+    steps: readonly ArmStep[] | null,
+  ): void {
+    if (!bone || !rest || !parentRest) return;
+    if (!steps || steps.length === 0) {
+      bone.quaternion.copy(rest);
+      return;
+    }
+    this.armQuat.identity();
+    for (const [x, y, z, angle] of steps) {
+      this.armAxis.set(x, y, z);
+      if (!angle || this.armAxis.lengthSq() < 1e-8) continue;
+      this.armAxis.normalize();
+      this.offsetQuat.setFromAxisAngle(this.armAxis, angle);
+      this.armQuat.premultiply(this.offsetQuat);
+    }
+    // Figure-frame premultiplier E becomes the local offset A⁻¹·E·A, applied
+    // on top of the captured rest orientation.
+    bone.quaternion
+      .copy(parentRest)
+      .invert()
+      .multiply(this.armQuat)
+      .multiply(parentRest)
+      .multiply(rest);
   }
 
   private emitAnchors(now: number): void {

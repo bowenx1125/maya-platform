@@ -66,21 +66,19 @@ survey all if≤3 else half;follow-ups before Boundary."end" submits;abandon/red
 deletes learning records,accounting stays. Boundary/reports:mastery/weak/
 not-yet-verified. Off-topic gets help,never answers.
 
-Oct5 build30db274/schema0053 healthy; backups20261005T110321Z/130151Z verified.
-Synthetic RAG/Knowledge receipts kept; consent-denied sends0; ledger457/457.
-Oct7 authorizes fresh synthetic four-Agent Team/multi-student workflow/reads,
-excludes real learner data/unrelated Private Chat.
+Oct5 build30db274/schema0053 healthy; backups20261005T110321Z/130151Z verified;
+ledger457/457,0 charges. Oct7 authorizes fresh synthetic four-Agent Team/
+multi-student workflow/reads,excludes real learner data/unrelated Private Chat.
 
 [UI contract](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) supersedes earlier plans.
 Studyform/Brainform share structure,role permissions differ. Oct9:Studyform creates
 Agents/Voices; Teachers publish Maya Teams; Chats→Chatform. Oct11:New→Teams/Agents,
 Done→owner-only Chat. Brainform:no disclosure entry; `PROVIDER_STANDING_CONSENT`
 covers classroom/prod,else unlinked Teacher approvals. Teacher Accounts Public-
-group read-only visits remove temp membership on return; Debates restored.
+group read-only visits drop temp membership on return.
 Sidebar New/Back/Done contextual. Voice New module-right; consent→create,←cancel. Agent Voice=None; groupmates choose/hear ready voices,course teachers
-hear/bind/manage (1026). Immediate heading help. Brainform:3 columns,no title/eyebrow;
-RAG uses Knowledge view/edit/download/delete,PDF/DOCX. View/New/edit replaces content,
-deep links,no bottom panel. Knowledge:asset-name entry,authorized Agent consumers,
+hear/bind/manage (1026). Brainform:3 columns,no title/eyebrow;
+RAG uses Knowledge view/edit/download/delete. View/New/edit replaces content. Knowledge:asset-name entry,authorized Agent consumers,
 one canonical editor; Agent entry stays.
 
 Create AI Knowledge/New Agent unified,Private/Public labels only; Brainform:RAG/
@@ -104,19 +102,17 @@ TTS bar054f420 excluded.
 
 Oct9–13:Debates in Brainform/Chatform/Studyform; private read_memory may pause
 team_no_progress; role Tool ACL; publisher edits Agent.md/Brainform/Avatar/Voice.
-Card room0058,production1f34fea/schema0057. PR50→556fdc5:Public green/Private gray,
-Chat pin0059,RAG creation visibility fixed,Accounts visits read Private.0060 retires
+Card room0058,production1f34fea/schema0057. PR50→556fdc5:Public green/
+Private gray,Chat pin0059,RAG creation visibility fixed,Accounts visits read Private.0060 retires
 prior work except Demo philosophers; Agent notes quote users.0061 personal debaters,
 Public Teams:Public Agents only;0062 owner-managed voices; 我不知道/忘了 scores.
 Scorer→summarizer uses live sign-in,all Questions asked; Brainform .md edit/rename,
 rubric follow-ups rerun,0063 names,answer-form checks,Leader report links.
-PR52:text playback/Live/Avatar/0064 slot release;Interact26/26. Create Done validates;
-edits need changes,saves→library. Withdrawn RAG unavailable; Team errors name unavailable
-members. Accounts:public RAG/Knowledge,publisher edits,Members/activity,natural names,
-ungrouped last. Profile:existing groups only,old work inaccessible. Phone<880px:
-sideways/upright/sideways within6s→card room. Hidden RAG blocks generation until
-reselected/published. Authorized generate/publish revives deleted Knowledge Sets.
-PRs56/58/59/60/64 kept.
+PR52:text playback/Live/Avatar/0064 slot release;Interact26/26. Create Done validates;edits need changes,saves→library. Accounts:public
+RAG/Knowledge,publisher edits,Members/activity,natural names,ungrouped last.
+Profile:existing groups only,old work inaccessible. Phone<880px:sideways/upright/
+sideways within6s→card room. Hidden RAG blocks generation until reselected/published.
+Authorized generate/publish revives deleted Knowledge Sets. 
 
 ## Oct14 release
 
@@ -202,42 +198,44 @@ malformed_request lists field+type. Topic: any language.
 
 ## Oct24–25 infra (PRs A/A2/B/C/E)
 
-A:`request_timing` JSON/request (+debate_timing);browser samples 25% to /client-metrics;
-`scripts/slow_endpoints_report.py` reads p50/p95/p99,no user data. B:SQLite DATABASE_URL
-refused;tests need MAYA_TEST_POSTGRES_URL;races fixed:budget,Agent/document,attempt.
-A2:Stage predownloads ready speeches as blobs in speaking order;blob (≤3s) else URL once.
-C:DEBATE_AUDIO_MP3 (prod on):ffmpeg mp3,64 MB LRU,max-age=300/304;playback off the event
-loop (offload.py);per-Debate lock;tickets in Postgres (0079);Next 103→35 SQL.
-E:DEBATE_LLM_* (no MAYA_ prefix;unset=previous)/DEBATE_TTS_* freeze into rule_snapshot_json
-(null=not sent);v3 contract lived in the Ruleset,pre-v3 keep legacy;playback rate 1.0 (0080).
+A:`request_timing` JSON/request (+debate_timing);browser samples 25% to
+/client-metrics;`scripts/slow_endpoints_report.py` reads p50/p95/p99,no user
+data. B:SQLite DATABASE_URL refused;tests need MAYA_TEST_POSTGRES_URL;races
+fixed:budget,Agent/document,attempt. A2:Stage predownloads ready speeches as
+blobs in speaking order;blob (≤3s) else URL once. C:DEBATE_AUDIO_MP3 (prod
+on):ffmpeg mp3,64 MB LRU,max-age=300/304;playback off the event loop
+(offload.py);per-Debate lock;tickets in Postgres (0079);Next 103→35 SQL.
+E:DEBATE_LLM_*/DEBATE_TTS_* freeze into rule_snapshot_json (null=not sent);
+v3 contract lived in the Ruleset,pre-v3 keep legacy;playback rate 1.0 (0080).
 
-## Oct27 UI (#305): Agents4/Teams3 cols,one LoadingCard.
+## Oct27 UI (#305): Agents4/Teams3 cols, one LoadingCard.
 
 ## Nov2 Chatform lists
 
-0081 adds chat_type agent|team; maya_team=team. Backfill needs entry-kind/binding
-agreement; leftover NULLs logged,typed lists skip them. Separate Agent/Team
-histories; no kind selects Agent history.
+0081 adds chat_type agent|team (maya_team=team); leftover NULLs logged, typed
+lists skip them. Separate Agent/Team histories.
 
-0082:Enter grants2h teacher_group_access (not roster),renewed20min;Backout;expiry sweeps/min.
-Visits edit group Studyform Agents/public Brainform,not deletion/other groups.
+0082:Enter grants2h teacher_group_access (not roster),renewed20min;expiry
+sweeps/min. Visits edit group Studyform Agents/public Brainform,not deletion/
+other groups.
 
-Single Chat: `draft` SSE (unsaved text as written), then delta/text_done after commit;
-ledger keeps the folded completion. Turn runners hold a pg advisory lock; each process
-sweeps per 60s, freeing claims unheld twice (startup with a live peer: only those).
-Team streams wake on committed events; fallback poll ≤2s. Debate default Rulesets: en
-mirrors the spoken zh one (no spoken RAG/I-feel labels or +5/+2), both address a listener
+Single Chat: `draft` SSE (unsaved text as written), then delta/text_done after
+commit; ledger keeps the folded completion. Turn runners hold a pg advisory
+lock; each sweeps per 60s, freeing claims unheld twice. Team streams wake on
+committed events; fallback poll ≤2s. Debate default Rulesets: en mirrors the
+spoken zh one (no spoken RAG/I-feel labels or +5/+2), both address a listener
 who missed earlier speeches; a copy mid-paragraph is rewritten, not cut out.
 
 ## Nov3 cleanup and capacity
 
-Visits hide Knowledge, renew every 20 min and end with a notice back to Accounts; Debate
-"?" shows Chinese help on hover. core/locks.py holds every cross-process lock; SQLite gone.
-core/capacity.py scales CPU caps by cores/2; a high load counts only with CPU busy ≥0.8.
-Idle polls 30s; Agent lists carry card label/theme. Debate Rulesets state goals, not bans.
-Accounts: filter; Delete is real (DELETE /courses/{id}/members/{user}). Chat 429 →
-provider_rate_limited, 502/503/504/529 → provider_busy (one call). Ordinary Team members
-answer together (≤3; assessment Teams one at a time); history is one read. 390px Brainform fits.
+Visits hide Knowledge, renew every 20 min, end with a notice back to Accounts;
+Debate "?" shows Chinese help on hover. core/locks.py holds every cross-process
+lock; SQLite gone. core/capacity.py scales CPU caps by cores/2 (high load counts
+only with CPU busy ≥0.8). Idle polls 30s; Agent lists carry card label/theme;
+Rulesets state goals, not bans. Accounts: filter; Delete is real. Chat 429 →
+provider_rate_limited, 502/503/504/529 → provider_busy. Ordinary Team members
+answer together (≤3; assessment Teams one at a time); history is one read.
+390px Brainform fits.
 
 ## Nov5–6 Agent Chat, recovery
 
@@ -255,9 +253,8 @@ volume untouched. Stalled needs backend receipt recovery;safety gates kept.
 detail,hand grading,hide;Record→Quiz. #383/4:opt-in AI grading. UI A:1 page/quiz,
 Paper|Submissions,no Chat tests;New/Back/Done 1 style. [Contract](contracts/CLASSROOM_QUIZ_API.md)
 Agent name card;Private→Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)).
-Nov11 in progress:0088_quiz_exemptions_schedule adds epoch deadlines+one-shot taking,
-lazy+10s sweeper(non-test lifespan).Static checks pass;PG/boundary:sandbox EPERM.
-0 calls/deploy.
+Nov11 in progress:0088_quiz_exemptions_schedule adds epoch deadlines+one-shot
+taking,lazy+10s sweeper.Static checks pass;PG/boundary:sandbox EPERM.0 calls/deploy.
 
 ## Nov9 local classes and accounts (in progress)
 
@@ -284,27 +281,36 @@ Builds:`markdown-structure-600t-v3`,150–900 tokens,no overlap (v2 kept till re
 
 ## Nov11 Debate cards (phase B)
 
-0089: new v4 participants start `compiling`; before an Agent's first turn its frozen
-AGENT.md compiles once (`llm_debate_card`, Debate model,strict schema, 1 ledgered
-attempt, 60s) to identity/position/reasoning/style/voice/dropped, ≤600 Han/400 words.
-Ready→card persona;failure/Mock→fallback (raw AGENT.md); null (old) keeps pinned bytes.
-Round-1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style. 0 calls;quality unverified.
+0089: new v4 participants start `compiling`; before an Agent's first turn its
+frozen AGENT.md compiles once (`llm_debate_card`, strict schema, 1 ledgered
+attempt, 60s) to identity/position/reasoning/style/voice/dropped, ≤600 Han/
+400 words. Ready→card persona;failure/Mock→fallback (raw AGENT.md); null
+(old) keeps pinned bytes. Round-1 query:stance,else card position. Preview:
+Check card. Clone TTS instruction=card voice_style. 0 calls;quality unverified.
 
-Nov11: Agents/Teams <768px: single black banner, no orange ring; desktop diff0 (1247 UI).
+Nov11: Agents/Teams <768px: single black banner, no orange ring; desktop
+diff0 (1247 UI).
 
 ## Nov12 3D performance engine (in progress)
 
-DEBATE_TTS_ENGINE=cosyvoice swaps the debate TTS adapter (same key/workspace;
-qwen3 default; pre-request-refusal fallback). TTSResult.
-word_timestamps feeds debates/performance (gesture anchors+viseme windows).
-AudioStore stores each turn's compiled timeline as a WAV-sibling
-performance.json (stored/discarded with the audio; +8 tests).
-Ticket-gated GET /debates/{id}/performance/
-{turn} serves it; 404 = plain audio. Stage: beta-stage fetches the sibling
-(media.prepared), ScholarScene forwards timeline+clock, scholar-stage
-layers viseme mouth and gesture clips on the procedural frame (8 vitest).
-18 backend +8 vitest. Bones resolve per rig family (UE spine_02/neck_01,
-AdvSkel Chest_M/Neck_M, Mixamo Spine2/Neck); old list matched head only:
-neck/torso clips no-op'd, head motion clipped collars (穿模). Watermark mesh
-hidden. +4 vitest. Tripo refined figures (~22.5k verts) in Mixamo rigging
-for finger clips.
+DEBATE_TTS_ENGINE=cosyvoice swaps the debate TTS adapter (qwen3 default;
+pre-request-refusal fallback); word_timestamps feeds debates/performance
+(gesture anchors+viseme windows). AudioStore keeps each turn's compiled
+timeline as a WAV-sibling performance.json; ticket-gated GET
+/debates/{id}/performance/{turn} serves it (404 = plain audio). Stage:
+beta-stage fetches the sibling (media.prepared); ScholarScene forwards
+timeline+clock; scholar-stage layers viseme mouth and gesture clips on the
+procedural frame. Bones resolve per rig family (UE spine_02/neck_01, AdvSkel
+Chest_M/Neck_M, Mixamo Spine2/Neck); the old head-only list clipped collars
+— fixed; watermark mesh hidden. Tripo-refined Mixamo-rigged figures live as
+elder-scholar.glb + female_1.glb.
+
+Gesture library v2: arm channels (upper/forearm/hand) are figure-space
+axis-angle steps; scholar-stage converts per rig against captured parent
+rest quats (local = A⁻¹·E·A·rest), so one clip set serves Mixamo rigs whose
+bone-local axes differ. Postures: hand_behind_back (right behind back, left
+at chest), hand_on_chest (mirror), open_palm_listening; clips emphasis,
+settle_calm, doubt_shrug, invite_present, chin_stroke, palm_open_sweep,
+lean_in, object_raise gesture with the free left arm. Compiler defaults
+thoughtful/friendly to hand_on_chest. Headless-render QA on elder+female;
+153 frontend files / 1259 tests green.
