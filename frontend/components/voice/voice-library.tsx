@@ -699,7 +699,7 @@ export function VoiceLibrary({
           onConfirm: () => void submitEnrollment(),
           disabled: !file || controlsDisabled || !canEnroll,
           busy,
-          describedBy: !file ? "voice-consent-hint" : "voice-sample-req",
+          describedBy: "voice-sample-req",
         }}
         input={
           <input
@@ -720,16 +720,6 @@ export function VoiceLibrary({
           />
         }
       />
-      {/* Students read a grey button as "upload is broken" (2026-10-20):
-          say why it is waiting. */}
-      {!file ? (
-        <p
-          id="voice-consent-hint"
-          className="m-0 font-body text-sm font-bold text-[#555]"
-        >
-          {t("voiceSelectFileFirst")}
-        </p>
-      ) : null}
     </div>
   );
 

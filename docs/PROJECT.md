@@ -58,11 +58,11 @@ regeneration:replace manual head only on valid newer success. Actor/source ACL,t
 evaluator,Boundary grants stay. Tool roles:Public+Student or Public+Teacher. Formal attempts->Teacher reports despite legacy labels;exclude ordinary Chats. General Chat:natural-language attempt actions;no cards/dashboard/lifecycle UI. Owner progress:phase-safe;history/completed evidence immutable. Oct9 0055 `submitted_at`:built,not real-accepted;survey all if≤3,else half;
 evaluator-chosen/server-validated follow-ups before Boundary. "end":submit answered work;only abandon/redo deletes learning records;keep accounting. Boundary/reports:mastery/weak/not-yet-verified. Student-majority language;off-topic/progress requests:help,never answers.
 
-Oct5:build30db274/schema0053 ready/integrity/FK passed;backups20261005T110321Z/130151Z
-healthy;sending/pending0,historical unknown3 kept. Synthetic RAG:1 charged Embedding+2 accepted
-charged Knowledge;Gen2/seq3 replaces seq2,history kept. Consent-denied:sends0;exact
-fixtures withdrawn;ledger457 operations/457 charged same. Oct7 authorizes fresh
-synthetic4-Agent Team/multi-student workflow/reads;no real learner data/unrelated Private Chat.
+Oct5:30db274/0053 ready/integrity/FK pass;backups20261005T110321Z/130151Z healthy;
+sending/pending0,unknown3 kept. Synthetic:1 charged Embedding+2 charged/accepted
+Knowledge;Gen2/seq3 replaces seq2,history kept;denied sends0,fixtures withdrawn;
+ledger457 operations/457 charges. Oct7:authorized synthetic4-Agent/multi-student
+workflow/reads;exclude learner data/unrelated Private Chat.
 
 [UI](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) replaces earlier plans.
 Studyform/Brainform:same structure,role permissions differ. Oct9:Studyform creates
@@ -189,7 +189,7 @@ C:DEBATE_AUDIO_MP3(prod on):ffmpeg mp3,64 MB LRU,max-age=300/304;playback off ev
 E:`DEBATE_LLM_*`/`DEBATE_TTS_*`(no MAYA_ prefix;unset=previous) freeze:rule_snapshot_json
 (null=not sent);v3 contract lived in the Ruleset,pre-v3 keep legacy;playback rate 1.0(0080).
 
-## Oct27 UI(#305):Agents4/Teams3 cols,one LoadingCard.
+#305:Agents4/Teams3 cols,one LoadingCard.
 
 ## Nov2 Chatform lists
 
@@ -224,18 +224,16 @@ retries safely;keep ambiguous keys;show definitive failures/manual retry.
 
 ## Nov5-8 Classroom Quiz
 
-0083-0085:Quiz domain;publish≠taking;start=new epoch,1 attempt/epoch;ZIP. #380:
-detail,hand grading,hide;Record->Quiz. #383/4:opt-in AI grading. UI A:1 page/quiz,
-Paper|Submissions,no Chat tests;New/Back/Done 1 style. [Contract](contracts/CLASSROOM_QUIZ_API.md)
+0083-0085:Quiz publish≠taking;new epoch/start,1 attempt/epoch;ZIP. #380:detail/hand
+grading/hide/Record->Quiz;#383/4:opt-in AI grading. 1 page/quiz,Paper|Submissions;no Chat tests;
+New/Back/Done unified. [Contract](contracts/CLASSROOM_QUIZ_API.md).
 Agent name card;Private->Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)).
-Nov11:0088_quiz_exemptions_schedule in progress:epoch deadlines/one-shot taking;
-lazy+10s sweeper(non-test lifespan). Static checks pass;PG/boundary:sandbox EPERM;0 calls/deploy.
-0091_quiz_show_results after0090_bowen_identity_choice:old=true/new=false,revision same.
-#412:V1 switch,no duplicate tooltip/banner;cyan row sticker;student expandable answers-only
-paper;stale submit visibility fixed(server post-commit read/client receipt flag);fail-closed
-UI;draft stickers/DTOs. PUT semantics/1274 UI(13 skipped)/type/lint/format/11 offline backend/
-ruff/mypy/regeneration/routes pass. PG owner-run;boundary EPERM;build stalled,Webpack
-showConfig failed;0 calls/deploy.
+0088(in progress):epoch deadlines/one-shot taking,lazy+10s sweeper(non-test).
+0091 follows0090:old show_results=true/new=false,revision unchanged. #412:V1 switch,
+cyan stickers,expandable student answers-only paper;post-commit/receipt visibility,
+fail-closed UI/DTOs,no duplicate help. PUT/1274 UI(13 skipped)/type/lint/format/11 offline
+backend/ruff/mypy/contracts/routes pass;PG owner-run,boundary EPERM,build stalled,
+Webpack showConfig failed;0 calls/deploy.
 
 ## Nov9 local classes/accounts(in progress)
 
@@ -249,7 +247,7 @@ Teacher pages:class-scoped;register:group join/create.0086:group choice;
 Nov10:Maya1002/Maya1001,stable IDs/student data;Teacher scopes fixed;RAG actions follow class bar.
 47 PG,1188 UI. Debates/Quizzes/Accounts;optional choice answer;no empty Agents card;large loader;chat omits missing group/editor.
 
-Nov11 code:teacher removals prune empty non-default groups;work FKs guard.
+Nov11:teacher removals prune empty non-default groups;work FKs guard.
 Ruff/format/mypy pass;PG tests blocked:socket EPERM;0 calls/deploy.
 
 ## Nov10 Debate prompt v4(replaces Oct24 contract-in-Ruleset)
@@ -273,14 +271,18 @@ identity/position/reasoning/style/voice/dropped,≤600 Han/400 words.
 Ready->card persona;failure/Mock->raw AGENT.md;null(old):keep pinned bytes.
 R1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style.0 calls;quality unverified.
 
-Nov11:Agents/Teams<768px:one black banner shadow,no orange ring.
-Mock Chromium390/1440+tour;desktop diff0;1247 UI tests/build passed.
-Speed:Agent list omits agent_md/docs;early /auth/me;idle Debate poll15s
+Nov11:Agents/Teams<768px:black banner shadow,no orange ring;Mock Chromium390/1440+
+tour,desktop diff0,1247 UI/build pass. Speed:Agent list omits agent_md/docs;
+early /auth/me;idle Debate poll15s.
 
-Nov11 Bowen:0090_bowen_identity_choice after0089;
-schema-only;UI/security same;acceptance pending.
+Bowen0090(after0089):schema-only;UI/security unchanged;acceptance pending.
 
 #412 integration:main8241a9f2 retained;chooser816f7ceca71d2299f20435af0ea1a536ee7a74a4;
 quiz migration renumbered0091;both endpoints/security tests retained. No calls/deploy.
 
 Merge:7aef7004+origin/main797cbe3c.
+
+Nov12:Bowen RAG/Knowledge lists use login class,no picker;other actors/group links
+unchanged;no other student pickers. Voice idle hint/key removed;ARIA fixed,errors/
+guards kept;album already lacked hint.1313 UI pass/13 skipped;type/lint/format/docs
+pass.Build stalled/showConfig;boundary/listen/Chromium EPERM.0 calls/deploy.
