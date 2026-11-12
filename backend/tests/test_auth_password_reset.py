@@ -45,7 +45,7 @@ def test_teacher_reset_issues_a_working_password(app_factory: Any) -> None:
         response = _reset(teacher, csrf, user_id)
         assert response.status_code == 200, response.text
         result = response.json()
-        assert result["username"] == "new-student"
+        assert result["username"] == "newstudent"
         issued = result["password"]
         assert len(issued) == 8
     with TestClient(app) as student:
@@ -53,14 +53,14 @@ def test_teacher_reset_issues_a_working_password(app_factory: Any) -> None:
         assert (
             student.post(
                 "/api/v1/auth/login",
-                json={"username": "new-student", "password": "correct-horse-1"},
+                json={"username": "newstudent", "password": "correct-horse-1"},
             ).status_code
             == 401
         )
         assert (
             student.post(
                 "/api/v1/auth/login",
-                json={"username": "new-student", "password": issued},
+                json={"username": "newstudent", "password": issued},
             ).status_code
             == 200
         )
@@ -78,7 +78,7 @@ def test_teacher_can_choose_the_replacement_password(app_factory: Any) -> None:
         assert (
             student.post(
                 "/api/v1/auth/login",
-                json={"username": "new-student", "password": "classroom-2026"},
+                json={"username": "newstudent", "password": "classroom-2026"},
             ).status_code
             == 200
         )
@@ -180,5 +180,5 @@ def test_reset_does_not_change_the_public_user_row(app_factory: Any) -> None:
     with database.session() as session:
         user = session.get(User, user_id)
         assert user is not None
-        assert user.username == "new-student"
+        assert user.username == "newstudent"
         assert user.status == "active"

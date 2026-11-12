@@ -80,9 +80,9 @@ def _borrowed_voice(
 ) -> tuple[TestClient, str, str, TestClient, str, str]:
     """An owner's ready clone, bound to a groupmate's Agent."""
 
-    owner, owner_id, owner_csrf = _student(app, "voice-owner", "Team Aurora")
-    mate, _mate_id, mate_csrf = _student(app, "voice-mate", "Team Aurora")
-    _student(app, "other-group", "Team Borealis")  # so the target group exists
+    owner, owner_id, owner_csrf = _student(app, "voiceowner", "Team Aurora")
+    mate, _mate_id, mate_csrf = _student(app, "voicemate", "Team Aurora")
+    _student(app, "othergroup", "Team Borealis")  # so the target group exists
     group_id = _group_id(database, "Team Aurora")
     enrolled = owner.post(
         f"/api/v1/groups/{group_id}/voice-profiles",

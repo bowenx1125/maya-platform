@@ -74,7 +74,7 @@ function mount() {
 
 /** Fill the sign-in step and advance to the group step. */
 async function toGroupStep(
-  username = "new-student",
+  username = "student01",
   password = "correct-horse-1",
 ) {
   fireEvent.change(await screen.findByLabelText("Username"), {
@@ -106,6 +106,12 @@ describe("student self-registration form", () => {
     // the sign-in details are being filled in, so nothing can grow under the
     // student's cursor.
     expect(await screen.findByLabelText("Username")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Use English letters only, no spaces. Example: student01",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("At least 5 characters.")).toBeTruthy();
     expect(screen.queryByLabelText("Group name")).toBeNull();
     expect(screen.queryByRole("listbox")).toBeNull();
     expect(screen.getByText(/Step 1 of 2/)).toBeTruthy();
@@ -123,7 +129,7 @@ describe("student self-registration form", () => {
     const username = (await screen.findByLabelText(
       "Username",
     )) as HTMLInputElement;
-    expect(username.value).toBe("new-student");
+    expect(username.value).toBe("student01");
   });
 
   it("suggests nothing until the student starts typing", async () => {
@@ -235,13 +241,13 @@ describe("student self-registration form", () => {
 
   it("registers with the chosen course and no display name", async () => {
     const { register } = mount();
-    const group = await toGroupStep(" new-student ");
+    const group = await toGroupStep(" student01 ");
     fireEvent.change(group, { target: { value: "Team Aurora" } });
     fireEvent.click(screen.getByRole("button", { name: "Create account" }));
 
     await waitFor(() =>
       expect(register).toHaveBeenCalledWith({
-        username: "new-student",
+        username: "student01",
         password: "correct-horse-1",
         group_name: "Team Aurora",
         course_id: courseId,
@@ -313,7 +319,7 @@ describe("student self-registration form", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create account" }));
     await waitFor(() =>
       expect(register).toHaveBeenCalledWith({
-        username: "new-student",
+        username: "student01",
         password: "correct-horse-1",
         course_id: "course-two",
         group_name: "Second class team",
@@ -332,7 +338,7 @@ describe("student self-registration form", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create account" }));
     await waitFor(() =>
       expect(register).toHaveBeenCalledWith({
-        username: "new-student",
+        username: "student01",
         password: "correct-horse-1",
         course_id: "course-two",
         group_name: "My new group",
@@ -363,6 +369,37 @@ describe("student self-registration form", () => {
     );
     expect(replace).not.toHaveBeenCalled();
   });
+});
+
+describe("registration guards the username before the group step", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    replace.mockReset();
+  });
+
+  it.each(["new student", "student-01", "student.01", "学生01", "ab"])(
+    "refuses %s",
+    async (username) => {
+      mount();
+      fireEvent.change(await screen.findByLabelText("Username"), {
+        target: { value: username },
+      });
+      fireEvent.change(screen.getByLabelText("Password"), {
+        target: { value: "correct-horse-1" },
+      });
+      fireEvent.change(screen.getByLabelText("Confirm password"), {
+        target: { value: "correct-horse-1" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      expect(
+        await screen.findByText(
+          "Use 3 to 64 English letters or digits, with no spaces.",
+        ),
+      ).toBeTruthy();
+      expect(screen.queryByLabelText("Group name")).toBeNull();
+    },
+  );
 });
 
 describe("registration guards the password before the group step", () => {

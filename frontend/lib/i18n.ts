@@ -983,6 +983,8 @@ const enMessages = {
   loginNeedPassword: "Enter your password.",
   loginNeedBoth: "Enter your username and password.",
   needAccountLink: "Create an account",
+  usernameRule: "Use English letters only, no spaces. Example: student01",
+  usernameInvalid: "Use 3 to 64 English letters or digits, with no spaces.",
   passwordRule: "At least 5 characters.",
   passwordTooShort: "That password is too short. Use at least 5 characters.",
   registerConfirmPassword: "Confirm password",

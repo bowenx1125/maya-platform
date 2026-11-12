@@ -1,6 +1,8 @@
 "use client";
 
 import { useSession } from "../session-provider";
+import { useBowenLandingGroupId } from "../use-bowen-landing-group";
+import { LoadingCard } from "../ui";
 import { VoiceLibrary } from "./voice-library";
 
 /**
@@ -20,6 +22,7 @@ export function VoicesPage({
   initialCreate?: boolean;
 }) {
   const { user, identityGeneration } = useSession();
+  const landing = useBowenLandingGroupId();
   const membershipGroupIds = [
     ...new Set((user?.groups ?? []).map((membership) => membership.group_id)),
   ];
@@ -46,19 +49,23 @@ export function VoicesPage({
       />
     );
   }
+  const bowen = user?.username === "bowen";
+  if (bowen && !groupId && !landing.ready) return <LoadingCard />;
   const studentGroupId =
     groupId && membershipGroupIds.includes(groupId)
       ? groupId
-      : membershipGroupIds.length === 1
-        ? membershipGroupIds[0]
-        : null;
+      : bowen
+        ? landing.groupId
+        : membershipGroupIds.length === 1
+          ? membershipGroupIds[0]
+          : null;
   return (
     <VoiceLibrary
       key={`${scope}:${studentGroupId ?? "all"}:${initialCreate ? "new" : "list"}`}
       id="voices"
       album
       groupId={studentGroupId}
-      membershipGroupIds={studentGroupId ? [] : membershipGroupIds}
+      membershipGroupIds={studentGroupId || bowen ? [] : membershipGroupIds}
       initialCreate={initialCreate}
     />
   );

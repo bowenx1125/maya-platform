@@ -1266,6 +1266,9 @@ def update_agent_metadata(
 
     reject_baseline_agent_mutation(str(agent_id))
     new_name = _clean_agent_name(payload.name) if payload.name is not None else None
+    # A visibility field uses the same read as every other metadata edit.
+    # It must not admit a caller who cannot see the Agent, or carry a name
+    # or description change onto someone else's private Agent.
     scoped = visible_student_agent(db, context, str(agent_id))
     # Close the authorization read snapshot before taking the final writer
     # lock, so concurrent updates resolve to one deterministic winner.
@@ -1291,10 +1294,13 @@ def update_agent_metadata(
                     "current_metadata_revision": latest,
                 },
             )
+        # Private can become Public for the owner only. A visibility field
+        # from anyone else stops the whole update, including an unchanged
+        # value sent beside a name or description. Public is final.
+        # Only the owner publishes, so the private RAG that goes public with
+        # the Agent is the creator's.
         if "visibility" in payload.model_fields_set and current.owner_user_id != context.user.id:
             raise not_found()
-        # Private can become Public (owner only, above); Public is final, so
-        # the group never loses an Agent it was given.
         if payload.visibility is not None and payload.visibility != current.visibility:
             if current.visibility == "public":
                 db.rollback()

@@ -59,7 +59,7 @@ def _student(
 ) -> dict[str, Any]:
     client = TestClient(app)
     client.headers["Origin"] = "http://testserver"
-    username = f"load-{index:03d}-{uuid4().hex[:6]}"
+    username = f"load{index:03d}{uuid4().hex[:6]}"
     group = f"Load group {index % 8}"
     registered = _retrying(
         lambda: client.post(

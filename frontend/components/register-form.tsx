@@ -33,8 +33,9 @@ function groupOptionId(index: number) {
   return `register-group-option-${index}`;
 }
 
-/** Mirrors PASSWORD_MIN in the backend registration service. */
+/** Mirrors PASSWORD_MIN and the registration username rule. */
 const PASSWORD_MIN = 5;
+const USERNAME_PATTERN = /^[A-Za-z0-9]{3,64}$/;
 
 export function RegisterForm({
   onCancel,
@@ -173,6 +174,10 @@ export function RegisterForm({
     if (step === 1) {
       // Checked here rather than through the server so the student is told
       // about a short or mistyped password before they pick a group.
+      if (!USERNAME_PATTERN.test(username.trim())) {
+        setLocalError("usernameInvalid");
+        return;
+      }
       if (password.length < PASSWORD_MIN) {
         setLocalError("passwordTooShort");
         return;
@@ -223,6 +228,7 @@ export function RegisterForm({
     }
   }
 
+  const usernameBad = localError === "usernameInvalid";
   const passwordShort = localError === "passwordTooShort";
   const mismatch = localError === "registerPasswordMismatch";
   return (
@@ -274,6 +280,12 @@ export function RegisterForm({
             <label>
               <span>{t("username")}</span>
               <input
+                aria-invalid={usernameBad || undefined}
+                aria-describedby={
+                  usernameBad
+                    ? "register-username-rule register-field-error"
+                    : "register-username-rule"
+                }
                 autoComplete="username"
                 value={username}
                 maxLength={64}
@@ -283,6 +295,9 @@ export function RegisterForm({
                 required
               />
             </label>
+            <small className="muted" id="register-username-rule">
+              {t("usernameRule")}
+            </small>
             <label>
               <span>{t("password")}</span>
               <span className="relative block">

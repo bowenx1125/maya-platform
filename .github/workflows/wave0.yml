@@ -316,7 +316,7 @@ jobs:
       - name: Register login regression accounts
         run: |
           for index in {0..19}; do
-            username="$(printf 'loadtune-%03d' "$index")"
+            username="$(printf 'loadtune%03d' "$index")"
             status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
               --max-time 30 --request POST \
               --header 'Content-Type: application/json' \

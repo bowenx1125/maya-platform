@@ -1198,7 +1198,7 @@ export function AgentWorkbench({
   }
 
   /**
-   * Private → Public, once, by the creator. Like copying the Agent to Public:
+   * Private → Public, once, by anyone who may edit the Agent. Like copying it to Public:
    * the server turns it and its RAG public in place (same Agent, so chats
    * carry on), then Done's publish makes the new public version.
    */
@@ -1842,8 +1842,8 @@ export function AgentWorkbench({
                       />
                     </label>
                     <div className="agent-identity">
-                      {/* Private can become Public (the creator, once);
-                          Public never goes back. */}
+                      {/* Private can become Public for the edit role while it is
+                          private; Public never goes back. */}
                       <div
                         className="visibility-toggle"
                         role="group"
@@ -1868,7 +1868,7 @@ export function AgentWorkbench({
                           aria-busy={makingPublic || undefined}
                           disabled={
                             currentAgent.visibility === "private" &&
-                            (currentAgent.is_creator !== true ||
+                            (currentAgent.can_manage_visibility !== true ||
                               editingLocked ||
                               makingPublic)
                           }

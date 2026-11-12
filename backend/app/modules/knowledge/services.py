@@ -718,7 +718,11 @@ def visible_snapshot(db: Session, context: AuthContext, snapshot_id: str) -> Sco
     return ScopedSnapshot(snapshot, version, agent, cast(str, role))
 
 
-def public_agent_editor_role(db: Session, actor: AuthContext | str, agent: Agent) -> str | None:
+def public_agent_editor_role(
+    db: Session,
+    actor: AuthContext | str,
+    agent: Agent,
+) -> str | None:
     """Who may edit/publish/delete an Agent.
 
     The creator always ("owner"). A *public*, live Agent is also editable by
@@ -1880,6 +1884,9 @@ def agent_summary(
         ownership_scope=cast(Literal["group", "personal"], agent.ownership_scope),
         visibility=cast(Literal["private", "public"], agent.visibility),
         can_edit=editor is not None or visit_edit,
+        # Same edit role as can_edit, and only while the Agent is still private.
+        # A visit can edit content without being that role, so it cannot publish.
+        can_manage_visibility=editor is not None and agent.visibility == "private",
         # Delete stays with the creator and the public-agent editors. A visit
         # can change the Agent's content without removing it.
         can_delete=editor is not None,

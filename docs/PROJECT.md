@@ -67,7 +67,7 @@ Visits:hide Knowledge,renew/20min,end notice->Accounts. Debate "?":Chinese hover
 
 ## Nov5-8 Classroom Quiz
 
-0083-0085:Quiz publish≠taking;new epoch/start,1 attempt/epoch;ZIP. #380:detail/hand grading/hide/Record->Quiz;#383/4:opt-in AI grading. 1 page/quiz,Paper|Submissions;no Chat tests;New/Back/Done unified. [Contract](contracts/CLASSROOM_QUIZ_API.md). Agent name card;Private->Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)). 0088(in progress):epoch deadlines/one-shot taking,lazy+10s sweeper(non-test). 0091 follows0090:old show_results=true/new=false,revision unchanged. #412:V1 switch,cyan stickers,expandable student answers-only paper;post-commit/receipt visibility,fail-closed UI/DTOs,no duplicate help. PUT/1274 UI(13 skipped)/type/lint/format/11 offline backend/ruff/mypy/contracts/routes pass;PG owner-run,boundary EPERM,build stalled,Webpack showConfig failed;0 calls/deploy.
+0083-0085:Quiz publish≠taking;new epoch/start,1 attempt/epoch;ZIP. #380:detail/hand grading/hide/Record->Quiz;#383/4:opt-in AI grading. 1 page/quiz,Paper|Submissions;no Chat tests;New/Back/Done unified. [Contract](contracts/CLASSROOM_QUIZ_API.md). Agent name card;Private->Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)). 0088(in progress):epoch deadlines/one-shot taking,lazy+10s sweeper(non-test). 0091 follows0090:old show_results=true/new=false,revision unchanged. #412:V1 switch,cyan stickers,expandable student answers-only paper;post-commit/receipt visibility,fail-closed UI/DTOs,no duplicate help. 0 calls/deploy.
 
 ## Nov9 local classes/accounts(in progress)
 
@@ -97,12 +97,14 @@ Bowen0090(after0089):schema-only;UI/security unchanged;acceptance pending.
 
 Merge:7aef7004+origin/main797cbe3c.
 
-Nov12:Bowen RAG/Knowledge lists use login class,no picker;other actors/group links unchanged;no other student pickers. Voice idle hint/key removed;ARIA fixed,errors/guards kept;album already lacked hint.1313 UI pass/13 skipped;type/lint/format/docs pass.Build stalled/showConfig;boundary/listen/Chromium EPERM.0 calls/deploy.
+Nov12:Bowen RAG/Knowledge lists use login class,no picker;other actors/group links unchanged;no other student pickers. Voice idle hint/key removed;ARIA fixed,errors/guards kept;album already lacked hint. 0 calls/deploy.
 
-Nov12 local Chatform:composer shell focuses Message;controls/selection kept. History avatar/date pass clicks to card button;visuals/copy/send unchanged. 1347 UI pass/13 skipped;type/lint/format/build pass.0 calls/deploy.
+Nov12 local Chatform:composer shell focuses Message;controls/selection kept. History avatar/date pass clicks to card button;visuals/copy/send unchanged. 0 calls/deploy.
 
 ## Nov12 3D performance engine (in progress)
 
 DEBATE_TTS_ENGINE=cosyvoice swaps the debate TTS adapter (qwen3 default;pre-request-refusal fallback); word_timestamps feeds debates/performance (gesture anchors+viseme windows). AudioStore keeps each turn's compiled timeline as a WAV-sibling performance.json; ticket-gated GET /debates/{id}/performance/{turn} serves it (404 = plain audio). Stage: beta-stage fetches the sibling (media.prepared); ScholarScene forwards timeline+clock; scholar-stage layers viseme mouth and gesture clips on the procedural frame. Bones resolve per rig family (UE spine_02/neck_01, AdvSkel Chest_M/Neck_M, Mixamo Spine2/Neck); the old head-only list clipped collars—fixed; watermark mesh hidden. Tripo-refined Mixamo-rigged figures live as elder-scholar.glb, noble-scholar.glb (noble2) + female_1.glb.
 
 Gesture library v2: arm channels (upper/forearm/hand) are figure-space axis-angle steps; scholar-stage converts per rig against captured parent rest quats (local = A⁻¹·E·A·rest), so one clip set serves Mixamo rigs whose bone-local axes differ. Postures: hand_behind_back (right behind back, left at chest), hand_on_chest (mirror), open_palm_listening; clips emphasis, settle_calm, doubt_shrug, invite_present, chin_stroke, palm_open_sweep, lean_in, object_raise gesture with the free left arm. Compiler defaults thoughtful/friendly to hand_on_chest. Headless-render QA on all three; 153 frontend files / 1259 tests green.
+
+Nov12 teacher/Bowen (not merged, not deployed): capsule second press closes; no per-route remount. Bowen student pages use the login class's first non-Students group; moves stay in that session class; choice skips the shell when another group exists; rows kept. New usernames are 3–64 letters or digits; older `.` `_` `-` names still sign in. No teacher music key; music does not auto-start. No RAG New hint. Private→Public is the owner. 0 calls. DEMO_MODE/DEMO_QUICK_LOGIN off.
