@@ -294,14 +294,17 @@ Nov11: Agents/Teams <768px: single black banner, no orange ring; desktop diff0 (
 
 ## Nov12 3D performance engine (in progress)
 
-DEBATE_TTS_ENGINE=cosyvoice swaps the debate TTS adapter (same DashScope key/
-workspace; qwen3 default, fallback on pre-request refusals only). TTSResult.
-word_timestamps feeds debates/performance (gesture anchors, viseme windows).
+DEBATE_TTS_ENGINE=cosyvoice swaps the debate TTS adapter (same key/workspace;
+qwen3 default; pre-request-refusal fallback). TTSResult.
+word_timestamps feeds debates/performance (gesture anchors+viseme windows).
 AudioStore stores each turn's compiled timeline as a WAV-sibling
-performance.json (staged/promoted/discarded/removed with the audio;
-enhancement-only; +8 tests). Ticket-gated GET /debates/{id}/performance/
+performance.json (stored/discarded with the audio; +8 tests).
+Ticket-gated GET /debates/{id}/performance/
 {turn} serves it; 404 = plain audio. Stage: beta-stage fetches the sibling
-(media.prepared, generation-guarded), ScholarScene forwards timeline + audio
-clock, scholar-stage layers viseme mouth and head/neck/torso gesture clips on
-the procedural frame (player closed-parses the JSON; 8 vitest). Rigs have no
-finger bones, so clips use big bones only. 18 backend +8 vitest. 0 calls/deploy.
+(media.prepared), ScholarScene forwards timeline+clock, scholar-stage
+layers viseme mouth and gesture clips on the procedural frame (8 vitest).
+18 backend +8 vitest. Bones resolve per rig family (UE spine_02/neck_01,
+AdvSkel Chest_M/Neck_M, Mixamo Spine2/Neck); old list matched head only:
+neck/torso clips no-op'd, head motion clipped collars (穿模). Watermark mesh
+hidden. +4 vitest. Tripo refined figures (~22.5k verts) in Mixamo rigging
+for finger clips.

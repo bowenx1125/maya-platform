@@ -224,20 +224,46 @@ type CharacterPerformance = {
   syncTime: number | null;
 };
 
-/** Bone naming differs between the two purchased figures. */
-const JAW_BONE_NAMES = ["bone_jaw", "jawjoint_m"];
-const HEAD_BONE_NAMES = ["head", "head_m"];
+/**
+ * Bone naming differs per rig family the stage has loaded: the elder figure
+ * uses UE-style names (spine_02, neck_01), the noble an AdvancedSkeleton rig
+ * (Chest_M, Neck_M), and RPM/Mixamo figures Hips-style names (Spine1, Neck).
+ * The single-name lookup below only ever matched the head, so neck and torso
+ * clips silently did nothing and all motion concentrated in the head — which
+ * is what pushed collars and hair through the mesh. Aliases resolve per
+ * family, most specific first.
+ */
+const BONE_ALIASES = {
+  head: [/^head$/i, /^head_m$/i, /^mixamorig:?head$/i],
+  neck: [/^neck_?01$/i, /^neck$/i, /^neck_m$/i, /^mixamorig:?neck$/i],
+  torso: [
+    /^chest_m$/i,
+    /^spine2$/i,
+    /^spine_?02$/i,
+    /^mixamorig:?spine2$/i,
+    /^spine1_?m$/i,
+    /^spine1$/i,
+    /^mixamorig:?spine1$/i,
+    /^spine$/i,
+  ],
+  jaw: [/^bone_jaw$/i, /^jawjoint_m$/i, /^mixamorig:?jaw$/i],
+} as const;
 
-function findBone(
+type StageBone = keyof typeof BONE_ALIASES;
+
+export function findBone(
   root: THREE.Object3D,
-  names: string[],
+  bone: StageBone,
 ): THREE.Object3D | null {
-  let found: THREE.Object3D | null = null;
-  root.traverse((object) => {
-    if (found) return;
-    if (names.includes(object.name.toLowerCase())) found = object;
-  });
-  return found;
+  for (const pattern of BONE_ALIASES[bone]) {
+    let found: THREE.Object3D | null = null;
+    root.traverse((object) => {
+      if (found) return;
+      if (pattern.test(object.name)) found = object;
+    });
+    if (found) return found;
+  }
+  return null;
 }
 
 function isMorphMesh(object: THREE.Object3D): object is MorphMesh {
@@ -1343,10 +1369,10 @@ export class ScholarStage {
       shadow.position.set(standingX, groundY + 0.004, standingZ);
       this.scene.add(shadow);
 
-      const headBone = findBone(root, HEAD_BONE_NAMES);
-      const neckBone = findBone(root, ["neck"]);
-      const torsoBone = findBone(root, ["spine2", "spine1", "spine"]);
-      const jawBone = findBone(root, JAW_BONE_NAMES);
+      const headBone = findBone(root, "head");
+      const neckBone = findBone(root, "neck");
+      const torsoBone = findBone(root, "torso");
+      const jawBone = findBone(root, "jaw");
 
       const character: Character = {
         spec,
@@ -1485,9 +1511,10 @@ export class ScholarStage {
     );
     root.traverse((object) => {
       if (!isMorphMesh(object)) return;
-      // The elder FBX includes a wide decorative plane named "aa" that
-      // otherwise leaves detached fragments across the classroom stage.
-      if (object.name === "aa") {
+      // The elder FBX carries a wide decorative plane named "aa" and a
+      // sibling watermark text mesh from the marketplace shop; both would
+      // otherwise float visibly across the classroom stage.
+      if (object.name === "aa" || object.name.includes("淘宝")) {
         object.visible = false;
         return;
       }
