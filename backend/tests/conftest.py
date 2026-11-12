@@ -223,11 +223,26 @@ def post_message(
     return client.get(url[: url.rindex("/messages")])
 
 
+def complete_student_login(client: TestClient, response: Any) -> Any:
+    if response.status_code == 202:
+        assert "set-cookie" not in response.headers
+        response = client.post(
+            "/api/v1/auth/identity-choice",
+            json={
+                "choice_token": response.json()["choice_token"],
+                "identity": "student",
+                "course_id": "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b",
+            },
+        )
+    return response
+
+
 def login(client: TestClient, username: str = "maya") -> tuple[dict[str, Any], str]:
     response = client.post(
         "/api/v1/auth/login",
         json={"username": username, "password": "demo-password"},
     )
+    response = complete_student_login(client, response)
     assert response.status_code == 200, response.text
     payload = response.json()
     return payload, payload["csrf_token"]

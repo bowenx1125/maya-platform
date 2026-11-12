@@ -2163,7 +2163,13 @@ def _published_agents_for_teacher(
                 role="teacher",
                 context=context,
             ),
-            current_version=version_dto(db, version, agent),
+            # A list card shows a name, a version and an avatar. The full
+            # AGENT.md and document list of every Agent were three quarters of
+            # a 480 KB response (production, 60 Agents) that each page load
+            # downloaded and parsed; the editor reads its own version.
+            current_version=version_dto(db, version, agent).model_copy(
+                update={"agent_md": "", "enabled_documents": []}
+            ),
             readiness_issues=[
                 AgentReadinessIssue.model_validate(item) for item in readiness_issues(db, agent)
             ],

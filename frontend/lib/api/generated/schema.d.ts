@@ -317,6 +317,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/identity-choice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Consume a five-minute, client-bound Bowen login choice once. Maya rejects course_id; student requires one of the two server-provisioned classes. */
+        post: operations["chooseLoginIdentity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/switch": {
         parameters: {
             query?: never;
@@ -2274,6 +2291,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/quizzes/{quiz_id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Course Quiz Results
+         * @description Course teachers may reveal or hide grading results for all past and future attempts. New quizzes hide results; migrated quizzes keep results visible. Students receive 403; non-members receive 404. Hidden student responses keep answers but redact scores, correctness, feedback, AI grades and grading state. Teacher views and exports remain unchanged.
+         */
+        put: operations["putCourseQuizResults"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2753,6 +2790,25 @@ export interface components {
             username: string;
             /** Format: password */
             password: string;
+        };
+        LoginIdentityClass: {
+            course_id: components["schemas"]["Uuid"];
+            code: string;
+            name: string;
+        };
+        LoginIdentityOptions: {
+            classes: components["schemas"]["LoginIdentityClass"][];
+        };
+        LoginIdentityChoice: {
+            choice_token: string;
+            expires_in_seconds: number;
+            options: components["schemas"]["LoginIdentityOptions"];
+        };
+        LoginIdentityChoiceRequest: {
+            choice_token: string;
+            /** @enum {string} */
+            identity: "maya" | "student";
+            course_id?: components["schemas"]["Uuid"] | null;
         };
         DemoQuickLoginRequest: {
             user_id: components["schemas"]["Uuid"];
@@ -6040,6 +6096,8 @@ export interface components {
             scheduled_start_at?: string | null;
             /** Schema Version */
             schema_version: number;
+            /** Show Results */
+            show_results: boolean;
             /**
              * Status
              * @enum {string}
@@ -6102,6 +6160,8 @@ export interface components {
             /** Schema Version */
             schema_version: number;
             settings: components["schemas"]["QuizSettings"];
+            /** Show Results */
+            show_results: boolean;
             /**
              * Status
              * @constant
@@ -6181,6 +6241,8 @@ export interface components {
             /** Schema Version */
             schema_version: number;
             settings: components["schemas"]["QuizSettings"];
+            /** Show Results */
+            show_results: boolean;
             /**
              * Status
              * @enum {string}
@@ -6355,6 +6417,366 @@ export interface components {
             score_max?: number | null;
             /** Score Min */
             score_min?: number | null;
+        };
+        /** PutQuizResultsRequest */
+        PutQuizResultsRequest: {
+            /** Show Results */
+            show_results: boolean;
+        };
+        /** QuizAttemptDTO */
+        QuizAttemptDTO: {
+            /**
+             * Actor User Id
+             * Format: uuid
+             */
+            actor_user_id: string;
+            /** Answers */
+            answers?: {
+                [key: string]: unknown;
+            }[];
+            /** Content Revision */
+            content_revision: number;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Grading Status
+             * @enum {string|null}
+             */
+            grading_status: "complete" | "pending" | "mixed" | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Quiz Id
+             * Format: uuid
+             */
+            quiz_id: string;
+            /** Scheduled End At */
+            scheduled_end_at?: string | null;
+            /** Scheduled Start At */
+            scheduled_start_at?: string | null;
+            /** Score Max Objective */
+            score_max_objective: number | null;
+            /** Score Objective */
+            score_objective: number | null;
+            /** Show Results */
+            show_results: boolean;
+            /**
+             * Status
+             * @constant
+             */
+            status: "submitted";
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+            /**
+             * Taking Epoch
+             * @default 0
+             */
+            taking_epoch: number;
+        };
+        /**
+         * QuizAttemptItemStudent
+         * @description One item of the paper as it was frozen at submit, with the response.
+         *
+         *     No answer key or rubric: a student sees their own choices, whether a
+         *     choice item was right, and the teacher's grade and feedback.
+         */
+        QuizAttemptItemStudent: {
+            /** Ai Score */
+            ai_score?: number | null;
+            /** Choices */
+            choices?: components["schemas"]["QuizChoice"][];
+            /** Correct */
+            correct?: boolean | null;
+            /** Feedback */
+            feedback?: string | null;
+            /**
+             * Graded
+             * @default false
+             */
+            graded: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Points
+             * @default 0
+             */
+            points: number;
+            /** Points Awarded */
+            points_awarded?: number | null;
+            /**
+             * Prompt
+             * @default
+             */
+            prompt: string;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+            /** Response Choice Ids */
+            response_choice_ids?: string[] | null;
+            /** Response Text */
+            response_text?: string | null;
+            /** Type */
+            type: ("single" | "multiple" | "short_text" | "long_text") | "unknown";
+        };
+        /** QuizAttemptItemTeacher */
+        QuizAttemptItemTeacher: {
+            /**
+             * Ai Grading
+             * @default false
+             */
+            ai_grading: boolean;
+            /** Ai Score */
+            ai_score?: number | null;
+            answer?: components["schemas"]["QuizAnswerKey"] | null;
+            /** Choices */
+            choices?: components["schemas"]["QuizChoice"][];
+            /** Correct */
+            correct?: boolean | null;
+            /** Feedback */
+            feedback?: string | null;
+            /**
+             * Graded
+             * @default false
+             */
+            graded: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Points
+             * @default 0
+             */
+            points: number;
+            /** Points Awarded */
+            points_awarded?: number | null;
+            /**
+             * Prompt
+             * @default
+             */
+            prompt: string;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+            /** Response Choice Ids */
+            response_choice_ids?: string[] | null;
+            /** Response Text */
+            response_text?: string | null;
+            /** Type */
+            type: ("single" | "multiple" | "short_text" | "long_text") | "unknown";
+        };
+        /**
+         * RecordAttemptDTO
+         * @description Unified Record row for Quiz and legacy chat attempts.
+         */
+        RecordAttemptDTO: {
+            /**
+             * Attempt Id
+             * Format: uuid
+             */
+            attempt_id: string;
+            /** Content Revision */
+            content_revision?: number | null;
+            /** Conversation Id */
+            conversation_id?: string | null;
+            /**
+             * Grading Status
+             * @enum {string|null}
+             */
+            grading_status?: "complete" | "pending" | "mixed" | null;
+            /** Phase */
+            phase?: string | null;
+            /** Points Awarded */
+            points_awarded?: number | null;
+            /** Points Total */
+            points_total?: number | null;
+            /** Quiz Id */
+            quiz_id?: string | null;
+            /** Score Ai */
+            score_ai?: number | null;
+            /** Score Max Objective */
+            score_max_objective?: number | null;
+            /** Score Objective */
+            score_objective?: number | null;
+            /** Show Results */
+            show_results: boolean;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "quiz" | "chat";
+            /** Status */
+            status: string;
+            /** Student Name */
+            student_name: string;
+            /** Submitted At */
+            submitted_at?: string | null;
+            /** Taking Epoch */
+            taking_epoch?: number | null;
+            /** Team Name */
+            team_name?: string | null;
+            /** Title */
+            title: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /** StudentQuizAttemptDetailDTO */
+        StudentQuizAttemptDetailDTO: {
+            /** Content Revision */
+            content_revision: number;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Graded At */
+            graded_at?: string | null;
+            /**
+             * Grading Status
+             * @enum {string|null}
+             */
+            grading_status: "complete" | "pending" | "mixed" | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Items */
+            items?: components["schemas"]["QuizAttemptItemStudent"][];
+            /** Points Awarded */
+            points_awarded: number | null;
+            /** Points Total */
+            points_total: number | null;
+            /**
+             * Quiz Id
+             * Format: uuid
+             */
+            quiz_id: string;
+            /** Score Ai */
+            score_ai?: number | null;
+            /** Score Manual */
+            score_manual: number | null;
+            /** Score Max Manual */
+            score_max_manual: number | null;
+            /** Score Max Objective */
+            score_max_objective: number | null;
+            /** Score Objective */
+            score_objective: number | null;
+            /** Show Results */
+            show_results: boolean;
+            /**
+             * Status
+             * @constant
+             */
+            status: "submitted";
+            /** Student Name */
+            student_name: string;
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+            /** Taking Epoch */
+            taking_epoch: number;
+            /** Title */
+            title: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /**
+             * View
+             * @default student
+             * @constant
+             */
+            view: "student";
+        };
+        /** TeacherQuizAttemptDetailDTO */
+        TeacherQuizAttemptDetailDTO: {
+            /** Content Revision */
+            content_revision: number;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Graded At */
+            graded_at?: string | null;
+            /**
+             * Grading Status
+             * @enum {string}
+             */
+            grading_status: "complete" | "pending" | "mixed";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Items */
+            items?: components["schemas"]["QuizAttemptItemTeacher"][];
+            /** Points Awarded */
+            points_awarded: number;
+            /** Points Total */
+            points_total: number;
+            /**
+             * Quiz Id
+             * Format: uuid
+             */
+            quiz_id: string;
+            /** Score Ai */
+            score_ai?: number | null;
+            /** Score Manual */
+            score_manual: number;
+            /** Score Max Manual */
+            score_max_manual: number;
+            /** Score Max Objective */
+            score_max_objective: number;
+            /** Score Objective */
+            score_objective: number;
+            /** Show Results */
+            show_results: boolean;
+            /**
+             * Status
+             * @constant
+             */
+            status: "submitted";
+            /** Student Name */
+            student_name: string;
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+            /** Taking Epoch */
+            taking_epoch: number;
+            /** Title */
+            title: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /**
+             * View
+             * @default teacher
+             * @constant
+             */
+            view: "teacher";
         };
     };
     responses: {
@@ -7705,6 +8127,15 @@ export interface operations {
                     "application/json": components["schemas"]["AuthSession"];
                 };
             };
+            /** @description Choose the login identity; no session cookie is issued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginIdentityChoice"];
+                };
+            };
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             /** @description The production gateway rejected an oversized authentication request. */
@@ -7714,6 +8145,34 @@ export interface operations {
                 };
                 content?: never;
             };
+            429: components["responses"]["Error"];
+        };
+    };
+    chooseLoginIdentity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginIdentityChoiceRequest"];
+            };
+        };
+        responses: {
+            /** @description Session created for the chosen identity. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSession"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
             429: components["responses"]["Error"];
         };
     };
@@ -12590,6 +13049,62 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putCourseQuizResults: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                course_id: string;
+                quiz_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutQuizResultsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuizSummaryDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

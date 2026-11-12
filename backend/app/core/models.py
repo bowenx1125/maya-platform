@@ -68,6 +68,7 @@ class User(Base):
     sessions: Mapped[list[SessionRecord]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
+        foreign_keys="SessionRecord.user_id",
     )
     course_memberships: Mapped[list[CourseMember]] = relationship(
         back_populates="user",
@@ -98,7 +99,18 @@ class SessionRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    user: Mapped[User] = relationship(back_populates="sessions")
+    entered_via_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", name="fk_sessions_entered_via", ondelete="SET NULL"),
+        nullable=True,
+    )
+    active_course_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("courses.id", name="fk_sessions_active_course", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    user: Mapped[User] = relationship(back_populates="sessions", foreign_keys=[user_id])
 
     __table_args__ = (
         Index("ix_sessions_user_id", "user_id"),

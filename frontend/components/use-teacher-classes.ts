@@ -3,12 +3,9 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "./session-provider";
-import { HOME_FRAME } from "./home/home-hero";
-import { Button, WORKSPACE_ACTION_SIZE } from "./ui/button";
-import { ErrorNotice } from "./ui";
 import { teacherEnterInProgress } from "../lib/teacher-visit";
 
-export function TeacherClassBar() {
+export function useTeacherClasses() {
   const { api, user, selectTeacherCourse } = useSession();
   const pathname = usePathname();
   const router = useRouter();
@@ -60,34 +57,12 @@ export function TeacherClassBar() {
       setBusy(null);
     }
   }
-  if (!scope) return null;
-  return (
-    <div
-      className={`grid gap-3 ${pathname === "/teacher" ? HOME_FRAME : "mb-6"} ${pathname === "/teacher/rag" ? "mx-auto w-full max-w-[1120px]" : ""}`}
-    >
-      <div role="group" aria-label="Classes" className="flex flex-wrap gap-3">
-        {classes
-          .filter((item) => ids.includes(item.id))
-          .map((item) => (
-            <Button
-              key={item.id}
-              variant={item.id === ids[0] ? "default" : "neutral"}
-              aria-pressed={item.id === ids[0]}
-              busy={busy === item.id}
-              disabled={busy !== null}
-              className={`${WORKSPACE_ACTION_SIZE} max-w-full min-w-0`}
-              onClick={() => void choose(item.id)}
-            >
-              {busy === item.id ? (
-                <span className="spinner" aria-hidden="true" />
-              ) : null}
-              <span className="truncate" title={item.name}>
-                {item.name}
-              </span>
-            </Button>
-          ))}
-      </div>
-      {error ? <ErrorNotice error={error} /> : null}
-    </div>
-  );
+  return {
+    classes: classes.filter((item) => ids.includes(item.id)),
+    current: classes.find((item) => item.id === ids[0]),
+    multiple: ids.length > 1,
+    busy,
+    error,
+    choose,
+  };
 }

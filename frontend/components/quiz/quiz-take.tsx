@@ -140,6 +140,9 @@ export function QuizTake({
   if (!quiz) return <LoadingCard />;
   if (result) {
     const percent =
+      result.show_results === true &&
+      result.score_objective != null &&
+      result.score_max_objective != null &&
       result.score_max_objective > 0
         ? Math.round(
             (result.score_objective / result.score_max_objective) * 100,

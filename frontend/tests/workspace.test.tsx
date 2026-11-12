@@ -1605,7 +1605,7 @@ describe("teacher workspace access", () => {
         navigation.querySelectorAll("a[data-tour], [aria-disabled='true']"),
       ).map((item) => item.textContent?.trim()),
     ).toEqual([
-      "Mayaform",
+      "Mayaform-Course",
       "Agents",
       "Chat with Agent",
       "Debates",

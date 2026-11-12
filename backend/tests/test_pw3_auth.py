@@ -30,10 +30,12 @@ from app.modules.auth.service import (
     session_hash,
     sync_demo_accounts,
 )
+from app.modules.org.classes import ensure_classes
 from app.seed import seed_demo_data
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from tests.conftest import complete_student_login
 from tests.postgres_db import named_url
 
 ACCOUNT_TABLE = """# private Demo catalog
@@ -66,6 +68,7 @@ def _app(tmp_path: Path, *, quick_login: bool = True) -> tuple[Any, Database, Se
     database.initialize_schema()
     with database.session() as session:
         seed_demo_data(session)
+        ensure_classes(session)
     sync_demo_accounts(database, settings)
     # The fixture performs seed then account sync explicitly; the app lifespan
     # is skipped here so its Wave 0 seed guard does not reject the intentional
@@ -300,6 +303,8 @@ def test_sync_rename_remove_readd_preserves_uuid_and_revokes_sessions(
             "/api/v1/auth/login",
             json={"username": "bowen", "password": "demo-password"},
         )
+        assert password_login.status_code == 202
+        password_login = complete_student_login(client, password_login)
         assert password_login.status_code == 200
         old_cookie = client.cookies.get("maya_session")
         assert old_cookie
@@ -649,4 +654,6 @@ def test_lifespan_seeds_once_then_allows_catalog_rename_on_restart(tmp_path: Pat
             "/api/v1/auth/login",
             json={"username": "bowen-renamed", "password": "demo-password"},
         )
+        assert login_response.status_code == 202
+        login_response = complete_student_login(restarted, login_response)
         assert login_response.status_code == 200

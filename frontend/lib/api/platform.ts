@@ -10,6 +10,10 @@ import { invalidateRequestCache } from "../request-cache";
 import type { ClientMetric } from "../client-metrics";
 
 export type AuthSession = components["schemas"]["AuthSession"];
+export type LoginIdentityChoice = components["schemas"]["LoginIdentityChoice"];
+export type LoginIdentityChoiceRequest =
+  components["schemas"]["LoginIdentityChoiceRequest"];
+export type LoginResult = AuthSession | LoginIdentityChoice;
 export type CurrentUser = components["schemas"]["CurrentUser"];
 export type Course = components["schemas"]["Course"];
 export type CourseDetail = components["schemas"]["CourseDetail"];
@@ -256,6 +260,7 @@ export type QuizItemStudent = {
 
 /** Types mirror backend/app/modules/quiz/schemas.py (student projections). */
 export type StudentQuizDto = {
+  show_results: boolean;
   id: string;
   course_id: string;
   group_id: string | null;
@@ -277,6 +282,7 @@ export type StudentQuizDto = {
 };
 
 export type QuizSummary = {
+  show_results: boolean;
   id: string;
   course_id: string;
   group_id: string | null;
@@ -302,15 +308,16 @@ export type QuizSummary = {
 };
 
 export type QuizAttemptDto = {
+  show_results: boolean;
   id: string;
   quiz_id: string;
   course_id: string;
   actor_user_id: string;
   content_revision: number;
   status: "submitted";
-  grading_status: QuizGradingStatus;
-  score_objective: number;
-  score_max_objective: number;
+  grading_status: QuizGradingStatus | null;
+  score_objective: number | null;
+  score_max_objective: number | null;
   answers: Array<Record<string, unknown>>;
   taking_epoch?: number;
   submitted_at: string;
@@ -318,6 +325,7 @@ export type QuizAttemptDto = {
 
 /** Unified Record row for Quiz and legacy chat attempts. */
 export type RecordAttemptDto = {
+  show_results: boolean;
   source: "quiz" | "chat";
   attempt_id: string;
   user_id: string;
@@ -510,6 +518,26 @@ export type ChatTurn = Omit<components["schemas"]["ChatTurn"], "state"> & {
     | "paused";
   assessment_result?: AssessmentRuntimeResult | null;
 };
+
+// The root layout starts GET /auth/me while the scripts are still loading.
+// Its answer serves the first session read only; anything but a signed-in
+// answer falls through to the ordinary request, which reports the real error.
+async function takeEarlySession(): Promise<AuthSession | null> {
+  if (typeof window === "undefined") return null;
+  const holder = window as unknown as {
+    __mayaEarlySession?: Promise<Response | null>;
+  };
+  const pending = holder.__mayaEarlySession;
+  if (!pending) return null;
+  delete holder.__mayaEarlySession;
+  try {
+    const response = await pending;
+    if (!response || !response.ok) return null;
+    return (await response.json()) as AuthSession;
+  } catch {
+    return null;
+  }
+}
 
 export class ChatRequestPendingError extends Error {
   constructor() {
@@ -1225,7 +1253,7 @@ export class PlatformApi {
       /** Upper bound for riding out a network drop while holding a ticket. */
       reconnectWindowMs?: number;
     },
-  ): Promise<AuthSession> {
+  ): Promise<LoginResult> {
     let ticket: string | undefined = options?.ticket;
     let last: LoginQueueNotice | null = null;
     let offlineSince: number | null = null;
@@ -1262,7 +1290,8 @@ export class PlatformApi {
         continue;
       }
       try {
-        const session = await unwrap<AuthSession>(result);
+        const session = await unwrap<LoginResult>(result);
+        if ("choice_token" in session) return session;
         this.setCsrfToken(session.csrf_token);
         return session;
       } catch (cause) {
@@ -1276,7 +1305,22 @@ export class PlatformApi {
     }
   }
 
+  async chooseLoginIdentity(
+    body: LoginIdentityChoiceRequest,
+  ): Promise<AuthSession> {
+    const session = await unwrap<AuthSession>(
+      await this.client.POST("/auth/identity-choice", { body }),
+    );
+    this.setCsrfToken(session.csrf_token);
+    return session;
+  }
+
   async me(): Promise<AuthSession> {
+    const early = await takeEarlySession();
+    if (early) {
+      this.setCsrfToken(early.csrf_token);
+      return early;
+    }
     const result = await this.client.GET("/auth/me");
     const session = await unwrap<AuthSession>(result);
     this.setCsrfToken(session.csrf_token);

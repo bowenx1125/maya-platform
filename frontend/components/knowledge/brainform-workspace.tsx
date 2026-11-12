@@ -491,13 +491,18 @@ export function BrainformWorkspace({
 }) {
   const { api, identityGeneration, user } = useSession();
   const [effectiveRole, setEffectiveRole] = useState(role);
-  const roleCourseIds = useMemo(
-    () =>
-      (user?.courses ?? [])
-        .filter((membership) => membership.role === effectiveRole)
-        .map((membership) => membership.course_id),
-    [effectiveRole, user?.courses],
-  );
+  const roleCourseIds = useMemo(() => {
+    const courseIds = (user?.courses ?? [])
+      .filter((membership) => membership.role === effectiveRole)
+      .map((membership) => membership.course_id);
+    // Bowen keeps both enrollments; auth puts the class chosen at login first.
+    // Explicit group links retain their own authorized course context.
+    return effectiveRole === "student" &&
+      user?.username === "bowen" &&
+      !initialGroupId
+      ? courseIds.slice(0, 1)
+      : courseIds;
+  }, [effectiveRole, initialGroupId, user?.courses, user?.username]);
   const usePageCourse = effectiveRole === "student" || Boolean(initialGroupId);
   const defaultCourseId =
     (usePageCourse && initialCourseId && roleCourseIds.includes(initialCourseId)

@@ -182,7 +182,7 @@ def test_catalog_account_can_replace_its_password(app_factory: Any) -> None:
                 "/api/v1/auth/login",
                 json={"username": "bowen", "password": "student-owned-password"},
             ).status_code
-            == 200
+            == 202
         )
 
 
@@ -260,3 +260,10 @@ def test_published_agent_exposes_confirming_author_avatar(app_factory: Any) -> N
         assert published.status_code == 200, published.text
         item = next(row for row in published.json() if row["author"]["user_id"] == author_id)
         assert item["author"]["avatar"] == AVATAR
+        # A list card needs no AGENT.md text or document list; the editor reads its own.
+        assert all(
+            row["current_version"]["agent_md"] == ""
+            and row["current_version"]["enabled_documents"] == []
+            and row["current_version"]["version_label"]
+            for row in published.json()
+        )

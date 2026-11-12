@@ -127,6 +127,7 @@ class PatchQuizRequest(BaseModel):
 
 
 class QuizSummaryDTO(BaseModel):
+    show_results: bool
     id: UUID
     course_id: UUID
     group_id: UUID | None = None
@@ -156,6 +157,7 @@ class TeacherQuizDTO(QuizSummaryDTO):
 
 
 class StudentQuizDTO(BaseModel):
+    show_results: bool
     id: UUID
     course_id: UUID
     group_id: UUID | None = None
@@ -196,6 +198,7 @@ class SubmitQuizAttemptRequest(BaseModel):
 
 
 class QuizAttemptDTO(BaseModel):
+    show_results: bool
     id: UUID
     quiz_id: UUID
     course_id: UUID
@@ -205,9 +208,9 @@ class QuizAttemptDTO(BaseModel):
     scheduled_start_at: datetime | None = None
     scheduled_end_at: datetime | None = None
     status: Literal["submitted"]
-    grading_status: GradingStatus
-    score_objective: float
-    score_max_objective: float
+    grading_status: GradingStatus | None
+    score_objective: float | None
+    score_max_objective: float | None
     answers: list[dict[str, Any]] = Field(default_factory=list)
     submitted_at: datetime
 
@@ -215,6 +218,7 @@ class QuizAttemptDTO(BaseModel):
 class RecordAttemptDTO(BaseModel):
     """Unified Record row for Quiz and legacy chat attempts."""
 
+    show_results: bool
     source: RecordSource
     attempt_id: UUID
     user_id: UUID
@@ -268,6 +272,7 @@ class QuizAttemptItemTeacher(QuizAttemptItemStudent):
 
 
 class StudentQuizAttemptDetailDTO(BaseModel):
+    show_results: bool
     # The route returns either shape; a distinct literal keeps a student's
     # payload from ever validating as the teacher one (which adds the key).
     view: Literal["student"] = "student"
@@ -280,15 +285,15 @@ class StudentQuizAttemptDetailDTO(BaseModel):
     content_revision: int
     taking_epoch: int
     status: Literal["submitted"]
-    grading_status: GradingStatus
-    score_objective: float
-    score_max_objective: float
-    score_manual: float
-    score_max_manual: float
+    grading_status: GradingStatus | None
+    score_objective: float | None
+    score_max_objective: float | None
+    score_manual: float | None
+    score_max_manual: float | None
     # Optional aggregate of AI item scores when any ai_score is present.
     score_ai: float | None = None
-    points_awarded: float
-    points_total: float
+    points_awarded: float | None
+    points_total: float | None
     submitted_at: datetime
     graded_at: datetime | None = None
     items: list[QuizAttemptItemStudent] = Field(default_factory=list)
@@ -296,6 +301,13 @@ class StudentQuizAttemptDetailDTO(BaseModel):
 
 class TeacherQuizAttemptDetailDTO(StudentQuizAttemptDetailDTO):
     view: Literal["teacher"] = "teacher"  # type: ignore[assignment]
+    grading_status: GradingStatus
+    score_objective: float
+    score_max_objective: float
+    score_manual: float
+    score_max_manual: float
+    points_awarded: float
+    points_total: float
     items: list[QuizAttemptItemTeacher] = Field(default_factory=list)  # type: ignore[assignment]
 
 
@@ -351,6 +363,10 @@ class QuizExemptionsDTO(BaseModel):
     taking_epoch: int
     exemptions: list[QuizExemptionDTO]
     students: list[QuizExemptionStudentDTO]
+
+
+class PutQuizResultsRequest(BaseModel):
+    show_results: bool = Field(strict=True)
 
 
 class PutQuizScheduleRequest(BaseModel):

@@ -94,7 +94,7 @@ def resolve_pool_config(
     return size, overflow, timeout
 
 
-ALEMBIC_HEAD = "0089_debate_cards"
+ALEMBIC_HEAD = "0091_quiz_show_results"
 # The oldest revision this checkout has (migrations squashed 2026-10-25).
 MIGRATION_BASELINE = "0080_drop_playback_rate"
 

@@ -55,6 +55,17 @@ export default async function RootLayout({
       lang="en-US"
       className={`${display.variable} ${body.variable} ${hand.variable} ${mono.variable}`}
     >
+      <head>
+        {/* Every page waits on the session before it can ask for data. Asking
+          here starts that request with the HTML instead of after the scripts
+          have downloaded and hydrated; the session provider takes the answer. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              'window.__mayaEarlySession=fetch("/api/v1/auth/me",{credentials:"same-origin",headers:{Accept:"application/json"}}).catch(function(){return null})',
+          }}
+        />
+      </head>
       <body>
         <SessionProvider>
           {children}

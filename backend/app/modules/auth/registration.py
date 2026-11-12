@@ -37,6 +37,7 @@ from app.core.sqlutil import begin_immediate
 from app.modules.auth.credentials import CredentialFileError, active_catalog_snapshot
 from app.modules.auth.models import UserCredential
 from app.modules.auth.service import revoke_user_sessions
+from app.modules.org.names import resolve_named_group
 
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$")
 USERNAME_MIN = 3
@@ -138,16 +139,7 @@ def attach_to_group(db: Session, course: Course, user: User, group_name: str) ->
     """Join or create a group inside the selected class's registration transaction."""
 
     now = datetime.now(UTC)
-    group = db.scalar(
-        select(Group).where(
-            Group.course_id == course.id,
-            Group.name_key == canonical_group_name(group_name).casefold(),
-        )
-    )
-    if group is None:
-        group = Group(id=str(uuid4()), course_id=course.id, name=group_name, created_at=now)
-        db.add(group)
-        db.flush()
+    group = resolve_named_group(db, course.id, group_name)
     existing = db.scalar(
         select(GroupMember).where(
             GroupMember.group_id == group.id,
