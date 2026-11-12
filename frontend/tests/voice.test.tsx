@@ -1285,50 +1285,75 @@ describe("Voices album create (p2-tab)", () => {
     expect(api.enrollVoice).not.toHaveBeenCalled();
   });
 
-  it("labels the sample requirement and wires Done to it and the consent", async () => {
-    api.voiceProfiles.mockResolvedValue([]);
-    render(
-      <AppShell role="student">
-        <VoiceLibrary groupId="group-a" album />
-      </AppShell>,
-    );
-    await waitFor(() =>
+  it.each([false, true])(
+    "omits the idle hint and describes the disabled action with existing requirements (album=%s)",
+    async (album) => {
+      api.voiceProfiles.mockResolvedValue([]);
+      render(
+        <AppShell role="student">
+          <VoiceLibrary
+            groupId="group-a"
+            album={album}
+            embedded={!album}
+            onSelect={album ? undefined : vi.fn()}
+          />
+        </AppShell>,
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
+        ).toBe(false),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "New" }));
+      const req =
+        "Upload a 10–20 second clip of yourself reading aloud (16-bit WAV, MP3, or M4A; max 10 MB).";
+      const reqEl = document.getElementById("voice-sample-req");
+      expect(reqEl?.textContent).toBe(req);
+      const input = screen.getByLabelText(req) as HTMLInputElement;
+      expect(input.getAttribute("aria-describedby")).toBe("voice-sample-req");
+      if (album)
+        expect(
+          input.closest('[data-ui-guide="voice.uploadSample"]'),
+        ).toBeNull();
+      expect(document.getElementById("voice-consent-text")?.textContent).toBe(
+        CONSENT,
+      );
+      expect(screen.queryByText(/Select an audio file/)).toBeNull();
       expect(
-        screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
-      ).toBe(false),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "New" }));
-    const req =
-      "Upload a 10–20 second clip of yourself reading aloud (16-bit WAV, MP3, or M4A; max 10 MB).";
-    const reqEl = document.getElementById("voice-sample-req");
-    expect(reqEl?.textContent).toBe(req);
-    const input = screen.getByLabelText(req) as HTMLInputElement;
-    expect(input.getAttribute("aria-describedby")).toBe("voice-sample-req");
-    expect(input.closest('[data-ui-guide="voice.uploadSample"]')).toBeNull();
-    expect(document.getElementById("voice-consent-text")?.textContent).toBe(
-      CONSENT,
-    );
-    expect(screen.queryByText(/Select an audio file/)).toBeNull();
-    expect(
-      document.querySelector('[title*="Select an audio file"]'),
-    ).toBeNull();
-    const done = screen.getByRole("button", { name: "Done" });
-    expect(
-      (done.getAttribute("aria-describedby") ?? "").split(" ").sort(),
-    ).toEqual(["voice-consent-text", "voice-sample-req"]);
-    expect(done.hasAttribute("disabled")).toBe(true);
-    expect(screen.getByRole("button", { name: "Back" })).toBeTruthy();
-    fireEvent.change(input, {
-      target: {
-        files: [
-          new File([new Uint8Array([1])], "s.wav", { type: "audio/wav" }),
-        ],
-      },
-    });
-    await waitFor(() =>
+        document.querySelector('[title*="Select an audio file"]'),
+      ).toBeNull();
+      expect(document.getElementById("voice-consent-hint")).toBeNull();
+      const done = screen.getByRole("button", {
+        name: album ? "Done" : CONSENT,
+      });
       expect(
-        screen.getByRole("button", { name: "Done" }).hasAttribute("disabled"),
-      ).toBe(false),
-    );
-  });
+        (done.getAttribute("aria-describedby") ?? "").split(" ").sort(),
+      ).toEqual(
+        album
+          ? ["voice-consent-text", "voice-sample-req"]
+          : ["voice-sample-req"],
+      );
+      for (const id of done.getAttribute("aria-describedby")!.split(" ")) {
+        expect(document.getElementById(id)).not.toBeNull();
+      }
+      expect(done.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(done);
+      expect(api.enrollVoice).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Back" })).toBeTruthy();
+      fireEvent.change(input, {
+        target: {
+          files: [
+            new File([new Uint8Array([1])], "s.wav", { type: "audio/wav" }),
+          ],
+        },
+      });
+      await waitFor(() =>
+        expect(
+          screen
+            .getByRole("button", { name: album ? "Done" : CONSENT })
+            .hasAttribute("disabled"),
+        ).toBe(false),
+      );
+    },
+  );
 });
