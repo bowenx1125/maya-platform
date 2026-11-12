@@ -65,33 +65,17 @@ from app.seed import COURSE_ID
 
 LOGGER = logging.getLogger("maya.voices")
 # Preview samples rotate in the order previews are generated, across every
-# user and voice: the 1st generation reads line 1, the 13th reads line 1 again.
-# Lines 1-11 tell the 龙脉长歌 story in order (one Chinese sentence, then the
-# next English sentence of the story); line 12 closes the rotation.
+# user and voice: the 1st generation reads line 1, the 10th reads line 1 again.
 VOICE_PREVIEW_LINES: tuple[str, ...] = (
-    "龙脉长歌是罗登家族搜集大量考古数据后，杜撰的神明爱情歌剧。"
-    "The first act describes the birth of Helius from the fires of Ignis.",
-    "他为烛龙授命，于虚空看望群山，漂泊亿万年为孤独折磨。"
-    "One day, he was drawn in by a mysterious voice.",
-    "有歌的地方，你就会找到我。"
-    "Terra, one of the gods, gazed at Helius from afar, hoping to save him with her song.",
-    "终于乙皇为她降世，彼此相恋。Together they established the Myrian Empire.",
-    "由于后土的歌声使龙脉不灭，众道不死，破坏了烛龙的法则。"
-    "In fear of divine retribution, six gods rebelled, "
-    "sacrificing Terra to Ignis and sparking the holy war.",
-    "我记得艾妲看完后，始终呢喃着后土死前对乙皇的话语。"
-    "Should we find each other in the next life, let us live on a planet of our own.",
-    "若来世再遇，就找一个无人的行星生活。"
-    "I will plant flowers among the valleys, and sing for you into old age and death.",
-    "而我只记得艾妲的侧脸。At the end of the story, Helius slays the gods who killed Terra.",
-    "他试图用龙脉生长的花卉让后土复活，然而烛龙却警告他。"
-    "If Terra were resurrected, the fires of heaven would destroy Thousand Peaks.",
-    "乙皇不允，反将爱人的尸首藏于大荒，目送后土于虚空离去。"
-    "His last words before sending his lover into the void were these.",
-    "花开有时，来世再遇。"
-    "The heavens erupted and Helius was blown away by wind storms, scattered among the stars.",
-    "如果遇见你不是奇迹，灵魂便不曾言语。"
-    "If meeting you wasn't a miracle, then the souls have never whispered.",
+    "如果遇见你不是奇迹，灵魂便不曾言语。If meeting you was not a miracle, then my soul has never spoken.",
+    "不管需要多少年，我都要再见你一面。No matter how many years it takes, I will see you again.",
+    "重铸 Maya 荣光，吾辈义不容辞！To restore Maya to its former glory is our duty, and we shall not turn away!",
+    "过得了我，再谈未来。Get past me first. Then we can talk about the future.",
+    "我是要成为海贼王的男人！海賊王に、俺はなる！",
+    "真相永远只有一个！真実はいつもひとつ！",
+    "或许是不知梦的缘故，流离之人追逐幻影。Perhaps because they do not know it is a dream, wandering souls keep chasing illusions.",
+    "这一路上我们将不彼此抛弃，不彼此出卖，直到死亡的尽头。We will neither abandon nor betray each other, not even at the very edge of death.",
+    "从这里开始吧。从一开始，不，从零开始！ここから始めましょう。一から、いいえ、ゼロから！",
 )
 # Kept for callers that want a stable sample; it is the first line.
 VOICE_PREVIEW_TEXT = VOICE_PREVIEW_LINES[0]
