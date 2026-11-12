@@ -828,6 +828,83 @@ describe("Studyform Team cards", () => {
 });
 
 describe("Chatform", () => {
+  it.each(["agent", "team"])(
+    "focuses the %s input from the composer shell without intercepting controls or caret selection",
+    async (kind) => {
+      window.history.replaceState(null, "", `/student/chat?kind=${kind}`);
+      const session =
+        kind === "team"
+          ? teamSession
+          : {
+              id: "conversation-agent-1",
+              entry_kind: "agent",
+              chat_visibility: "private",
+              origin: "single_agent",
+              read_only: false,
+              can_send: true,
+              agent: agents[0],
+              revision: 0,
+              turns: [],
+              created_at: "2026-10-11T00:00:00Z",
+            };
+      state.api.conversationSessions.mockResolvedValue([session]);
+      state.api.conversation.mockResolvedValue(session);
+      state.api.conversationSession.mockResolvedValue(session);
+      state.api.streamConversation.mockResolvedValue(session);
+      renderChats();
+      fireEvent.click(
+        await within(await screen.findByLabelText("History")).findByRole(
+          "button",
+          {
+            name: kind === "team" ? "Reasoning circle" : "Socrates",
+          },
+        ),
+      );
+      const message = (await screen.findByRole("textbox", {
+        name: "Message",
+      })) as HTMLTextAreaElement;
+      await waitFor(() => expect(message.disabled).toBe(false));
+      const composer = message.closest("form")!;
+      const focus = vi.spyOn(message, "focus");
+
+      message.blur();
+      fireEvent.click(composer);
+      expect(document.activeElement).toBe(message);
+      expect(focus).toHaveBeenCalledTimes(1);
+
+      message.blur();
+      const send = within(composer).getByRole("button", { name: "Send" });
+      fireEvent.click(send.parentElement!);
+      expect(document.activeElement).toBe(message);
+      expect(focus).toHaveBeenCalledTimes(2);
+
+      message.blur();
+      const attach = within(composer).getByRole("button", {
+        name: "Attach a file",
+      });
+      attach.focus();
+      fireEvent.click(attach.querySelector("path")!);
+      expect(document.activeElement).toBe(attach);
+      expect(focus).toHaveBeenCalledTimes(2);
+
+      fireEvent.change(message, { target: { value: "A draft message" } });
+      message.focus();
+      focus.mockClear();
+      message.setSelectionRange(2, 7);
+      fireEvent.click(message);
+      expect(focus).not.toHaveBeenCalled();
+      expect(message.selectionStart).toBe(2);
+      expect(message.selectionEnd).toBe(7);
+
+      message.blur();
+      send.focus();
+      fireEvent.click(send.querySelector("path")!);
+      expect(focus).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(send);
+      focus.mockRestore();
+    },
+  );
+
   beforeEach(() => {
     window.history.replaceState(null, "", "/student/chat?kind=team");
   });

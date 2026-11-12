@@ -286,3 +286,7 @@ Nov12:Bowen RAG/Knowledge lists use login class,no picker;other actors/group lin
 unchanged;no other student pickers. Voice idle hint/key removed;ARIA fixed,errors/
 guards kept;album already lacked hint.1313 UI pass/13 skipped;type/lint/format/docs
 pass.Build stalled/showConfig;boundary/listen/Chromium EPERM.0 calls/deploy.
+
+Nov12 local Chatform: composer shell focuses Message;controls/selection kept.
+History avatar/date pass clicks to card button;visuals/copy/send unchanged.
+1347 UI pass/13 skipped;type/lint/format/build pass.0 calls/deploy.
