@@ -67,13 +67,13 @@ Visits:hide Knowledge,renew/20min,end notice->Accounts. Debate "?":Chinese hover
 
 ## Nov5-8 Classroom Quiz
 
-0083-0085:Quiz publish≠taking;new epoch/start,1 attempt/epoch;ZIP. #380:detail/hand grading/hide/Record->Quiz;#383/4:opt-in AI grading. 1 page/quiz,Paper|Submissions;no Chat tests;New/Back/Done unified. [Contract](contracts/CLASSROOM_QUIZ_API.md). Agent name card;Private->Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)). 0088(in progress):epoch deadlines/one-shot taking,lazy+10s sweeper(non-test). 0091 follows0090:old show_results=true/new=false,revision unchanged. #412:V1 switch,cyan stickers,expandable student answers-only paper;post-commit/receipt visibility,fail-closed UI/DTOs,no duplicate help. PUT/1274 UI(13 skipped)/type/lint/format/11 offline backend/ruff/mypy/contracts/routes pass;PG owner-run,boundary EPERM,build stalled,Webpack showConfig failed;0 calls/deploy.
+0083-0085:Quiz publish≠taking;new epoch/start,1 attempt/epoch;ZIP. #380:detail/hand grading/hide/Record->Quiz;#383/4:opt-in AI grading. 1 page/quiz,Paper|Submissions;no Chat tests;New/Back/Done unified. [Contract](contracts/CLASSROOM_QUIZ_API.md). Agent name card;Private->Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)). 0088(in progress):epoch deadlines/one-shot taking,lazy+10s sweeper(non-test). 0091 follows0090:old show_results=true/new=false,revision unchanged. #412:V1 switch,cyan stickers,expandable student answers-only paper;post-commit/receipt visibility,fail-closed UI/DTOs,no duplicate help. Checks pass;PG owner-run;0 calls/deploy.
 
 ## Nov9 local classes/accounts(in progress)
 
 3081da2(base b6c2047b1549c5d28e84b52c5323a1e655bb596f) integrated onto 535d2272a9b337e9daec819e89df889d100789a8->28b8bf8e8f8ef6169bbe876a281bb93dd031d3ac. Teacher pages:class-scoped;register:group join/create.0086:group choice;0087:erasure keeps contributors' work. Hard-delete student-owned work/grades/Quiz attempts. #390 merged;local0082->0087/build/1187 UI/82 focused passed. 535d227:3073 pass/139 fail/1 skip;main reproduced135,four fixed.
 
-Nov10:Maya1002/Maya1001,stable IDs/student data;Teacher scopes fixed;RAG actions follow class bar. 47 PG,1188 UI. Debates/Quizzes/Accounts;optional choice answer;no empty Agents card;large loader;chat omits missing group/editor.
+Nov10:Maya1002/Maya1001,stable IDs;teacher scopes fixed;RAG follows class bar. 47 PG,1188 UI;optional choice answer;no empty Agents card;chat omits missing group/editor.
 
 Nov12:removals/deactivation prune empty/inactive-only non-default groups;work FKs guard,accounts kept;course locks ordered;0 calls/deploy.
 
@@ -106,3 +106,7 @@ Nov12 local Chatform:composer shell focuses Message;controls/selection kept. His
 DEBATE_TTS_ENGINE=cosyvoice swaps the debate TTS adapter (qwen3 default;pre-request-refusal fallback); word_timestamps feeds debates/performance (gesture anchors+viseme windows). AudioStore keeps each turn's compiled timeline as a WAV-sibling performance.json; ticket-gated GET /debates/{id}/performance/{turn} serves it (404 = plain audio). Stage: beta-stage fetches the sibling (media.prepared); ScholarScene forwards timeline+clock; scholar-stage layers viseme mouth and gesture clips on the procedural frame. Bones resolve per rig family (UE spine_02/neck_01, AdvSkel Chest_M/Neck_M, Mixamo Spine2/Neck); the old head-only list clipped collars—fixed; watermark mesh hidden. Tripo-refined Mixamo-rigged figures live as elder-scholar.glb, noble-scholar.glb (noble2) + female_1.glb.
 
 Gesture library v2: arm channels (upper/forearm/hand) are figure-space axis-angle steps; scholar-stage converts per rig against captured parent rest quats (local = A⁻¹·E·A·rest), so one clip set serves Mixamo rigs whose bone-local axes differ. Postures: hand_behind_back (right behind back, left at chest), hand_on_chest (mirror), open_palm_listening; clips emphasis, settle_calm, doubt_shrug, invite_present, chin_stroke, palm_open_sweep, lean_in, object_raise gesture with the free left arm. Compiler defaults thoughtful/friendly to hand_on_chest. Headless-render QA on all three; 153 frontend files / 1259 tests green.
+
+## Nov13 deploy
+
+334fbd94 live.Local docker build,images save/load(3.5G server:never build/test there);images tagged :334fbd94,containers verified on them.Backup maya-pre-334fbd94-20261112-213724.dump(102M,pg_restore --list ok;PG-only,no sqlite file).Schema 0091_quiz_show_results;/health/ready 200;https 200.Backend pytest 240/319 chunked on server,failures all known(main voice baseline+2 load-adaptive flakes),no regressions.
