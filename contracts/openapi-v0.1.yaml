@@ -8069,6 +8069,10 @@ components:
         can_edit:
           title: Can Edit
           type: boolean
+        can_manage_visibility:
+          default: false
+          title: Can Manage Visibility
+          type: boolean
         card_material_theme:
           title: Card Material Theme
           type:
@@ -8210,6 +8214,10 @@ components:
           title: Can Delete
         can_edit:
           title: Can Edit
+          type: boolean
+        can_manage_visibility:
+          default: false
+          title: Can Manage Visibility
           type: boolean
         card_material_theme:
           title: Card Material Theme

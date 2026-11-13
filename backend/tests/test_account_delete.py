@@ -32,7 +32,7 @@ def test_deleting_an_account_removes_the_person_and_their_private_work(
 ) -> None:
     app, database, _settings = app_factory()
     with TestClient(app) as student:
-        created = register(student, username="leaving-student", password="abcde")
+        created = register(student, username="leavingstudent", password="abcde")
         assert created.status_code == 201, created.text
         user_id = str(created.json()["user"]["id"])
         csrf = created.json()["csrf_token"]
@@ -69,10 +69,10 @@ def test_deleting_an_account_removes_the_person_and_their_private_work(
     with TestClient(app) as again:
         refused = again.post(
             "/api/v1/auth/login",
-            json={"username": "leaving-student", "password": "abcde"},
+            json={"username": "leavingstudent", "password": "abcde"},
         )
         assert refused.status_code in {401, 403}
-        reused = register(again, username="leaving-student", password="abcde")
+        reused = register(again, username="leavingstudent", password="abcde")
         assert reused.status_code == 201, reused.text
         assert reused.json()["user"]["id"] != user_id
 
@@ -90,7 +90,7 @@ def test_a_teacher_cannot_delete_themselves_or_a_catalog_account(client: TestCli
 def test_a_student_cannot_delete_accounts(app_factory: Any) -> None:
     app, _database, _settings = app_factory()
     with TestClient(app) as student:
-        created = register(student, username="curious-student", password="abcde")
+        created = register(student, username="curiousstudent", password="abcde")
         csrf = created.json()["csrf_token"]
         assert _delete(student, csrf, TEACHER_ID).status_code in {403, 404}
 
@@ -108,7 +108,7 @@ def test_hard_delete_removes_public_work_and_grades_only_for_target(app_factory:
     app, database, _ = app_factory()
     users = []
     with TestClient(app) as client:
-        for name in ["erased-student", "remaining-student"]:
+        for name in ["erasedstudent", "remainingstudent"]:
             response = register(client, username=name, password="abcde")
             assert response.status_code == 201, response.text
             user = response.json()["user"]
@@ -258,7 +258,7 @@ def test_unruled_reference_rolls_back_the_entire_account_delete(app_factory: Any
 
     app, database, _ = app_factory()
     with TestClient(app) as client:
-        response = register(client, username="protected-student", password="abcde")
+        response = register(client, username="protectedstudent", password="abcde")
         user_id = response.json()["user"]["id"]
         group_id = response.json()["user"]["groups"][0]["group_id"]
         agent_id, _ = _make_agent_version(
@@ -281,7 +281,7 @@ def test_unruled_reference_rolls_back_the_entire_account_delete(app_factory: Any
         assert response.status_code == 409, response.text
         assert response.json()["code"] == "account_delete_blocked"
         with database.session() as db:
-            assert db.get(User, user_id).username == "protected-student"
+            assert db.get(User, user_id).username == "protectedstudent"
             assert db.get(Agent, agent_id) is not None
             assert db.get(UserCredential, user_id) is not None
         reset_catalog_cache()

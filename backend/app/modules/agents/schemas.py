@@ -34,6 +34,8 @@ class AgentSummary(BaseModel):
     visibility: Literal["private", "public"]
     # Creator; for a public Agent also same-group students and course teachers.
     can_edit: bool
+    # That same edit role, and only while the Agent is still private.
+    can_manage_visibility: bool = False
     name: str
     description: str = ""
     metadata_revision: int = Field(ge=0)

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
+import { bowenLandingGroup, type BowenGroup } from "../lib/bowen-student";
 import { cachedCall, requestCacheIdentity } from "../lib/request-cache";
 import { PlatformApiError } from "../lib/api/platform";
 import { useT } from "../lib/i18n";
@@ -69,30 +70,35 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
   const [currentGroup, setCurrentGroup] = useState("");
   const [groupChoice, setGroupChoice] = useState("");
   useEffect(() => {
-    if (!studentCourseIds || !currentGroupId) return;
+    const activeCourseId = studentCourseIds.split(",").filter(Boolean)[0] ?? "";
+    if (!activeCourseId) return;
+    // Bowen is in both classes, so the current membership may belong to the
+    // other one. Everyone else still needs a group before the picker means
+    // anything.
+    if (user?.username !== "bowen" && !currentGroupId) return;
     let active = true;
+    const membershipIds = (user?.groups ?? []).map((item) => item.group_id);
+    const groupReads =
+      user?.username === "bowen"
+        ? Promise.all(membershipIds.map((groupId) => api.group(groupId)))
+        : cachedCall(
+            api,
+            requestCacheIdentity(user?.id, identityGeneration),
+            "group",
+            [currentGroupId ?? ""],
+            () => api.group(currentGroupId ?? ""),
+          ).then((group) => [group]);
     // The group is the page's own read too (shared cache, same key).
-    void Promise.all([
-      api.registrationOptions(),
-      cachedCall(
-        api,
-        requestCacheIdentity(user?.id, identityGeneration),
-        "group",
-        [currentGroupId],
-        () => api.group(currentGroupId),
-      ),
-    ])
-      .then(([options, group]) => {
+    void Promise.all([api.registrationOptions(), groupReads])
+      .then(([options, details]) => {
         if (!active) return;
-        // The choices are the course's existing groups; the picker never
-        // offers to start a new one.
+        // The choices are the active class's existing groups; the picker
+        // never offers to start a new one. Bowen's session lists the class
+        // chosen at login first, which is the class he can move inside.
         const selectedGroups =
-          options.classes?.find((item) =>
-            studentCourseIds.split(",").includes(item.course_id),
-          )?.groups ??
-          (studentCourseIds.split(",").includes(options.course_id)
-            ? options.groups
-            : []);
+          options.classes?.find((item) => item.course_id === activeCourseId)
+            ?.groups ??
+          (options.course_id === activeCourseId ? options.groups : []);
         const names = selectedGroups
           .map((choice) => choice.name)
           .sort((left, right) =>
@@ -101,6 +107,18 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
               sensitivity: "base",
             }),
           );
+        if (user?.username === "bowen") {
+          const inClass = (details as BowenGroup[]).filter(
+            (group) => group.course_id === activeCourseId,
+          );
+          const currentName =
+            bowenLandingGroup(inClass, activeCourseId)?.name ?? "";
+          setGroupNames(names);
+          setCurrentGroup(currentName);
+          setGroupChoice(currentName);
+          return;
+        }
+        const group = details[0];
         setGroupNames(names.includes(group.name) ? names : []);
         setCurrentGroup(group.name);
         setGroupChoice(group.name);
@@ -111,7 +129,15 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
     return () => {
       active = false;
     };
-  }, [api, currentGroupId, identityGeneration, studentCourseIds, user?.id]);
+  }, [
+    api,
+    currentGroupId,
+    identityGeneration,
+    studentCourseIds,
+    user?.groups,
+    user?.id,
+    user?.username,
+  ]);
   const [classChoices, setClassChoices] = useState<
     { course_id: string; course_name: string }[]
   >([]);

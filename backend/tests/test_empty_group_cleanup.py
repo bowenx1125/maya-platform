@@ -65,7 +65,7 @@ def _assert_listed(client: TestClient, group_id: str, *, listed: bool) -> None:
 def test_sequential_teacher_deletes_prune_only_after_last_member(
     client: TestClient, database: Any, member_count: int
 ) -> None:
-    users = [_register(client, username=f"leaver-{index}") for index in range(member_count)]
+    users = [_register(client, username=f"leaver{index}") for index in range(member_count)]
     group_id = users[0][1]
     _, csrf = login(client)
     headers = {**HEADERS, "X-CSRF-Token": csrf}
@@ -87,7 +87,7 @@ def test_teacher_moves_prune_only_the_empty_group_left_behind(
 ) -> None:
     user_id, group_id = _register(client)
     if member_count == 2:
-        _register(client, username="staying-student")
+        _register(client, username="stayingstudent")
     _, csrf = login(client)
     target = "Team Aurora" if same_group else "Destination"
     response = _update(client, csrf, user_id, group_name=target)
@@ -173,7 +173,7 @@ def test_inactive_members_count_as_deleted_without_deleting_accounts(
     client: TestClient, database: Any, active_member: bool
 ) -> None:
     user_id, group_id = _register(client)
-    other_id, _ = _register(client, username="other-student")
+    other_id, _ = _register(client, username="otherstudent")
     _, csrf = login(client)
     assert (
         client.post(
@@ -255,7 +255,7 @@ def test_all_inactive_members_of_protected_groups_survive(
 def test_deactivation_prunes_after_the_last_active_member_and_reactivation_keeps_it_gone(
     client: TestClient, database: Any, member_count: int, move: bool
 ) -> None:
-    users = [_register(client, username=f"leaver-{index}") for index in range(member_count)]
+    users = [_register(client, username=f"leaver{index}") for index in range(member_count)]
     group_id = users[0][1]
     _, csrf = login(client)
     for index, (user_id, _) in enumerate(users):
@@ -451,10 +451,10 @@ def test_catalog_delete_never_prunes(client: TestClient, database: Any) -> None:
 
 def test_student_self_move_keeps_the_empty_source_group(client: TestClient, database: Any) -> None:
     _, group_id = _register(client)
-    _register(client, username="destination-student", group_name="Destination")
+    _register(client, username="destinationstudent", group_name="Destination")
     response = client.post(
         "/api/v1/auth/login",
-        json={"username": "new-student", "password": "correct-horse-1"},
+        json={"username": "newstudent", "password": "correct-horse-1"},
     )
     assert response.status_code == 200, response.text
     response = client.patch(

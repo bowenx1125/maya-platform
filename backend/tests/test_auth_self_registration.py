@@ -16,7 +16,7 @@ COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 
 def register(
     client: TestClient,
-    username: str = "new-student",
+    username: str = "newstudent",
     password: str = "correct-horse-1",
     group_name: str = "Team Aurora",
     **extra: Any,
@@ -37,9 +37,9 @@ def test_registration_creates_account_group_and_session(
     response = register(client)
     assert response.status_code == 201, response.text
     payload = response.json()
-    assert payload["user"]["username"] == "new-student"
+    assert payload["user"]["username"] == "newstudent"
     # The display name defaults to the username rather than staying empty.
-    assert payload["user"]["display_name"] == "new-student"
+    assert payload["user"]["display_name"] == "newstudent"
     assert len(payload["user"]["groups"]) == 1
     assert payload["user"]["courses"] == [{"course_id": COURSE_ID, "role": "student"}]
     assert len(payload["csrf_token"]) >= 32
@@ -54,10 +54,10 @@ def test_registered_account_can_log_in_with_its_password(client: TestClient) -> 
     assert client.get("/api/v1/auth/me").status_code == 401
     response = client.post(
         "/api/v1/auth/login",
-        json={"username": "new-student", "password": "correct-horse-1"},
+        json={"username": "newstudent", "password": "correct-horse-1"},
     )
     assert response.status_code == 200, response.text
-    assert response.json()["user"]["username"] == "new-student"
+    assert response.json()["user"]["username"] == "newstudent"
 
 
 def test_registered_account_rejects_a_wrong_password(client: TestClient) -> None:
@@ -65,7 +65,7 @@ def test_registered_account_rejects_a_wrong_password(client: TestClient) -> None
     client.cookies.clear()
     response = client.post(
         "/api/v1/auth/login",
-        json={"username": "new-student", "password": "correct-horse-2"},
+        json={"username": "newstudent", "password": "correct-horse-2"},
     )
     assert response.status_code == 401
     assert response.json()["code"] == "password_incorrect"
@@ -83,9 +83,9 @@ def test_fixed_demo_catalog_still_authenticates(client: TestClient) -> None:
 def test_same_group_name_joins_one_group(client: TestClient, app_factory: Any) -> None:
     app, database, _settings = app_factory()
     with TestClient(app) as first:
-        assert register(first, username="student-one", group_name="Team Aurora").status_code == 201
+        assert register(first, username="studentone", group_name="Team Aurora").status_code == 201
     with TestClient(app) as second:
-        assert register(second, username="student-two", group_name="Team Aurora").status_code == 201
+        assert register(second, username="studenttwo", group_name="Team Aurora").status_code == 201
     with database.session() as session:
         groups = session.scalars(
             select(Group).where(Group.course_id == COURSE_ID, Group.name == "Team Aurora")
@@ -102,12 +102,12 @@ def test_group_name_matching_is_case_and_space_insensitive(
 ) -> None:
     app, database, _settings = app_factory()
     with TestClient(app) as first:
-        assert register(first, username="student-one", group_name="Team Aurora").status_code == 201
+        assert register(first, username="studentone", group_name="Team Aurora").status_code == 201
     with TestClient(app) as second:
         # A student typing a different case or stray spacing must land in the
         # same group, not silently create a near-duplicate one.
         assert (
-            register(second, username="student-two", group_name="  team   aurora ").status_code
+            register(second, username="studenttwo", group_name="  team   aurora ").status_code
             == 201
         )
     with database.session() as session:
@@ -144,7 +144,17 @@ def test_rejects_unacceptable_username_and_password(client: TestClient) -> None:
     assert register(client, username="ab").status_code == 422
     assert register(client, username="has space").status_code == 422
     assert register(client, username="-leading").status_code == 422
+    assert register(client, username="student.01").status_code == 422
+    assert register(client, username="student_01").status_code == 422
+    assert register(client, username="student-01").status_code == 422
+    assert register(client, username="学生01").status_code == 422
     assert register(client, password="ab1").status_code == 422
+
+
+def test_student01_is_a_valid_username(client: TestClient) -> None:
+    response = register(client, username="student01")
+    assert response.status_code == 201, response.text
+    assert response.json()["user"]["username"] == "student01"
 
 
 def test_rejects_blank_group_name(client: TestClient) -> None:
@@ -195,7 +205,7 @@ def test_display_name_is_used_when_supplied(client: TestClient, app_factory: Any
         assert response.status_code == 201
         assert response.json()["user"]["display_name"] == "Kai Kai"
     with database.session() as session:
-        user = session.scalar(select(User).where(User.username == "new-student"))
+        user = session.scalar(select(User).where(User.username == "newstudent"))
         assert user is not None
         assert user.display_name == "Kai Kai"
         membership = session.scalar(select(CourseMember).where(CourseMember.user_id == user.id))
@@ -208,7 +218,7 @@ def test_sign_in_says_which_half_was_wrong(client: TestClient) -> None:
 
     missing = client.post(
         "/api/v1/auth/login",
-        json={"username": "nobody-here", "password": "correct-horse-1"},
+        json={"username": "nobodyhere", "password": "correct-horse-1"},
     )
     assert missing.status_code == 401
     assert missing.json()["code"] == "account_not_found"
@@ -228,7 +238,7 @@ def test_a_deactivated_account_says_so(app_factory: Any) -> None:
     with TestClient(app) as teacher:
         _payload, csrf = login(teacher)
         roster = teacher.get(f"/api/v1/courses/{COURSE_ID}/roster").json()
-        target = next(item for item in roster["entries"] if item["username"] == "new-student")
+        target = next(item for item in roster["entries"] if item["username"] == "newstudent")
         assert (
             teacher.patch(
                 f"/api/v1/courses/{COURSE_ID}/members/{target['user_id']}",
@@ -240,7 +250,7 @@ def test_a_deactivated_account_says_so(app_factory: Any) -> None:
     with TestClient(app) as blocked:
         response = blocked.post(
             "/api/v1/auth/login",
-            json={"username": "new-student", "password": "correct-horse-1"},
+            json={"username": "newstudent", "password": "correct-horse-1"},
         )
         assert response.status_code == 401
         assert response.json()["code"] == "account_inactive"
@@ -262,11 +272,11 @@ def test_a_removed_account_leaves_its_group_for_everyone_else(app_factory: Any) 
             assert group.status_code == 200, group.text
             return {member["display_name"] for member in group.json()["members"]}
 
-        assert "new-student" in names()
+        assert "newstudent" in names()
         with TestClient(app) as teacher:
             _payload, csrf = login(teacher)
             roster = teacher.get(f"/api/v1/courses/{COURSE_ID}/roster").json()
-            target = next(item for item in roster["entries"] if item["username"] == "new-student")
+            target = next(item for item in roster["entries"] if item["username"] == "newstudent")
             removed = teacher.patch(
                 f"/api/v1/courses/{COURSE_ID}/members/{target['user_id']}",
                 json={"status": "inactive"},
@@ -275,5 +285,5 @@ def test_a_removed_account_leaves_its_group_for_everyone_else(app_factory: Any) 
             assert removed.status_code == 200, removed.text
             course = teacher.get(f"/api/v1/courses/{COURSE_ID}").json()
             assert target["user_id"] not in {m["user_id"] for m in course["members"]}
-        assert "new-student" not in names()
+        assert "newstudent" not in names()
         assert "classmate" in names()

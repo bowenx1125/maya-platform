@@ -167,10 +167,14 @@ def test_maya_session_writes_as_maya_and_logout_revokes_only_it(client, database
 
 
 @pytest.mark.parametrize(
-    "course_id,group_id", [(SECOND_CLASS_ID, SECOND_CLASS_GROUP_ID), (COURSE_ID, GROUP_DEMO_ID)]
+    ("course_id", "group_id", "joins_group"),
+    [
+        (SECOND_CLASS_ID, SECOND_CLASS_GROUP_ID, False),
+        (COURSE_ID, GROUP_DEMO_ID, True),
+    ],
 )
 def test_student_enrollment_additive_idempotent_and_active_per_session(
-    client, database, app_bundle, course_id, group_id
+    client, database, app_bundle, course_id, group_id, joins_group
 ):
     _, _, settings = app_bundle
     with database.session() as db:
@@ -194,7 +198,7 @@ def test_student_enrollment_additive_idempotent_and_active_per_session(
         first_token = client.cookies.get("maya_session")
     with database.session() as db:
         assert db.get(CourseMember, (course_id, BOWEN_ID)).role == "student"
-        assert db.get(GroupMember, (group_id, BOWEN_ID)) is not None
+        assert (db.get(GroupMember, (group_id, BOWEN_ID)) is not None) is joins_group
         assert before_courses <= {
             (r.course_id, r.role, r.created_at)
             for r in db.scalars(select(CourseMember).where(CourseMember.user_id == BOWEN_ID))
@@ -223,6 +227,29 @@ def test_student_enrollment_additive_idempotent_and_active_per_session(
         assert db.get(CourseMember, (SECOND_CLASS_ID, BOWEN_ID)) is not None
 
 
+def test_student_choice_joins_a_real_group_instead_of_the_students_shell(client, database):
+    with database.session() as db:
+        db.add(
+            Group(
+                id=str(uuid4()),
+                course_id=SECOND_CLASS_ID,
+                name="First Team",
+                created_at=datetime.now(UTC),
+            )
+        )
+        db.commit()
+    response = choose(client, challenge(client)["choice_token"], "student", SECOND_CLASS_ID)
+    assert response.status_code == 200, response.text
+    with database.session() as db:
+        assert db.get(GroupMember, (SECOND_CLASS_GROUP_ID, BOWEN_ID)) is None
+        names = db.scalars(
+            select(Group.name)
+            .join(GroupMember, GroupMember.group_id == Group.id)
+            .where(GroupMember.user_id == BOWEN_ID, Group.course_id == SECOND_CLASS_ID)
+        ).all()
+        assert list(names) == ["First Team"]
+
+
 @pytest.mark.parametrize(
     "course_id,group_id", [(SECOND_CLASS_ID, SECOND_CLASS_GROUP_ID), (COURSE_ID, GROUP_DEMO_ID)]
 )
@@ -233,7 +260,9 @@ def test_student_login_preserves_revoked_or_changed_group_grants(
     enrolled = choose(client, challenge(client)["choice_token"], "student", course_id)
     assert enrolled.status_code == 200, enrolled.text
     with database.session() as db:
-        db.delete(db.get(GroupMember, (group_id, BOWEN_ID)))
+        existing = db.get(GroupMember, (group_id, BOWEN_ID))
+        if existing is not None:
+            db.delete(existing)
         if moved:
             group = Group(
                 id=str(uuid4()),

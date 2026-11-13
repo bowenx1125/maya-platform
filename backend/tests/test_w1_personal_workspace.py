@@ -283,7 +283,8 @@ def test_public_agent_never_goes_back_to_private(
     assert joined.status_code == 200, joined.text
     private_id, private_version = agents["private"]
     public_id, public_version = agents["public"]
-    # The entered teacher can edit both. Only the creator turns it public.
+    # The entered teacher can edit both. Publishing stays with the edit role
+    # on a private Agent, which a visit is not, so Private stays private.
     assert client.get(f"/api/v1/agent-versions/{private_version}").status_code == 200
     assert client.get(f"/api/v1/agent-versions/{public_version}").status_code == 200
     assert client.get(f"/api/v1/agents/{public_id}").json()["visibility"] == "public"
@@ -291,12 +292,14 @@ def test_public_agent_never_goes_back_to_private(
     assert observed.status_code == 200, observed.text
     assert observed.json()["visibility"] == "private"
     assert observed.json()["can_edit"] is True
+    assert observed.json()["can_manage_visibility"] is False
     flipped = client.patch(
         f"/api/v1/agents/{private_id}",
         headers=_headers(teacher_csrf),
-        json={"expected_metadata_revision": 1, "visibility": "public"},
+        json={"expected_metadata_revision": 1, "visibility": "public", "name": "Taken"},
     )
     assert flipped.status_code in {403, 404}, flipped.text
+    assert client.get(f"/api/v1/agents/{private_id}").json()["name"] != "Taken"
 
 
 def test_owner_history_survives_sharing_an_active_private_source(
@@ -654,7 +657,7 @@ def test_group_public_access_is_scoped_to_group_and_lost_access_only_disables_ch
 
     # A student in a different group in the same course cannot discover, invoke,
     # read, download, reindex, replace or hide these Public group resources.
-    other = register(client, username="w1-acl-other-group", group_name="W1 ACL Other Group")
+    other = register(client, username="w1aclothergroup", group_name="W1 ACL Other Group")
     assert other.status_code == 201, other.text
     other_csrf = other.json()["csrf_token"]
     other_directory = client.get(f"/api/v1/courses/{COURSE_ID}/chat-agents")
@@ -796,7 +799,7 @@ def test_personal_public_agent_is_visible_to_the_course(
     assert denied_next.status_code == 404
 
     # The same holds for a student outside the teacher's groups.
-    other = register(client, username="w1-teacher-public-outsider", group_name="W1 Outside")
+    other = register(client, username="w1teacherpublicoutsider", group_name="W1 Outside")
     assert other.status_code == 201, other.text
     other_csrf = other.json()["csrf_token"]
     other_directory = client.get(f"/api/v1/courses/{COURSE_ID}/chat-agents")
@@ -863,7 +866,7 @@ def test_teacher_public_group_source_is_usable_outside_that_group(
     )
     assert published.status_code == 200, published.text
 
-    other = register(client, username="w1-teacher-source-outsider", group_name="W1 Source Outside")
+    other = register(client, username="w1teachersourceoutsider", group_name="W1 Source Outside")
     assert other.status_code == 201, other.text
     other_csrf = other.json()["csrf_token"]
     # Studyform: students reach a teacher's public Agent only through a Team.
@@ -945,7 +948,7 @@ def test_legacy_group_agent_binds_entered_teachers_public_group_source_only(
     assert current.json()["revision"] == 0
     assert current.json()["enabled_documents"] == []
 
-    other = register(client, username="w1-legacy-cross-group", group_name="W1 Legacy Other")
+    other = register(client, username="w1legacycrossgroup", group_name="W1 Legacy Other")
     assert other.status_code == 201, other.text
     other_csrf = other.json()["csrf_token"]
     other_source = client.post(

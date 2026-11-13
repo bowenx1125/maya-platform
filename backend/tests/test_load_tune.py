@@ -55,7 +55,7 @@ def test_login_ci_attempt_posts_only_login_and_counts_non_200_as_error(
     monkeypatch.setattr(lt, "Client", FakeClient)
     attempt = lt.login_ci_attempt("http://example.test", "student", "secret", 3, 1.0)
     assert calls == [
-        ("POST", "/api/v1/auth/login", {"username": "student-003", "password": "secret"})
+        ("POST", "/api/v1/auth/login", {"username": "student003", "password": "secret"})
     ]
     assert attempt.error is True
     assert attempt.latency_ms >= 0

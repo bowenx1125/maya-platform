@@ -79,17 +79,107 @@ def test_public_name_clash_gets_a_suffix(client: TestClient) -> None:
     assert made.json()["name"] == "Twin-2"
 
 
-def test_only_the_creator_can_make_it_public(client: TestClient) -> None:
-    _owner, owner_csrf = login(client, "bowen")
-    agent_id, _version = _agent(client, owner_csrf, "Mine", "private")
-    _teacher, teacher_csrf = login(client, "maya")
-    joined = client.post(f"/api/v1/groups/{GROUP_ID}/membership", headers=_headers(teacher_csrf))
-    assert joined.status_code == 200, joined.text
-    refused = client.patch(
+def _make_public(client: TestClient, csrf: str, agent_id: str, revision: int = 0):
+    return client.patch(
         f"/api/v1/agents/{agent_id}",
-        headers=_headers(teacher_csrf),
-        json={"expected_metadata_revision": 0, "visibility": "public"},
+        headers=_headers(csrf),
+        json={"expected_metadata_revision": revision, "visibility": "public"},
     )
-    assert refused.status_code in {403, 404}, refused.text
-    _owner, owner_csrf = login(client, "bowen")
-    assert client.get(f"/api/v1/agents/{agent_id}").json()["visibility"] == "private"
+
+
+def test_only_the_creator_can_make_a_private_agent_public(client: TestClient) -> None:
+    """A caller who cannot read a private Agent cannot publish it either."""
+
+    from app.core.models import Agent
+    from app.modules.org.classes import SECOND_CLASS_ID
+    from app.seed import BOWEN_ID
+
+    from tests.test_auth_self_registration import register
+
+    _, owner_csrf = login(client, "bowen")
+    creator_id, _version = _agent(client, owner_csrf, "Creator publishes", "private")
+    before = client.get(f"/api/v1/agents/{creator_id}")
+    assert before.status_code == 200, before.text
+    assert before.json()["can_manage_visibility"] is True
+    made = _make_public(client, owner_csrf, creator_id, before.json()["metadata_revision"])
+    assert made.status_code == 200, made.text
+    assert made.json()["visibility"] == "public"
+    assert made.json()["is_creator"] is True
+    assert made.json()["can_manage_visibility"] is False
+
+    _, owner_csrf = login(client, "bowen")
+    groupmate_id, _version = _agent(client, owner_csrf, "Groupmate publishes", "private")
+    client.cookies.clear()
+    _, kaikai_csrf = login(client, "kaikai")
+    detail = client.get(f"/api/v1/agents/{groupmate_id}")
+    assert detail.status_code == 404
+    made = client.patch(
+        f"/api/v1/agents/{groupmate_id}",
+        headers=_headers(kaikai_csrf),
+        json={
+            "expected_metadata_revision": 0,
+            "visibility": "public",
+            "name": "Stolen",
+            "description": "Not the groupmate's draft.",
+        },
+    )
+    assert made.status_code in {403, 404}, made.text
+    client.cookies.clear()
+    _, owner_csrf = login(client, "bowen")
+    kept = client.get(f"/api/v1/agents/{groupmate_id}")
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["visibility"] == "private"
+    assert kept.json()["name"] == "Groupmate publishes"
+    assert kept.json()["description"] == ""
+    with client.app.state.database.session() as db:
+        assert db.get(Agent, groupmate_id).owner_user_id == BOWEN_ID
+
+    _, owner_csrf = login(client, "bowen")
+    teacher_id, _version = _agent(client, owner_csrf, "Teacher publishes", "private")
+    client.cookies.clear()
+    _, maya_csrf = login(client, "maya")
+    assert client.get(f"/api/v1/agents/{teacher_id}").status_code == 404
+    made = _make_public(client, maya_csrf, teacher_id)
+    assert made.status_code in {403, 404}, made.text
+
+    # Bowen signed in as Maya is that same teacher account.
+    _, owner_csrf = login(client, "bowen")
+    via_id, _version = _agent(client, owner_csrf, "Bowen as Maya publishes", "private")
+    client.cookies.clear()
+    challenge = client.post(
+        "/api/v1/auth/login", json={"username": "bowen", "password": "demo-password"}
+    )
+    assert challenge.status_code == 202, challenge.text
+    chosen = client.post(
+        "/api/v1/auth/identity-choice",
+        json={"choice_token": challenge.json()["choice_token"], "identity": "maya"},
+    )
+    assert chosen.status_code == 200, chosen.text
+    assert chosen.json()["user"]["username"] == "maya"
+    made = _make_public(client, chosen.json()["csrf_token"], via_id)
+    assert made.status_code in {403, 404}, made.text
+    with client.app.state.database.session() as db:
+        assert db.get(Agent, via_id).owner_user_id == BOWEN_ID
+        assert db.get(Agent, via_id).visibility == "private"
+
+    _, owner_csrf = login(client, "bowen")
+    foreign_id, _version = _agent(client, owner_csrf, "Other group cannot", "private")
+    client.cookies.clear()
+    other = register(client, username="othergroupstudent", group_name="Elsewhere")
+    assert other.status_code == 201, other.text
+    refused = _make_public(client, other.json()["csrf_token"], foreign_id)
+    assert refused.status_code == 404, refused.text
+
+    client.cookies.clear()
+    outsider = register(
+        client,
+        username="outsiderstudent",
+        group_name="Far Group",
+        course_id=SECOND_CLASS_ID,
+    )
+    assert outsider.status_code == 201, outsider.text
+    refused = _make_public(client, outsider.json()["csrf_token"], foreign_id)
+    assert refused.status_code == 404, refused.text
+    client.cookies.clear()
+    _, owner_csrf = login(client, "bowen")
+    assert client.get(f"/api/v1/agents/{foreign_id}").json()["visibility"] == "private"

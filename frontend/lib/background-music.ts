@@ -5,12 +5,12 @@ import { useEffect, useSyncExternalStore } from "react";
 /**
  * Background music (2026-11-03): two channels that never play together.
  *
- * - workspace: the music key beside Mayaform. On by default when that
- *   account has not turned it off: it starts when the signed-in site loads.
- *   It keeps playing across pages and stops at logout. The on/off choice is
- *   remembered per signed-in account (localStorage) and only for workspace;
- *   the next visit for that account follows the last choice. Logout stops
- *   sound but keeps the saved preference.
+ * - workspace: the music key beside Mayaform, for students only. Off until
+ *   that account turns it on. Teachers have no key, so it stays off for them.
+ *   It keeps playing across pages and stops at logout. An explicit on or off
+ *   choice is remembered per signed-in account (localStorage) and only for
+ *   workspace; a visit with no choice stays silent. Logout stops sound but
+ *   keeps the saved preference.
  * - stage: the 3D Debate stage's own music key. Entering the stage always
  *   starts it from the beginning of the track (and hands the workspace music
  *   off); pressing its key pauses it for this visit only. Leaving the stage
@@ -67,11 +67,13 @@ function workspaceOffKey(accountId: string): string {
   return `${WORKSPACE_OFF_PREFIX}${accountId}`;
 }
 
-/** The person turned the workspace key off for this account. */
-function workspaceTurnedOff(): boolean {
+/** This account turned the workspace key on. Absence stays off. */
+function workspaceExplicitlyOn(): boolean {
   if (!musicAccountId || typeof window === "undefined") return false;
   try {
-    return window.localStorage.getItem(workspaceOffKey(musicAccountId)) === "1";
+    return (
+      window.localStorage.getItem(workspaceOffKey(musicAccountId)) === "on"
+    );
   } catch {
     return false;
   }
@@ -81,8 +83,9 @@ function rememberWorkspaceOff(off: boolean): void {
   if (!musicAccountId) return;
   try {
     const key = workspaceOffKey(musicAccountId);
-    if (off) window.localStorage.setItem(key, "1");
-    else window.localStorage.removeItem(key);
+    // "1" is off, "on" is an explicit choice. Missing means never chosen,
+    // which stays silent so a teacher (no key) and a new student do not autoplay.
+    window.localStorage.setItem(key, off ? "1" : "on");
   } catch {
     // Private mode or no storage: the choice lasts this visit only.
   }
@@ -363,11 +366,11 @@ export function enterStageMusic(): void {
   channels.stage.fadeIn();
 }
 
-/** The signed-in site loaded (AppShell mounted): workspace music follows this account. */
+/** The signed-in site loaded. Workspace music stays off unless this account turned it on. */
 export function startDefaultMusic(): void {
   const channel = channels.workspace;
   if (channel.wanted || channel.tracks.length === 0) return;
-  if (workspaceTurnedOff()) return;
+  if (!workspaceExplicitlyOn()) return;
   channel.wanted = true;
   if (channel === current()) channel.fadeIn();
   else emit();

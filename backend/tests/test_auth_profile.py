@@ -123,7 +123,7 @@ def test_password_change_keeps_current_session_and_revokes_others(app_factory: A
             assert (
                 other.post(
                     "/api/v1/auth/login",
-                    json={"username": "new-student", "password": "correct-horse-1"},
+                    json={"username": "newstudent", "password": "correct-horse-1"},
                 ).status_code
                 == 200
             )
@@ -143,14 +143,14 @@ def test_password_change_keeps_current_session_and_revokes_others(app_factory: A
         assert (
             signed_out.post(
                 "/api/v1/auth/login",
-                json={"username": "new-student", "password": "correct-horse-1"},
+                json={"username": "newstudent", "password": "correct-horse-1"},
             ).status_code
             == 401
         )
         assert (
             signed_out.post(
                 "/api/v1/auth/login",
-                json={"username": "new-student", "password": "new-classroom-password"},
+                json={"username": "newstudent", "password": "new-classroom-password"},
             ).status_code
             == 200
         )
@@ -202,7 +202,7 @@ def test_wrong_current_password_does_not_change_the_credential(app_factory: Any)
         assert (
             signed_out.post(
                 "/api/v1/auth/login",
-                json={"username": "new-student", "password": "correct-horse-1"},
+                json={"username": "newstudent", "password": "correct-horse-1"},
             ).status_code
             == 200
         )

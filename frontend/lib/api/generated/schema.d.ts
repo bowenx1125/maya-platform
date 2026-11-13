@@ -3146,6 +3146,11 @@ export interface components {
             can_delete?: boolean | null;
             /** Can Edit */
             can_edit: boolean;
+            /**
+             * Can Manage Visibility
+             * @default false
+             */
+            can_manage_visibility: boolean;
             /** Card Material Theme */
             card_material_theme?: string | null;
             /** Card Version Label */
@@ -3227,6 +3232,11 @@ export interface components {
             can_delete?: boolean | null;
             /** Can Edit */
             can_edit: boolean;
+            /**
+             * Can Manage Visibility
+             * @default false
+             */
+            can_manage_visibility: boolean;
             /** Card Material Theme */
             card_material_theme?: string | null;
             /** Card Version Label */

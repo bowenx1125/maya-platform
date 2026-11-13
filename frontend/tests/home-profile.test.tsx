@@ -26,6 +26,7 @@ const session = vi.hoisted(() => ({
     avatar: string | null;
     courses?: { course_id: string; role: string }[];
     groups?: { group_id: string; role: string }[];
+    username?: string;
   },
 }));
 
@@ -180,6 +181,59 @@ describe("profile group", () => {
     await screen.findByLabelText("Display name");
     expect(screen.queryByLabelText("Group")).toBeNull();
     expect(session.api.registrationOptions).not.toHaveBeenCalled();
+  });
+
+  it("offers Bowen the groups of the class he entered, not the other class", async () => {
+    session.user = {
+      ...student,
+      username: "bowen",
+      courses: [
+        { course_id: "maya1001", role: "student" },
+        { course_id: "maya1002", role: "student" },
+      ],
+      groups: [
+        { group_id: "shell", role: "member" },
+        { group_id: "team", role: "member" },
+        { group_id: "other", role: "member" },
+      ],
+    };
+    session.api.registrationOptions.mockResolvedValue({
+      course_id: "maya1002",
+      course_name: "Maya1002",
+      groups: [{ name: "Demo Group", member_count: 5 }],
+      classes: [
+        {
+          course_id: "maya1002",
+          course_name: "Maya1002",
+          groups: [
+            { name: "Demo Group", member_count: 5 },
+            { name: "Students", member_count: 1 },
+          ],
+        },
+        {
+          course_id: "maya1001",
+          course_name: "Maya1001",
+          groups: [
+            { name: "First Team", member_count: 3 },
+            { name: "Students", member_count: 2 },
+          ],
+        },
+      ],
+    });
+    session.api.group.mockImplementation(async (groupId: string) => {
+      if (groupId === "team")
+        return { id: "team", name: "First Team", course_id: "maya1001" };
+      if (groupId === "other")
+        return { id: "other", name: "Students", course_id: "maya1002" };
+      return { id: "shell", name: "Students", course_id: "maya1001" };
+    });
+    inEnglish(<AccountSettings />);
+    const picker = (await screen.findByLabelText("Group")) as HTMLSelectElement;
+    await waitFor(() => expect(picker.value).toBe("First Team"));
+    expect([...picker.options].map((option) => option.value)).toEqual([
+      "First Team",
+      "Students",
+    ]);
   });
 });
 

@@ -49,6 +49,7 @@ function createdAgent(): AgentDetail {
     description: "",
     metadata_revision: 0,
     can_edit: true,
+    can_manage_visibility: true,
     status: "active",
     current_draft_version_id: "version-id",
     current_published_version_id: null,
