@@ -727,21 +727,11 @@ export function TeamEntryFlow({
   ) {
     // Approved 13-teams-final E1 cork board with G2 "checked" stickers and the
     // H2 Studyform banner (Back · title · Done).
-    const sectionHead = (label: string, guide?: string, guideText?: string) => (
+    const sectionHead = (label: string) => (
       <div className="mb-4 mt-[-42px] flex items-center gap-2.5">
         <h2 className="m-0 inline-block -skew-x-12 -rotate-1 bg-[#111] px-3.5 py-[3px] font-display text-[15px] leading-normal font-extrabold tracking-[1px] text-white uppercase">
           {label}
         </h2>
-        {guide ? (
-          <span
-            className="inline-grid size-[22px] cursor-help place-items-center rounded-full border-2 border-[#111] bg-[#FFE14D] font-body text-xs font-extrabold text-[#111] shadow-[2px_2px_0_#111]"
-            data-ui-guide={guide}
-            data-ui-guide-text={guideText}
-            aria-hidden="true"
-          >
-            ?
-          </span>
-        ) : null}
       </div>
     );
     const cardClass =
@@ -828,11 +818,7 @@ export function TeamEntryFlow({
             ) : null}
             <div className="grid grid-cols-[1.05fr_1fr] items-start gap-7 max-[767px]:grid-cols-1">
               <section className="relative mt-[22px] min-h-[260px] rounded-[12px] border-[3px] border-[#111] bg-[#E8D5B5] px-5 py-7 shadow-[0_0_0_3px_#67E8F9,7px_7px_0_3px_#111] [background-image:radial-gradient(#0001_1px,transparent_1.5px)] [background-size:14px_14px] [&>div:first-child]:mt-[-44px]">
-                {sectionHead(
-                  t("teamMembers"),
-                  "chat.teamMembers",
-                  t("teamMembersHelp"),
-                )}
+                {sectionHead(t("teamMembers"))}
                 {hintField === "members" ? <StickerBadge n={1} /> : null}
                 {memberChoices.length ? (
                   <div
@@ -998,11 +984,7 @@ export function TeamEntryFlow({
                   ) : null}
                 </section>
                 <section className={cardClass}>
-                  {sectionHead(
-                    t("teamSharedKnowledge"),
-                    "chat.teamSharedKnowledge",
-                    t("teamSharedKnowledgeHelp"),
-                  )}
+                  {sectionHead(t("teamSharedKnowledge"))}
                   {knowledgeChoices.length ? (
                     <div role="group" aria-label={t("teamSharedKnowledge")}>
                       {knowledgeChoices.map((set) => {

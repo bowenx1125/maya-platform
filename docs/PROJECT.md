@@ -109,4 +109,6 @@ Nov12 teacher/Bowen #419(live Nov13):capsule second press closes;no per-route re
 
 ## Nov13 deploy
 
-f1087c4d live:3D engine,gesture v2,3 refined figures,#419 teacher/Bowen fixes.334fbd94 briefly live,superseded same day(local build missed #419).Local docker build,images save/load(3.5G server:no build/test);tags :f1087c4d.Backup maya-pre-334fbd94-20261112-213724.dump(102M,pg_restore --list ok;PG-only).Schema 0091_quiz_show_results;/health/ready 200;https 200.Backend pytest 240/319 chunked,failures known(main voice baseline+2 load-adaptive),no regressions.
+f1087c4d live:3D/gesture v2/3 refined figures/#419;supersedes 334fbd94(same day,missed #419).Local images :f1087c4d save/load;3.5G server:no build/test.Backup maya-pre-334fbd94-20261112-213724.dump:102M,pg_restore list passed,PG-only.Schema0091_quiz_show_results;ready/HTTPS200.Backend240/319 chunked;known main voice+2 load-adaptive failures,no regressions.
+
+Nov14:Teams ?/Agent New RAG hint removed;tour drops voices.UI1372/13skip,build passed.0 calls/deploy.
