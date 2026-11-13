@@ -11,6 +11,11 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import {
+  attachSyntheticMouth,
+  findHeadTopBone,
+} from "./synthetic-mouth";
+
+import {
   applyRelaxedStandingPose,
   avatarAssetUrlForTemplate,
   avatarMotionFrame,
@@ -1386,6 +1391,19 @@ export class ScholarStage {
       const forearmRBone = findBone(root, "forearmR");
       const handLBone = findBone(root, "handL");
       const handRBone = findBone(root, "handR");
+
+      // Figures without facial blendshapes (Tripo+Mixamo) still talk: graft a
+      // synthetic mouthOpen morph onto the head's lower-front region so the
+      // viseme/procedural pipeline drives it like a built-in morph.
+      root.updateMatrixWorld(true);
+      const headTopBone = findHeadTopBone(root);
+      for (const mesh of meshes) {
+        attachSyntheticMouth(
+          mesh as unknown as THREE.SkinnedMesh,
+          headBone ?? root,
+          headTopBone,
+        );
+      }
 
       // Figure-frame (root-yaw removed) parent orientation per arm bone; the
       // player's figure-space steps convert to bone-local against these.

@@ -84,6 +84,7 @@ Nov12 Chatform:composer focuses Message,controls kept;history avatar/date pass c
 ## Nov12 3D engine(ongoing)
 
 DEBATE_TTS_ENGINE=cosyvoice(qwen3 default;pre-request-refusal fallback):word_timestamps->performance gestures/visemes. WAV-sibling performance.json;ticket-gated GET /debates/{id}/performance/{turn},404=plain audio;media.prepared sibling. ScholarScene clock/timeline;scholar-stage clips/visemes. UE/AdvSkel/Mixamo collar fix,watermark hidden. Models:elder-scholar,noble-scholar(noble2),female_1.glb.
+No-blendshape rigs get a runtime-synthesized mouthOpen morph(synthetic-mouth.ts lower-front head-weighted region),driven by the same viseme pipeline.
 
 Gesture v2:figure-space arm/hand rotations,A⁻¹·E·A·rest,shared Mixamo clips;hand_behind_back/hand_on_chest/open_palm_listening;free-left clips emphasis/settle_calm/doubt_shrug/invite_present/chin_stroke/palm_open_sweep/lean_in/object_raise.Thoughtful/friendly->hand_on_chest.All3 render QA/UI pass.
 
