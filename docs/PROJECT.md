@@ -71,7 +71,7 @@ Visits:hide Knowledge,renew/20min,end notice->Accounts. Debate "?":Chinese hover
 
 ## Nov9 local classes/accounts(in progress)
 
-3081da2(base b6c2047b1549c5d28e84b52c5323a1e655bb596f) integrated onto 535d2272a9b337e9daec819e89df889d100789a8->28b8bf8e8f8ef6169bbe876a281bb93dd031d3ac. Teacher pages:class-scoped;register:group join/create.0086:group choice;0087:erasure keeps contributors' work. Hard-delete student-owned work/grades/Quiz attempts. #390 merged;local0082->0087/build/1187 UI/82 focused passed. 535d227:3073 pass/139 fail/1 skip;main reproduced135,four fixed.
+3081da2(base b6c2047b) onto 535d2272->28b8bf8e. Teacher pages:class-scoped;register:group join/create.0086:group choice;0087:erasure keeps contributors' work. Hard-delete student-owned work/grades/Quiz attempts. #390 merged;local0082->0087/build/1187 UI/82 focused passed. 535d227:3073 pass/139 fail/1 skip;main reproduced135,four fixed.
 
 Nov10:Maya1002/Maya1001,stable IDs;teacher scopes fixed;RAG follows class bar. 47 PG,1188 UI;optional choice answer;no empty Agents card;chat omits missing group/editor.
 
@@ -93,13 +93,11 @@ Nov11:Agents/Teams<768px:black banner shadow,no orange ring;Mock Chromium390/144
 
 Bowen0090(after0089):schema-only;UI/security unchanged;acceptance pending.
 
-#412 integration:main8241a9f2 retained;chooser816f7ceca71d2299f20435af0ea1a536ee7a74a4;quiz migration renumbered0091;both endpoints/security tests retained. No calls/deploy.
+#412 integration:main8241a9f2 retained;quiz migration renumbered0091;both endpoints/security tests retained;merge7aef7004+origin/main797cbe3c.
 
-Merge:7aef7004+origin/main797cbe3c.
+Nov12:Bowen RAG/Knowledge lists use login class,no picker;others unchanged. Voice idle hint/key removed;ARIA fixed,guards kept. 0 calls/deploy.
 
-Nov12:Bowen RAG/Knowledge lists use login class,no picker;other actors/group links unchanged;no other student pickers. Voice idle hint/key removed;ARIA fixed,errors/guards kept;album already lacked hint. 0 calls/deploy.
-
-Nov12 local Chatform:composer shell focuses Message;controls/selection kept. History avatar/date pass clicks to card button;visuals/copy/send unchanged. 0 calls/deploy.
+Nov12 local Chatform:composer shell focuses Message;controls kept. History avatar/date pass clicks to card button;visuals unchanged. 0 calls/deploy.
 
 ## Nov12 3D performance engine (in progress)
 
@@ -111,4 +109,4 @@ Nov12 teacher/Bowen #419(live Nov13):capsule second press closes;no per-route re
 
 ## Nov13 deploy
 
-f1087c4d live:3D engine,gesture v2,3 refined figures,#419 teacher/Bowen fixes.334fbd94 briefly live,superseded same day(local build missed #419).Local docker build,images save/load(3.5G server:no build/test there);tags :f1087c4d,containers verified.Backup maya-pre-334fbd94-20261112-213724.dump(102M,pg_restore --list ok;PG-only).Schema 0091_quiz_show_results;/health/ready 200;https 200.Backend pytest 240/319 chunked,failures known(main voice baseline+2 load-adaptive),no regressions.
+f1087c4d live:3D engine,gesture v2,3 refined figures,#419 teacher/Bowen fixes.334fbd94 briefly live,superseded same day(local build missed #419).Local docker build,images save/load(3.5G server:no build/test);tags :f1087c4d.Backup maya-pre-334fbd94-20261112-213724.dump(102M,pg_restore --list ok;PG-only).Schema 0091_quiz_show_results;/health/ready 200;https 200.Backend pytest 240/319 chunked,failures known(main voice baseline+2 load-adaptive),no regressions.
