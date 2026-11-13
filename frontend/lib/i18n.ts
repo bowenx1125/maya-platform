@@ -491,7 +491,7 @@ const enMessages = {
     "A one-minute walk round the academy, so you know where everything is. Skip it whenever you like.",
   tourStudyformTitle: "Studyform",
   tourStudyformBody:
-    "Build your Agents here: who they are and how they speak. Teams and voices live here too.",
+    "Build your Agents here: who they are and how they speak. Teams live here too.",
   tourBrainformTitle: "Brainform",
   tourBrainformBody:
     "Add the readings your Agents should know. They draw on them when they answer.",

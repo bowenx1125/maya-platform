@@ -176,9 +176,6 @@ export const uiGuideCopy = {
   "knowledge.importFile": {
     en: "Import Markdown, PDF, or Word files. PDF and Word uploads are converted to Markdown for this library.",
   },
-  "agent.uploadRag": {
-    en: "Upload a Markdown, PDF or Word file as this Agent's RAG. It is Private or Public like the Agent.",
-  },
   "agent.uploadMarkdown": {
     en: "Upload a Markdown file for the next Agent draft revision.",
   },
