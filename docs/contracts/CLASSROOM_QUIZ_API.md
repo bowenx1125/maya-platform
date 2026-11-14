@@ -322,24 +322,27 @@ route. A second hide, or a hide by a student, is **404**.
 ## Export
 
 `GET …/quizzes/{quiz_id}/attempts/export[?taking_epoch=N]` returns
-`application/zip` as an attachment named
-`quiz-<slug>-<first 8 hex of id>-attempts.zip`, with `Cache-Control: no-store`.
-A non-integer `taking_epoch` is **400**.
+`application/zip` as `<sanitised quiz title>.zip`, with RFC 5987 `filename*`
+and `Cache-Control: no-store`. A non-integer `taking_epoch` is **400**.
 
-- Includes only `status="submitted"` attempts with no `teacher_hidden_at`,
-  optionally narrowed to one epoch.
-- Files: `manifest.json` (counts, filter, `taking_epoch_filter`),
-  `quiz.json` (the quiz's **current** document, including the key),
-  `attempts.json` (per attempt: id, user id, display name, revision, epoch,
-  time, grading, objective and manual scores, `points_awarded`/`points_total`,
-  `graded_at`, `manual_grades`, answers) and `summary.md` (its Score column
-  is `points_awarded/points_total`). With zero submissions it
-  still returns 200, `attempts.json` is `[]`, and `README.md`/`summary.md` say
-  `No submissions yet.`
-- Rows contain no email, password or token fields (asserted). Each attempt's
-  own `document_snapshot_json` is not exported, so an attempt from an earlier
-  `content_revision` is shown beside the current paper.
-- The quiz page's Download calls export without `taking_epoch` (all epochs).
+- Includes only submitted attempts with no `teacher_hidden_at`, optionally
+  narrowed to one epoch. Participants without submissions remain omitted.
+- Each participant has one safe, Unicode-preserving folder; duplicate names
+  gain ` (2)`, etc. Each attempt is an XLSX named after the participant;
+  multiple epochs gain numbered file suffixes in the same folder.
+- `Attempt` contains participant name, username, submission time, total score,
+  previous attempt/accounting identifiers, revision, epoch, grading status and
+  score breakdown. Every snapshot question appears, including unanswered items,
+  with prompt, type, options, readable answers, key/rubric, score, raw answer
+  fields and teacher grades/feedback. Teacher grades override AI scores; AI
+  details remain available. Unknown question answers remain in `Other answers`.
+- `Current paper` preserves the current quiz metadata/settings and questions
+  previously in `quiz.json`; attempt questions use their own frozen snapshot.
+  Text exceeding Excel's cell limit continues in `Long text`, with source cell
+  and character offset. Strings are explicit non-formula cells and invalid XML
+  control characters are removed. Sheet names are fixed safe names.
+- Zero submissions returns 200 with an empty ZIP. No email, password or token
+  fields are exported. The Download button exports all epochs as a blob.
 
 ## Teacher and student controls
 

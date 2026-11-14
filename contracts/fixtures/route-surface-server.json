@@ -10133,6 +10133,102 @@
         "description": "Course teachers may reveal or hide grading results for all past and future attempts. New quizzes hide results; migrated quizzes keep results visible. Students receive 403; non-members receive 404. Hidden student responses keep answers but redact scores, correctness, feedback, AI grades and grading state. Teacher views and exports remain unchanged."
       }
     },
+    "/api/v1/courses/{course_id}/quizzes/{quiz_id}/attempts/export": {
+      "get": {
+        "operationId": "exportCourseQuizAttempts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quiz_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quiz Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "taking_epoch",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Taking Epoch"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Export Course Quiz Attempts",
+        "tags": [
+          "Classroom Quiz"
+        ],
+        "description": "Download a ZIP of participant folders containing XLSX attempts. Includes submitted, non-hidden attempts, optionally filtered by epoch. Filenames preserve Unicode through RFC 5987 filename*. Questions include unanswered items and readable choices; teacher grades take precedence over AI scores."
+      }
+    },
     "/health/live": {
       "get": {
         "operationId": "health_live_health_live_get",

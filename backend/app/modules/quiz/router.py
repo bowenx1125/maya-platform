@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Annotated
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, Request, Response
@@ -266,7 +267,12 @@ def submit_course_quiz_attempt(
     "/courses/{course_id}/quizzes/{quiz_id}/attempts/export",
     operation_id="exportCourseQuizAttempts",
     response_class=Response,
-    responses={401: {"model": Error}, 403: {"model": Error}, 404: {"model": Error}},
+    responses={
+        200: {"content": {"application/zip": {"schema": {"type": "string", "format": "binary"}}}},
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+    },
 )
 def export_course_quiz_attempts(
     course_id: UUID,
@@ -282,11 +288,16 @@ def export_course_quiz_attempts(
         str(quiz_id),
         taking_epoch=taking_epoch,
     )
+    ascii_title = download.filename[:-4].encode("ascii", "ignore").decode().strip(" ._")
+    fallback_filename = f"{ascii_title or 'quiz'}.zip"
     return Response(
         content=download.content,
         media_type=download.content_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{download.filename}"',
+            "Content-Disposition": (
+                f'attachment; filename="{fallback_filename}"; '
+                f"filename*=UTF-8''{quote(download.filename, safe='')}"
+            ),
             "Cache-Control": "no-store, max-age=0",
             "Pragma": "no-cache",
             "X-Content-Type-Options": "nosniff",

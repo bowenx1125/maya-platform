@@ -6,13 +6,11 @@
 
 from __future__ import annotations
 
-import io
-import json
-import zipfile
 from typing import Any
 
 from app.seed import COURSE_ID
 
+from tests.quiz_export_helpers import read_export
 from tests.test_classroom_quiz_api import (  # noqa: F401
     Actor,
     _create_publish_open,
@@ -192,8 +190,7 @@ def test_teacher_hide_removes_the_attempt_everywhere(teacher: Actor, student: Ac
 
     export = teacher.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/export")
     assert export.status_code == 200
-    with zipfile.ZipFile(io.BytesIO(export.content)) as zf:
-        assert json.loads(zf.read("attempts.json")) == []
+    assert read_export(export.content) == []
 
     # Hiding keeps the row, so the round stays submitted for the student.
     again = _submit(quiz_id, student)
@@ -209,11 +206,9 @@ def test_export_carries_hand_grades(teacher: Actor, student: Actor) -> None:
         {"grades": [{"item_id": "q3", "points_awarded": 2, "feedback": "Good."}]},
     )
     export = teacher.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/export")
-    with zipfile.ZipFile(io.BytesIO(export.content)) as zf:
-        row = json.loads(zf.read("attempts.json"))[0]
-        summary = zf.read("summary.md").decode("utf-8")
+    _, row, questions, _ = read_export(export.content)[0]
     assert row["score_manual"] == 2.0
     assert row["points_awarded"] == 5.0
     assert row["points_total"] == 6.0
-    assert row["manual_grades"]["q3"]["feedback"] == "Good."
-    assert "5.0/6.0" in summary
+    assert row["Total score"] == "5.0/6.0"
+    assert questions[2]["Teacher grade: feedback"] == "Good."

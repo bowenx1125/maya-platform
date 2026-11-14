@@ -3,9 +3,7 @@
 # ruff: noqa: F811
 from __future__ import annotations
 
-import io
 import json
-import zipfile
 from copy import deepcopy
 from typing import Any
 
@@ -15,6 +13,7 @@ from app.modules.quiz.models import ClassroomQuizAttempt
 from app.seed import COURSE_ID
 from fastapi import FastAPI
 
+from tests.quiz_export_helpers import read_export
 from tests.test_classroom_quiz_api import (  # noqa: F401
     SAMPLE_ITEMS,
     Actor,
@@ -156,14 +155,13 @@ def test_quiz_historical_keyless_scores_preserve_manual_and_answers(
         assert records[0]["points_awarded"] == expected_score + 2
     for key in ("answer", "rubric", "grading"):
         assert f'"{key}"' not in student.get(path).text
-    with zipfile.ZipFile(io.BytesIO(teacher.get(f"{base}/attempts/export").content)) as archive:
-        row = json.loads(archive.read("attempts.json"))[0]
-        assert row["points_awarded"] == expected_score + 2
-        assert all(answer["correct"] is expected_correct for answer in row["answers"][:2])
-        assert all(
-            answer["points_awarded"] == (answer["points"] if expected_score else 0)
-            for answer in row["answers"][:2]
-        )
+    _, row, questions, _ = read_export(teacher.get(f"{base}/attempts/export").content)[0]
+    assert row["points_awarded"] == expected_score + 2
+    assert all(answer["Answer: correct"] is expected_correct for answer in questions[:2])
+    assert all(
+        answer["Result/score"] == (answer["Points available"] if expected_score else 0)
+        for answer in questions[:2]
+    )
     with database.session() as db:
         attempt = db.get(ClassroomQuizAttempt, attempt_id)
         assert attempt is not None
