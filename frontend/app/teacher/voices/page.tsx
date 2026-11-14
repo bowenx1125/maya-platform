@@ -3,7 +3,6 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
-import { AppShell } from "../../../components/app-shell";
 import { RouteGuard } from "../../../components/session-provider";
 import { VoicesPage } from "../../../components/voice/voices-page";
 import { LoadingPage } from "../../../components/ui";
@@ -13,9 +12,7 @@ function TeacherVoicesRoute() {
   const q = (key: string) => query.get(key) ?? undefined;
   return (
     <RouteGuard role="teacher">
-      <AppShell role="teacher">
-        <VoicesPage role="teacher" groupId={q("group_id")} />
-      </AppShell>
+      <VoicesPage role="teacher" groupId={q("group_id")} />
     </RouteGuard>
   );
 }

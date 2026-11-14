@@ -33,11 +33,13 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("../components/session-provider", () => ({
   useSession: () => ({ ...state, logout: vi.fn() }),
+  RouteGuard: ({ children }: { children: ReactNode }) => children,
 }));
 
 import { ClassSwitcher } from "../components/class-switcher";
 import { AppShell, SIDEBAR_COLLAPSED_KEY } from "../components/app-shell";
 import { useTeacherClasses } from "../components/use-teacher-classes";
+import TeacherLayout from "../app/teacher/layout";
 import { beginTeacherEnter, endTeacherEnter } from "../lib/teacher-visit";
 
 function homeLink(label?: ReactNode, className?: string, title?: string) {
@@ -65,6 +67,8 @@ async function trigger() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  state.api = { courses: vi.fn() };
+  state.user.id = "teacher";
   window.localStorage.clear();
   window.history.replaceState(null, "", "/");
   state.pathname = "/teacher/agents/example";
@@ -322,6 +326,65 @@ describe("class switcher", () => {
 });
 
 describe("shared teacher class logic", () => {
+  it("shows cached names on the first remount render before refresh resolves", async () => {
+    const first = mount();
+    await trigger();
+    first.unmount();
+    state.api.courses.mockReturnValue(new Promise(() => {}));
+    const names: (string | undefined)[] = [];
+    renderHook(() => {
+      const value = useTeacherClasses();
+      names.push(value.current?.name);
+    });
+    expect(names.length).toBeGreaterThan(0);
+    expect(names.every((name) => name === "Maya1001")).toBe(true);
+    expect(state.api.courses).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the cached label if background refresh fails", async () => {
+    const first = mount();
+    await trigger();
+    first.unmount();
+    state.api.courses.mockRejectedValueOnce(new Error("unavailable"));
+    mount();
+    expect(screen.getByTestId("class-switcher-trigger").textContent).toBe(
+      "1001",
+    );
+    await screen.findByRole("alert");
+    expect(screen.getByTestId("class-switcher-trigger").textContent).toBe(
+      "1001",
+    );
+  });
+
+  it.each(["account", "membership", "session"])(
+    "does not reuse another %s's cached names",
+    async (change) => {
+      const first = mount();
+      await trigger();
+      first.unmount();
+      if (change === "account") state.user.id = "other-teacher";
+      if (change === "membership")
+        state.user.courses = [{ course_id: "a", role: "teacher" }];
+      if (change === "session") state.api = { courses: vi.fn() };
+      state.api.courses.mockReturnValue(new Promise(() => {}));
+      const { result } = renderHook(() => useTeacherClasses());
+      expect(result.current.current).toBeUndefined();
+      expect(result.current.classes).toEqual([]);
+    },
+  );
+
+  it("uses the selected class synchronously when teacher course order changes", async () => {
+    const first = mount();
+    await trigger();
+    first.unmount();
+    state.user.courses.reverse();
+    state.api.courses.mockReturnValue(new Promise(() => {}));
+    mount();
+    expect(screen.getByTestId("class-switcher-trigger").textContent).toBe(
+      "1002",
+    );
+  });
+
   it("guards current, Enter and busy calls independently of the menu", async () => {
     let finish!: () => void;
     state.selectTeacherCourse.mockImplementation(
@@ -353,6 +416,43 @@ describe("shared teacher class logic", () => {
 });
 
 describe("teacher shell integration", () => {
+  it("retains the layout's capsule node and label across distinct route pages", async () => {
+    function AgentsPage() {
+      return <p>Agents</p>;
+    }
+    function TeamsPage() {
+      return <p>Teams</p>;
+    }
+    const view = render(
+      <TeacherLayout>
+        <AgentsPage />
+      </TeacherLayout>,
+    );
+    const button = await trigger();
+    state.api.courses.mockReturnValue(new Promise(() => {}));
+    state.pathname = "/teacher/teams";
+    view.rerender(
+      <TeacherLayout>
+        <TeamsPage />
+      </TeacherLayout>,
+    );
+    expect(screen.getAllByTestId("class-switcher-trigger")).toEqual([button]);
+    expect(button.textContent).toBe("1001");
+    expect(state.api.courses).toHaveBeenCalledTimes(1);
+    expect(within(screen.getByRole("main")).getByText("Teams")).toBeTruthy();
+  });
+
+  it("leaves the immersive stage without a workspace sidebar", () => {
+    state.pathname = "/teacher/debates-beta/example/control";
+    render(
+      <TeacherLayout>
+        <p>Stage</p>
+      </TeacherLayout>,
+    );
+    expect(screen.getByText("Stage")).toBeTruthy();
+    expect(screen.queryByTestId("class-switcher-home")).toBeNull();
+  });
+
   function shell() {
     return render(
       <AppShell role="teacher">
