@@ -7,6 +7,7 @@ import {
 } from "next/font/google";
 import type { ReactNode } from "react";
 
+import { PageTransition } from "../components/page-transition";
 import { SessionProvider } from "../components/session-provider";
 import { UiGuideTooltip } from "../components/ui-guide-tooltip";
 
@@ -68,7 +69,7 @@ export default async function RootLayout({
       </head>
       <body>
         <SessionProvider>
-          {children}
+          <PageTransition>{children}</PageTransition>
           <UiGuideTooltip />
         </SessionProvider>
       </body>

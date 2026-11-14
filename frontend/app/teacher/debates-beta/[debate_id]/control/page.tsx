@@ -472,9 +472,11 @@ export default function TeacherDebateControlPage() {
     <RouteGuard role="teacher">
       {!detail || !debateId ? (
         <div className={BOOT}>
-          <Link className={BOOT_BACK} href="/teacher/debates">
-            {t("debateBack")}
-          </Link>
+          {!loading ? (
+            <Link className={BOOT_BACK} href="/teacher/debates">
+              {t("debateBack")}
+            </Link>
+          ) : null}
           {loading ? <LoadingCard /> : null}
           {!loading && error ? (
             <ErrorNotice

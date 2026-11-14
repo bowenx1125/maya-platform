@@ -31,7 +31,7 @@ Unified Create AI Knowledge/New Agent;Private/Public labels only;Brainform:RAG/K
 
 ## Oct7 closure
 
-Teacher generate_agent_knowledge:reuse accepted receipts,post-commit wake;first publish:no Set needed. RAG pending-save lock/draft fence. Production:no Demo/quick-login/auto-confirm;exact HTTPS,strong Teacher creds,isolated mounts,abuse bounds only. C1 Mock:60 registrations,parallel send/replay/SSE,0 calls. Backup113435Z/0053->0054:Provider records kept,0 charges. Pose e9b000a:one canvas;preset voice b8f65e7=0056;TTS bar054f420 excluded.
+generate_agent_knowledge:accepted receipt reuse/post-commit wake;first publish:no Set. RAG:pending-save lock/draft fence. Prod:no Demo/quick-login/auto-confirm;exact HTTPS,strong Teacher creds,isolated mounts,abuse bounds only. C1 Mock:60 registrations/parallel send/replay/SSE,0 calls. Backup113435Z/0053->0054:Provider records kept,0 charges. Pose e9b000a:one canvas;voice b8f65e7=0056;TTS054f420 excluded.
 
 Oct9-13:Debates in Brainform/Chatform/Studyform;private read_memory may pause team_no_progress;role Tool ACL;publisher edits Agent.md/Brainform/Avatar/Voice. Card room0058,production1f34fea/schema0057. PR50->556fdc5:Public green/Private gray,Chat pin0059,RAG creation visibility fixed,Accounts visits read Private.0060 retires prior work except Demo philosophers;Agent notes quote users.0061 personal debaters,Public Teams:Public Agents only;0062 owner-managed voices;我不知道/忘了 scores. Scorer->summarizer uses live sign-in,all Questions asked;Brainform .md edit/rename,rubric follow-ups rerun,0063 names,answer-form checks,Leader report links. PR52:text playback/Live/Avatar/0064 slot release;Interact26/26. Create Done validates;edits need changes,saves->library. Withdrawn RAG unavailable;Team errors name unavailable members. Accounts:public RAG/Knowledge,publisher edits,Members/activity,natural names,ungrouped last. Profile:existing groups only,old work inaccessible. Phone<880px:sideways/upright/sideways within6s->card room. Hidden RAG:blocks generation till reselected/published. Authorized generate/publish:revive deleted Knowledge Sets. PRs56/58/59/60/64 kept.
 
@@ -65,11 +65,11 @@ Visits:hide Knowledge,renew/20min,end notice->Accounts. Debate "?":Chinese hover
 
 #337/#338:Agent Chats send Agent name/AGENT.md/Knowledge/RAG;no assessment Tools/attempt;Teams same. Owner-only RAG Details:stored model input;scoring/summary Rubrics hidden. Nov6 off main70ecfa29(#356/#357). Replay=Rebirth;Review=playback,no rebirth lock. Revocalize:durable intent,3 workers,Back/F5 reseed/revision reconcile;admission refusal retries safely;keep ambiguous keys;show definitive failures/manual retry. 0 calls/deploy;volume untouched. Stalled needs backend receipt recovery;keep safety gates.
 
-## Nov5-8 Classroom Quiz
+## Nov5-8 Quiz
 
 0083-0085:Quiz publish≠taking;new epoch/start,1 attempt/epoch;ZIP. #380:detail/hand grading/hide/Record->Quiz;#383/4:opt-in AI grading. 1 page/quiz,Paper|Submissions;no Chat tests;New/Back/Done unified. [Contract](contracts/CLASSROOM_QUIZ_API.md). Agent name card;Private->Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)). 0088(in progress):epoch deadlines/one-shot taking,lazy+10s sweeper(non-test). 0091 follows0090:old show_results=true/new=false,revision unchanged. #412:V1 switch,cyan stickers,expandable student answers-only paper;post-commit/receipt visibility,fail-closed UI/DTOs,no duplicate help. Checks pass;PG owner-run;0 calls/deploy.
 
-## Nov9 local classes/accounts(in progress)
+## Nov9 classes/accounts(in progress)
 
 3081da2(base b6c2047b) onto 535d2272->28b8bf8e. Teacher pages:class-scoped;register:group join/create.0086:group choice;0087:erasure keeps contributors' work. Hard-delete student-owned work/grades/Quiz attempts. #390 merged;local0082->0087/build/1187 UI/82 focused passed. 535d227:3073 pass/139 fail/1 skip;main reproduced135,four fixed.
 
@@ -85,7 +85,7 @@ ruleset_contract_v4:default_rules/contract/*.md,form read-only;Ruleset=style+rou
 
 Builds:`markdown-structure-600t-v3`,150-900 tokens,no overlap;keep v2 snapshots till republish. Diagnostics:3-gram grounding,other-language unmeasured.
 
-## Nov11 Debate cards B
+## Nov11 Debate cards
 
 0089:new v4 participants start `compiling`;each frozen AGENT.md compiles once before its Agent's first turn(`llm_debate_card`,Debate model,strict schema,1 ledgered attempt,60s) to identity/position/reasoning/style/voice/dropped,≤600 Han/400 words. Ready->card persona;failure/Mock->raw AGENT.md;null(old):keep pinned bytes. R1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style.0 calls;quality unverified.
 
@@ -99,18 +99,20 @@ Nov12:Bowen RAG/Knowledge lists use login class,no picker;others unchanged. Voic
 
 Nov12 local Chatform:composer shell focuses Message;controls kept. History avatar/date pass clicks to card button;visuals unchanged. 0 calls/deploy.
 
-## Nov12 3D performance engine (in progress)
+## Nov12 3D engine (in progress)
 
-DEBATE_TTS_ENGINE=cosyvoice:Debate TTS(qwen3 default;pre-request-refusal fallback);word_timestamps->debates/performance(gestures+visemes). AudioStore:WAV-sibling performance.json;ticket-gated GET /debates/{id}/performance/{turn}(404=plain audio). beta-stage:media.prepared sibling;ScholarScene:timeline+clock;scholar-stage:visemes+gesture clips over procedural frame. Bones resolve per rig family (UE spine_02/neck_01, AdvSkel Chest_M/Neck_M, Mixamo Spine2/Neck); the old head-only list clipped collars—fixed; watermark mesh hidden. Tripo-refined Mixamo-rigged figures live as elder-scholar.glb, noble-scholar.glb (noble2) + female_1.glb.
+DEBATE_TTS_ENGINE=cosyvoice:Debate TTS(qwen3 default;pre-request-refusal fallback);word_timestamps->debates/performance(gestures+visemes). AudioStore:WAV-sibling performance.json;ticket-gated GET /debates/{id}/performance/{turn}(404=plain audio). beta-stage:media.prepared sibling;ScholarScene:timeline+clock;scholar-stage:visemes+gesture clips over procedural frame. Bones:UE spine_02/neck_01,AdvSkel Chest_M/Neck_M,Mixamo Spine2/Neck;fix head-only collar clipping;hide watermark.Tripo-refined/Mixamo-rigged:elder-scholar.glb,noble-scholar.glb(noble2),female_1.glb.
 
-Gesture v2:upper/forearm/hand figure-space axis-angle;scholar-stage per-rig parent rest quats(local=A⁻¹·E·A·rest),shared clips despite differing Mixamo bone axes. Postures: hand_behind_back (right behind back, left at chest), hand_on_chest (mirror), open_palm_listening; clips emphasis, settle_calm, doubt_shrug, invite_present, chin_stroke, palm_open_sweep, lean_in, object_raise gesture with the free left arm. Compiler defaults thoughtful/friendly to hand_on_chest. Headless-render QA on all three; 153 frontend files / 1259 tests green.
+Gesture v2:upper/forearm/hand figure-space axis-angle;scholar-stage per-rig parent rest quats(local=A⁻¹·E·A·rest),shared clips across Mixamo axes. Postures: hand_behind_back (right behind back, left at chest), hand_on_chest (mirror), open_palm_listening; clips emphasis, settle_calm, doubt_shrug, invite_present, chin_stroke, palm_open_sweep, lean_in, object_raise gesture with the free left arm. Compiler defaults thoughtful/friendly to hand_on_chest. Headless-render QA on all three; 153 frontend files / 1259 tests green.
 
 Nov12 #419(live Nov13):capsule second press closes;trigger pathname key removed. Bowen student pages use the login class's first non-Students group;moves stay in that session class. New usernames 3-64 letters/digits;older `.` `_` `-` names still sign in. Private→Public is the owner.
 
 ## Nov13 deploy
 
-f1087c4d live:3D/gesture v2/3 refined figures/#419;supersedes 334fbd94(same day,missed #419).Local images :f1087c4d save/load;3.5G server:no build/test.Backup maya-pre-334fbd94-20261112-213724.dump:102M,pg_restore list passed,PG-only.Schema0091_quiz_show_results;ready/HTTPS200.Backend240/319 chunked;known main voice+2 load-adaptive failures,no regressions.
+f1087c4d live:3D/gesture v2/3 figures/#419;replaces334fbd94(missed #419).Local image save/load;3.5G server:no build/test.Backup maya-pre-334fbd94-20261112-213724.dump:102M,pg_restore list pass,PG-only.Schema0091_quiz_show_results;ready/HTTPS200.Backend240/319 chunked;known voice+2 load-adaptive failures,no regressions.
 
 Nov14:Teams ?/Agent New RAG hint removed;tour drops voices.UI1372/13skip,build passed.0 calls/deploy.
 
-Nov14 capsule:page shells remounted with empty names. Teacher layout retains shell;session-API/user/course cache seeds remounts. B2b kept. Chromium1440/390:class44-70.15625px before,70.15625 fixed;1380UI/13skip(+8),build/gates pass.0 calls/deploy.
+Nov14 capsule:shared teacher layout/session-API/user/course caches fix empty-name remounts.B2b kept.Chromium1440/390:class44-70.15625px→70.15625px stable;1380UI/13skip(+8),build/gates pass.0 calls/deploy.
+
+Nov14 local UX:shared page-rise520ms/reduced motion;teacher shell retained;Immerse loading hides Back.Quiz ZIP:participant XLSX,snapshot questions/grades.1387UI/13skip,build pass;PG3521pass/129baselinefail;new0.0 calls/deploy.

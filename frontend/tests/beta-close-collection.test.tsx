@@ -273,6 +273,24 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+describe("Immerse boot navigation", () => {
+  it("hides Back while loading and retains it on the loaded stage", async () => {
+    const api = pageApi(interaction("open"));
+    renderPage(api);
+    expect(screen.getByText("Loading")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Back" })).toBeNull();
+    expect(await screen.findByRole("link", { name: "Back" })).toBeTruthy();
+  });
+
+  it("retains Back when loading fails", async () => {
+    const api = pageApi(interaction("open"));
+    api.debate.mockRejectedValue(new Error("Unavailable"));
+    renderPage(api);
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Back" })).toBeTruthy();
+  });
+});
+
 describe("segments_v2 interaction dock (A1: no Close collection)", () => {
   it("toggles the join code with Interact and never closes the collection", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);

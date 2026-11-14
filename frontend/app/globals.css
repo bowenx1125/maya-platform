@@ -2708,3 +2708,35 @@ dd {
   color: #111;
   font-size: 14px;
 }
+
+/* A page's blocks rise into place one after another, so arriving reads as
+   the page being laid out rather than switched on. The home is one block that
+   holds the page, so its sections take the stagger instead. */
+.page-transition > :not(.mayaform-home),
+.page-transition > .mayaform-home > * {
+  animation: page-rise 520ms var(--ease-out) both;
+}
+
+.page-transition > :nth-child(2),
+.page-transition > .mayaform-home > :nth-child(2) {
+  animation-delay: 60ms;
+}
+.page-transition > :nth-child(3),
+.page-transition > .mayaform-home > :nth-child(3) {
+  animation-delay: 120ms;
+}
+.page-transition > :nth-child(4),
+.page-transition > .mayaform-home > :nth-child(4) {
+  animation-delay: 180ms;
+}
+.page-transition > :nth-child(n + 5),
+.page-transition > .mayaform-home > :nth-child(n + 5) {
+  animation-delay: 240ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-transition > :not(.mayaform-home),
+  .page-transition > .mayaform-home > * {
+    animation: none;
+  }
+}

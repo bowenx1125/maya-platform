@@ -429,6 +429,9 @@ describe("teacher shell integration", () => {
       </TeacherLayout>,
     );
     const button = await trigger();
+    const nav = screen.getByRole("navigation");
+    const main = screen.getByRole("main");
+    expect(main.className).toContain("page-transition");
     state.api.courses.mockReturnValue(new Promise(() => {}));
     state.pathname = "/teacher/teams";
     view.rerender(
@@ -438,6 +441,10 @@ describe("teacher shell integration", () => {
     );
     expect(screen.getAllByTestId("class-switcher-trigger")).toEqual([button]);
     expect(button.textContent).toBe("1001");
+    expect(screen.getByRole("navigation")).toBe(nav);
+    expect(screen.getByRole("main")).toBe(main);
+    expect(main.dataset.pageTransition).toBe("/teacher/teams");
+    expect(nav.closest(".page-transition")).toBeNull();
     expect(state.api.courses).toHaveBeenCalledTimes(1);
     expect(within(screen.getByRole("main")).getByText("Teams")).toBeTruthy();
   });

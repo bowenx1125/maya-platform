@@ -41,7 +41,7 @@ describe("QuizApi.exportAttempts", () => {
         headers: {
           "Content-Type": "application/zip",
           "Content-Disposition":
-            'attachment; filename="quiz-demo-attempts.zip"',
+            "attachment; filename=\"quiz.zip\"; filename*=UTF-8''%E6%B5%8B%E9%AA%8C%20%F0%9F%99%82.zip",
         },
       }),
     );
@@ -63,7 +63,7 @@ describe("QuizApi.exportAttempts", () => {
     expect((init.headers as Record<string, string>)["X-CSRF-Token"]).toBe(
       "csrf-token",
     );
-    expect(result.filename).toBe("quiz-demo-attempts.zip");
+    expect(result.filename).toBe("测验 🙂.zip");
     expect(result.blob).toBeInstanceOf(Blob);
     expect(result.blob.type).toContain("zip");
   });

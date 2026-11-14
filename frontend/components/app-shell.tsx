@@ -13,6 +13,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { usePageTransition } from "./page-transition";
 import workspaceStyles from "./workspace-theme.module.css";
 import { SecretDoor } from "./card-table/secret-door";
 import { ViewTransition } from "./view-transition";
@@ -229,6 +230,8 @@ export function AppShell({
   children: ReactNode;
   role: "student" | "teacher";
 }) {
+  const contentRef = useRef<HTMLElement>(null);
+  const contentPath = usePageTransition(contentRef);
   const t = useT();
   const { api, user, logout, refresh, identityGeneration, status } =
     useSession();
@@ -1405,9 +1408,11 @@ export function AppShell({
           </div>
         </header>
         <main
+          ref={contentRef}
+          data-page-transition={contentPath}
           id="workspace-content"
           tabIndex={-1}
-          className={`relative mx-auto w-[min(100%,1320px)] min-w-0 px-[clamp(24px,4vw,64px)] pt-12 max-[900px]:px-6 max-[900px]:pt-8 max-[480px]:px-4 max-[480px]:pt-7 ${workspaceStyles.surface} ${pathname === "/teacher/chat" || pathname === "/student/chat" ? "pb-[max(24px,env(safe-area-inset-bottom))]" : "pb-20 max-[900px]:pb-16 max-[480px]:pb-12"}`}
+          className={`page-transition relative mx-auto w-[min(100%,1320px)] min-w-0 px-[clamp(24px,4vw,64px)] pt-12 max-[900px]:px-6 max-[900px]:pt-8 max-[480px]:px-4 max-[480px]:pt-7 ${workspaceStyles.surface} ${pathname === "/teacher/chat" || pathname === "/student/chat" ? "pb-[max(24px,env(safe-area-inset-bottom))]" : "pb-20 max-[900px]:pb-16 max-[480px]:pb-12"}`}
         >
           {(actions.back && actions.back.placement !== "page") ||
           (actions.done && actions.done.placement !== "page") ||

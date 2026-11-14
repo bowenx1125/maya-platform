@@ -19,6 +19,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from tests.conftest import login
+from tests.quiz_export_helpers import read_export
 
 SAMPLE_ITEMS = [
     {
@@ -135,54 +136,37 @@ def test_teacher_export_with_submission(teacher: Actor, student: Actor) -> None:
     assert response.status_code == 200, response.text
     assert "application/zip" in response.headers["content-type"]
     assert "attachment;" in response.headers["content-disposition"]
-    assert "attempts.zip" in response.headers["content-disposition"]
-
+    assert "filename*=UTF-8''Week%203%20Quiz.zip" in response.headers["content-disposition"]
     files = _read_zip(response)
-    assert "manifest.json" in files
-    assert "quiz.json" in files
-    assert "attempts.json" in files
-    assert "summary.md" in files
-
-    manifest = json.loads(files["manifest.json"])
-    assert manifest["schema_version"] == 1
-    assert manifest["attempt_count"] == 1
-    assert manifest["quiz_id"] == quiz_id
-    assert manifest["course_id"] == COURSE_ID
-    assert "teacher_hidden excluded" in manifest["filter"]
-
-    attempts = json.loads(files["attempts.json"])
-    assert len(attempts) == 1
-    row = attempts[0]
+    assert len(files) == 1
+    name, row, questions, book = read_export(response.content)[0]
+    assert name.endswith(".xlsx")
     assert row["taking_epoch"] == 1
     assert row["score_objective"] == 3.0
     assert row["score_max_objective"] == 3.0
-    assert isinstance(row["answers"], list)
-    assert len(row["answers"]) >= 1
-    assert row["student_name"]
-    assert "email" not in row
-    assert "password" not in row
-    assert "token" not in row
-
-    blob = b"".join(files.values()).decode("utf-8", errors="ignore").lower()
-    for forbidden in ("password", "csrf", "session_token", "access_token"):
+    assert row["Participant name"]
+    assert row["Username"] == "bowen"
+    assert row["quiz_id"] == quiz_id
+    assert row["course_id"] == COURSE_ID
+    assert len(questions) == len(SAMPLE_ITEMS)
+    assert questions[0]["Question"] == SAMPLE_ITEMS[0]["prompt"]
+    assert questions[0]["Participant answer"] == "API gateway"
+    assert questions[0]["Correct answer"] == "API gateway"
+    assert questions[1]["Participant answer"] == "GET; HEAD"
+    assert questions[2]["Participant answer"] == "Decouple producers"
+    assert questions[2]["Correct answer"] == "Mentions decoupling."
+    assert "Current paper" in book.sheetnames
+    blob = str([list(sheet.values) for sheet in book]).lower()
+    for forbidden in ("password", "csrf", "session_token", "access_token", "email"):
         assert forbidden not in blob
-
-    summary = files["summary.md"].decode("utf-8")
-    assert "Week 3 Quiz" in summary
-    assert row["student_name"] in summary
 
 
 def test_teacher_export_zero_submissions(teacher: Actor) -> None:
     quiz_id = _create_publish_open(teacher)
     response = teacher.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/export")
     assert response.status_code == 200, response.text
-    files = _read_zip(response)
-    manifest = json.loads(files["manifest.json"])
-    assert manifest["attempt_count"] == 0
-    assert json.loads(files["attempts.json"]) == []
-    assert "README.md" in files
-    assert b"No submissions yet." in files["README.md"]
-    assert b"No submissions yet." in files["summary.md"]
+    assert _read_zip(response) == {}
+    assert read_export(response.content) == []
 
 
 def test_student_export_forbidden(teacher: Actor, student: Actor) -> None:
@@ -218,22 +202,24 @@ def test_export_isolates_course_epoch_and_auth(
     disposition = both.headers["content-disposition"]
     assert "\r" not in disposition and "\n" not in disposition
     assert disposition.count('"') == 2
-    assert "X-Evil" not in disposition
-    files = _read_zip(both)
-    epochs = sorted(row["taking_epoch"] for row in json.loads(files["attempts.json"]))
+    assert 'filename="Week _3___X-Evil_ 1.zip"' in disposition
+    workbooks = read_export(both.content)
+    assert len({name.split("/")[0] for name, *_ in workbooks}) == 1
+    assert len({name for name, *_ in workbooks}) == 2
+    epochs = sorted(row["taking_epoch"] for _, row, _, _ in workbooks)
     assert epochs == [1, 2]
 
     epoch_one = teacher.get(
         f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/export?taking_epoch=1"
     )
     assert epoch_one.status_code == 200
-    one_rows = json.loads(_read_zip(epoch_one)["attempts.json"])
+    one_rows = [row for _, row, _, _ in read_export(epoch_one.content)]
     assert [row["taking_epoch"] for row in one_rows] == [1]
-    assert json.loads(_read_zip(epoch_one)["manifest.json"])["taking_epoch_filter"] == 1
+    assert one_rows[0]["taking_epoch_filter"] == 1
 
     empty = teacher.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/export?taking_epoch=99")
     assert empty.status_code == 200
-    assert json.loads(_read_zip(empty)["manifest.json"])["attempt_count"] == 0
+    assert read_export(empty.content) == []
 
     bad = teacher.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/export?taking_epoch=nope")
     assert bad.status_code == 400
@@ -275,7 +261,7 @@ def test_export_isolates_course_epoch_and_auth(
     # The original course teacher still exports only that course's rows.
     still = teacher.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/export")
     assert still.status_code == 200
-    assert json.loads(_read_zip(still)["manifest.json"])["attempt_count"] == 2
+    assert len(read_export(still.content)) == 2
 
 
 def test_export_totals_follow_teacher_grade_over_ai_score(
@@ -311,19 +297,17 @@ def test_export_totals_follow_teacher_grade_over_ai_score(
 
     response = teacher.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/export")
     assert response.status_code == 200, response.text
-    files = _read_zip(response)
-    row = json.loads(files["attempts.json"])[0]
-    summary = files["summary.md"].decode("utf-8")
-    answer = next(item for item in row["answers"] if item["item_id"] == "q3")
+    _, row, questions, book = read_export(response.content)[0]
+    answer = next(item for item in questions if item["Question ID"] == "q3")
     assert row["score_manual"] == 1.0
     assert row["points_awarded"] == 4.0
     assert row["points_total"] == 6.0
-    assert row["manual_grades"]["q3"]["points_awarded"] == 1.0
-    assert answer["ai_score"] == 3.0
-    assert "4.0/6.0" in summary
-    assert "password" not in row
-    paper = json.loads(files["quiz.json"])["document"]["items"]
-    assert next(item["answer"]["choice_ids"] for item in paper if item["id"] == "q1") == ["a"]
+    assert row["Total score"] == "4.0/6.0"
+    assert answer["Teacher grade: points_awarded"] == 1.0
+    assert answer["Answer: ai_score"] == 3.0
+    assert answer["Result/score"] == 1.0
+    assert answer["Teacher grade: feedback"] == "Thin."
+    assert "password" not in str(list(book["Attempt"].values))
 
 
 def test_hidden_attempt_excluded(
@@ -343,7 +327,114 @@ def test_hidden_attempt_excluded(
 
     response = teacher.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/export")
     assert response.status_code == 200, response.text
-    files = _read_zip(response)
-    manifest = json.loads(files["manifest.json"])
-    assert manifest["attempt_count"] == 0
-    assert json.loads(files["attempts.json"]) == []
+    assert read_export(response.content) == []
+
+
+@pytest.mark.parametrize("display_name", ["../张同学/\\🙂", "..", "CON", "😀" * 80])
+def test_export_duplicate_and_unsafe_names(teacher, student, app_bundle, display_name):
+    from app.core.models import User
+
+    quiz_id = _create_publish_open(teacher)
+    submitted = _submit(quiz_id, student)
+    assert submitted.status_code == 201, submitted.text
+    with app_bundle[1].session() as db:
+        original = db.get(ClassroomQuizAttempt, submitted.json()["id"])
+        first = db.get(User, student.id)
+        first.display_name = display_name
+        second = User(
+            id=str(uuid4()),
+            username="exportstudent",
+            display_name=display_name,
+            created_at=datetime.now(UTC),
+        )
+        db.add(second)
+        db.flush()
+        fields = {
+            column.name: getattr(original, column.name)
+            for column in ClassroomQuizAttempt.__table__.columns
+        }
+        fields.update(id=str(uuid4()), actor_user_id=second.id)
+        db.add(ClassroomQuizAttempt(**fields))
+        db.commit()
+    response = teacher.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/export")
+    rows = read_export(response.content)
+    assert len(rows) == 2
+    folders = [name.split("/")[0] for name, *_ in rows]
+    assert len(set(folders)) == 2
+    assert folders[1] == folders[0] + " (2)"
+    for path, metadata, _, book in rows:
+        assert metadata["Participant name"] == display_name
+        assert all(part not in (".", "..") for part in path.split("/"))
+        assert "\\" not in path
+        assert all(len(part.encode("utf-8")) <= 255 for part in path.split("/"))
+        assert all(
+            len(title) <= 31 and not any(char in title for char in "[]:*?/\\")
+            for title in book.sheetnames
+        )
+
+
+def test_export_unanswered_snapshot_and_inert_strings(teacher, student, app_bundle):
+    from app.modules.quiz.models import ClassroomQuiz
+
+    quiz_id = _create_publish_open(teacher)
+    submitted = _submit(quiz_id, student)
+    assert submitted.status_code == 201
+    with app_bundle[1].session() as db:
+        attempt = db.get(ClassroomQuizAttempt, submitted.json()["id"])
+        snapshot = json.loads(attempt.document_snapshot_json)
+        snapshot["items"][0]["prompt"] = "=1+1\u0001"
+        snapshot["items"][1]["prompt"] = "+SUM(A1)"
+        snapshot["items"][2]["prompt"] = "-2+3"
+        attempt.document_snapshot_json = json.dumps(snapshot)
+        attempt.answers_json = json.dumps(
+            [
+                {"item_id": "q1", "choice_ids": [], "points_awarded": 0},
+                {"item_id": "q3", "text": "@SUM(A1)\u0002", "points_awarded": None},
+                {"item_id": "retired", "text": "Retained unknown answer"},
+            ]
+        )
+        quiz = db.get(ClassroomQuiz, quiz_id)
+        quiz.title = "../测验🙂/\\title"
+        db.commit()
+    response = teacher.get(f"/courses/{COURSE_ID}/quizzes/{quiz_id}/attempts/export")
+    assert "filename*=UTF-8''" in response.headers["content-disposition"]
+    _, _, questions, book = read_export(response.content)[0]
+    assert len(questions) == 3
+    assert questions[0]["Participant answer"] is None
+    assert questions[1]["Participant answer"] is None
+    assert questions[0]["Question"] == "=1+1"
+    assert questions[2]["Participant answer"] == "@SUM(A1)"
+    assert "Retained unknown answer" in str(list(book["Other answers"].values))
+    for sheet in book:
+        assert all(cell.data_type != "f" for row in sheet for cell in row)
+    assert SAMPLE_ITEMS[0]["prompt"] in str(list(book["Current paper"].values))
+
+
+def test_empty_draft_exports_empty_zip(teacher):
+    created = teacher.post(f"/courses/{COURSE_ID}/quizzes", {"title": "Empty", "items": []})
+    assert created.status_code == 201
+    response = teacher.get(f"/courses/{COURSE_ID}/quizzes/{created.json()['id']}/attempts/export")
+    assert response.status_code == 200
+    assert _read_zip(response) == {}
+
+
+def test_workbook_keeps_long_text_and_safe_cell_types():
+    from app.modules.quiz.export import _workbook
+    from app.modules.quiz.schemas import QuizItemTeacher
+    from openpyxl import load_workbook
+
+    text = "=" + "x" * 70000
+    content = _workbook(
+        metadata={"Participant name": "+Learner"},
+        items=[QuizItemTeacher(id="q", type="long_text", prompt="-Question")],
+        answers={"q": {"text": text}},
+        grades={},
+        quiz_payload={"document": {"items": []}},
+    )
+    book = load_workbook(io.BytesIO(content))
+    sheet = book["Attempt"]
+    heading = next(row[0].row for row in sheet if row[0].value == "Question #")
+    cell = sheet.cell(heading + 1, 5)
+    remainder = [row[3] for row in book["Long text"].values if row[1] == cell.coordinate]
+    assert cell.value + "".join(remainder) == text
+    assert all(cell.data_type != "f" for sheet in book for row in sheet for cell in row)

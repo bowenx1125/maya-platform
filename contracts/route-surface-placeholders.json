@@ -52,10 +52,6 @@
       "owner": "T2-QUIZ-M1M3",
       "reason": "Classroom Quiz rework P3: pause taking without changing the epoch"
     },
-    "exportCourseQuizAttempts": {
-      "owner": "T2-QUIZ-M1M3",
-      "reason": "Classroom Quiz teacher ZIP export of submitted attempts (#375)"
-    },
     "getCourseQuizAttempt": {
       "owner": "T2-QUIZ-M1M3",
       "reason": "Classroom Quiz attempt detail: teacher any visible attempt, student own without the key"

@@ -26,6 +26,7 @@ dependencies = [
   "psycopg[binary]==3.2.10",
   "pypinyin==0.55.0",
   "dashscope==2.0.4",
+  "openpyxl==3.1.5",
 ]
 
 [project.scripts]
@@ -58,7 +59,7 @@ plugins = []
 exclude = ["migrations"]
 
 [[tool.mypy.overrides]]
-module = ["yaml", "pypinyin", "pypinyin.*", "dashscope", "dashscope.*"]
+module = ["openpyxl", "openpyxl.*", "yaml", "pypinyin", "pypinyin.*", "dashscope", "dashscope.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

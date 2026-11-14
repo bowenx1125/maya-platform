@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib
 import io
 import json
-import zipfile
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -19,6 +18,7 @@ from app.modules.quiz.models import ClassroomQuiz, ClassroomQuizAttempt
 from app.seed import COURSE_ID
 from sqlalchemy import insert, inspect, text
 
+from tests.quiz_export_helpers import read_export
 from tests.test_classroom_quiz_api import (
     SAMPLE_ITEMS,
     Actor,
@@ -117,10 +117,9 @@ def test_hidden_submit_records_and_detail_keep_only_student_answers(
     teacher_rows = teacher.get(f"/courses/{COURSE_ID}/record-attempts?quiz_id={quiz_id}").json()
     export = teacher.get(f"{_path(quiz_id)}/attempts/export")
     assert export.status_code == 200
-    with zipfile.ZipFile(io.BytesIO(export.content)) as archive:
-        exported = json.loads(archive.read("attempts.json"))[0]
-        assert exported["points_awarded"] == 5.5
-        assert exported["manual_grades"]["q3"]["feedback"] == "Feedback"
+    _, exported, questions, _ = read_export(export.content)[0]
+    assert exported["points_awarded"] == 5.5
+    assert questions[2]["Teacher grade: feedback"] == "Feedback"
     for show in (False, True, False):
         _set_results_visible(teacher, quiz_id, show)
         detail = student.get(f"{_path(quiz_id)}/attempts/{attempt_id}")
