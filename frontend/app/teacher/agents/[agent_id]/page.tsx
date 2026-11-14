@@ -3,7 +3,6 @@
 import { Suspense } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 
-import { AppShell } from "../../../../components/app-shell";
 import { RouteGuard } from "../../../../components/session-provider";
 import { TeacherAgentDetail } from "../../../../components/teacher-workspace";
 import { LoadingPage } from "../../../../components/ui";
@@ -14,14 +13,12 @@ function TeacherAgentRoute() {
   const q = (key: string) => query.get(key) ?? undefined;
   return (
     <RouteGuard role="teacher">
-      <AppShell role="teacher">
-        <TeacherAgentDetail
-          agentId={agentId}
-          snapshotId={q("snapshot")}
-          generationFlow={q("flow") === "ai-knowledge"}
-          generationSetId={q("update_set_id")}
-        />
-      </AppShell>
+      <TeacherAgentDetail
+        agentId={agentId}
+        snapshotId={q("snapshot")}
+        generationFlow={q("flow") === "ai-knowledge"}
+        generationSetId={q("update_set_id")}
+      />
     </RouteGuard>
   );
 }

@@ -5,6 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "./session-provider";
 import { teacherEnterInProgress } from "../lib/teacher-visit";
 
+type ClassList = { id: string; name: string }[];
+type ClassSnapshot = { key: string; classes: ClassList };
+// The session API survives route and stage transitions; never share labels
+// between accounts or different teacher memberships.
+const snapshots = new WeakMap<object, ClassSnapshot>();
+
 export function useTeacherClasses() {
   const { api, user, selectTeacherCourse } = useSession();
   const pathname = usePathname();
@@ -13,7 +19,18 @@ export function useTeacherClasses() {
     .filter((item) => item.role === "teacher")
     .map((item) => item.course_id);
   const scope = ids.join(",");
-  const [classes, setClasses] = useState<{ id: string; name: string }[]>([]);
+  const key = JSON.stringify([user?.id, [...ids].sort()]);
+  const cached = snapshots.get(api);
+  const [snapshot, setSnapshot] = useState<ClassSnapshot | undefined>(() =>
+    cached?.key === key ? cached : undefined,
+  );
+  const classes =
+    (snapshot?.key === key
+      ? snapshot
+      : cached?.key === key
+        ? cached
+        : undefined
+    )?.classes ?? [];
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   useEffect(() => {
@@ -22,10 +39,16 @@ export function useTeacherClasses() {
       void api
         .courses()
         .then((items) => {
-          if (active)
-            setClasses(
-              items.filter((item) => scope.split(",").includes(item.id)),
-            );
+          if (active) {
+            const next = {
+              key,
+              classes: items.filter((item) =>
+                scope.split(",").includes(item.id),
+              ),
+            };
+            snapshots.set(api, next);
+            setSnapshot(next);
+          }
         })
         .catch((cause) => {
           if (active) setError(cause);
@@ -33,7 +56,7 @@ export function useTeacherClasses() {
     return () => {
       active = false;
     };
-  }, [api, scope]);
+  }, [api, scope, key]);
   async function choose(id: string) {
     if (busy || id === ids[0] || teacherEnterInProgress()) return;
     setBusy(id);

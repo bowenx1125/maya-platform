@@ -3,7 +3,6 @@
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { AppShell } from "../../../../../components/app-shell";
 import { DebateDiagnosticsView } from "../../../../../components/debate/diagnostics";
 import { PageAction } from "../../../../../components/page-action";
 import {
@@ -59,28 +58,26 @@ export default function TeacherDebateDiagnosticsPage() {
 
   return (
     <RouteGuard role="teacher">
-      <AppShell role="teacher">
-        <PageAction
-          name="back"
-          href={
-            debateId
-              ? `/teacher/debates/${encodeURIComponent(debateId)}/control`
-              : "/teacher/debates"
-          }
+      <PageAction
+        name="back"
+        href={
+          debateId
+            ? `/teacher/debates/${encodeURIComponent(debateId)}/control`
+            : "/teacher/debates"
+        }
+      />
+      {loading && !diagnostics ? <LoadingCard /> : null}
+      {!loading && error && !diagnostics ? (
+        <ErrorNotice
+          inline
+          notFound="debateNotFound"
+          error={error}
+          onRetry={() => void load()}
         />
-        {loading && !diagnostics ? <LoadingCard /> : null}
-        {!loading && error && !diagnostics ? (
-          <ErrorNotice
-            inline
-            notFound="debateNotFound"
-            error={error}
-            onRetry={() => void load()}
-          />
-        ) : null}
-        {diagnostics ? (
-          <DebateDiagnosticsView topic={topic} diagnostics={diagnostics} />
-        ) : null}
-      </AppShell>
+      ) : null}
+      {diagnostics ? (
+        <DebateDiagnosticsView topic={topic} diagnostics={diagnostics} />
+      ) : null}
     </RouteGuard>
   );
 }

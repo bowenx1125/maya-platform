@@ -7,7 +7,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DEBATE_BUTTON } from "../../../../../components/debate/debate-chrome";
 import { DebatePreview } from "../../../../../components/debate/preview";
 import { IconEye } from "../../../../../components/quiet-icons";
-import { AppShell } from "../../../../../components/app-shell";
 import { PageAction } from "../../../../../components/page-action";
 import {
   RouteGuard,
@@ -170,38 +169,36 @@ export default function TeacherDebateControlPage() {
 
   return (
     <RouteGuard role="teacher">
-      <AppShell role="teacher">
-        <PageAction name="back" href="/teacher/debates" />
-        {loading && !detail ? <LoadingCard /> : null}
-        {!loading && error && !detail ? (
-          <ErrorNotice
-            inline
-            notFound="debateNotFound"
-            error={error}
-            onRetry={() => void load()}
-          />
-        ) : null}
-        {legacy ? <LoadingCard /> : null}
-        {detail && debateId && !legacy ? (
-          <DebatePreview
-            detail={detail}
-            error={error ? localizeError(error) : null}
-            onRetryTurn={(turnIds) => void retryPreviewTurns(turnIds)}
-            retryingTurnId={retryingPreviewTurnId}
-            openClassroomHref={immerseControlHref(debateId)}
-            actions={
-              <Link
-                className={DEBATE_BUTTON}
-                href={`/teacher/debates/${encodeURIComponent(debateId)}/diagnostics`}
-                data-testid="debate-diagnostics-link"
-              >
-                <IconEye size={18} />
-                Diagnostics
-              </Link>
-            }
-          />
-        ) : null}
-      </AppShell>
+      <PageAction name="back" href="/teacher/debates" />
+      {loading && !detail ? <LoadingCard /> : null}
+      {!loading && error && !detail ? (
+        <ErrorNotice
+          inline
+          notFound="debateNotFound"
+          error={error}
+          onRetry={() => void load()}
+        />
+      ) : null}
+      {legacy ? <LoadingCard /> : null}
+      {detail && debateId && !legacy ? (
+        <DebatePreview
+          detail={detail}
+          error={error ? localizeError(error) : null}
+          onRetryTurn={(turnIds) => void retryPreviewTurns(turnIds)}
+          retryingTurnId={retryingPreviewTurnId}
+          openClassroomHref={immerseControlHref(debateId)}
+          actions={
+            <Link
+              className={DEBATE_BUTTON}
+              href={`/teacher/debates/${encodeURIComponent(debateId)}/diagnostics`}
+              data-testid="debate-diagnostics-link"
+            >
+              <IconEye size={18} />
+              Diagnostics
+            </Link>
+          }
+        />
+      ) : null}
     </RouteGuard>
   );
 }

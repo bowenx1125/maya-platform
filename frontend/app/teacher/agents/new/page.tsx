@@ -3,7 +3,6 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
-import { AppShell } from "../../../../components/app-shell";
 import { RouteGuard } from "../../../../components/session-provider";
 import { TeacherPersonalAgentCreate } from "../../../../components/teacher-workspace";
 import { LoadingPage } from "../../../../components/ui";
@@ -13,9 +12,7 @@ function NewTeacherAgentRoute() {
   const q = (key: string) => query.get(key) ?? undefined;
   return (
     <RouteGuard role="teacher">
-      <AppShell role="teacher">
-        <TeacherPersonalAgentCreate returnHref={q("return")} />
-      </AppShell>
+      <TeacherPersonalAgentCreate returnHref={q("return")} />
     </RouteGuard>
   );
 }
