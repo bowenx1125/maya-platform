@@ -127,3 +127,5 @@ Merge inputs:HEAD 0988a2322832c6db264ff13a0780b97bfa96dc51 + origin/main 5e5f349
 Integration inputs:local a1ff6af9 + origin/main 7e7087442a584897aad0cd0ce445e2f97ca30d98;preserve class labels/Teachers and #438/#439.
 
 Nov16 B(local):0093_default_group_no_group follows0092_repair_feedback_v2;rename Demo Group/Students to No Group,skip case-insensitive collisions;additive ACTIVE-only backfill,teachers/inactive untouched. Runtime enrolment/reactivation repairs missing memberships;default IDs/name protected;downgrade keeps data.0 calls/deploy.
+
+Local checks:A/C/B targeted PG146/UI1423 pass;18 static gates/build/production routes pass. Baseline long bilingual literals and animation channel array reformatted only;voice content/behavior unchanged. Full PG/main comparison pending.
