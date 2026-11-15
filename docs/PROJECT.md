@@ -113,6 +113,6 @@ f1087c4d live:3D/gesture v2/3 figures/#419;replaces334fbd94(missed #419).Local i
 
 Nov14 UI:Teams ?/Agent New RAG hint removed;tour omits voices.Capsule:shared teacher layout/session-API/user/course caches,B2b kept;Chromium1440/390 width70.15625px stable.UX:page-rise520ms/reduced motion/teacher shell kept;Immerse loading hides Back.Quiz ZIP:participant XLSX/snapshot questions/grades.1387UI/13skip;build/gates pass;PG3521pass/129baselinefail/new0.0 calls/deploy.
 
-Nov15 #426 local:LoadingPage flat #CEDAE3;390/1440 Chromium reviewed;1387UI/13skip/build pass.Prettier baseline:performance-player.ts.0 calls/deploy.
+Nov15 #426:LoadingPage flat #CEDAE3;390/1440 reviewed;1387UI/13skip,build pass.0 calls/deploy.
 
-Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs/ce52b274;Team/assessment bytes kept;identity kept.473 focused pass.0 calls/deploy;no real LLM.
+Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs/ce52b274;Team/assessment bytes kept.473 focused pass;no real LLM.
