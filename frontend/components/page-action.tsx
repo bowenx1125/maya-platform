@@ -19,18 +19,24 @@ export const BANNER_ACTION = `inline-flex h-auto min-h-11 w-auto shrink-0 cursor
 
 /**
  * The one look for New / Back / Done wherever a page draws them (its
- * banner, or the shell's row above a page without one): New and Done pink,
- * Back white, symbol plus word, the shared press and busy motion.
+ * banner, or the shell's row above a page without one): New lime
+ * (--arc-cat-studyform), Done pink, Back white, symbol plus word, the
+ * shared press and busy motion.
  */
 export function pageActionClass(
   name: WorkspaceActionName,
   className?: string,
 ): string {
-  const primary = name !== "back";
+  const fill =
+    name === "new"
+      ? "bg-[var(--arc-cat-studyform)]"
+      : name === "done"
+        ? "bg-[#FF4D8D]"
+        : "bg-white";
   return cn(
     BANNER_ACTION,
-    primary ? "bg-[#FF4D8D]" : "bg-white",
-    primary ? BUSY_MOTION_PRIMARY : BUSY_MOTION,
+    fill,
+    name === "back" ? BUSY_MOTION : BUSY_MOTION_PRIMARY,
     className,
   );
 }

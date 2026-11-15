@@ -42,6 +42,11 @@
     font-family: inherit;
   }
 
+  /* Reveal the body/AppShell blue-gray grid while LoadingPage is on screen. */
+  .appearance:has(> main > :global(.loading-card--bare)) {
+    background: transparent;
+  }
+
   .appearance :is(button, a, input, select, textarea, summary):focus-visible {
     outline: 3px solid var(--accent);
     outline-offset: 3px;

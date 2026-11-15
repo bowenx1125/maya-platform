@@ -199,9 +199,12 @@ describe("W1 teacher personal workspace", () => {
     const ragUpload = screen.getByLabelText("Upload RAG");
     const ragNew = ragUpload.closest("label")!;
     const empty = screen.getByText("No RAG yet.");
-    expect(empty).toHaveClass("muted-copy");
     expect(empty.tagName).toBe("P");
-    expectFooterAfter(ragNew, empty);
+    expect(empty).not.toHaveClass("muted-copy");
+    const sticker = empty.parentElement;
+    expect(sticker).toBeTruthy();
+    expect(sticker?.querySelector("svg")).toBeTruthy();
+    expectFooterAfter(ragNew, sticker!);
     expect(ragNew).toHaveAttribute("data-ui-guide", "agent.uploadRag");
     expect(within(ragNew).getByText("New")).toBeVisible();
     fireEvent.change(ragUpload, {

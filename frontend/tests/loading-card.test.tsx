@@ -53,12 +53,12 @@ describe("LoadingCard", () => {
     expect(screen.getByRole("status").textContent).toContain("Loading…");
   });
 
-  it("fills the whole screen as LoadingPage, on a flat blue-gray background", () => {
+  it("fills the whole screen as LoadingPage, leaving the app background visible", () => {
     const { container } = render(<LoadingPage />);
     const main = container.querySelector("main");
     expect(main?.className).toContain("min-h-screen");
-    expect(main?.className).toContain("bg-[#CEDAE3]");
-    expect(main?.className).not.toMatch(/67E8F9|A5F3FC|gradient/i);
+    expect(main?.className).not.toMatch(/\bbg-|CEDAE3|67E8F9|A5F3FC|gradient/i);
+    expect(main?.style.background).toBe("");
     expect(main?.querySelector(".loading-card")).toBeTruthy();
   });
 

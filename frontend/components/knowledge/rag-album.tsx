@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import type { AffectedAgent, KnowledgeDocument } from "../../lib/api/platform";
 import { useT } from "../../lib/i18n";
+import { cn } from "../../lib/utils";
 import { Button, PRESS_MOTION, WORKSPACE_ACTION_SIZE } from "../ui/button";
 
 const PATHS = {
@@ -111,6 +112,37 @@ export const albumStyles = {
     "py-[28px] px-[34px] bg-white [background-image:repeating-linear-gradient(0deg,transparent_0_31px,#dcebff_31px_33px)] border-[3px] border-solid border-[#111] rounded-[12px] shadow-[6px_6px_0_#111] [&_h1]:mt-0 [&_h1]:mx-0 [&_h1]:mb-[12px] [&_h1]:[font:800_30px_var(--font-bricolage,'Bricolage_Grotesque'),system-ui] [&_h2]:mt-[22px] [&_h2]:mx-0 [&_h2]:mb-[8px] [&_h2]:[font:800_20px_var(--font-bricolage,'Bricolage_Grotesque'),system-ui] [&_li]:[font:400_16px/1.6_var(--font-lexend,'Lexend')] [&_p]:[font:400_16px/1.6_var(--font-lexend,'Lexend')] [&_blockquote]:my-[14px] [&_blockquote]:mx-0 [&_blockquote]:py-[10px] [&_blockquote]:px-[14px] [&_blockquote]:bg-[#fff7cc] [&_blockquote]:border-2 [&_blockquote]:border-solid [&_blockquote]:border-[#111] [&_blockquote]:rounded-[8px] [&_blockquote]:shadow-[3px_3px_0_#111]",
 } as const;
 
+/** Agent create/edit compact empty sticker (approved R2). Reuses the Brainform album empty look. */
+export function RagAlbumEmpty({
+  title,
+  compact = false,
+}: {
+  title: string;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        albumStyles.ghostFirst,
+        compact && "min-h-[180px] [&_p]:m-0",
+      )}
+    >
+      <svg
+        width="64"
+        height="64"
+        viewBox="0 0 24 24"
+        fill="#67E8F9"
+        stroke="#111"
+        strokeWidth="1.6"
+        aria-hidden="true"
+      >
+        <path d={PATHS.doc} />
+      </svg>
+      <p>{title}</p>
+    </div>
+  );
+}
+
 /** The album page class (the RAG page's <main>): dotted paper. */
 export const ragAlbumClass = albumStyles.alb;
 
@@ -139,7 +171,10 @@ export function AlbumPlus({
 }) {
   return (
     <Button
-      className={WORKSPACE_ACTION_SIZE}
+      className={cn(
+        WORKSPACE_ACTION_SIZE,
+        "!bg-[var(--arc-cat-studyform)] hover:!bg-[var(--arc-cat-studyform)]",
+      )}
       aria-label={label}
       busy={busy}
       disabled={disabled}

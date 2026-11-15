@@ -24,7 +24,7 @@ export const knowledgeAlbum = {
   sp: "flex-1",
   acts: "flex gap-[12px] ml-auto",
   btn: `!inline-flex !items-center !gap-[6px] !h-[40px] !py-0 !px-[16px] !border-[2.5px] !border-solid !border-[#111] !rounded-[8px] ![font:800_14px_var(--font-lexend,'Lexend')] !bg-white !text-[#111] ${PRESS_MOTION} ${BUSY_MOTION}`,
-  pink: "!bg-[#ff4d8d] hover:!bg-[#ff4d8d] aria-busy:!bg-[linear-gradient(90deg,#FF4D8D_var(--p,0%),#FFD1E1_0)]",
+  pink: "!bg-[var(--arc-cat-studyform)] hover:!bg-[var(--arc-cat-studyform)] aria-busy:!bg-[linear-gradient(90deg,var(--arc-cat-studyform)_var(--p,0%),#E8FFA8_0)]",
   del: "!ml-auto !bg-[#ef4444] !text-white hover:!bg-[#ef4444]",
   grid: `grid grid-cols-[repeat(2,minmax(0,1fr))] gap-y-[30px] gap-x-[28px] m-0 p-0 list-none max-[960px]:grid-cols-[minmax(0,1fr)] max-[960px]:gap-[22px]`,
   card: `relative flex flex-col gap-[10px] p-[10px] border-[3px] border-solid border-[#111] rounded-[12px] shadow-[6px_6px_0_#111] [&:nth-child(4n+1)]:[--r:-1.2deg] [&:nth-child(4n+2)]:[--r:1deg] [&:nth-child(4n+3)]:[--r:-0.8deg] [&:nth-child(4n)]:[--r:1.1deg] ${LIST_CARD_LIFT}`,
