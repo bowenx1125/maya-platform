@@ -554,24 +554,35 @@ def test_ruleset_endpoint_contract_and_creation_with_minutes(debate_app) -> None
     )
     assert rejected.status_code == 400
     assert rejected.json()["code"] == "malformed_request"
+    minutes_only = client.post(
+        f"/api/v1/courses/{COURSE_ID}/debates",
+        headers=headers(csrf, **{"Idempotency-Key": "prompt-v4-create-minutes-only"}),
+        json=body,
+    )
+    assert minutes_only.status_code == 422, minutes_only.text
+    assert minutes_only.json()["code"] == "round_unit_caps_required"
+    caps = [150, 120, 120, 180]
     created = client.post(
         f"/api/v1/courses/{COURSE_ID}/debates",
         headers=headers(csrf, **{"Idempotency-Key": "prompt-v4-create-ok-001"}),
-        json=body,
+        json={**body, "round_unit_caps": caps},
     )
     assert created.status_code == 201, created.text
     debate_id = created.json()["id"]
     with database.session() as db:
         frozen = db.get(Debate, debate_id).rule_snapshot_json
     stored = json.loads(frozen)
-    assert stored["contract_version"] == CONTRACT_VERSION
-    assert stored["target_minutes"] == 4
+    from app.modules.debates.generation_params import RULESET_CONTRACT_V5
+
+    assert stored["contract_version"] == RULESET_CONTRACT_V5
+    assert stored["round_unit_caps"] == caps
+    assert "target_minutes" not in stored
     assert "min_words" not in stored and "frequency_penalty" not in stored["llm_params"]
-    # Resending the same form values (with the unstored parameter) is not a change.
+    # Resending the same caps is not a change; leftover target_minutes is ignored.
     updated = client.patch(
         f"/api/v1/debates/{debate_id}",
         headers=headers(csrf),
-        json={**body, "background": "New context", "expected_revision": 0},
+        json={**body, "round_unit_caps": caps, "background": "New context", "expected_revision": 0},
     )
     assert updated.status_code == 200, updated.text
     with database.session() as db:
@@ -579,7 +590,7 @@ def test_ruleset_endpoint_contract_and_creation_with_minutes(debate_app) -> None
     changed = client.patch(
         f"/api/v1/debates/{debate_id}",
         headers=headers(csrf),
-        json={**body, "target_minutes": 6, "expected_revision": 1},
+        json={**body, "round_unit_caps": [151, 120, 120, 180], "expected_revision": 1},
     )
     assert changed.status_code == 409
 

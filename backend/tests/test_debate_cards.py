@@ -320,6 +320,7 @@ def _create(client: Any, database: Any, *, key: str, language: str = "en") -> st
             "output_language": language,
             "topic": "Should schools ban phones?" if language == "en" else "学校应该禁止手机吗？",
             "participants": [{"agent_id": agent, "stance_mode": "open"} for agent in ids],
+            "round_unit_caps": [200, 200, 200, 200]
         },
     )
     assert created.status_code == 201, created.text
@@ -610,10 +611,16 @@ def test_every_failure_is_a_fallback_with_its_ledger_state(
     result, transport, operations = _compile(database, debate_id, outcome)
     assert result == CardOutcome("fallback", safe_error_code=code)
     assert code in cards.CARD_FALLBACK_CODES
-    assert len(transport.calls) == 1
-    [operation] = operations
-    assert operation.state == state
-    assert operation.charged_request_count == charged
+    if code == "debate_card_not_sent":
+        # not_sent may be retried once in the same compile call (attempt_no=2).
+        assert len(transport.calls) == 2
+        assert len(operations) == 2
+        assert all(item.state == state and item.charged_request_count == charged for item in operations)
+    else:
+        assert len(transport.calls) == 1
+        [operation] = operations
+        assert operation.state == state
+        assert operation.charged_request_count == charged
 
 
 def test_a_missing_policy_blocks_the_call_before_anything_is_sent(debate_app) -> None:

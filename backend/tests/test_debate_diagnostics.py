@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.modules.debates.generation.four_round import turn_unit_cap
+from app.modules.debates.generation_params import RULESET_CONTRACT_V4
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn
 from app.modules.debates.teaching_rules import frozen_speech_length
 from fastapi.testclient import TestClient
@@ -48,6 +49,7 @@ def _create_previewed_debate(app, database) -> tuple[TestClient, str, str]:
             ],
             "round_count": 4,
             "output_language": "en",
+            "round_unit_caps": [200, 200, 200, 200]
         },
     )
     assert response.status_code == 201, response.text
@@ -104,6 +106,16 @@ def test_teacher_reads_per_agent_diagnostics_for_a_v4_debate(app_factory) -> Non
     app, database, _settings = app_factory()
     client, _csrf, debate_id = _create_previewed_debate(app, database)
     try:
+        with database.session() as db:
+            debate = db.get(Debate, debate_id)
+            snapshot = json.loads(debate.rule_snapshot_json)
+            snapshot["contract_version"] = RULESET_CONTRACT_V4
+            snapshot["target_minutes"] = 5
+            snapshot.pop("round_unit_caps", None)
+            snapshot.pop("over_length_ratio", None)
+            snapshot.pop("repair_feedback_version", None)
+            debate.rule_snapshot_json = json.dumps(snapshot)
+            db.commit()
         turn_id = _rewrite_first_turn(
             database,
             debate_id,

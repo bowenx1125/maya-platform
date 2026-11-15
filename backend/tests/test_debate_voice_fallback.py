@@ -44,6 +44,7 @@ def test_real_speech_without_fallback_does_not_block_debate_creation(debate_app:
             ],
             "round_count": 4,
             "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
+            "round_unit_caps": [200, 200, 200, 200]
         },
     )
     assert response.status_code == 201, response.text
@@ -159,7 +160,8 @@ def test_debate_setup_drops_a_clone_whose_owner_left_the_group(debate_app: Any) 
                 ],
                 "round_count": 4,
                 "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
-            },
+            "round_unit_caps": [200, 200, 200, 200]
+        },
         )
         assert response.status_code == 201, response.text
         participant: dict[str, Any] = response.json()["participants"][0]

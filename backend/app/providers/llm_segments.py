@@ -38,6 +38,7 @@ from app.modules.debates.generation_params import (
     RULESET_CONTRACT_V3,
     default_params,
     request_fields,
+    uses_code_contract,
 )
 from app.providers.llm_adapter import LLMAdapterError, LLMUsageV1
 from app.providers.llm_price_card import (
@@ -114,10 +115,10 @@ SEGMENT_REPAIR_PREFIX_ZH = (
 def segment_prompt_version(snapshot: SegmentInputSnapshot) -> str:
     if getattr(snapshot, "discussion_json", None) is None:
         return SEGMENT_PROMPT_VERSION
-    contract = _frozen_llm(snapshot).get("contract_version")
-    if contract == CONTRACT_VERSION:
+    frozen = _frozen_llm(snapshot)
+    if uses_code_contract(frozen):
         return OWNED_CONTRACT_PROMPT_VERSION
-    if contract == RULESET_CONTRACT_V3:
+    if frozen.get("contract_version") == RULESET_CONTRACT_V3:
         return RULESET_CONTRACT_PROMPT_VERSION
     return FOUR_ROUND_SEGMENT_PROMPT_VERSION
 

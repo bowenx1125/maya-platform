@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from collections.abc import Callable, Mapping
 from contextlib import ExitStack
 from dataclasses import dataclass
@@ -41,6 +42,7 @@ from app.modules.debates.schemas import DebateCardDropReason
 from app.modules.knowledge.providers.product_publication import require_exact_confirmation
 from app.providers.control import (
     LLM_DEBATE_TURN_BUCKET,
+    DuplicateOperation,
     ExportFieldV1,
     ExportManifestV1,
     ProviderReservationRequestV1,
@@ -160,16 +162,86 @@ def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+CARD_TEACHER_FALLBACK_NOTICE = "将使用原始 AGENT.md，本场可继续"
+CardTeacherReason = Literal[
+    "compile_timeout",
+    "format_invalid",
+    "card_too_long",
+    "service_busy",
+    "config_problem",
+    "other",
+]
+_TIMEOUT_TYPES = {
+    "TimeoutError",
+    "ReadTimeout",
+    "ConnectTimeout",
+    "WriteTimeout",
+    "PoolTimeout",
+    "asyncio.TimeoutError",
+}
+
+
 def initial_card_status(rule_snapshot_json: str) -> CardStatus | None:
-    """New Debates on the v4 contract compile cards; older ones never do."""
+    """New Debates on the v4 or v5 code contract compile cards; older ones never do."""
+
+    from app.modules.debates.generation_params import uses_code_contract
 
     try:
         snapshot = json.loads(rule_snapshot_json)
     except (TypeError, ValueError):
         return None
-    if isinstance(snapshot, dict) and snapshot.get("contract_version") == CONTRACT_VERSION:
+    if uses_code_contract(snapshot if isinstance(snapshot, dict) else None):
         return "compiling"
     return None
+
+
+def _card_error_stem(code: str | None) -> str:
+    raw = str(code or "")
+    return raw.removeprefix("debate_card_")
+
+
+def card_teacher_reason(
+    code: str | None, *, transport_timeout: bool | None = None
+) -> CardTeacherReason | None:
+    """Map an internal card error to the teacher-facing coarse reason.
+
+    Only fallback rows should call this; ready and missing codes stay null.
+    """
+
+    if not code:
+        return None
+    raw = _card_error_stem(code)
+    if raw.startswith("llm_outbound_"):
+        return "config_problem"
+    if raw == "too_long":
+        return "card_too_long"
+    if raw in {"invalid", "http_rejected"}:
+        return "format_invalid"
+    if raw == "acceptance_unknown":
+        return "compile_timeout"
+    if raw in {"admission_refused", "not_sent"}:
+        return "service_busy"
+    if raw == "transport_failed":
+        if transport_timeout is True:
+            return "compile_timeout"
+        if transport_timeout is False:
+            return "service_busy"
+        return "compile_timeout"
+    if raw in {"preflight_blocked", "budget_invalid", "agent_md_missing"}:
+        return "config_problem"
+    return "other"
+
+
+def card_teacher_projection(
+    card_status: object, safe_error_code: object
+) -> dict[str, str | None]:
+    if card_status != "fallback":
+        return {"card_teacher_reason": None, "card_teacher_notice": None}
+    reason = card_teacher_reason(str(safe_error_code) if safe_error_code else None)
+    return {
+        "card_teacher_reason": reason,
+        "card_teacher_notice": CARD_TEACHER_FALLBACK_NOTICE if reason else CARD_TEACHER_FALLBACK_NOTICE,
+    }
 
 
 def card_system_prompt(language: str) -> str:
@@ -247,6 +319,52 @@ def _line(value: object, pointer: str) -> str:
     if len(text) > CARD_MAX_LINE_CHARS:
         raise CardRejected("debate_card_invalid", pointer)
     return text
+
+
+def correct_card_payload(value: object) -> object:
+    """Deterministic display/metadata fixes applied before ``validate_card``.
+
+    Identity, position, speaking style and non-empty reasoning are left alone.
+    """
+
+    if not isinstance(value, Mapping):
+        return value
+    card = dict(value)
+    dropped = card.get("dropped")
+    if isinstance(dropped, list):
+        cleaned: list[object] = []
+        for item in dropped:
+            if item in (None, {}, ""):
+                continue
+            if isinstance(item, Mapping):
+                excerpt = item.get("excerpt")
+                reason = item.get("reason")
+                if (
+                    (excerpt is None or (isinstance(excerpt, str) and not excerpt.strip()))
+                    and (reason is None or (isinstance(reason, str) and not str(reason).strip()))
+                ):
+                    continue
+                item = dict(item)
+                if isinstance(excerpt, str) and len(excerpt) > CARD_MAX_LINE_CHARS:
+                    item["excerpt"] = excerpt[:CARD_MAX_LINE_CHARS]
+            cleaned.append(item)
+            if len(cleaned) >= CARD_MAX_DROPPED_ITEMS:
+                break
+        card["dropped"] = cleaned
+    reasoning = card.get("reasoning")
+    if isinstance(reasoning, list):
+        card["reasoning"] = [
+            item
+            for item in reasoning
+            if not (item is None or (isinstance(item, str) and not item.strip()))
+        ]
+    voice = card.get("voice_style")
+    if isinstance(voice, str):
+        if not voice.strip():
+            card["voice_style"] = None
+        elif len(voice) > CARD_MAX_LINE_CHARS:
+            card["voice_style"] = voice[:CARD_MAX_LINE_CHARS]
+    return card
 
 
 def validate_card(value: object, language: str) -> dict[str, object]:
@@ -461,7 +579,7 @@ def _response_card(response: object, language: str) -> tuple[dict[str, object], 
         raise
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
         raise CardRejected("debate_card_invalid", "/choices/0/message/content") from exc
-    return validate_card(value, language), _sha256(content)
+    return validate_card(correct_card_payload(value), language), _sha256(content)
 
 
 def compile_card_with_provider(
@@ -617,67 +735,99 @@ def compile_card_with_provider(
     ]
     if existing:
         return _fallback(row, "debate_card_attempt_used")
-    try:
-        operation = repository.create_prepared(
-            ProviderReservationRequestV1(
-                operation_id=str(uuid4()),
-                scope_id=str(debate.id),
-                provider_operation=CARD_OPERATION,
-                logical_item_id=str(row.id),
-                attempt_no=1,
-                request_hash=request_hash,
-                max_tokens=max_tokens,
-                max_cost_cny=0.0,
-                policy_hash=str(policy_hash),
-                export_manifest_hash=persisted.manifest_hash,
-                build_manifest_hash=persisted.build_manifest_hash,
-                model_key=model_key,
-                budget_bucket=LLM_DEBATE_TURN_BUCKET,
+
+    started = time.monotonic()
+    recovered = False
+    response: object | None = None
+    while True:
+        try:
+            operation = repository.create_prepared(
+                ProviderReservationRequestV1(
+                    operation_id=str(uuid4()),
+                    scope_id=str(debate.id),
+                    provider_operation=CARD_OPERATION,
+                    logical_item_id=str(row.id),
+                    attempt_no=2 if recovered else 1,
+                    request_hash=request_hash,
+                    max_tokens=max_tokens,
+                    max_cost_cny=0.0,
+                    policy_hash=str(policy_hash),
+                    export_manifest_hash=persisted.manifest_hash,
+                    build_manifest_hash=persisted.build_manifest_hash,
+                    model_key=model_key,
+                    budget_bucket=LLM_DEBATE_TURN_BUCKET,
+                )
             )
+        except DuplicateOperation:
+            return _fallback(row, "debate_card_attempt_used")
+        except Exception:
+            return _fallback(row, "debate_card_ledger_failed")
+
+        def _can_recover(operation_id: str) -> bool:
+            nonlocal recovered
+            if recovered or (time.monotonic() - started) >= CARD_TIMEOUT_SECONDS:
+                return False
+            try:
+                current = repository.operation(operation_id)
+            except Exception:
+                return False
+            billed = int(getattr(current, "charged_request_count", 0) or 0)
+            if current.state != "not_sent" or billed:
+                return False
+            recovered = True
+            return True
+
+        timeout_seconds = (
+            max(0.001, CARD_TIMEOUT_SECONDS - (time.monotonic() - started))
+            if recovered
+            else CARD_TIMEOUT_SECONDS
         )
-    except Exception:
-        return _fallback(row, "debate_card_attempt_used")
-    headers = {"Content-Type": "application/json"}
-    if adapter.config.api_key:
-        headers["Authorization"] = f"Bearer {adapter.config.api_key}"
-    # The slot is taken before the call is reserved or "sending", as the report
-    # does: a refusal under load leaves nothing in flight.
-    admission = ExitStack()
-    try:
-        admission.enter_context(debate_llm_slot())
-    except PlatformError:
-        _settle(repository, operation.id, "not_sent", "debate_card_admission_refused")
-        return _fallback(row, "debate_card_admission_refused")
-    with admission:
+        headers = {"Content-Type": "application/json"}
+        if adapter.config.api_key:
+            headers["Authorization"] = f"Bearer {adapter.config.api_key}"
+        # The slot is taken before the call is reserved or "sending", as the report
+        # does: a refusal under load leaves nothing in flight.
+        admission = ExitStack()
         try:
-            repository.reserve(operation.id)
-            repository.transition(operation.id, expected="reserved", state="sending")
-        except Exception as exc:
-            _settle(repository, operation.id, "not_sent", "debate_card_ledger_failed")
-            return _fallback(row, "debate_card_ledger_failed", type(exc).__name__)
-        try:
-            response = adapter.transport.post(
-                endpoint,
-                headers=headers,
-                json=body,
-                timeout=httpx.Timeout(
-                    timeout=CARD_TIMEOUT_SECONDS, connect=LLM_CONNECT_TIMEOUT_SECONDS
-                ),
-            )
-        except LLMTransportNotSent:
-            _settle(repository, operation.id, "not_sent", "debate_card_not_sent")
-            return _fallback(row, "debate_card_not_sent")
-        except Exception as exc:
-            # A read timeout (CARD_TIMEOUT_SECONDS), a dropped connection or
-            # anything else after sending: the supplier may have accepted the
-            # request, so it is recorded as unknown and never sent again.
-            code = (
-                "debate_card_acceptance_unknown"
-                if isinstance(exc, LLMAcceptanceUnknown)
-                else "debate_card_transport_failed"
-            )
-            _settle(repository, operation.id, "acceptance_unknown", code)
-            return _fallback(row, code, type(exc).__name__)
+            admission.enter_context(debate_llm_slot())
+        except PlatformError:
+            _settle(repository, operation.id, "not_sent", "debate_card_admission_refused")
+            if _can_recover(operation.id):
+                continue
+            return _fallback(row, "debate_card_admission_refused")
+        with admission:
+            try:
+                repository.reserve(operation.id)
+                repository.transition(operation.id, expected="reserved", state="sending")
+            except Exception as exc:
+                _settle(repository, operation.id, "not_sent", "debate_card_ledger_failed")
+                return _fallback(row, "debate_card_ledger_failed", type(exc).__name__)
+            try:
+                response = adapter.transport.post(
+                    endpoint,
+                    headers=headers,
+                    json=body,
+                    timeout=httpx.Timeout(
+                        timeout=timeout_seconds, connect=LLM_CONNECT_TIMEOUT_SECONDS
+                    ),
+                )
+            except LLMTransportNotSent:
+                _settle(repository, operation.id, "not_sent", "debate_card_not_sent")
+                if _can_recover(operation.id):
+                    continue
+                return _fallback(row, "debate_card_not_sent")
+            except Exception as exc:
+                # A read timeout (CARD_TIMEOUT_SECONDS), a dropped connection or
+                # anything else after sending: the supplier may have accepted the
+                # request, so it is recorded as unknown and never sent again.
+                code = (
+                    "debate_card_acceptance_unknown"
+                    if isinstance(exc, LLMAcceptanceUnknown)
+                    else "debate_card_transport_failed"
+                )
+                _settle(repository, operation.id, "acceptance_unknown", code)
+                return _fallback(row, code, type(exc).__name__)
+        break
     try:
         card, response_hash = _response_card(response, language)
     except CardRejected as rejected:
@@ -686,8 +836,14 @@ def compile_card_with_provider(
     try:
         repository.mark_accepted(operation.id, response_hash=response_hash)
         repository.mark_succeeded(operation.id)
-    except Exception:
-        return _fallback(row, "debate_card_ledger_failed")
+    except Exception as exc:
+        LOGGER.warning(
+            "debate_card_ledger_settle_failed debate_id=%s participant_id=%s operation_id=%s error=%s",
+            row.debate_id,
+            row.id,
+            operation.id,
+            type(exc).__name__,
+        )
     return CardOutcome("ready", card=card)
 
 
@@ -715,6 +871,7 @@ def _settle(repository: ProviderRepository, operation_id: str, state: str, code:
 
 __all__ = [
     "CARD_MAX_UNITS",
+    "correct_card_payload",
     "CARD_OPERATION",
     "CARD_SCHEMA",
     "CardOutcome",

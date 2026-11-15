@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from fractions import Fraction
 from pathlib import Path
 
 DEFAULT_DIRECTORY = Path(__file__).with_name("default_rules")
@@ -36,6 +37,13 @@ def execution_contracts() -> dict[str, str]:
         lang: (CONTRACT_DIRECTORY / f"{lang}.md").read_text(encoding="utf-8")
         for lang in ("zh", "en")
     }
+
+
+def execution_contracts_v5() -> dict[str, str]:
+    """The code-owned v5 contract compiled into new Debates."""
+
+    directory = CONTRACT_DIRECTORY / "v5"
+    return {lang: (directory / f"{lang}.md").read_text(encoding="utf-8") for lang in ("zh", "en")}
 
 
 ROUND_PLACEHOLDER = "{round}"
@@ -79,11 +87,21 @@ def _round_view(markdown: str, round_number: int) -> str:
     return re.sub(r"\n{3,}", "\n\n", "".join(kept)).strip()
 
 
-def compile_code_contract_prompt(markdown: str, round_number: int, language: str) -> str:
-    """v4: the teacher's style and this round's task, then the code-owned contract."""
+def compile_code_contract_prompt(
+    markdown: str,
+    round_number: int,
+    language: str,
+    *,
+    contract_version: str | None = None,
+) -> str:
+    """The teacher's style and this round's task, then the code-owned contract."""
+
+    from app.modules.debates.generation_params import CONTRACT_VERSION, RULESET_CONTRACT_V5
 
     teacher = _round_view(strip_execution_contract(markdown), round_number)
-    contract = _round_view(execution_contracts()[language], round_number)
+    version = contract_version or CONTRACT_VERSION
+    source = execution_contracts_v5() if version == RULESET_CONTRACT_V5 else execution_contracts()
+    contract = _round_view(source[language], round_number)
     parts = [item for item in (teacher, contract) if item]
     return "\n\n".join(parts).replace(ROUND_PLACEHOLDER, str(round_number))
 
@@ -199,25 +217,55 @@ def _compile_zh_system_prompt(markdown: str, round_number: int) -> str:
     )
 
 
+def _normalized_round_unit_caps(value: object) -> list[int] | None:
+    if value is None:
+        return None
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        raise ValueError("round_unit_caps must be four positive integers")
+    caps: list[int] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, int) or item < 1:
+            raise ValueError("round_unit_caps must be four positive integers")
+        caps.append(int(item))
+    return caps
+
+
 def freeze_teaching_rules(
     prompts: Mapping[str, str] | None = None,
     llm_params: Mapping[str, object] | None = None,
     voice_params: Mapping[str, object] | None = None,
     target_minutes: int | None = None,
+    round_unit_caps: Sequence[int] | None = None,
 ) -> dict[str, object]:
-    from app.modules.debates.generation_params import CONTRACT_VERSION, UNSTORED_V4_PARAMS
+    from app.modules.debates.generation_params import (
+        CONTRACT_VERSION,
+        RULESET_CONTRACT_V5,
+        UNSTORED_V4_PARAMS,
+    )
 
+    caps = _normalized_round_unit_caps(round_unit_caps)
+    version = RULESET_CONTRACT_V5 if caps is not None else CONTRACT_VERSION
     source = default_teaching_prompts() if prompts is None else prompts
     authored = {lang: strip_execution_contract(source[lang]) for lang in ("zh", "en")}
     frozen: dict[str, object] = {
         "teaching_prompts": authored,
         "system_prompts": {
-            lang: [compile_code_contract_prompt(authored[lang], turn, lang) for turn in range(1, 5)]
+            lang: [
+                compile_code_contract_prompt(
+                    authored[lang], turn, lang, contract_version=version
+                )
+                for turn in range(1, 5)
+            ]
             for lang in ("zh", "en")
         },
-        "contract_version": CONTRACT_VERSION,
-        "target_minutes": DEFAULT_TARGET_MINUTES if target_minutes is None else target_minutes,
+        "contract_version": version,
     }
+    if caps is not None:
+        frozen["round_unit_caps"] = caps
+        frozen["over_length_ratio"] = "3/2"
+        frozen["repair_feedback_version"] = "repair_feedback_v2"
+    else:
+        frozen["target_minutes"] = DEFAULT_TARGET_MINUTES if target_minutes is None else target_minutes
     if llm_params is not None:
         frozen["llm_params"] = {
             name: value for name, value in llm_params.items() if name not in UNSTORED_V4_PARAMS
@@ -252,6 +300,83 @@ def frozen_speech_length(snapshot_json: str) -> tuple[int | None, float]:
         minutes if isinstance(minutes, int) and not isinstance(minutes, bool) else None,
         float(rate) if isinstance(rate, (int, float)) and not isinstance(rate, bool) else 1.0,
     )
+
+
+def frozen_voice_rate(snapshot_json: str | None) -> float:
+    """Voice rate from any teaching snapshot; default 1.0."""
+
+    if not snapshot_json:
+        return 1.0
+    try:
+        snapshot = json.loads(snapshot_json)
+    except (TypeError, ValueError):
+        return 1.0
+    voice = snapshot.get("voice_params") if isinstance(snapshot, dict) else None
+    rate = voice.get("rate") if isinstance(voice, dict) else None
+    return float(rate) if isinstance(rate, (int, float)) and not isinstance(rate, bool) else 1.0
+
+
+def frozen_round_unit_caps(snapshot_json: str | None) -> tuple[int, int, int, int] | None:
+    """Four positive caps from a v5 snapshot; otherwise None."""
+
+    from app.modules.debates.generation_params import uses_v5_speech_limits
+
+    if not snapshot_json:
+        return None
+    try:
+        snapshot = json.loads(snapshot_json)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(snapshot, dict) or not uses_v5_speech_limits(snapshot):
+        return None
+    try:
+        caps = _normalized_round_unit_caps(snapshot.get("round_unit_caps"))
+    except ValueError:
+        return None
+    if caps is None:
+        return None
+    return (caps[0], caps[1], caps[2], caps[3])
+
+
+def frozen_over_length_ratio(snapshot_json: str | None) -> Fraction | None:
+    """Trim ratio frozen on a v5 snapshot, such as 3/2."""
+
+    from app.modules.debates.generation_params import uses_v5_speech_limits
+
+    if not snapshot_json:
+        return None
+    try:
+        snapshot = json.loads(snapshot_json)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(snapshot, dict) or not uses_v5_speech_limits(snapshot):
+        return None
+    raw = snapshot.get("over_length_ratio")
+    if not isinstance(raw, str) or "/" not in raw:
+        return Fraction(3, 2)
+    try:
+        num, den = raw.split("/", 1)
+        fraction = Fraction(int(num), int(den))
+    except (TypeError, ValueError, ZeroDivisionError):
+        return Fraction(3, 2)
+    return fraction if fraction > 0 else Fraction(3, 2)
+
+
+def frozen_repair_feedback_version(snapshot_json: str | None) -> str:
+    from app.modules.debates.generation_params import uses_v5_speech_limits
+
+    if not snapshot_json:
+        return "repair_feedback_v1"
+    try:
+        snapshot = json.loads(snapshot_json)
+    except (TypeError, ValueError):
+        return "repair_feedback_v1"
+    if not isinstance(snapshot, dict) or not uses_v5_speech_limits(snapshot):
+        return "repair_feedback_v1"
+    raw = snapshot.get("repair_feedback_version") or snapshot.get("repair_policy_version")
+    if isinstance(raw, str) and raw:
+        return raw
+    return "repair_feedback_v2"
 
 
 def frozen_llm_settings(snapshot_json: str) -> dict[str, object] | None:

@@ -112,6 +112,7 @@ def test_create_freezes_voice_values_and_patch_cannot_change_them(debate_app: An
         "topic": "Water?",
         "participants": [{"agent_id": agent, "stance_mode": "open"} for agent in ids],
         "voice_params": {"rate": 1.1, "instruction": "语气坚定，像辩论赛选手", "seed": 12},
+        "round_unit_caps": [200, 200, 200, 200]
     }
     created = client.post(
         f"/api/v1/courses/{COURSE_ID}/debates",

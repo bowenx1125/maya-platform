@@ -207,6 +207,53 @@ class PromptRepairFeedbackV1(PromptClosedModel):
         return self.json_pointers
 
 
+class PromptRepairFeedbackV2(PromptClosedModel):
+    """v5 repair feedback: closed fields plus measured units, never free text."""
+
+    schema_version: Literal["repair_feedback_v2"] = "repair_feedback_v2"
+    safe_error_code: str = Field(
+        pattern=r"^[a-z][a-z0-9_]{0,79}$",
+        validation_alias=AliasChoices("safe_error_code", "code"),
+    )
+    json_pointers: tuple[str, ...] = Field(
+        default=(),
+        max_length=32,
+        validation_alias=AliasChoices("json_pointers", "pointers", "json_pointer"),
+    )
+    actual_units: int | None = Field(default=None, ge=0)
+    unit_cap: int | None = Field(default=None, ge=0)
+    repetition_ratio_percent: int | None = Field(default=None, ge=0, le=100)
+    language: Literal["zh", "en"] | None = None
+
+    @model_validator(mode="after")
+    def validate_pointers(self) -> PromptRepairFeedbackV2:
+        if any(not _POINTER_RE.fullmatch(pointer) for pointer in self.json_pointers):
+            raise ValueError("repair feedback contains an invalid JSON pointer")
+        if any(len(pointer) > 240 for pointer in self.json_pointers):
+            raise ValueError("repair feedback JSON pointer is too long")
+        return self
+
+    @property
+    def error_code(self) -> str:
+        return self.safe_error_code
+
+    @property
+    def pointers(self) -> tuple[str, ...]:
+        return self.json_pointers
+
+
+def parse_repair_feedback(
+    value: PromptRepairFeedbackV1 | PromptRepairFeedbackV2 | Mapping[str, object] | None,
+) -> PromptRepairFeedbackV1 | PromptRepairFeedbackV2 | None:
+    if value is None or isinstance(value, (PromptRepairFeedbackV1, PromptRepairFeedbackV2)):
+        return value
+    if not isinstance(value, Mapping):
+        raise ValueError("repair feedback is invalid")
+    if value.get("schema_version") == "repair_feedback_v2" or "actual_units" in value or "unit_cap" in value:
+        return PromptRepairFeedbackV2.model_validate(value)
+    return PromptRepairFeedbackV1.model_validate(value)
+
+
 class PromptRequestV1(PromptClosedModel):
     """Canonical logical request sent as the sole user JSON message."""
 
@@ -245,7 +292,7 @@ class PromptRequestV1(PromptClosedModel):
     receipt_hash: str = Field(min_length=1)
     output_schema_id: str = PROMPT_OUTPUT_SCHEMA_ID
     evidence_trace_schema_id: str = PROMPT_EVIDENCE_TRACE_SCHEMA_ID
-    repair_feedback: PromptRepairFeedbackV1 | None = None
+    repair_feedback: PromptRepairFeedbackV1 | PromptRepairFeedbackV2 | None = None
 
     @model_validator(mode="after")
     def validate_closed_request(self) -> PromptRequestV1:
@@ -832,7 +879,7 @@ def build_prompt_request(
     transcript_hash: str | None = None,
     receipt_hash: str | None = None,
     rules: Sequence[str] = MUTUAL_LEARNING_PLATFORM_RULES,
-    repair_feedback: PromptRepairFeedbackV1 | Mapping[str, object] | None = None,
+    repair_feedback: PromptRepairFeedbackV1 | PromptRepairFeedbackV2 | Mapping[str, object] | None = None,
 ) -> PromptRequestV1:
     """Build a closed logical request without any provider or retrieval call."""
 
@@ -1069,15 +1116,7 @@ def build_prompt_request(
             evidence_catalog=tuple(evidence_models),
             transcript_hash=transcript_hash or computed_transcript,
             receipt_hash=receipt_hash or computed_receipt,
-            repair_feedback=(
-                repair_feedback
-                if isinstance(repair_feedback, PromptRepairFeedbackV1)
-                else (
-                    PromptRepairFeedbackV1.model_validate(repair_feedback)
-                    if repair_feedback is not None
-                    else None
-                )
-            ),
+            repair_feedback=parse_repair_feedback(repair_feedback),
         )
     except PromptRequestError:
         raise

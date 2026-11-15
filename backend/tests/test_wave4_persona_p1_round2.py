@@ -357,7 +357,8 @@ def test_sql_adapter_uses_published_markdown_without_a_persona_confirmation(
                 ],
                 "rule_set_id": _RULE_SET,
                 "round_count": 4,
-            },
+            "round_unit_caps": [200, 200, 200, 200]
+        },
         )
         assert created.status_code == 201, created.text
         debate_id = created.json()["id"]
