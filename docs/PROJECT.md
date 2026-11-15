@@ -117,4 +117,4 @@ Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not command
 
 ## Nov16 local review(in progress)
 
-Base cc2a73219fea5b5a2b281dceb2c1daf47df85041;#432=4b06c1cdab2b03f11cf84750bbccbeef5acb2233;#433=43cbd7d252490451f33494c5e1d01e51aa60cc2f;integration556226e4.No remote writes/deploy/real calls.Strict caps,finite bounded rate,known repair-policy pair;legacy rate retained.v2 schema formatted and repinned;v1 unchanged.PG:0092 sole head;0091 round trip keeps old rows;v2 rows block lossy downgrade.
+Base cc2a73219fea5b5a2b281dceb2c1daf47df85041;#432=4b06c1cdab2b03f11cf84750bbccbeef5acb2233;#433=43cbd7d252490451f33494c5e1d01e51aa60cc2f;integration556226e4.No remote writes/deploy/real calls.Strict caps,finite bounded rate,known repair-policy pair;legacy rate retained.v2 formatted/repinned,v1 unchanged.Cards:one attempt restored;English fallback;original ledger assertions restored.PG:0092 sole head;0091 round trip keeps old rows;v2 rows block lossy downgrade.
