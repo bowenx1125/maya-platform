@@ -77,9 +77,11 @@ export function EggCanvas({
         observer.observe(element);
         resize();
         let raf = 0;
+        let disposeEgg = () => {};
         const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
         cleanup = () => {
           cancelAnimationFrame(raf);
+          disposeEgg();
           observer.disconnect();
           scene.traverse((o) => {
             if (o instanceof T.Mesh) {
@@ -106,6 +108,7 @@ export function EggCanvas({
             return;
           }
           const egg = prepareEggModel(gltf.scene);
+          disposeEgg = egg.dispose;
           scene.add(egg.root);
           const frame = (ms: number) => {
             if (!active) return;

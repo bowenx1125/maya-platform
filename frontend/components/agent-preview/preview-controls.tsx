@@ -49,7 +49,7 @@ export function PreviewControls({
               value={message}
               onChange={(event) => setMessage(event.target.value)}
             />
-            <button type="submit" aria-label="Send" disabled={!message.trim()}>
+            <button type="submit" aria-label="Send">
               <WorkspaceIcon name="send" size={20} />
             </button>
           </form>

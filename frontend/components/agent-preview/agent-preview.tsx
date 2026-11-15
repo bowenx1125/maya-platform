@@ -28,6 +28,11 @@ export function AgentPreview({
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const oldOverflow = document.body.style.overflow;
+    const root = document.documentElement;
+    const oldRootOverflow = root.style.overflow;
+    const oldGutter = root.style.scrollbarGutter;
+    root.style.overflow = "hidden";
+    root.style.scrollbarGutter = "auto";
     document.body.style.overflow = "hidden";
     const current = new PreviewController(setState);
     controller.current = current;
@@ -36,6 +41,8 @@ export function AgentPreview({
       current.close();
       controller.current = null;
       document.body.style.overflow = oldOverflow;
+      root.style.overflow = oldRootOverflow;
+      root.style.scrollbarGutter = oldGutter;
       previous?.focus();
     };
   }, []);

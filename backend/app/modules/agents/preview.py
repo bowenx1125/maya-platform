@@ -175,7 +175,13 @@ def preview_agent(
                     target_model_key=voice.profile.target_model_key,
                 )
                 audio = base64.b64encode(read_pcm16_wav_bytes(output.audio_bytes)).decode("ascii")
-            except (TTSProviderError, VoiceEncryptionError, AudioValidationError, OSError, RuntimeError):
+            except (
+                TTSProviderError,
+                VoiceEncryptionError,
+                AudioValidationError,
+                OSError,
+                RuntimeError,
+            ):
                 logger.warning("agent_preview_text_only safe_code=tts_preview_unavailable")
     return AgentPreviewResponse(
         answer=answer, audio_base64=audio, audio_content_type="audio/wav" if audio else None

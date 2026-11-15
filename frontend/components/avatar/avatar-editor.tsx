@@ -81,11 +81,11 @@ export function AvatarEditor({
 
   return (
     <section
-      className={`grid min-w-0 ${value.template_id === "egg" ? "gap-0" : "gap-5"}`}
+      className={`grid min-w-0 grid-cols-1 ${value.template_id === "egg" ? "h-[437px] grid-rows-[44px_minmax(0,1fr)_auto] gap-0 max-[767px]:h-[405px]" : "gap-5"}`}
       aria-label={t("avatarEditor")}
     >
       <div
-        className="flex gap-1.5"
+        className="flex gap-1.5 max-[767px]:gap-[5px]"
         role="radiogroup"
         aria-label={t("avatarTemplate")}
       >
@@ -100,7 +100,7 @@ export function AvatarEditor({
               const next = avatarDefaultConfigForTemplate(template);
               if (next) onChange(next);
             }}
-            className={`flex h-11 min-w-0 flex-1 items-center justify-center gap-[3px] rounded-[9px] border-2 border-[#111] px-[5px] text-[11px] font-bold shadow-[0_3px_0_#111] ${PRESS_MOTION} ${value.template_id === template.id ? "bg-[#A3E635]" : "bg-white"}`}
+            className={`flex h-11 min-w-0 flex-1 items-center justify-center gap-[3px] rounded-[9px] border-2 border-[#111] px-[5px] text-[11px] font-bold shadow-[0_3px_0_#111] max-[767px]:px-[3px] max-[767px]:text-[10px] ${PRESS_MOTION} ${value.template_id === template.id ? "bg-[#A3E635]" : "bg-white"}`}
           >
             {template.id === "egg" ? (
               <WorkspaceIcon name="diamond" size={13} />
@@ -115,21 +115,19 @@ export function AvatarEditor({
         ))}
       </div>
       <AvatarCanvas
-        className={
-          value.template_id === "egg" ? "h-[322px] aspect-auto" : undefined
-        }
+        className={value.template_id === "egg" ? "h-full min-h-0" : undefined}
         config={value}
         state={localState}
         framing="full-body"
         fallbackLabel={displayFallbackLabel}
       />
       {value.template_id === "egg" ? (
-        <div className="rounded-xl border-[3px] border-[#111] bg-white p-2.5 shadow-[3px_3px_0_#111]">
+        <div className="rounded-xl border-[3px] border-[#111] bg-white p-2.5 shadow-[3px_3px_0_#111] max-[767px]:p-[9px]">
           <button
             type="button"
             disabled={disabled}
             onClick={onPreview}
-            className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-[10px] border-[3px] border-[#111] bg-[#FFE14D] text-base font-bold shadow-[3px_3px_0_#111] ${PRESS_MOTION}`}
+            className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-[10px] border-[3px] border-[#111] bg-[#FFE14D] text-base font-bold shadow-[6px_6px_0_#111] max-[767px]:text-sm ${PRESS_MOTION}`}
           >
             <WorkspaceIcon name="play" size={20} />
             Preview

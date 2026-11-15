@@ -1753,7 +1753,14 @@ export function AgentWorkbench({
                 />
               ) : null}
               {avatarConfig ? (
-                <SectionCard title={t("avatarDesign")} className={AVATAR_CARD}>
+                <SectionCard
+                  title={t("avatarDesign")}
+                  className={cn(
+                    AVATAR_CARD,
+                    avatarConfig.template_id === "egg" &&
+                      "px-4 pt-[23px] pb-[18px] [&>.section-card-header]:mb-0 [&>.section-card-header]:min-h-0 max-[767px]:px-3 max-[767px]:pb-4",
+                  )}
+                >
                   {avatarTemplatesError ? (
                     <ErrorNotice
                       inline

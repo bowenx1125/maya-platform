@@ -837,6 +837,7 @@ export class ScholarStage {
       document.exitPointerLock?.();
     for (const character of this.characters) {
       this.scene.remove(character.root);
+      character.egg?.dispose();
       disposeObject(character.root, Boolean(character.egg));
       this.scene.remove(character.shadow);
       disposeObject(character.shadow);
@@ -1386,6 +1387,7 @@ export class ScholarStage {
   private rebuild(specs: StageCharacter[]): void {
     for (const character of this.characters) {
       this.scene.remove(character.root);
+      character.egg?.dispose();
       disposeObject(character.root, Boolean(character.egg));
       this.scene.remove(character.shadow);
       disposeObject(character.shadow);

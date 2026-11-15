@@ -62,6 +62,15 @@ describe("C2 ovoid profile", () => {
     const size = shell.geometry.boundingBox!.getSize(new THREE.Vector3());
     expect(size.x / size.y).toBeGreaterThan(0.75);
     expect(size.x / size.y).toBeLessThan(0.8);
+    const positions = shell.geometry.attributes.position;
+    for (let i = 0; i < positions.count; i += 32) {
+      const h = (positions.getY(i) - P.bottom) / P.height;
+      if (h > 0.01 && h < 0.99)
+        expect(Math.hypot(positions.getX(i), positions.getZ(i))).toBeCloseTo(
+          eggRadius(h),
+          5,
+        );
+    }
     egg.frame(1, true, true);
     egg.frame(1.1, true, true);
     expect(shell.scale.toArray()).toEqual([1, 1, 1]);

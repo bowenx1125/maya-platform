@@ -5,6 +5,7 @@ import {
   type PreviewReply,
   type PreviewState,
 } from "../components/agent-preview/preview-controller";
+import { AgentPreview } from "../components/agent-preview/agent-preview";
 import { PreviewControls } from "../components/agent-preview/preview-controls";
 import { AvatarEditor } from "../components/avatar/avatar-editor";
 import { AVATAR_TEMPLATE_DEFAULT_CONFIGS as defaults } from "../components/avatar/types";
@@ -115,6 +116,32 @@ describe("single-turn Preview", () => {
       answer: "B.",
       playing: false,
     });
+  });
+  it("fills the viewport and restores the page gutter and focus on Close", () => {
+    document.documentElement.style.scrollbarGutter = "stable";
+    const close = vi.fn();
+    const trigger = document.createElement("button");
+    document.body.appendChild(trigger);
+    trigger.focus();
+    const { unmount } = render(
+      <AgentPreview
+        onClose={close}
+        request={async () => ({ answer: "One sentence." })}
+      />,
+    );
+    expect(document.documentElement.style.scrollbarGutter).toBe("auto");
+    expect(document.documentElement.style.overflow).toBe("hidden");
+    expect(
+      screen.getByRole("button", { name: "Send" }).getAttribute("disabled"),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(close).toHaveBeenCalledOnce();
+    unmount();
+    expect(document.documentElement.style.scrollbarGutter).toBe("stable");
+    expect(document.documentElement.style.overflow).toBe("");
+    expect(document.activeElement).toBe(trigger);
+    trigger.remove();
+    document.documentElement.style.scrollbarGutter = "";
   });
   it("has exactly Close, latest caption/chip, input and Send", () => {
     const send = vi.fn();

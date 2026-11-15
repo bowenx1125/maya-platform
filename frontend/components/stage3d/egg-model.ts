@@ -8,6 +8,7 @@ import {
 
 export type EggModel = {
   root: THREE.Object3D;
+  dispose: () => void;
   frame: (time: number, playing: boolean, reduced: boolean) => void;
 };
 
@@ -17,8 +18,26 @@ export function prepareEggModel(root: THREE.Object3D): EggModel {
   const sourceMouth = root.getObjectByName("Mouth") as THREE.Mesh;
   if (!shell || !sourceMouth) throw new Error("egg_asset_invalid");
   const joints: THREE.Vector3[] = [];
+  const joins: THREE.Mesh[] = [];
+  const aoScale = { value: 1 };
+  const aoBottom = { value: P.bottom as number };
+  const worldScale = new THREE.Vector3();
+  const worldBase = new THREE.Vector3();
+  const grainBytes = new Uint8Array(128 * 128 * 4);
+  let seed = 427;
+  for (let i = 0; i < 128 * 128; i++) {
+    seed = (1664525 * seed + 1013904223) >>> 0;
+    const value = 120 + Math.round(16 * (seed / 4294967296 - 0.5));
+    grainBytes.set([value, value, value, 255], i * 4);
+  }
+  const grain = new THREE.DataTexture(grainBytes, 128, 128);
+  grain.wrapS = grain.wrapT = THREE.RepeatWrapping;
+  grain.repeat.set(6, 6);
+  grain.needsUpdate = true;
   const material = new THREE.MeshPhysicalMaterial({
     color: "#BE8032",
+    bumpMap: grain,
+    bumpScale: 0.0012,
     roughness: 0.66,
     sheen: 0.1,
     sheenColor: new THREE.Color("#E5AD68"),
@@ -26,6 +45,8 @@ export function prepareEggModel(root: THREE.Object3D): EggModel {
   });
   material.onBeforeCompile = (shader) => {
     shader.uniforms.clayJoin = { value: joints };
+    shader.uniforms.clayScale = aoScale;
+    shader.uniforms.clayBottom = aoBottom;
     shader.vertexShader = shader.vertexShader
       .replace(
         "#include <common>",
@@ -49,13 +70,13 @@ export function prepareEggModel(root: THREE.Object3D): EggModel {
       .replace("#include <lights_physical_pars_fragment>", physical)
       .replace(
         "#include <common>",
-        "#include <common>\nvarying vec3 vClayWorld;\nuniform vec3 clayJoin[4];",
+        "#include <common>\nvarying vec3 vClayWorld;\nuniform vec3 clayJoin[4];\nuniform float clayScale;\nuniform float clayBottom;",
       )
       .replace(
         "#include <opaque_fragment>",
         `float ao=1.0;
-        for(int i=0;i<4;i++){vec3 q=vClayWorld-clayJoin[i];ao*=1.0-0.22*exp(-dot(q,q)/0.018);}
-        outgoingLight*=ao*mix(0.76,1.0,smoothstep(0.40,0.85,vClayWorld.y));
+        for(int i=0;i<4;i++){vec3 q=vClayWorld-clayJoin[i];ao*=1.0-0.22*exp(-dot(q,q)/(0.018*clayScale*clayScale));}
+        outgoingLight*=ao*mix(0.76,1.0,smoothstep(clayBottom+0.09*clayScale,clayBottom+0.54*clayScale,vClayWorld.y));
         #include <opaque_fragment>`,
       );
   };
@@ -71,19 +92,12 @@ export function prepareEggModel(root: THREE.Object3D): EggModel {
   g.computeBoundingBox();
   const min = g.boundingBox!.min.y,
     height = g.boundingBox!.max.y - min;
-  // Source rings share height; normalize each ring before applying the isolated profile.
-  const rings = new Map<string, number>();
-  for (let i = 0; i < pos.count; i++) {
-    const key = pos.getY(i).toFixed(5);
-    rings.set(
-      key,
-      Math.max(rings.get(key) ?? 0, Math.hypot(pos.getX(i), pos.getZ(i))),
-    );
-  }
+  // Preserve source topology, with circular rings so the analytic mouth
+  // projection stays on the same surface from every viewing direction.
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i),
       h = (y - min) / height;
-    const radius = rings.get(y.toFixed(5))!;
+    const radius = Math.hypot(pos.getX(i), pos.getZ(i));
     const factor = radius > 0.00001 ? eggRadius(h) / radius : 0;
     pos.setXYZ(
       i,
@@ -110,6 +124,7 @@ export function prepareEggModel(root: THREE.Object3D): EggModel {
     mesh.scale.set(scale[0], scale[1], scale[2]);
     root.add(mesh);
     joints.push(mesh.position.clone());
+    joins.push(mesh);
     return mesh;
   };
   const handY = P.bottom + P.height * P.handHeight;
@@ -232,7 +247,11 @@ export function prepareEggModel(root: THREE.Object3D): EggModel {
         Math.sin((2 * Math.PI * local) / 3.4) *
         envelope;
     root.rotation.x = 0;
+    root.updateMatrixWorld(true);
+    joins.forEach((join, index) => join.getWorldPosition(joints[index]));
+    aoScale.value = root.getWorldScale(worldScale).y;
+    aoBottom.value = root.localToWorld(worldBase.set(0, P.bottom, 0)).y;
   };
   frame(0, false, true);
-  return { root, frame };
+  return { root, frame, dispose: () => grain.dispose() };
 }
