@@ -515,7 +515,9 @@ def _sync_graph_in_session(
                     )
                 )
 
-            if account.role == "student":
+            # Active ungrouped students need No Group, but Bowen's preserved
+            # grants stay as-is: a revoked membership must not be recreated.
+            if account.role == "student" and not preserve_bowen_memberships:
                 for student_course_id in sorted(desired_courses):
                     ensure_student_group(session, student_course_id, user.id)
 
