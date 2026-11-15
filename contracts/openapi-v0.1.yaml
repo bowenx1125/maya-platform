@@ -9324,7 +9324,7 @@ components:
             maximum: 2000
         estimated_duration_minutes:
           type: number
-        DebateDraftRequest:
+    DebateDraftRequest:
       type: object
       required:
       - topic
