@@ -14,7 +14,8 @@ from app.core.identity import group_name_key, normalize_group_name
 from app.core.locks import xact_lock
 from app.core.models import Course, CourseMember, Group, GroupMember, User
 from app.core.sqlutil import begin_immediate, dialect_insert
-from app.seed import COURSE_ID, COURSE_NAME, GROUP_DEMO_ID, seed_uuid
+from app.seed import BOWEN_ID, COURSE_ID, COURSE_NAME, GROUP_DEMO_ID, seed_uuid
+
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +197,11 @@ def change_class(db: Session, user: User, course_id: str) -> None:
     course = next((item for item in registration_classes(db) if item.id == course_id), None)
     if course is None:
         raise unprocessable("class_not_found", "Choose an available class.")
+    if user.id == BOWEN_ID:
+        from app.modules.auth.identity_choice import enter_student_class
+
+        enter_student_class(db, user, course.id, datetime.now(UTC))
+        return
     if len(memberships) == 1 and memberships[0].course_id == course.id:
         ensure_student_group(db, course.id, user.id)
         return

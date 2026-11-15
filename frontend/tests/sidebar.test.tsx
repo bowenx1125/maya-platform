@@ -112,6 +112,13 @@ describe("sidebar groups", () => {
       "Chat with Team",
     ]);
     expect(groupRows("Classroom")).toEqual(["Live", "Quiz"]);
+    const quiz = nav().getByRole("link", { name: "Quiz" });
+    expect(quiz.querySelector("path")?.getAttribute("d")).toBe(
+      "M13 5h8 M13 12h8 M13 19h8 M3 17l2 2 4-4 M3 7l2 2 4-4",
+    );
+    expect(quiz.querySelector("svg")?.getAttribute("stroke-width")).toBe(
+      "1.65",
+    );
     expect(
       nav().getByRole("link", { name: "Voices" }).getAttribute("href"),
     ).toBe("/student/voices?group_id=group-a");
@@ -147,6 +154,43 @@ describe("sidebar groups", () => {
       nav().getByRole("link", { name: "Knowledge" }).getAttribute("href"),
     ).toBe("/teacher/knowledge");
   });
+
+  it.each(["/teacher/debates", "/teacher/quizzes"])(
+    "keeps distinct teacher Debate and Quiz glyphs and selects only %s",
+    (pathname) => {
+      state.user = teacher();
+      renderShell("teacher", pathname);
+      const debates = nav().getByRole("link", { name: "Debates" });
+      const quizzes = nav().getByRole("link", { name: "Quizzes" });
+      expect(groupRows("Classroom")).toEqual([
+        "Debates",
+        "Quizzes",
+        "Accounts",
+      ]);
+      expect(debates.getAttribute("href")).toBe("/teacher/debates");
+      expect(quizzes.getAttribute("href")).toBe("/teacher/quizzes");
+      expect(debates.querySelector("path")?.getAttribute("d")).toBe(
+        "M4 4h16v12H4zM8 21l4-5 4 5M8 8h8M8 12h5",
+      );
+      expect(quizzes.querySelector("path")?.getAttribute("d")).toBe(
+        "M13 5h8 M13 12h8 M13 19h8 M3 17l2 2 4-4 M3 7l2 2 4-4",
+      );
+      expect(quizzes.querySelector("svg")?.getAttribute("stroke-width")).toBe(
+        "1.65",
+      );
+      expect(debates.getAttribute("data-tour")).toBe("classroom");
+      expect(quizzes.getAttribute("data-tour")).toBe("quiz");
+      expect(document.querySelectorAll('[data-tour="classroom"]')).toHaveLength(
+        1,
+      );
+      expect(document.querySelectorAll('[data-tour="quiz"]')).toHaveLength(1);
+      expect(
+        [debates, quizzes]
+          .filter((row) => row.getAttribute("aria-current") === "page")
+          .map((row) => row.getAttribute("href")),
+      ).toEqual([pathname]);
+    },
+  );
 
   it("keeps a visiting teacher's Brainform entry for that group", () => {
     state.user = { ...teacher(), groups: [{ group_id: "g", role: "admin" }] };

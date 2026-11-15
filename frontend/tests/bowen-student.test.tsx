@@ -15,8 +15,8 @@ const state = vi.hoisted(() => ({
     ],
     groups: [
       { group_id: "shell-1002", role: "member" },
-      { group_id: "shell-1001", role: "member" },
       { group_id: "demo-1001", role: "member" },
+      { group_id: "shell-1001", role: "member" },
     ],
   },
 }));
@@ -55,7 +55,7 @@ vi.mock("../components/session-provider", () => ({
           "demo-1001": {
             id: "demo-1001",
             course_id: "maya1001",
-            name: "Project Team",
+            name: "Demo Group",
             members: [
               { user_id: "guyue", display_name: "Guyue", role: "member" },
               { user_id: "bowen", display_name: "Bowen", role: "member" },
@@ -89,15 +89,6 @@ describe("default group", () => {
     (name) => {
       expect(DEFAULT_GROUP_NAME).toBe("No Group");
       expect(isDefaultGroup(name)).toBe(true);
-      expect(
-        bowenLandingGroup(
-          [
-            { id: "shell", name, course_id: "class" },
-            { id: "team", name: "Team", course_id: "class" },
-          ],
-          "class",
-        )?.id,
-      ).toBe("team");
     },
   );
   it("keeps ordinary student-named groups available", () => {
@@ -121,26 +112,28 @@ describe("Bowen student class", () => {
     );
   });
 
-  it("lands on the first non-default group of that class, in list order", () => {
+  it("preserves server preference regardless of group name, within the login class", () => {
     const groups = [
       { id: "shell-1002", name: "No Group", course_id: "maya1002" },
       { id: "shell-1001", name: "No Group", course_id: "maya1001" },
       { id: "later", name: "Later Team", course_id: "maya1001" },
-      { id: "demo-1001", name: "Project Team", course_id: "maya1001" },
+      { id: "demo-1001", name: "Demo Group", course_id: "maya1001" },
     ];
-    expect(bowenLandingGroup(groups, "maya1001")?.id).toBe("later");
+    expect(bowenLandingGroup(groups, "maya1001")?.id).toBe("shell-1001");
+    groups[1].name = "No Group";
+    expect(bowenLandingGroup(groups, "maya1001")?.id).toBe("shell-1001");
     expect(bowenLandingGroup(groups, "maya1002")?.name).toBe("No Group");
   });
 });
 
 describe("Bowen student home", () => {
-  it("uses the login class and skips the No Group shell and the other class", async () => {
+  it("uses server-ordered memberships in the login class, excluding the other class", async () => {
     render(<StudentDashboard />);
     const rag = await screen.findByRole("link", { name: /Add the RAG/ });
     expect(rag.getAttribute("href")).toBe(
       "/student/rag?group_id=demo-1001&mode=rag-new",
     );
-    expect(screen.getByRole("heading", { name: "Project Team" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Demo Group" })).toBeTruthy();
     expect(screen.getByText("Bowen1")).toBeTruthy();
     expect(screen.queryByText("Other Class")).toBeNull();
   });

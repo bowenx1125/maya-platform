@@ -108,21 +108,12 @@ export function fileExt(filename: string | undefined): string {
   return dot >= 0 ? filename.slice(dot + 1).toUpperCase() : "";
 }
 
-/**
- * Creator's username. The backend does not send it yet (see
- * proposals/20-voices-album-v2/API-CHANGES.md); the row stays bound to the
- * field and shows an empty signature line until it does.
- */
-export function voiceMaker(profile: VoiceProfile): string | null {
-  const extra = profile as VoiceProfile & {
-    owner_username?: string | null;
-    created_by_username?: string | null;
-  };
-  return extra.owner_username || extra.created_by_username || null;
-}
-
 /** Agents using each voice, from GET /voice-profiles/{id}/affected-agents. */
-export function useVoiceAgents(profiles: VoiceProfile[], enabled: boolean) {
+export function useVoiceAgents(
+  profiles: VoiceProfile[],
+  enabled: boolean,
+  onError: (cause: unknown) => void,
+) {
   const { api } = useSession();
   const [agents, setAgents] = useState<Record<string, AffectedAgent[]>>({});
   const ids = enabled ? profiles.map((profile) => profile.id).join(",") : "";
@@ -133,7 +124,8 @@ export function useVoiceAgents(profiles: VoiceProfile[], enabled: boolean) {
       list.map(async (id) => {
         try {
           return [id, await api.voiceAffectedAgents(id)] as const;
-        } catch {
+        } catch (cause) {
+          if (live) onError(cause);
           return [id, null] as const;
         }
       }),
@@ -146,7 +138,7 @@ export function useVoiceAgents(profiles: VoiceProfile[], enabled: boolean) {
     return () => {
       live = false;
     };
-  }, [api, ids]);
+  }, [api, ids, profiles, onError]);
   return agents;
 }
 
@@ -166,7 +158,7 @@ export function VoiceAlbumCard({
   audio: ReactNode;
 }) {
   const t = useT();
-  const maker = voiceMaker(profile);
+  const maker = profile.owner_username;
   const used = agents ?? [];
   const pending =
     profile.status === "enrolling" || profile.status === "validating";

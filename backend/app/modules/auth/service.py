@@ -408,22 +408,31 @@ def _sync_graph_in_session(
                 desired_group_id = default_class_group(session, course.id).id
             else:
                 desired_group_id = _resolve_group(account, groups, groups_by_name, course.id)
+            # The chooser enrolls Bowen additively; a replica restart must not
+            # project those memberships away or revoke his existing sessions.
+            preserve_bowen_memberships = (
+                user.id == BOWEN_ID and account.role == "student" and not material_changed
+            )
             if binding is not None and binding.selected_group_id is not None:
                 selected_group = groups.get(binding.selected_group_id)
                 if (
                     not material_changed
                     and account.role == "student"
                     and selected_group is not None
-                    and selected_group.course_id == course.id
+                    and (
+                        selected_group.course_id == course.id
+                        or (
+                            preserve_bowen_memberships
+                            and any(
+                                row.course_id == selected_group.course_id and row.role == "student"
+                                for row in existing_courses
+                            )
+                        )
+                    )
                 ):
                     desired_group_id = selected_group.id
                 else:
                     binding.selected_group_id = None
-            # The chooser enrolls Bowen additively; a replica restart must not
-            # project those memberships away or revoke his existing sessions.
-            preserve_bowen_memberships = (
-                user.id == BOWEN_ID and account.role == "student" and not material_changed
-            )
             desired_courses = {course.id}
             if preserve_bowen_memberships:
                 desired_courses.update(row.course_id for row in existing_courses)
@@ -496,7 +505,7 @@ def _sync_graph_in_session(
                     not desired_group_id or group_row is not prior_group
                 ):
                     session.delete(group_row)
-            if desired_group_id and prior_group is None:
+            if desired_group_id and prior_group is None and not preserve_bowen_memberships:
                 session.add(
                     GroupMember(
                         group_id=desired_group_id,

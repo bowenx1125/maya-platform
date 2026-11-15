@@ -168,7 +168,7 @@ def test_registration_chooses_class_and_rejects_invalid_groups(class_app: Any) -
 
 def test_profile_switch_is_immediate_and_survives_catalog_restart(class_app: Any) -> None:
     client, database, settings = class_app
-    session, headers = sign_in(client, "bowen")
+    session, headers = sign_in(client, "kaikai")
     user_id = session["user"]["id"]
     old_group = session["user"]["groups"][0]["group_id"]
     moved = client.patch("/api/v1/auth/me", headers=headers, json={"course_id": SECOND_CLASS_ID})
@@ -263,7 +263,7 @@ def test_teacher_creates_named_class_visible_at_registration_and_restart(class_a
     )
     assert joined.status_code == 201, joined.text
     assert joined.json()["user"]["courses"] == [{"course_id": course_id, "role": "student"}]
-    _, student_headers = sign_in(client, "bowen")
+    _, student_headers = sign_in(client, "kaikai")
     moved = client.patch("/api/v1/auth/me", headers=student_headers, json={"course_id": course_id})
     assert moved.status_code == 200, moved.text
     with database.session() as db:
