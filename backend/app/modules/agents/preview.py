@@ -19,6 +19,9 @@ from app.modules.agents.preview_provider import preview_reply
 from app.modules.agents.schemas import AgentPreviewRequest, AgentPreviewResponse
 from app.modules.auth.service import AuthContext
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
+from app.modules.debates.generation.retrieval import RAGRetrievalError, SnapshotRetriever
+from app.modules.knowledge.markdown import EMBEDDING_DIMENSION, EMBEDDING_KEY
+from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
 from app.modules.knowledge.services import (
     _enabled_documents,
     course_member_role,
@@ -26,6 +29,7 @@ from app.modules.knowledge.services import (
     visible_student_document,
     visible_student_version,
 )
+from app.modules.knowledge.vector import MockVectorStore, StoredVectorRow
 from app.modules.voices.crypto import VoiceEncryptionError
 from app.modules.voices.preview import read_pcm16_wav_bytes, resolve_effective_voice_profile
 from app.modules.voices.service import _profile_external_id, validate_voice_binding
@@ -35,6 +39,9 @@ from app.providers.factory import tts_provider
 from app.providers.tts import TTSProviderError
 
 logger = logging.getLogger(__name__)
+# Preview has no published KnowledgeSnapshot. Reuse the draft-scope Mock vector
+# store that Wave 1 / draft test chat already use over indexed document chunks.
+PREVIEW_VECTOR_SCOPE_ID = "agent-preview"
 PREVIEW_RULES = (
     "You are the Agent defined by agent_markdown. Answer only the current question. "
     "This is a stateless single-turn Preview: "
@@ -63,8 +70,14 @@ def first_sentence(text: str) -> str:
 def preview_sources(
     db: Session, context: AuthContext, payload: AgentPreviewRequest, course_id: str
 ) -> list[ChatSource]:
-    # Drafts do not have an immutable vector snapshot yet. Retrieve only from
-    # explicitly selected, readable indexed chunks, without publishing a snapshot.
+    """Rank selected indexed document chunks with the existing Mock vector path.
+
+    Saved-version Preview still resolves only the form's selected documents
+    (or the version's enabled documents when the client omits document_ids).
+    Unsaved-draft Preview uses the same selected-document envelope. Neither
+    path publishes a snapshot or falls back to lexical term-overlap ranking.
+    """
+
     documents = []
     for document_id in dict.fromkeys(payload.document_ids):
         document = visible_student_document(db, context, str(document_id)).document
@@ -78,19 +91,54 @@ def preview_sources(
                 else "rag_index_pending",
             )
         documents.append(document)
-    terms = set(re.findall(r"[a-z0-9]+|[\u3400-\u9fff]", payload.message.lower()))
-    ranked: list[tuple[int, str, KnowledgeDocumentChunk]] = []
-    for document in documents:
+    rows: list[StoredVectorRow] = []
+    for order, document in enumerate(documents):
         for chunk in db.scalars(
-            select(KnowledgeDocumentChunk).where(KnowledgeDocumentChunk.document_id == document.id)
+            select(KnowledgeDocumentChunk)
+            .where(KnowledgeDocumentChunk.document_id == document.id)
+            .order_by(KnowledgeDocumentChunk.chunk_index)
         ):
-            score = sum(term in chunk.chunk_text.lower() for term in terms)
-            if score:
-                ranked.append((score, document.source_filename, chunk))
-    ranked.sort(key=lambda row: (-row[0], row[2].document_id, row[2].chunk_index))
+            if (
+                chunk.embedding_dimension != EMBEDDING_DIMENSION
+                or chunk.embedding_key != EMBEDDING_KEY
+                or len(chunk.embedding_blob) != 4 * EMBEDDING_DIMENSION
+            ):
+                logger.warning("agent_preview_failed safe_code=provider_unavailable")
+                raise PlatformError(
+                    "provider_unavailable", "The service is temporarily unavailable.", 503
+                )
+            rows.append(
+                StoredVectorRow(
+                    chunk_id=chunk.id,
+                    source_filename=document.source_filename,
+                    chunk_text=chunk.chunk_text,
+                    blob=chunk.embedding_blob,
+                    dimension=chunk.embedding_dimension,
+                    key=chunk.embedding_key,
+                    document_order=order,
+                    chunk_index=chunk.chunk_index,
+                )
+            )
+    if not rows:
+        return []
+    # MockVectorStore.search(query, top_k=...) is the draft-scope adapter
+    # SnapshotRetriever already accepts via its legacy two-argument fallback.
+    store = MockVectorStore(rows)
+    try:
+        result = SnapshotRetriever(store.search).retrieve(
+            PREVIEW_VECTOR_SCOPE_ID,
+            [payload.message],
+            policy_id=MOCK_LEXICAL_ANCHOR_POLICY_ID,
+            topic_anchor=payload.message,
+        )
+    except (RAGRetrievalError, ValueError):
+        logger.warning("agent_preview_failed safe_code=provider_unavailable")
+        raise PlatformError(
+            "provider_unavailable", "The service is temporarily unavailable.", 503
+        ) from None
     return [
-        ChatSource(chunk_id=UUID(chunk.id), filename=filename, excerpt=chunk.chunk_text)
-        for _, filename, chunk in ranked[:6]
+        ChatSource(chunk_id=UUID(item.chunk_id), filename=item.source_filename, excerpt=item.text)
+        for item in result.receipts
     ]
 
 

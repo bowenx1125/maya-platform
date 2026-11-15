@@ -111,10 +111,8 @@ Nov12 #419(live Nov13):capsule second press closes;trigger pathname key removed.
 
 f1087c4d live:3D/gesture v2/3 figures/#419;replaces334fbd94(missed #419).Image save/load;3.5G server:no build/test.Backup maya-pre-334fbd94-20261112-213724.dump:102M,pg_restore list pass,PG-only.Schema0091_quiz_show_results;ready/HTTPS200.Backend240/319;known voice+2 load-adaptive failures.
 
-Nov14 UI:Teams ?/Agent New RAG hint removed;tour omits voices.Capsule:shared teacher layout/session-API/user/course caches,B2b kept;Chromium1440/390 width70.15625px stable.UX:page-rise520ms/reduced motion/teacher shell kept;Immerse loading hides Back.Quiz ZIP:participant XLSX/snapshot questions/grades.1387UI/13skip;build/gates pass;PG3521pass/129baselinefail/new0.0 calls/deploy.
+Nov14 UI:Teams ?/Agent New RAG hint removed;nav omits voices.Capsule:shared teacher layout/session-API/user/course caches;Chromium1440/390 stable.UX:page-rise520ms/reduced motion;Immerse loading hides Back.Quiz ZIP grades.1387UI/13skip;PG3521pass/129baselinefail.0 calls/deploy.
 
-Nov15 #426:LoadingPage #CEDAE3;390/1440 reviewed;1387UI/13skip/build pass.0 calls/deploy.
+Nov15 #426 LoadingPage #CEDAE3;#425 single Chat memory(RAG=evidence);473 focused.0 calls.
 
-Nov15 #425:single Chat memory;RAG/Knowledge=evidence.48 golden pairs;Team/assessment kept.473 focused pass;0 calls.
-
-#427 local:Egg/C2;Preview V2 own Voice/RAG/AGENT.md,no Chat/history/drawing/migration.Audit:null create version,short foot joins;Mock1440/390;1406UI/13PG/static pass.Real Voice unverified;0 calls/remotes.
+#427 Egg/C2+Preview V2(Voice/AGENT.md/RAG;no Chat/history/drawing).RAG fix:drop lexical term-overlap;reuse MockVectorStore+SnapshotRetriever on selected indexed document chunks(draft test-chat path);no snapshot/publish prerequisite;vector failure≠lexical fallback.18 preview tests pass;Real Voice/vendor E2E blocked.Workspace /workspace/egg-427 notes unavailable here.0 calls/remotes.

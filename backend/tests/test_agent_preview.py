@@ -5,19 +5,26 @@ from __future__ import annotations
 import base64
 import io
 import json
+import re
 import wave
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
 import pytest
-from app.core.models import AgentVersion
+from app.core.models import (
+    AgentVersion,
+    KnowledgeDocumentChunk,
+    KnowledgeSnapshot,
+)
 from app.modules.agents import preview
 from app.modules.avatars.catalog import default_config_for
+from app.modules.knowledge.markdown import EMBEDDING_DIMENSION, EMBEDDING_KEY, mock_embedding
+from app.modules.knowledge.vector import MockVectorStore
 from app.modules.workspace.models import AgentAccountMemory, Conversation, ConversationTurn
 from app.providers.tts import TTSProviderError, TTSResult
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from tests.conftest import login
 from tests.test_wave2_setup import (
@@ -325,3 +332,254 @@ def test_real_preview_path_accounts_once_without_chat_rows(
         assert operations[0].charged_request_count == 1
         for model in (Conversation, ConversationTurn, RuntimeModelCallStage, AgentAccountMemory):
             assert db.scalar(select(func.count()).select_from(model)) == 0
+
+
+def _upload_ready_document(client: TestClient, csrf: str, *, name: str, body_bytes: bytes) -> str:
+    upload = client.post(
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
+        headers=headers(csrf, **{"Idempotency-Key": f"preview-doc-{name}"}),
+        files={"file": (f"{name}.md", body_bytes, "text/markdown")},
+    )
+    assert upload.status_code == 201, upload.text
+    return upload.json()["document"]["id"]
+
+
+def _old_lexical_ranking(message: str, chunks: list[KnowledgeDocumentChunk]) -> list[str]:
+    """Reproduce the rejected Preview term-overlap ranking for regression contrast."""
+
+    terms = set(re.findall(r"[a-z0-9]+|[\u3400-\u9fff]", message.lower()))
+    ranked = [(sum(term in chunk.chunk_text.lower() for term in terms), chunk) for chunk in chunks]
+    ranked = [item for item in ranked if item[0]]
+    ranked.sort(key=lambda row: (-row[0], row[1].document_id, row[1].chunk_index))
+    return [chunk.id for _, chunk in ranked[:6]]
+
+
+def _replace_document_chunks(
+    database: Any,
+    document_id: str,
+    rows: list[tuple[str, bytes]],
+) -> list[KnowledgeDocumentChunk]:
+    with database.session() as db:
+        db.execute(
+            delete(KnowledgeDocumentChunk).where(KnowledgeDocumentChunk.document_id == document_id)
+        )
+        chunks: list[KnowledgeDocumentChunk] = []
+        offset = 0
+        for index, (text, blob) in enumerate(rows):
+            chunk = KnowledgeDocumentChunk(
+                id=str(uuid4()),
+                document_id=document_id,
+                chunk_index=index,
+                chunk_text=text,
+                start_offset=offset,
+                end_offset=offset + len(text),
+                embedding_blob=blob,
+                embedding_dimension=EMBEDDING_DIMENSION,
+                embedding_key=EMBEDDING_KEY,
+            )
+            db.add(chunk)
+            chunks.append(chunk)
+            offset += len(text) + 1
+        db.flush()
+        for chunk in chunks:
+            db.expunge(chunk)
+        return chunks
+
+
+def test_preview_vector_ranking_differs_from_rejected_lexical(
+    app_factory: Any, monkeypatch: Any
+) -> None:
+    app, database, settings = app_factory()
+    captured: list[dict[str, Any]] = []
+
+    def reply(*args: Any, **kwargs: Any) -> tuple[str, str]:
+        captured.append(kwargs)
+        return "Vector evidence wins.", "unused"
+
+    monkeypatch.setattr(preview, "preview_reply", reply)
+    question = "alpha beta gamma"
+    lexical_text = "alpha beta gamma alpha beta gamma repeated terms."
+    vector_text = "alpha beta unique vector target."
+    with TestClient(app) as client:
+        _, csrf = login(client, "bowen")
+        settings.llm_provider = "dashscope"
+        document_id = _upload_ready_document(
+            client,
+            csrf,
+            name="vector-vs-lexical",
+            body_bytes=b"# Seed\nSeed markdown for indexed document.\n",
+        )
+        # Zero vector scores below SnapshotRetriever's relaxed threshold, so
+        # only the query-aligned chunk survives vector retrieval — while the
+        # rejected lexical term-overlap ranker would still prefer the first row.
+        zero_blob = mock_embedding("")
+        chunks = _replace_document_chunks(
+            database,
+            document_id,
+            [
+                (lexical_text, zero_blob),
+                (vector_text, mock_embedding(question)),
+            ],
+        )
+        assert _old_lexical_ranking(question, chunks)[0] == chunks[0].id
+        result = client.post(
+            "/api/v1/agents/preview",
+            headers=headers(csrf),
+            json=body(
+                message=question,
+                document_ids=[document_id],
+                version_id=None,
+                agent_md="You cite the vector winner.",
+            ),
+        )
+        assert result.status_code == 200, result.text
+        assert result.json()["answer"] == "Vector evidence wins."
+        assert len(captured) == 1
+        evidence = json.loads(captured[0]["messages"][0]["content"].split("\n", 1)[1])["evidence"]
+        assert evidence == [{"text": vector_text}]
+        assert chunks[0].id != chunks[1].id
+
+
+def test_preview_selected_documents_only_and_rejects_cross_course(
+    app_factory: Any, monkeypatch: Any
+) -> None:
+    app, database, settings = app_factory()
+    captured: list[dict[str, Any]] = []
+
+    def reply(*args: Any, **kwargs: Any) -> tuple[str, str]:
+        captured.append(kwargs)
+        return "Only selected evidence.", "unused"
+
+    monkeypatch.setattr(preview, "preview_reply", reply)
+    with TestClient(app) as client:
+        _, csrf = login(client, "bowen")
+        settings.llm_provider = "dashscope"
+        selected = _upload_ready_document(
+            client,
+            csrf,
+            name="selected-evidence",
+            body_bytes=b"# Selected\nSelected passage about orchids.\n",
+        )
+        ignored = _upload_ready_document(
+            client,
+            csrf,
+            name="ignored-evidence",
+            body_bytes=b"# Ignored\nIgnored passage about volcanoes.\n",
+        )
+        result = client.post(
+            "/api/v1/agents/preview",
+            headers=headers(csrf),
+            json=body(
+                message="What about orchids?",
+                document_ids=[selected],
+                version_id=None,
+            ),
+        )
+        assert result.status_code == 200, result.text
+        system = captured[0]["messages"][0]["content"]
+        assert "orchids" in system
+        assert "volcanoes" not in system
+        assert ignored != selected
+
+        real_visible = preview.visible_student_document
+
+        def cross_course(db: Any, context: Any, document_id: str) -> Any:
+            scoped = real_visible(db, context, document_id)
+            scoped.document.course_id = "00000000-0000-4000-8000-000000000099"
+            return scoped
+
+        monkeypatch.setattr(preview, "visible_student_document", cross_course)
+        denied = client.post(
+            "/api/v1/agents/preview",
+            headers=headers(csrf),
+            json=body(document_ids=[selected], version_id=None),
+        )
+        assert denied.status_code == 404
+
+
+def test_preview_unsaved_draft_needs_no_snapshot_or_version(app_factory: Any) -> None:
+    app, database, _ = app_factory()
+    with TestClient(app) as client:
+        _, csrf = login(client, "bowen")
+        document_id = _upload_ready_document(
+            client,
+            csrf,
+            name="draft-only",
+            body_bytes=b"# Draft\nDraft evidence about rivers.\n",
+        )
+        with database.session() as db:
+            before_versions = db.scalar(select(func.count()).select_from(AgentVersion))
+            before_snapshots = db.scalar(select(func.count()).select_from(KnowledgeSnapshot))
+            before_chats = {
+                model: db.scalar(select(func.count()).select_from(model))
+                for model in (Conversation, ConversationTurn, AgentAccountMemory)
+            }
+        result = client.post(
+            "/api/v1/agents/preview",
+            headers=headers(csrf),
+            json=body(
+                message="What about rivers?",
+                document_ids=[document_id],
+                version_id=None,
+                agent_md="You are an unsaved draft persona.",
+                voice_profile_id=None,
+            ),
+        )
+        assert result.status_code == 200, result.text
+        assert result.json()["answer"] == "This is a single-turn preview."
+        with database.session() as db:
+            assert db.scalar(select(func.count()).select_from(AgentVersion)) == before_versions
+            assert (
+                db.scalar(select(func.count()).select_from(KnowledgeSnapshot)) == before_snapshots
+            )
+            assert before_chats == {
+                model: db.scalar(select(func.count()).select_from(model)) for model in before_chats
+            }
+
+
+def test_preview_vector_failure_does_not_lexical_fallback(
+    app_factory: Any, monkeypatch: Any
+) -> None:
+    app, _, settings = app_factory()
+    calls: list[str] = []
+
+    def boom(self: MockVectorStore, query: str, *, top_k: int = 6) -> list[Any]:
+        del self, query, top_k
+        calls.append("vector")
+        raise ValueError("vector search failed")
+
+    monkeypatch.setattr(MockVectorStore, "search", boom)
+    monkeypatch.setattr(
+        preview,
+        "preview_reply",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("LLM must not run")),
+    )
+    with TestClient(app) as client:
+        _, csrf = login(client, "bowen")
+        settings.llm_provider = "dashscope"
+        document_id = _upload_ready_document(
+            client,
+            csrf,
+            name="vector-fail",
+            body_bytes=b"# Fail\nalpha beta gamma lexical bait.\n",
+        )
+        result = client.post(
+            "/api/v1/agents/preview",
+            headers=headers(csrf),
+            json=body(
+                message="alpha beta gamma",
+                document_ids=[document_id],
+                version_id=None,
+            ),
+        )
+        assert result.status_code == 503, result.text
+        assert result.json()["code"] == "provider_unavailable"
+        assert calls == ["vector"]
+
+
+def test_preview_sources_uses_mock_vector_store_not_term_overlap() -> None:
+    source = (preview.__file__ and open(preview.__file__, encoding="utf-8").read()) or ""
+    assert "MockVectorStore" in source
+    assert "SnapshotRetriever" in source
+    assert "sum(term in chunk.chunk_text.lower() for term in terms)" not in source
+    assert 're.findall(r"[a-z0-9]+|[\\u3400-\\u9fff]"' not in source
