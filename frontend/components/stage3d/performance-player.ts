@@ -366,11 +366,7 @@ export function createPerformancePlayer(
               smoothstep(event.dur, event.dur - fadeSec, audioTimeSec - event.t)
             : 1;
         const sample: PerformanceSample = { ...NO_SAMPLE, mouth };
-        for (const channel of [
-          "head",
-          "neck",
-          "torso",
-        ] as const) {
+        for (const channel of ["head", "neck", "torso"] as const) {
           const base = posture?.[channel];
           const gesture = frame[channel];
           if (!base && !gesture) continue;

@@ -21,7 +21,7 @@ Agno3.0.11/public SDK(ADR-009);Team additional_input history.0035:owner-first dr
 
 ## Oct7 MayaForm
 
-feat/mayaform-v14:learning/Tools checkpoints(Git refs),foreign Debate/Voice/UI;Resume v2 Brainform RAG/Knowledge/Memory,canonical Markdown/history kept. RAG/manual regen replaces manual head only on valid newer success. Actor/source ACL,task evaluator,Boundary grants stay. Tool roles:Public+Student or Public+Teacher. Formal attempts->Teacher reports despite legacy labels;exclude ordinary Chats. General Chat:natural-language attempt actions;no cards/dashboard/lifecycle UI. Owner progress:phase-safe;history/completed evidence immutable. Oct9 0055 `submitted_at`:built,not real-accepted;survey all if≤3,else half;evaluator-chosen/server-validated follow-ups before Boundary. "end":submit answered work;only abandon/redo deletes learning records;keep accounting. Boundary/reports:mastery/weak/not-yet-verified. Student-majority language;off-topic/progress requests:help,never answers.
+MayaForm v1.4:learning/Tools checkpoints;Brainform RAG/Knowledge/Memory,canonical Markdown/history. Manual RAG regen replaces head only on valid newer success. Actor/source ACL,task evaluator,Boundary grants stay. Tool roles:Public+Student or Public+Teacher. Formal attempts->Teacher reports,ordinary Chats excluded. General Chat:attempt actions in natural language,no lifecycle UI. Owner progress:phase-safe,history/completed evidence immutable.0055 submitted_at:built,not real-accepted;survey all if≤3,else half;server-validated evaluator follow-ups before Boundary. "end":submit answered work;only abandon/redo deletes learning records;keep accounting. Boundary/reports:mastery/weak/not-yet-verified. Student-majority language;off-topic/progress:help,never answers.
 
 Oct5:30db274/0053 ready/integrity/FK;backups20261005T110321Z/130151Z healthy;pending/sending0,unknown3 kept.Synthetic:1 Embedding+2 accepted Knowledge charges;Gen2/seq3 replaces seq2,history kept;denied0,fixtures withdrawn;ledger457 operations/charges.Oct7:authorized synthetic4-Agent/multi-student workflow;no learner/Private Chat data.
 
@@ -33,7 +33,7 @@ Create AI Knowledge/New Agent;Private/Public labels only;Brainform:RAG/Knowledge
 
 generate_agent_knowledge:accepted receipt reuse/post-commit wake;first publish:no Set. RAG:pending-save lock/draft fence. Prod:no Demo/quick-login/auto-confirm;exact HTTPS,strong Teacher creds,isolated mounts,abuse bounds only. C1 Mock:60 registrations/parallel send/replay/SSE,0 calls. Backup113435Z/0053->0054:Provider records kept,0 charges. Pose e9b000a:one canvas;voice b8f65e7=0056;TTS054f420 excluded.
 
-Oct9-13:Debates:Brainform/Chatform/Studyform;private read_memory pauses team_no_progress;Tool role ACL;publisher edits Agent.md/Brainform/Avatar/Voice.0058 cardroom;prod1f34fea/0057.PR50->556fdc5:Public green/Private gray,0059 Chat pin,RAG visibility,Accounts visits read Private.0060 retires old work except Demo philosophers;Agent notes quote users.0061 personal debaters,Public Teams:Public Agents;0062 owner voices;我不知道/忘了 scores. Scorer->summarizer:live sign-in,all Questions;Brainform .md edit/rename,rubric follow-ups rerun,0063 names,answer-form checks,Leader report links.PR52:text/Live/Avatar/0064 slot release;Interact26/26.Create Done validates;edits require changes,saves->library.Withdrawn RAG blocks generation till reselected/published;Teacher generate/publish revives Knowledge Sets.Team errors name unavailable members.Accounts:public RAG/Knowledge,publisher edits,Members/activity,natural names,ungrouped last.Profile:existing groups,old work inaccessible.Phone<880px:sideways/upright/sideways within6s->cardroom.PRs56/58/59/60/64 kept.
+Oct9-13:Debates in Brainform/Chatform/Studyform;private read_memory pauses team_no_progress;Tool role ACL;publisher edits Agent.md/Brainform/Avatar/Voice.0058 cardroom;Public green/Private gray;0059 Chat pin/RAG visibility/Accounts Private reads.0060 retires old work except Demo philosophers;Agent notes quote users.0061 personal debaters/Public Teams require Public Agents;0062 owner voices;我不知道/忘了 scores. Scorer->summarizer:live sign-in/all Questions;Brainform .md edit/rename;rubric follow-ups rerun;0063 names/answer-form checks/Leader report links;0064 slot release. Create Done validates;edits require changes/save->library. Withdrawn RAG blocks generation until reselected/published;Teacher generate/publish revives Sets. Team errors name unavailable members. Accounts:public RAG/Knowledge,publisher edits,Members/activity,natural names,ungrouped last. Profile:existing groups,old work inaccessible. Phone<880px:sideways/upright/sideways within6s->cardroom.
 
 ## Oct14 release
 
@@ -71,9 +71,7 @@ Visits:hide Knowledge,renew/20min,end notice->Accounts. Debate "?":Chinese hover
 
 ## Nov9 classes/accounts(ongoing)
 
-#390:3081da2(b6c2047b) onto535d2272->28b8bf8e.Teacher pages class-scoped;register group join/create.0086 group choice;0087 erasure keeps contributors' work,hard-deletes student work/grades/Quiz attempts.Local0082->0087/build/1187UI/82PG passed;4 failures fixed,135 reproduced on main.
-
-Nov10:Maya1002/Maya1001 stable IDs;teacher class scope/RAG class bar.47PG/1188UI. Optional choice;no empty Agents card;chat hides missing group/editor.Nov12:removals/deactivation prune empty/inactive-only non-default groups;work FKs guard,accounts kept;course locks ordered;0 calls/deploy.
+#390/0086:Teacher pages class-scoped;register group join/create.0087 erasure keeps contributors' work,hard-deletes student work/grades/Quiz attempts. Nov10:Maya1002/Maya1001 stable IDs;teacher class scope/RAG class bar;optional choice,no empty Agents card,chat hides missing group/editor. Nov12:prune empty/inactive-only non-default groups;work FKs guard,accounts kept,course locks ordered. Local PG/UI checked;acceptance ongoing;0 calls/deploy.
 
 ## Nov10 v4(replaces Oct24 contract-in-Ruleset)
 
@@ -87,7 +85,7 @@ Builds:`markdown-structure-600t-v3`,150-900 tokens,no overlap;keep v2 snapshots 
 
 0089:new v4 participants start `compiling`;each frozen AGENT.md compiles once before its Agent's first turn(`llm_debate_card`,Debate model,strict schema,1 ledgered attempt,60s) to identity/position/reasoning/style/voice/dropped,≤600 Han/400 words. Ready->card persona;failure/Mock->raw AGENT.md;null(old):keep pinned bytes. R1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style.0 calls;quality unverified.
 
-Nov11:Agents/Teams<768px black banner shadow,no orange ring;desktop unchanged;390/1440/tour,1247UI/build pass. Agent list omits agent_md/docs;early /auth/me;idle Debate poll15s.
+Nov11:Agents/Teams<768px black shadow,no orange ring;desktop unchanged. Lists omit agent_md/docs;early /auth/me;idle Debate poll15s.
 
 Bowen0090(after0089):schema only;UI/security kept;acceptance pending.
 
@@ -101,19 +99,19 @@ Nov12 Chatform:composer focuses Message,controls kept;history avatar/date pass c
 
 DEBATE_TTS_ENGINE=cosyvoice:Debate TTS(qwen3 default;pre-request-refusal fallback);word_timestamps->debates/performance(gestures+visemes). AudioStore:WAV-sibling performance.json;ticket-gated GET /debates/{id}/performance/{turn}(404=plain audio). beta-stage:media.prepared sibling;ScholarScene:timeline+clock;scholar-stage:visemes+gesture clips over procedural frame. Bones:UE spine_02/neck_01,AdvSkel Chest_M/Neck_M,Mixamo Spine2/Neck;fix head-only collar clipping;hide watermark.Tripo-refined/Mixamo-rigged:elder-scholar.glb,noble-scholar.glb(noble2),female_1.glb.
 
-Gesture v2:upper/forearm/hand figure-space axis-angle;per-rig local=A⁻¹·E·A·rest;shared Mixamo clips. Postures:hand_behind_back(right behind,left chest),hand_on_chest(mirror),open_palm_listening;free-left-arm clips:emphasis,settle_calm,doubt_shrug,invite_present,chin_stroke,palm_open_sweep,lean_in,object_raise.Thoughtful/friendly->hand_on_chest.Headless-render QA:all3;153 frontend files/1259 tests green.
+Gesture v2:upper/forearm/hand figure-space axis-angle;per-rig local=A⁻¹·E·A·rest;shared Mixamo clips. Postures:hand_behind_back(right behind,left chest),hand_on_chest(mirror),open_palm_listening;free-left-arm clips:emphasis,settle_calm,doubt_shrug,invite_present,chin_stroke,palm_open_sweep,lean_in,object_raise.Thoughtful/friendly->hand_on_chest.All3 render QA/UI pass.
 
-Nov12 #419(live Nov13):capsule second press closes;trigger pathname key removed. Bowen student pages use the login class's first non-Students group;moves stay in that session class. New usernames 3-64 letters/digits;older `.` `_` `-` names still sign in. Private→Public is the owner.
+Nov12 #419:second capsule press closes;no trigger pathname key. Bowen student pages use the login class's first non-Students group;moves stay in that session class. New usernames 3-64 letters/digits;older `.` `_` `-` names still sign in. Private→Public is the owner.
 
 ## Nov13 deploy
 
 f1087c4d live:3D/gesture v2/3 figures/#419,replaces334fbd94.Local image save/load;3.5G server:no build/test.Backup maya-pre-334fbd94-20261112-213724.dump:102M,list pass,PG-only.0091_quiz_show_results;ready/HTTPS200.Backend240/319;known voice+2 load-adaptive failures,no regressions.
 
-Nov14 UI:Teams ?/Agent New RAG hint removed;tour omits voices.Capsule:shared teacher layout/session-API/user/course caches,B2b kept;Chromium1440/390 width70.15625px stable.UX:page-rise520ms/reduced motion/teacher shell kept;Immerse loading hides Back.Quiz ZIP:participant XLSX/snapshot questions/grades.1387UI/13skip;build/gates pass;PG3521pass/129baselinefail/new0.0 calls/deploy.
+Nov14:Teams ?/Agent New RAG hint removed;tour omits voices. Capsule:shared teacher layout/session-API/user/course caches,B2b kept;390/1440 stable. Page-rise520ms/reduced motion/teacher shell;Immerse loading hides Back. Quiz ZIP:participant XLSX/snapshot questions/grades.UI/build/gates/PG checked;new0;0 calls/deploy.
 
-Nov15 #426:flat LoadingPage #CEDAE3;390/1440 reviewed;1387UI/13skip,build pass.
+Nov15 #426:flat LoadingPage #CEDAE3;390/1440/build checked.
 
-Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs;Team/assessment bytes kept.473 focused pass;no real LLM.Prettier baseline:performance-player.ts.
+Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs;Team/assessment bytes kept.473 focused pass;no real LLM.Voice branch fixes baseline Prettier/Ruff formatting.
 
 ## Nov16 local paired review
 
@@ -122,3 +120,7 @@ Base cc2a7321;#432=4b06c1cd;#433=43cbd7d2;integration556226e4.Local;0 real calls
 D1:remove `agent_md_invalid` AGENT.md heading readiness gate;keep empty/other checks/legacy enum.
 
 Merge inputs:HEAD 0988a2322832c6db264ff13a0780b97bfa96dc51 + origin/main 5e5f349a004729cc594db2821235407a2548224a (#438/#432/#433);headingless create:v5 round_unit_caps.
+
+Nov16 Voice merge:f802eb72d76c407818a817da1cb570d07a74353c + origin/main 7e7087442a584897aad0cd0ce445e2f97ca30d98. #432/#433/#439 retained;Voice consent-actor owner_username(optional/nullable),peer usage ACL/private Agent filter,Retry. Merged contracts:169 platform operations. Voice pre-merge:155PG pass;0 calls/deploy. D2/#427/No Group migration excluded.
+
+Merge checks:17 static PASS;113 targeted PG PASS;160UI files/1412pass/13skip;boundary/reset/Ruff PASS.

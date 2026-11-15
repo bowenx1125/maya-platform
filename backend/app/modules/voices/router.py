@@ -31,6 +31,7 @@ from app.modules.voices.service import (
     create_voice_preview,
     delete_voice_profile,
     enroll_voice,
+    groupmate_ready_voice,
     list_group_voices,
     list_personal_voices,
     media_path_for_preview,
@@ -236,7 +237,7 @@ def get_voice_profile(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> VoiceProfileResponse:
-    return voice_profile_dto(visible_student_voice(db, context, str(voice_profile_id)).profile)
+    return voice_profile_dto(db, visible_student_voice(db, context, str(voice_profile_id)).profile)
 
 
 @router.patch(
@@ -321,13 +322,17 @@ def list_voice_profile_affected_agents(
     """Live Agents that would get a new version if this Voice were deleted."""
 
     from app.modules.agents.cascade import affected_agents
-    from app.modules.voices.service import visible_student_voice
 
-    scoped = visible_student_voice(db, context, str(voice_profile_id))
+    try:
+        profile = visible_student_voice(db, context, str(voice_profile_id)).profile
+    except PlatformError as exc:
+        if exc.status_code != 404:
+            raise
+        profile = groupmate_ready_voice(db, context, str(voice_profile_id))
     return [
         AffectedAgentDTO(agent_id=UUID(item.agent_id), name=item.name)
         for item in affected_agents(
-            db, voice_profile_ids=[scoped.profile.id], viewer_user_id=context.user.id
+            db, voice_profile_ids=[profile.id], viewer_user_id=context.user.id
         )
     ]
 

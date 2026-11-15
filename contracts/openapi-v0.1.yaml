@@ -8947,6 +8947,10 @@ components:
           - outcome_unknown
           - failed
           - deleted
+        owner_username:
+          type:
+          - string
+          - 'null'
         source_filename:
           type: string
         safe_error_code:
