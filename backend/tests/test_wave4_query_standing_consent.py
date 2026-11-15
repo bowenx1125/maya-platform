@@ -132,8 +132,8 @@ def _query_setup(
                 "rule_set_id": MUTUAL_LEARNING_RULE_SET_ID,
                 "round_count": 4,
                 "turn_protocol": "segments_v2",
-            "round_unit_caps": [200, 200, 200, 200]
-        },
+                "round_unit_caps": [200, 200, 200, 200],
+            },
         )
         assert created.status_code == 201, created.text
         debate_id = created.json()["id"]

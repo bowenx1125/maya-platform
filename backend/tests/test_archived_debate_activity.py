@@ -41,8 +41,8 @@ def test_archived_running_classroom_does_not_block_visible_start(
                     "topic": topic,
                     "round_count": 4,
                     "participants": [{"agent_id": item, "stance_mode": "open"} for item in agents],
-            "round_unit_caps": [200, 200, 200, 200]
-        },
+                    "round_unit_caps": [200, 200, 200, 200],
+                },
             )
             assert response.status_code == 201, response.text
             ids.append(response.json()["id"])

@@ -249,7 +249,11 @@ def parse_repair_feedback(
         return value
     if not isinstance(value, Mapping):
         raise ValueError("repair feedback is invalid")
-    if value.get("schema_version") == "repair_feedback_v2" or "actual_units" in value or "unit_cap" in value:
+    if (
+        value.get("schema_version") == "repair_feedback_v2"
+        or "actual_units" in value
+        or "unit_cap" in value
+    ):
         return PromptRepairFeedbackV2.model_validate(value)
     return PromptRepairFeedbackV1.model_validate(value)
 
@@ -879,7 +883,10 @@ def build_prompt_request(
     transcript_hash: str | None = None,
     receipt_hash: str | None = None,
     rules: Sequence[str] = MUTUAL_LEARNING_PLATFORM_RULES,
-    repair_feedback: PromptRepairFeedbackV1 | PromptRepairFeedbackV2 | Mapping[str, object] | None = None,
+    repair_feedback: PromptRepairFeedbackV1
+    | PromptRepairFeedbackV2
+    | Mapping[str, object]
+    | None = None,
 ) -> PromptRequestV1:
     """Build a closed logical request without any provider or retrieval call."""
 

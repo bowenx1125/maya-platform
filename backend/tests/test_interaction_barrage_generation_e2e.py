@@ -55,8 +55,8 @@ def test_http_barrage_freezes_anonymously_then_survives_mock_generation_and_publ
                     ],
                     "round_count": 4,
                     "output_language": "en",
-            "round_unit_caps": [200, 200, 200, 200]
-        },
+                    "round_unit_caps": [200, 200, 200, 200],
+                },
             )
             assert created.status_code == 201, created.text
             debate_id = created.json()["id"]

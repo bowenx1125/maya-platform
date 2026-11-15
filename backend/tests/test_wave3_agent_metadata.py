@@ -668,7 +668,7 @@ def test_description_metadata_does_not_mutate_release_or_debate_inputs(
                 {"agent_id": second_id, "stance_mode": "open"},
             ],
             "round_count": 4,
-            "round_unit_caps": [200, 200, 200, 200]
+            "round_unit_caps": [200, 200, 200, 200],
         },
     )
     assert debate.status_code == 201, debate.text
@@ -845,8 +845,8 @@ def test_delete_and_create_debate_race_is_fk_safe(
             DebateParticipantInput(agent_id=UUID(first_agent_id), stance_mode="open"),
             DebateParticipantInput(agent_id=UUID(second_agent_id), stance_mode="open"),
         ],
-            round_unit_caps=[200, 200, 200, 200],
-)
+        round_unit_caps=[200, 200, 200, 200],
+    )
     student_context = _context(database, STUDENT_BOWEN_ID)
     settings = cast(Any, client.app).state.settings
 

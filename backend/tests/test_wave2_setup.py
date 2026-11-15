@@ -134,8 +134,8 @@ def test_request_validates_assigned_open_and_fixed_round_shapes() -> None:
             ),
             DebateParticipantInput(agent_id=uuid4(), stance_mode="open"),
         ],
-            round_unit_caps=[200, 200, 200, 200],
-)
+        round_unit_caps=[200, 200, 200, 200],
+    )
     assert request.round_count == 4
 
 
@@ -512,7 +512,7 @@ def test_embedding_only_slice_keeps_mock_voice_fallback(
             ],
             "round_count": 4,
             "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
-            "round_unit_caps": [200, 200, 200, 200]
+            "round_unit_caps": [200, 200, 200, 200],
         },
     )
     assert response.status_code == 201, response.text
@@ -541,8 +541,11 @@ def test_invalid_topic_is_a_stable_422_before_create_claim_or_update_cas(
     rejected = client.post(
         f"/api/v1/courses/{COURSE_ID}/debates",
         headers=headers(csrf, **{"Idempotency-Key": "invalid-topic-create-001"}),
-        json={"topic": invalid_topic, "participants": participants, "round_count": 4,
-            "round_unit_caps": [200, 200, 200, 200]
+        json={
+            "topic": invalid_topic,
+            "participants": participants,
+            "round_count": 4,
+            "round_unit_caps": [200, 200, 200, 200],
         },
     )
     assert rejected.status_code == 422, rejected.text
@@ -566,7 +569,7 @@ def test_invalid_topic_is_a_stable_422_before_create_claim_or_update_cas(
             "participants": participants,
             "round_count": 4,
             "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
-            "round_unit_caps": [200, 200, 200, 200]
+            "round_unit_caps": [200, 200, 200, 200],
         },
     )
     assert created.status_code == 201, created.text
@@ -894,7 +897,7 @@ def test_teacher_student_and_outside_course_boundaries(
         ],
         "round_count": 4,
         "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
-        "round_unit_caps": [200, 200, 200, 200]
+        "round_unit_caps": [200, 200, 200, 200],
     }
     student_session, student_csrf = login(client, "bowen")
     del student_session
@@ -938,8 +941,8 @@ def test_commit_start_plan_writes_full_predecessor_prefix_without_public_start_s
             DebateParticipantInput(agent_id=UUID(ids[0]), stance_mode="open"),
             DebateParticipantInput(agent_id=UUID(ids[1]), stance_mode="open"),
         ],
-            round_unit_caps=[200, 200, 200, 200],
-)
+        round_unit_caps=[200, 200, 200, 200],
+    )
     with database.session() as session:
         detail = create_debate_draft(
             session,
@@ -1252,7 +1255,7 @@ def test_teacher_personal_agent_without_a_group_can_debate(
                 {"agent_id": personal_id, "stance_mode": "open"},
             ],
             "round_count": 4,
-            "round_unit_caps": [200, 200, 200, 200]
+            "round_unit_caps": [200, 200, 200, 200],
         },
     )
     assert response.status_code == 201, response.text

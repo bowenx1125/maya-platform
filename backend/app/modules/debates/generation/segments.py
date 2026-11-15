@@ -26,7 +26,7 @@ from app.modules.agents.persona import (
     PersonaSpecV1,
     PersonaSpecV2,
 )
-from app.modules.debates.generation_params import CONTRACT_VERSION, uses_code_contract
+from app.modules.debates.generation_params import uses_code_contract
 from app.modules.debates.teaching_rules import DEFAULT_TARGET_MINUTES
 
 from .four_round import (
@@ -1150,8 +1150,7 @@ def build_segment_input(
                 minutes=context.target_minutes or DEFAULT_TARGET_MINUTES,
                 unit_cap=(
                     context.round_unit_caps[context.turn.round_no - 1]
-                    if context.round_unit_caps is not None
-                    and 1 <= context.turn.round_no <= 4
+                    if context.round_unit_caps is not None and 1 <= context.turn.round_no <= 4
                     else None
                 ),
             )

@@ -59,11 +59,10 @@ from .llm_price_card import (
 )
 from .llm_privacy import (
     LLM_REPAIR_FEEDBACK_FIELD_CLASS,
-    LLM_REPAIR_FEEDBACK_POLICY_HASH,
-    repair_policy_is_current,
     LLM_REPAIR_FEEDBACK_POLICY_VERSION,
     LLMOutboundManifestV1,
     LLMOutboundPrivacyError,
+    repair_policy_is_current,
     scan_llm_outbound_messages,
 )
 from .llm_tokenizer import (
@@ -684,8 +683,13 @@ def _validate_attempt_authorization(
         raise LLMAdapterError(code="llm_attempt_exceeds_manifest")
 
     if manifest.max_attempts == 2:
-        if not repair_policy_is_current(manifest.repair_policy_version, manifest.repair_policy_hash):
-            if manifest.repair_policy_version not in {LLM_REPAIR_FEEDBACK_POLICY_VERSION, "repair_feedback_v2"}:
+        if not repair_policy_is_current(
+            manifest.repair_policy_version, manifest.repair_policy_hash
+        ):
+            if manifest.repair_policy_version not in {
+                LLM_REPAIR_FEEDBACK_POLICY_VERSION,
+                "repair_feedback_v2",
+            }:
                 raise LLMAdapterError(code="llm_repair_policy_missing")
             raise LLMAdapterError(code="llm_repair_policy_stale")
         if LLM_REPAIR_FEEDBACK_FIELD_CLASS not in manifest.field_classes:

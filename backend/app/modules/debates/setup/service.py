@@ -46,7 +46,6 @@ from app.core.version_label import agent_version_label
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
 from app.modules.debates.cards import card_teacher_projection, initial_card_status, stored_card
 from app.modules.debates.generation_params import (
-    CONTRACT_VERSION,
     UNSTORED_V4_PARAMS,
     resolve_params,
     resolve_voice_params,
@@ -1259,7 +1258,6 @@ def debate_summary(
             else None,
         }
     )
-
 
 
 def _speech_limit_fields(debate: Debate, *, participant_count: int) -> dict[str, object]:

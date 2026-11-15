@@ -28,7 +28,7 @@ def _create(client: Any, csrf: str, agent_ids: list[str]) -> Any:
             ],
             "round_count": 4,
             "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
-            "round_unit_caps": [200, 200, 200, 200]
+            "round_unit_caps": [200, 200, 200, 200],
         },
     )
 
@@ -249,8 +249,8 @@ def test_a_malformed_debate_names_each_field(debate_app: Any) -> None:
                 "round_count": 4,
                 "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
                 **body,
-            "round_unit_caps": [200, 200, 200, 200]
-        },
+                "round_unit_caps": [200, 200, 200, 200],
+            },
         )
         assert response.status_code == 400, response.text
         assert response.json()["code"] == "malformed_request"

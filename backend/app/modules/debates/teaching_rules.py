@@ -251,9 +251,7 @@ def freeze_teaching_rules(
         "teaching_prompts": authored,
         "system_prompts": {
             lang: [
-                compile_code_contract_prompt(
-                    authored[lang], turn, lang, contract_version=version
-                )
+                compile_code_contract_prompt(authored[lang], turn, lang, contract_version=version)
                 for turn in range(1, 5)
             ]
             for lang in ("zh", "en")
@@ -265,7 +263,9 @@ def freeze_teaching_rules(
         frozen["over_length_ratio"] = "3/2"
         frozen["repair_feedback_version"] = "repair_feedback_v2"
     else:
-        frozen["target_minutes"] = DEFAULT_TARGET_MINUTES if target_minutes is None else target_minutes
+        frozen["target_minutes"] = (
+            DEFAULT_TARGET_MINUTES if target_minutes is None else target_minutes
+        )
     if llm_params is not None:
         frozen["llm_params"] = {
             name: value for name, value in llm_params.items() if name not in UNSTORED_V4_PARAMS

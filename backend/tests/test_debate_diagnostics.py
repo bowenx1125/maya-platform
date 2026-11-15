@@ -49,7 +49,7 @@ def _create_previewed_debate(app, database) -> tuple[TestClient, str, str]:
             ],
             "round_count": 4,
             "output_language": "en",
-            "round_unit_caps": [200, 200, 200, 200]
+            "round_unit_caps": [200, 200, 200, 200],
         },
     )
     assert response.status_code == 201, response.text

@@ -334,7 +334,7 @@ def test_rag_knowledge_voice_and_agent_deletion_keeps_debate_material(
             ],
             "round_count": 4,
             "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
-            "round_unit_caps": [200, 200, 200, 200]
+            "round_unit_caps": [200, 200, 200, 200],
         },
     )
     assert created.status_code == 201, created.text

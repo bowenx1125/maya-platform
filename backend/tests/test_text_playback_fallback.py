@@ -92,8 +92,8 @@ def test_four_round_text_only_http_lifecycle(app_factory: Any, voice_missing: bo
                 "round_count": 4,
                 "output_language": "en",
                 "participants": [{"agent_id": item, "stance_mode": "open"} for item in agents],
-            "round_unit_caps": [200, 200, 200, 200]
-        },
+                "round_unit_caps": [200, 200, 200, 200],
+            },
         )
         assert created.status_code == 201, created.text
         debate_id = created.json()["id"]

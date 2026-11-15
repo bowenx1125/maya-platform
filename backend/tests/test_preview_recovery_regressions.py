@@ -376,8 +376,8 @@ def test_chinese_draft_locks_language_before_preview_and_start(app_factory):
                     "output_language": "zh",
                     "round_count": 4,
                     "participants": [{"agent_id": item, "stance_mode": "open"} for item in agents],
-            "round_unit_caps": [200, 200, 200, 200]
-        },
+                    "round_unit_caps": [200, 200, 200, 200],
+                },
             )
             assert created.status_code == 201, created.text
             detail = created.json()
@@ -574,8 +574,8 @@ def test_completed_preview_text_counts_as_ready_without_audio_and_is_not_rewarme
                     "output_language": "en",
                     "round_count": 4,
                     "participants": [{"agent_id": item, "stance_mode": "open"} for item in agents],
-            "round_unit_caps": [200, 200, 200, 200]
-        },
+                    "round_unit_caps": [200, 200, 200, 200],
+                },
             )
             assert response.status_code == 201, response.text
             debate_id = response.json()["id"]
