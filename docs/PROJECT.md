@@ -111,6 +111,8 @@ Nov12 #419(live Nov13):capsule second press closes;trigger pathname key removed.
 
 f1087c4d live:3D/gesture v2/3 figures/#419;replaces334fbd94(missed #419).Local image save/load;3.5G server:no build/test.Backup maya-pre-334fbd94-20261112-213724.dump:102M,pg_restore list pass,PG-only.Schema0091_quiz_show_results;ready/HTTPS200.Backend240/319 chunked;known voice+2 load-adaptive failures,no regressions.
 
-Nov14:Teams ?/Agent New RAG hint removed;tour drops voices.1372UI/13skip,build pass. Capsule:teacher layout/session-API/user/course caches fix empty-name remounts;B2b kept.Chromium1440/390:class44-70.15625px→70.15625px stable;1380UI/13skip(+8),build/gates pass. UX:page-rise520ms/reduced motion;teacher shell retained;Immerse loading hides Back.Quiz ZIP:participant XLSX,snapshot questions/grades.1387UI/13skip,build pass;PG3521pass/129baselinefail,new0.Each:0 calls/deploy.
+Nov14 UI:Teams ?/Agent New RAG hint removed;tour omits voices.Capsule:shared teacher layout/session-API/user/course caches,B2b kept;Chromium1440/390 width70.15625px stable.UX:page-rise520ms/reduced motion/teacher shell kept;Immerse loading hides Back.Quiz ZIP:participant XLSX/snapshot questions/grades.1387UI/13skip;build/gates pass;PG3521pass/129baselinefail/new0.0 calls/deploy.
+
+Nov15 #426 local:LoadingPage flat #CEDAE3;390/1440 Chromium reviewed;1387UI/13skip/build pass.Prettier baseline:performance-player.ts.0 calls/deploy.
 
 Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs/ce52b274;Team/assessment bytes kept;identity kept.473 focused pass.0 calls/deploy;no real LLM.
