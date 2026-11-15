@@ -164,6 +164,26 @@ const enMessages = {
   debateTopicRequired: "Enter a topic.",
   debateSelectAtLeast: "Select at least two Agents.",
   debateSelectAtMost: "A Demo debate supports at most five Agents.",
+  debateRoundCapsTitle: "Speech length by round",
+  debateRoundCapsFlexibility:
+    "Target / suggested upper limits; speeches can vary and are not cut off word for word.",
+  debateEstimatedDuration: "Estimated total debate length",
+  debateEstimatedDurationAssumption:
+    "Assumes {participants} Agents, voice rate {rate}, and a 10% pause allowance. This is an estimate, not a timer or actual playback duration.",
+  debateRoundCapInvalid:
+    "{round} must be an integer from {minimum} to 2,000 {unit}.",
+  debateRoundCapsUnitChanged:
+    "The counting unit changed; edited values were kept.",
+  debateCardReasonCompileTimeout: "Card compilation timed out.",
+  debateCardReasonFormatInvalid:
+    "The card could not be read in the expected format.",
+  debateCardReasonTooLong: "The card exceeded the safe length limit.",
+  debateCardReasonServiceBusy: "The card service was temporarily unavailable.",
+  debateCardReasonConfigProblem:
+    "The card service could not prepare this Agent's card.",
+  debateCardReasonOther: "The card could not be prepared.",
+  debateCardFallbackContinues:
+    "This Agent will use its original AGENT.md. This session can continue.",
   debateCurrent: "current",
   debateRounds: "{count} Rounds",
   debateStageTitle: "Classroom debate",
