@@ -53,11 +53,12 @@ describe("LoadingCard", () => {
     expect(screen.getByRole("status").textContent).toContain("Loading…");
   });
 
-  it("fills the whole screen as LoadingPage, on the cyan stripes", () => {
+  it("fills the whole screen as LoadingPage, on a flat blue-gray background", () => {
     const { container } = render(<LoadingPage />);
     const main = container.querySelector("main");
     expect(main?.className).toContain("min-h-screen");
-    expect(main?.className).toContain("bg-[#67E8F9]");
+    expect(main?.className).toContain("bg-[#CEDAE3]");
+    expect(main?.className).not.toMatch(/67E8F9|A5F3FC|gradient/i);
     expect(main?.querySelector(".loading-card")).toBeTruthy();
   });
 

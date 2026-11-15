@@ -41,13 +41,9 @@ export {
 
 export { NOTICE_TAIL_CLASS, useNoticeTray };
 
-const STRIPES =
-  "bg-[#67E8F9] [background-image:repeating-linear-gradient(-35deg,#A5F3FC_0_46px,#67E8F9_46px_92px)]";
-
-/** The whole-page wait: the agent loader across the cyan-striped screen. */
 export function LoadingPage() {
   return (
-    <main className={cn("grid min-h-screen place-items-center px-4", STRIPES)}>
+    <main className="grid min-h-screen place-items-center bg-[#CEDAE3] px-4">
       <LoadingCard bare />
     </main>
   );
@@ -68,7 +64,7 @@ export function LoadingCard({
   count = 1,
 }: {
   label?: string;
-  /** No frame of its own (LoadingPage already paints the stripes). */
+  /** No frame of its own (LoadingPage already paints the background). */
   bare?: boolean;
   size?: LoaderSize;
   /** "dark" for a dark screen (the audience terminal): light label. */
