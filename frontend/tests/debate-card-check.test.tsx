@@ -60,7 +60,7 @@ describe("debate cards on the teacher preview", () => {
     );
     expect(
       screen.getAllByTestId("debate-card-status").map((tag) => tag.textContent),
-    ).toEqual(["Ready", "Compiling", "Fallback"]);
+    ).toEqual(["Ready", "Compiling"]);
     const [ready, compiling, fallback] =
       screen.getAllByTestId("debate-card-check");
 
@@ -75,12 +75,36 @@ describe("debate cards on the teacher preview", () => {
     expect(
       within(compiling).getByText(/The card is still compiling\./),
     ).toBeTruthy();
+    expect(within(fallback).queryByTestId("debate-card-status")).toBeNull();
+    expect(within(fallback).queryByText("Fallback")).toBeNull();
     expect(
       within(fallback).getByText("The card could not be prepared."),
     ).toBeTruthy();
+    expect(within(fallback).queryByText(/original AGENT\.md/)).toBeNull();
+  });
+
+  it("omits the Fallback status tag on extraction failure while keeping the reason", () => {
+    renderPreview(
+      snapshot([
+        {
+          id: "a",
+          agent_name: "Ada",
+          card_status: "fallback",
+          card_teacher_reason: "format_invalid",
+          card: null,
+        },
+      ]),
+    );
+    const check = screen.getByTestId("debate-card-check");
+    expect(within(check).queryByTestId("debate-card-status")).toBeNull();
+    expect(within(check).queryByText("Fallback")).toBeNull();
+    fireEvent.click(within(check).getByText("Check card"));
     expect(
-      within(fallback).queryByText(/original AGENT\.md/),
-    ).toBeNull();
+      within(check).getByText(
+        "The card could not be read in the expected format.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByTestId("debate-card-check")).toBeTruthy();
   });
 
   it("names the Agent on the disclosure and lists nothing dropped plainly", () => {
