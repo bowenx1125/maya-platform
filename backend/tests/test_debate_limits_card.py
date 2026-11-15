@@ -14,12 +14,20 @@ from app.modules.debates.generation.four_round import (
     over_length_limit,
     speech_language_mismatch,
 )
+from dataclasses import replace
+
 from app.modules.debates.generation_params import (
     CONTRACT_VERSION,
     RULESET_CONTRACT_V5,
     uses_code_contract,
     uses_v5_speech_limits,
 )
+from app.providers.llm_segments import (
+    SEGMENT_NO_HISTORY_COPY_RULE,
+    SEGMENT_NO_HISTORY_COPY_RULE_ZH,
+)
+from tests.test_debate_prompt_v4 import PARAMS, _snapshot, _v4_context
+from tests.test_four_round_provider import adapter
 from app.modules.debates.teaching_rules import (
     freeze_teaching_rules,
     frozen_round_unit_caps,
@@ -71,6 +79,23 @@ def test_freeze_without_caps_stays_v4_and_caps_freeze_v5() -> None:
     assert frozen_speech_length(__import__("json").dumps(v5)) == (None, 1.0)
     assert frozen_round_unit_caps(__import__("json").dumps(v5)) == tuple(caps)
     assert uses_v5_speech_limits(v5) is True
+
+
+def test_v5_with_history_does_not_append_the_old_no_copy_rule() -> None:
+    caps = (200, 160, 160, 240)
+    frozen = {
+        "contract_version": RULESET_CONTRACT_V5,
+        "params": PARAMS,
+        "round_unit_caps": list(caps),
+        "over_length_ratio": "3/2",
+        "repair_feedback_version": "repair_feedback_v2",
+    }
+    snapshot = _snapshot(replace(_v4_context(3, frozen_llm=frozen), round_unit_caps=caps))
+    assert snapshot.history
+    content = adapter().build_request(snapshot).system_message.content
+    assert SEGMENT_NO_HISTORY_COPY_RULE not in content
+    zh = _snapshot(replace(_v4_context(3, "zh", frozen_llm=frozen), round_unit_caps=caps))
+    assert SEGMENT_NO_HISTORY_COPY_RULE_ZH not in adapter().build_request(zh).system_message.content
 
 
 def test_repair_feedback_hashes_are_pinned() -> None:
