@@ -131,4 +131,6 @@ Exact inputs: codex/fix-435-group-switch abbc4a32ca4b915545ed7b6a617976ff5c9a2eb
 
 G merge input: codex/voice-preview-mayaform 75188b1137d25c333ac58ab9b1fbef4d68ca7fd0. Only preview line3 changes Maya->Mayaform in both languages;fresh synthesis unchanged,no cache reset,old previews expire normally.12-click test wraps through line3 and checks one synthesis/request.Main formatting/DTO preserved.
 
-F merge input: codex/quiz-icon-list-checks 8af342ca64c05894003d771ef594b651d5ea2e33. Shared Quiz list-checks glyph/teacher nav,stroke1.65;stable quizzes key,distinct Debate glyph/selection/tour kept.Original34UI/8PG pass;integration checks pending.
+F merge input: codex/quiz-icon-list-checks 8af342ca64c05894003d771ef594b651d5ea2e33. Shared Quiz list-checks glyph/teacher nav,stroke1.65;stable quizzes key,distinct Debate glyph/selection/tour kept.Original34UI/8PG pass.
+
+Integration:17/17 static PASS;76 targeted PG PASS;full serial UI161files/1418pass/13skip;Next build PASS;generated-boundary/reset/bootstrap/production-routes/Ruff PASS.0 calls/push/deploy.
