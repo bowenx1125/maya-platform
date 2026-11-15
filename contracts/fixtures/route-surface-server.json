@@ -14125,6 +14125,12 @@
               "deleted"
             ]
           },
+          "owner_username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "source_filename": {
             "type": "string"
           },

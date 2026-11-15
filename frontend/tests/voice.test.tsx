@@ -22,6 +22,8 @@ vi.mock("next/navigation", () => ({
 
 const api = {
   voiceProfiles: vi.fn(),
+  personalVoiceProfiles: vi.fn(),
+  voiceAffectedAgents: vi.fn().mockResolvedValue([]),
   enrollVoice: vi.fn(),
   createVoicePreview: vi.fn(),
   deleteVoiceProfile: vi.fn(),
@@ -38,6 +40,7 @@ const CONSENT =
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  api.voiceAffectedAgents.mockReset().mockResolvedValue([]);
   vi.unstubAllGlobals();
 });
 
@@ -65,6 +68,75 @@ async function openEnrollForm() {
 }
 
 describe("M08 voice library", () => {
+  it.each([
+    { role: "teacher", visiting: false },
+    { role: "teacher", visiting: true },
+    { role: "student", visiting: false },
+  ] as const)(
+    "shows the API creator and visible Agent usage in the $role album (visiting=$visiting)",
+    async ({ role, visiting }) => {
+      const profile = {
+        id: "album-voice",
+        scope: role === "teacher" && !visiting ? "personal" : "group",
+        status: "ready",
+        source_filename: "sample.wav",
+        created_at: "2026-10-12T00:00:00Z",
+        owner_username: "voicecreator",
+        can_manage: role === "teacher",
+      };
+      api.voiceProfiles.mockResolvedValue([profile]);
+      api.personalVoiceProfiles.mockResolvedValue([profile]);
+      api.voiceAffectedAgents.mockResolvedValue([
+        { agent_id: "visible-agent", name: "Socrates" },
+      ]);
+      render(
+        <AppShell role={role}>
+          <VoiceLibrary
+            album
+            groupId={role === "student" || visiting ? "group-a" : null}
+            courseId={role === "teacher" && !visiting ? "course-a" : null}
+            listenOnly={visiting}
+          />
+        </AppShell>,
+      );
+      expect(await screen.findByText("@voicecreator")).toBeVisible();
+      expect(await screen.findByText("Socrates")).toBeVisible();
+      expect(screen.queryByText("No Agents yet")).toBeNull();
+      expect(api.voiceAffectedAgents).toHaveBeenCalledWith("album-voice");
+    },
+  );
+
+  it("reports a failed usage lookup and retries it when the list reloads", async () => {
+    api.voiceProfiles.mockResolvedValue([
+      {
+        id: "album-voice",
+        scope: "group",
+        status: "ready",
+        source_filename: "sample.wav",
+        created_at: "2026-10-12T00:00:00Z",
+        owner_username: "voicecreator",
+      },
+    ]);
+    api.voiceAffectedAgents
+      .mockRejectedValueOnce(new PlatformApiError(503, "Usage unavailable."))
+      .mockResolvedValue([{ agent_id: "visible-agent", name: "Socrates" }]);
+    render(
+      <AppShell role="student">
+        <VoiceLibrary album groupId="group-a" />
+      </AppShell>,
+    );
+    expect(
+      await screen.findByText(
+        "A platform capability is temporarily unavailable.",
+      ),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Socrates")).toBeVisible();
+    expect(
+      screen.queryByText("A platform capability is temporarily unavailable."),
+    ).toBeNull();
+  });
+
   it.each([
     { embedded: true, moduleCard: false, picker: true },
     { embedded: true, moduleCard: false, picker: false },

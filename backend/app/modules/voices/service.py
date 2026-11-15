@@ -23,6 +23,7 @@ from app.core.models import (
     CourseMember,
     Group,
     IdempotencyRecord,
+    User,
     VoiceProfile,
     VoiceProviderOperation,
 )
@@ -137,9 +138,13 @@ def _safe_error_code(value: str | None) -> str | None:
     return value if value in SAFE_VOICE_ERRORS else None
 
 
-def voice_profile_dto(profile: VoiceProfile, *, can_manage: bool = True) -> VoiceProfileResponse:
+def voice_profile_dto(
+    db: Session, profile: VoiceProfile, *, can_manage: bool = True
+) -> VoiceProfileResponse:
+    owner = db.get(User, profile.consent_actor_user_id) if profile.consent_actor_user_id else None
     return VoiceProfileResponse(
         can_manage=can_manage,
+        owner_username=owner.username if owner else None,
         id=UUID(profile.id),
         scope=profile.scope,  # type: ignore[arg-type]
         group_id=UUID(profile.group_id) if profile.group_id else None,
@@ -268,7 +273,7 @@ def rename_voice_profile(
     profile.source_filename = source_filename
     profile.updated_at = now_utc()
     db.flush()
-    return voice_profile_dto(profile)
+    return voice_profile_dto(db, profile)
 
 
 def _groupmate_owner_ids(db: Session, group_id: str) -> Any:
@@ -380,6 +385,7 @@ def list_group_voices(
     ).all()
     return [
         voice_profile_dto(
+            db,
             profile,
             can_manage=profile.consent_actor_user_id == context.user.id
             or course_teacher is not None,
@@ -403,7 +409,7 @@ def list_personal_voices(
         )
         .order_by(VoiceProfile.created_at, VoiceProfile.id)
     ).all()
-    return [voice_profile_dto(profile) for profile in profiles]
+    return [voice_profile_dto(db, profile) for profile in profiles]
 
 
 def _assert_course_teacher(db: Session, context: AuthContext, course_id: str) -> None:
@@ -1151,7 +1157,7 @@ def enroll_voice(
             if operation.state in {"dispatched", "reconciling", "outcome_unknown"}:
                 _claim_provider_operation(db, operation, record.claim_token)
                 if _reconcile_enrollment(db, profile, operation, provider_instance, settings):
-                    result = voice_profile_dto(profile)
+                    result = voice_profile_dto(db, profile)
                     if profile.__dict__.get("_retire_deleted_voice"):
                         _retire_deleted_voice(db, profile, settings)
                     finish_idempotency(db, record, 202, result.model_dump(mode="json"))
@@ -1159,7 +1165,7 @@ def enroll_voice(
                     return result
                 _claim_provider_operation(db, operation, record.claim_token)
             elif operation.state == "succeeded":
-                result = voice_profile_dto(profile)
+                result = voice_profile_dto(db, profile)
                 finish_idempotency(db, record, 202, result.model_dump(mode="json"))
                 db.commit()
                 return result
@@ -1284,7 +1290,7 @@ def enroll_voice(
             db, profile, operation, provider_result, settings, provider=provider_instance
         )
         if profile.__dict__.get("_retire_deleted_voice"):
-            result = voice_profile_dto(profile)
+            result = voice_profile_dto(db, profile)
             _retire_deleted_voice(db, profile, settings)
             if not claim_lost:
                 finish_idempotency(db, record, 202, result.model_dump(mode="json"))
@@ -1299,7 +1305,7 @@ def enroll_voice(
                     )
             except Exception:  # noqa: BLE001 - the Voice itself is fine
                 LOGGER.warning("voice_sample_retain_failed profile=%s", profile.id)
-        result = voice_profile_dto(profile)
+        result = voice_profile_dto(db, profile)
         if not claim_lost:
             finish_idempotency(db, record, 202, result.model_dump(mode="json"))
         db.commit()

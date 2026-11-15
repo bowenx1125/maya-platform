@@ -843,7 +843,10 @@ export function VoiceLibrary({
     ) : null;
 
   const albumList = album && !onSelect && !embedded;
-  const voiceAgents = useVoiceAgents(profiles, albumList);
+  const voiceAgentsFailed = useCallback((cause: unknown) => {
+    setFailure({ cause, retry: { kind: "load" } });
+  }, []);
+  const voiceAgents = useVoiceAgents(profiles, albumList, voiceAgentsFailed);
 
   function nameField(
     profile: ListedVoice,

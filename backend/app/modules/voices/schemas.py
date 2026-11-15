@@ -26,6 +26,7 @@ class VoiceProfile(BaseModel):
     scope: Literal["system", "group", "personal"]
     group_id: UUID | None = None
     status: VoiceStatus
+    owner_username: str | None = None
     source_filename: str = ""
     safe_error_code: str | None = None
     created_at: datetime

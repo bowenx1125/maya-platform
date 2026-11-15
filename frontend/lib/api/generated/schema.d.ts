@@ -3526,6 +3526,7 @@ export interface components {
             group_id?: components["schemas"]["Uuid"] | null;
             /** @enum {string} */
             status: "validating" | "enrolling" | "preview_ready" | "ready" | "deleting" | "outcome_unknown" | "failed" | "deleted";
+            owner_username?: string | null;
             source_filename?: string;
             safe_error_code?: string | null;
             created_at: components["schemas"]["IsoTime"];
