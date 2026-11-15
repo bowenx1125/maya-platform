@@ -1161,6 +1161,7 @@ def test_published_and_superseded_release_fingerprint_survives_metadata_change(
                     {"agent_id": second_agent, "stance_mode": "open"},
                 ],
                 "round_count": 4,
+                "round_unit_caps": [200, 200, 200, 200],
             },
         )
         assert debate.status_code == 201, debate.text

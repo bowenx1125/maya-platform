@@ -82,7 +82,6 @@ function readiness(issues: Issue[]) {
   const messages: Record<string, string> = {
     rag_missing: "needs RAG",
     voice_missing: "voice none",
-    agent_md_invalid: "agent md",
     avatar_missing: "avatar",
   };
   return issues.map((item) => ({
@@ -98,6 +97,7 @@ function makeApi(version: AgentVersion, issues: Issue[][] = [[]]) {
   let read = 0;
   const api = {
     me: vi.fn(async () => makeSession()),
+    group: vi.fn(async () => ({ id: "group-id", course_id: "course-id" })),
     getCsrfToken: vi.fn(() => "csrf-1"),
     version: vi.fn(async () => version),
     agent: vi.fn(
@@ -238,9 +238,7 @@ describe("Agent hint bar", () => {
       "Agent “Agent” needs at least one RAG file.",
     );
     expect(bar.textContent).toContain("Agent “Agent” has no Voice");
-    expect(bar.textContent).toContain(
-      "Agent “Agent” has a non-standard AGENT.md",
-    );
+    expect(bar.textContent).not.toContain("non-standard AGENT.md");
     expect(bar.textContent).toContain("Agent “Agent” has no usable Avatar.");
     // U3 tray: the mascot speaks the checklist (portal), not an in-flow bar.
     expect(bar.className).toContain("notice");
@@ -255,9 +253,11 @@ describe("Agent hint bar", () => {
     expect(screen.queryByRole("note")).toBeNull();
   });
 
-  it("stays away when the published version passes every check", async () => {
+  it("ignores the retired heading issue on the Agent page", async () => {
     renderWorkbench(
-      makeApi(makeVersion(), [[]]) as unknown as PlatformApi,
+      makeApi(makeVersion({ agent_md: "A perspective without a heading." }), [
+        [{ issue: "agent_md_invalid" }],
+      ]) as unknown as PlatformApi,
       true,
     );
     await screen.findByLabelText("Material theme");
@@ -268,7 +268,7 @@ describe("Agent hint bar", () => {
     // Load, then after the RAG line's Done: RAG and Voice pass on the server.
     const api = makeApi(makeVersion(), [
       all,
-      [{ issue: "agent_md_invalid" }, { issue: "avatar_missing" }],
+      [{ issue: "avatar_missing" }],
       [{ issue: "avatar_missing" }],
     ]);
     renderWorkbench(api as unknown as PlatformApi, true);
@@ -276,7 +276,7 @@ describe("Agent hint bar", () => {
     const checks = within(bar).getAllByRole("button", {
       name: "Done: save, publish and check this again",
     });
-    expect(checks).toHaveLength(4);
+    expect(checks).toHaveLength(3);
     editAgentMd("# Agent\n\nA clear perspective.");
     fireEvent.click(checks[0]);
     await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(1));
@@ -285,7 +285,7 @@ describe("Agent hint bar", () => {
     );
     // Voice also passes now, but only the checked line moves.
     expect(bar.textContent).toContain("has no Voice");
-    expect(bar.textContent).toContain("non-standard AGENT.md");
+    expect(bar.textContent).not.toContain("non-standard AGENT.md");
 
     // A line that still fails stays after its Done.
     editAgentMd("# Agent\n\nA clearer perspective.");
@@ -300,6 +300,25 @@ describe("Agent hint bar", () => {
     await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(2));
     await act(async () => undefined);
     expect(bar.textContent).toContain("has no usable Avatar.");
+  });
+
+  it("still refuses to publish empty AGENT.md content", async () => {
+    const api = makeApi(makeVersion());
+    const create = vi.fn();
+    renderWorkbench(api as unknown as PlatformApi, true, {
+      groupId: "group-id",
+      create,
+    });
+    fireEvent.change(await screen.findByRole("textbox", { name: "Name" }), {
+      target: { value: "Agent" },
+    });
+    editAgentMd("   ");
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    expect(
+      await screen.findByText("Enter AGENT.md content before publishing."),
+    ).toBeTruthy();
+    expect(api.publish).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
   });
 
   it("publishes an Agent that still has open hints: they never block saving", async () => {

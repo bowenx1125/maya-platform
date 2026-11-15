@@ -99,6 +99,62 @@ describe("debate cards on the teacher preview", () => {
     expect(screen.queryByText("Voice")).toBeNull();
   });
 
+  it("shows a coarse teacher reason and the continue message for new fallbacks", () => {
+    renderPreview(
+      snapshot([
+        {
+          id: "a",
+          agent_name: "Ada",
+          card_status: "fallback",
+          card_teacher_reason: "card_too_long",
+          card: null,
+        },
+      ]),
+    );
+    const check = screen.getByTestId("debate-card-check");
+    fireEvent.click(within(check).getByText("Check card"));
+    expect(
+      within(check).getByText("The card exceeded the safe length limit."),
+    ).toBeTruthy();
+    expect(
+      within(check).getByText(
+        "This Agent will use its original AGENT.md. This session can continue.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(check).queryByText(
+        "Fallback: this Agent speaks from its original AGENT.md.",
+      ),
+    ).toBeNull();
+    expect(within(check).queryByText("card_too_long")).toBeNull();
+    expect(within(check).queryByText("too_long")).toBeNull();
+  });
+
+  it("does not display a teacher fallback reason for a ready card", () => {
+    renderPreview(
+      snapshot([
+        {
+          id: "a",
+          agent_name: "Ada",
+          card_status: "ready",
+          card_teacher_reason: "other",
+          card,
+        },
+      ]),
+    );
+    const check = screen.getByTestId("debate-card-check");
+    fireEvent.click(within(check).getByText("Check card"));
+    expect(within(check).getByText(card.identity)).toBeTruthy();
+    expect(
+      within(check).queryByText("The card could not be prepared."),
+    ).toBeNull();
+    expect(
+      within(check).queryByText(
+        "This Agent will use its original AGENT.md. This session can continue.",
+      ),
+    ).toBeNull();
+  });
+
   it("adds nothing for a Debate created before cards", () => {
     renderPreview(
       snapshot([

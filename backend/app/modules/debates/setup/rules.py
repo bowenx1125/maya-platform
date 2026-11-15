@@ -161,11 +161,11 @@ def canonical_rule_snapshot_json(
             )
         payload["teaching_protocol"] = teaching_protocol
     if teaching_protocol is not None:
-        from app.modules.debates.generation_params import CONTRACT_VERSION
+        from app.modules.debates.generation_params import uses_code_contract
         from app.modules.debates.teaching_rules import freeze_teaching_rules
 
         payload.update(frozen_teaching if frozen_teaching is not None else freeze_teaching_rules())
-        if payload.get("contract_version") == CONTRACT_VERSION:
+        if uses_code_contract(payload):
             # Frozen into every earlier snapshot without affecting anything;
             # those snapshots keep them, v4 ones no longer carry them.
             for name in V4_UNSTORED_RULE_FIELDS:

@@ -320,6 +320,7 @@ def _create(client: Any, database: Any, *, key: str, language: str = "en") -> st
             "output_language": language,
             "topic": "Should schools ban phones?" if language == "en" else "学校应该禁止手机吗？",
             "participants": [{"agent_id": agent, "stance_mode": "open"} for agent in ids],
+            "round_unit_caps": [200, 200, 200, 200],
         },
     )
     assert created.status_code == 201, created.text

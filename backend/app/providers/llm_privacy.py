@@ -17,6 +17,26 @@ LLM_REPAIR_FEEDBACK_POLICY_HASH: Final = (
     "d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b"
 )
 LLM_REPAIR_FEEDBACK_POLICY_VERSION: Final = "repair_feedback_v1"
+LLM_REPAIR_FEEDBACK_V2_HASH: Final = (
+    "d911e9af5381af8cea22f171fdd11f1a07f18ccdf2f703bdfbee1e4d096292f7"
+)
+LLM_REPAIR_FEEDBACK_V2_VERSION: Final = "repair_feedback_v2"
+LLM_REPAIR_FEEDBACK_POLICIES: Final = {
+    LLM_REPAIR_FEEDBACK_POLICY_VERSION: LLM_REPAIR_FEEDBACK_POLICY_HASH,
+    LLM_REPAIR_FEEDBACK_V2_VERSION: LLM_REPAIR_FEEDBACK_V2_HASH,
+}
+
+
+def repair_policy_is_current(version: str | None, policy_hash: str | None) -> bool:
+    """True when the version/hash pair is a known v1 or v2 policy."""
+
+    return (
+        isinstance(version, str)
+        and isinstance(policy_hash, str)
+        and LLM_REPAIR_FEEDBACK_POLICIES.get(version) == policy_hash
+    )
+
+
 LLM_REPAIR_FEEDBACK_FIELD_CLASS: Final = "server_authored_structure_repair_feedback"
 LLM_ANONYMOUS_BARRAGE_FIELD_CLASS: Final = "anonymous_classroom_barrage"
 LLM_SESSION_DISCUSSION_MEMORY_FIELD_CLASS: Final = "session_discussion_memory"
@@ -103,11 +123,11 @@ class LLMOutboundManifestV1:
                 "LLM outbound manifest is incomplete", code="llm_manifest_fields_missing"
             )
         if self.max_attempts == 2:
-            if self.repair_policy_version != LLM_REPAIR_FEEDBACK_POLICY_VERSION:
+            if self.repair_policy_version not in LLM_REPAIR_FEEDBACK_POLICIES:
                 raise LLMOutboundPrivacyError(
                     "LLM repair policy is missing", code="llm_repair_policy_missing"
                 )
-            if self.repair_policy_hash != LLM_REPAIR_FEEDBACK_POLICY_HASH:
+            if not repair_policy_is_current(self.repair_policy_version, self.repair_policy_hash):
                 raise LLMOutboundPrivacyError(
                     "LLM repair policy is stale", code="llm_repair_policy_stale"
                 )
@@ -218,6 +238,15 @@ _QUERY_KEYS = frozenset({"query_id", "query_kind", "query_text", "query_hash", "
 _EVIDENCE_KEYS = frozenset({"evidence_id", "excerpt", "query_ids"})
 _DISAGREEMENT_KEYS = frozenset({"summary", "category", "claim_ids"})
 _REPAIR_KEYS = frozenset({"code", "json_pointers", "safe_error_code"})
+_REPAIR_V2_KEYS = _REPAIR_KEYS | frozenset(
+    {
+        "schema_version",
+        "actual_units",
+        "unit_cap",
+        "repetition_ratio_percent",
+        "language",
+    }
+)
 _SEGMENT_INPUT_KEYS = frozenset(
     {"topic", "language", "round", "persona", "history", "sources", "barrages"}
 )
@@ -329,7 +358,12 @@ def _validate_request_key_tree(value: object) -> None:
                 if isinstance(evidence, Mapping):
                     _walk_keys(evidence, allowed=_EVIDENCE_KEYS, path="evidence")
         elif key == "repair_feedback" and isinstance(nested, Mapping):
-            _walk_keys(nested, allowed=_REPAIR_KEYS, path="repair_feedback")
+            allowed = (
+                _REPAIR_V2_KEYS
+                if nested.get("schema_version") == LLM_REPAIR_FEEDBACK_V2_VERSION
+                else _REPAIR_KEYS
+            )
+            _walk_keys(nested, allowed=allowed, path="repair_feedback")
 
 
 def validate_anonymous_barrage_text(
@@ -524,6 +558,10 @@ __all__ = [
     "LLM_REQUIRED_OUTBOUND_FIELD_CLASSES",
     "LLM_REPAIR_FEEDBACK_FIELD_CLASS",
     "LLM_REPAIR_FEEDBACK_POLICY_HASH",
+    "LLM_REPAIR_FEEDBACK_V2_HASH",
+    "LLM_REPAIR_FEEDBACK_V2_VERSION",
+    "LLM_REPAIR_FEEDBACK_POLICIES",
+    "repair_policy_is_current",
     "LLM_REPAIR_FEEDBACK_POLICY_VERSION",
     "OutboundLLMDataError",
     "scan_debate_card_outbound_messages",

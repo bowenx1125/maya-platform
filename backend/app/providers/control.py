@@ -67,6 +67,12 @@ TTS_SYNTHESIS_BUCKET = "tts_synthesis"
 VOICE_ENROLLMENT_BUCKET = "voice_enrollment"
 REPAIR_FEEDBACK_POLICY_VERSION = "repair_feedback_v1"
 REPAIR_FEEDBACK_POLICY_HASH = "d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b"
+REPAIR_FEEDBACK_V2_VERSION = "repair_feedback_v2"
+REPAIR_FEEDBACK_V2_HASH = "d911e9af5381af8cea22f171fdd11f1a07f18ccdf2f703bdfbee1e4d096292f7"
+REPAIR_FEEDBACK_POLICIES = {
+    REPAIR_FEEDBACK_POLICY_VERSION: REPAIR_FEEDBACK_POLICY_HASH,
+    REPAIR_FEEDBACK_V2_VERSION: REPAIR_FEEDBACK_V2_HASH,
+}
 LLM_TURN_OUTPUT_SCHEMA_HASH = "77769a5fdc0e6ef368c048a6e2b28891c1702a2d904da2471bcf7b2ed9df253f"
 LLM_RECOVERY_INPUT_VERSION = "llm_recovery_input_v1"
 LLM_RECOVERY_INPUT_BYTES_LIMIT = 256 * 1024
@@ -646,8 +652,9 @@ class ExportManifestV1:
         if is_llm_turn:
             if self.max_attempts == 2:
                 if (
-                    self.repair_policy_version != REPAIR_FEEDBACK_POLICY_VERSION
-                    or self.repair_policy_hash != REPAIR_FEEDBACK_POLICY_HASH
+                    self.repair_policy_version not in REPAIR_FEEDBACK_POLICIES
+                    or REPAIR_FEEDBACK_POLICIES.get(self.repair_policy_version)
+                    != self.repair_policy_hash
                     or not repair_fields
                 ):
                     raise ExportManifestError(
@@ -2583,6 +2590,9 @@ __all__ = [
     "ProviderSuccessResultV1",
     "PROVIDER_BUDGET_BUCKETS",
     "REPAIR_FEEDBACK_POLICY_HASH",
+    "REPAIR_FEEDBACK_V2_HASH",
+    "REPAIR_FEEDBACK_V2_VERSION",
+    "REPAIR_FEEDBACK_POLICIES",
     "REPAIR_FEEDBACK_POLICY_VERSION",
     "ReservationState",
     "TTS_SYNTHESIS_BUCKET",

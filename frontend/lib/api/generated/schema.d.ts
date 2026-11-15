@@ -1155,6 +1155,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/debate-round-unit-cap-defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        /** @description Default four-round unit caps from turn_unit_cap(..., minutes=5) and the estimated duration at the given voice rate. */
+        get: operations["getDebateRoundUnitCapDefaults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/courses/{course_id}/debates": {
         parameters: {
             query?: never;
@@ -3674,6 +3693,14 @@ export interface components {
             /** Voice Params */
             voice_params: components["schemas"]["DebateVoiceParamSpec"][];
         };
+        DebateRoundUnitCapDefaults: {
+            /** @enum {string} */
+            language: "en" | "zh";
+            participants: number;
+            rate: number;
+            round_unit_caps: number[];
+            estimated_duration_minutes: number;
+        };
         DebateDraftRequest: {
             /** @description The parameter card's values; omitted means the DEBATE_LLM_* defaults. */
             llm_params?: components["schemas"]["DebateLLMParams"] | null;
@@ -3681,6 +3708,8 @@ export interface components {
             voice_params?: components["schemas"]["DebateVoiceParams"] | null;
             /** @description Spoken length the whole debate aims for; omitted means five minutes. */
             target_minutes?: number | null;
+            /** @description Four per-speaker unit caps for rounds 1-4. Required on create; optional on a v4 draft update. */
+            round_unit_caps?: number[] | null;
             /** @description Non-empty topic; any script or symbols are accepted. */
             topic: string;
             /** @default  */
@@ -3780,6 +3809,12 @@ export interface components {
              */
             card_status?: "compiling" | "ready" | "fallback" | null;
             card?: components["schemas"]["DebateCard"] | null;
+            /**
+             * @description Only set on fallback; ready and older rows stay null.
+             * @enum {string|null}
+             */
+            card_teacher_reason?: "compile_timeout" | "format_invalid" | "card_too_long" | "service_busy" | "config_problem" | "other" | null;
+            card_teacher_notice?: string | null;
         };
         DebateCardDrop: {
             excerpt: string;
@@ -3955,6 +3990,13 @@ export interface components {
             /** @enum {string} */
             report_status: "not_started" | "generating" | "ready" | "failed";
             mutual_learning_synthesis?: components["schemas"]["MutualLearningSynthesisV1"] | null;
+            contract_version?: string | null;
+            /** @description Frozen minutes on a v4 Debate; null on v5. */
+            target_minutes?: number | null;
+            /** @description Frozen per-round caps on a v5 Debate; null on older rows. */
+            round_unit_caps?: number[] | null;
+            estimated_duration_minutes?: number | null;
+            estimated_duration_rate?: number | null;
         };
         AdvancedPlayback: components["schemas"]["PlaybackState"] & {
             media_url?: string | null;
@@ -9951,6 +9993,35 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    getDebateRoundUnitCapDefaults: {
+        parameters: {
+            query: {
+                language: "en" | "zh";
+                participants: number;
+                rate?: number;
+            };
+            header?: never;
+            path: {
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default per-round unit caps and estimated duration for a new debate. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DebateRoundUnitCapDefaults"];
+                };
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
     listDebates: {
         parameters: {
             query?: never;
@@ -10230,7 +10301,7 @@ export interface operations {
                      * @default null
                      * @enum {string|null}
                      */
-                    output_language?: "en" | "zh" | null;
+                    output_language?: "zh" | "en" | null;
                 };
             };
         };
