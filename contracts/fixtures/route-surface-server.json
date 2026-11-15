@@ -10229,6 +10229,74 @@
         "description": "Download a ZIP of participant folders containing XLSX attempts. Includes submitted, non-hidden attempts, optionally filtered by epoch. Filenames preserve Unicode through RFC 5987 filename*. Questions include unanswered items and readable choices; teacher grades take precedence over AI scores."
       }
     },
+    "/api/v1/agents/preview": {
+      "post": {
+        "operationId": "previewAgent",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPreviewResponse"
+                }
+              }
+            },
+            "description": "Disposable single-sentence reply and optional voice."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Agent or source not found."
+          },
+          "422": {
+            "description": "Invalid Preview input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Preview Agent Route",
+        "tags": [
+          "Agents"
+        ]
+      }
+    },
     "/health/live": {
       "get": {
         "operationId": "health_live_health_live_get",
@@ -10517,6 +10585,118 @@
       }
     },
     "schemas": {
+      "AgentPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_md": {
+            "minLength": 1,
+            "title": "Agent Md",
+            "type": "string"
+          },
+          "avatar_config": {
+            "$ref": "#/components/schemas/AvatarConfig"
+          },
+          "course_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Id"
+          },
+          "document_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Document Ids",
+            "type": "array"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "message": {
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          },
+          "voice_profile_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Profile Id"
+          }
+        },
+        "required": [
+          "message",
+          "agent_md",
+          "avatar_config"
+        ],
+        "title": "AgentPreviewRequest",
+        "type": "object"
+      },
+      "AgentPreviewResponse": {
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "audio_base64": {
+            "title": "Audio Base64",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "audio_content_type": {
+            "enum": [
+              "audio/wav",
+              null
+            ],
+            "title": "Audio Content Type",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "answer"
+        ],
+        "title": "AgentPreviewResponse",
+        "type": "object"
+      },
       "ChatAgent": {
         "additionalProperties": false,
         "properties": {

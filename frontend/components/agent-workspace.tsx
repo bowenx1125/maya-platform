@@ -1,5 +1,7 @@
 "use client";
 
+import { AgentPreview } from "./agent-preview/agent-preview";
+
 import { AgentHintBar } from "./agent-issue-list";
 import {
   issueKey,
@@ -94,7 +96,7 @@ const MARKDOWN_CARD = cn(
 );
 const AVATAR_CARD = cn(
   agentCard("avatar"),
-  "[background:radial-gradient(ellipse_at_50%_46%,#FFE14D_0_20%,transparent_21%),repeating-conic-gradient(from_0deg_at_50%_32%,#FDBA74_0_9deg,#FFE7CC_9deg_18deg)]",
+  "[background:#FDBA74_repeating-conic-gradient(from_0deg_at_50%_47%,#FFE9CB_0_9deg,transparent_9deg_18deg)]",
   "[&_[class*=canvasFrame]]:border-0 [&_[class*=canvasFrame]]:bg-none [&_[class*=canvasFrame]]:bg-transparent [&_canvas]:drop-shadow-[0_8px_0_#1113]",
   "[&_[class*=controlGrid]]:rounded-[12px] [&_[class*=controlGrid]]:border-[3px] [&_[class*=controlGrid]]:border-[#111] [&_[class*=controlGrid]]:bg-white [&_[class*=controlGrid]]:p-3 [&_[class*=controlGrid]]:shadow-[4px_4px_0_#111]",
   "[&_select]:h-10 [&_select]:rounded-[8px] [&_select]:border-2 [&_select]:border-[#111] [&_select]:bg-white",
@@ -358,6 +360,7 @@ export function AgentWorkbench({
     useState<unknown>(null);
   const [avatarTemplatesLoading, setAvatarTemplatesLoading] = useState(false);
   const avatarLoadSequence = useRef(0);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
   const [voiceProfileId, setVoiceProfileId] = useState<string | null>(null);
   const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfile[]>([]);
@@ -1731,6 +1734,24 @@ export function AgentWorkbench({
               ) : null}
             </div>
             <div className="stage sticky top-5 grid gap-11 self-start max-[767px]:static max-[767px]:order-2">
+              {previewOpen && avatarConfig ? (
+                <AgentPreview
+                  key={workbenchScope}
+                  onClose={() => setPreviewOpen(false)}
+                  request={(message) =>
+                    api.previewAgent({
+                      message,
+                      agent_md: agentMd,
+                      avatar_config: avatarConfig,
+                      voice_profile_id: voiceProfileId,
+                      version_id: version?.id ?? null,
+                      course_id: unsavedCreate?.courseId ?? null,
+                      group_id: unsavedCreate?.groupId ?? null,
+                      document_ids: selectedDocumentIds,
+                    })
+                  }
+                />
+              ) : null}
               {avatarConfig ? (
                 <SectionCard title={t("avatarDesign")} className={AVATAR_CARD}>
                   {avatarTemplatesError ? (
@@ -1742,6 +1763,7 @@ export function AgentWorkbench({
                   ) : null}
                   {avatarTemplatesLoading ? <LoadingCard size="sm" /> : null}
                   <AvatarEditor
+                    onPreview={() => setPreviewOpen(true)}
                     templates={avatarTemplates}
                     value={avatarConfig}
                     onChange={setAvatarConfig}

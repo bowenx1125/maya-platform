@@ -2776,6 +2776,12 @@ export class PlatformApi {
     );
   }
 
+  async previewAgent(
+    body: components["schemas"]["AgentPreviewRequest"],
+  ): Promise<components["schemas"]["AgentPreviewResponse"]> {
+    return this.postJson("agents/preview", body);
+  }
+
   async avatarTemplates(): Promise<AvatarTemplate[]> {
     return unwrap(await this.client.GET("/avatar-templates"));
   }
