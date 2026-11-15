@@ -8,7 +8,7 @@ field.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -127,7 +127,9 @@ class DebateRoundUnitCapDefaults(_ClosedModel):
     language: Literal["en", "zh"]
     participants: int = Field(ge=2, le=5)
     rate: float
-    round_unit_caps: list[int] = Field(min_length=4, max_length=4)
+    round_unit_caps: list[Annotated[int, Field(strict=True, ge=1, le=2000)]] = Field(
+        min_length=4, max_length=4
+    )
     estimated_duration_minutes: float
 
 
@@ -154,7 +156,9 @@ class DebateDraftRequest(_ClosedModel):
     target_minutes: int | None = Field(default=None, ge=3, le=10)
     # Four per-speaker unit caps (rounds 1-4). Required on create; optional
     # on a v4 draft update so old clients can omit it.
-    round_unit_caps: list[int] | None = Field(default=None, min_length=4, max_length=4)
+    round_unit_caps: list[Annotated[int, Field(strict=True, ge=1, le=2000)]] | None = Field(
+        default=None, min_length=4, max_length=4
+    )
 
     @field_validator("teaching_prompts", mode="before")
     @classmethod
@@ -192,7 +196,12 @@ class DebateDraftRequest(_ClosedModel):
 
         minimum = MIN_TURN_UNITS[self.output_language]
         for cap in caps:
-            if isinstance(cap, bool) or not isinstance(cap, int) or cap < minimum or cap > ROUND_UNIT_CAP_MAX:
+            if (
+                isinstance(cap, bool)
+                or not isinstance(cap, int)
+                or cap < minimum
+                or cap > ROUND_UNIT_CAP_MAX
+            ):
                 raise PydanticCustomError(
                     "round_unit_caps_invalid",
                     "round_unit_caps must be four integers between the language minimum and 2000",

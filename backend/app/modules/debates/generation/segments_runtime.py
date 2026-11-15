@@ -74,7 +74,7 @@ SEGMENT_REPAIR_CODES = frozenset(
     }
 )
 
-_V2_HASH = "22ccaa931e2b17aa8b4ec6dd485ccbc864c0af37c47b32dcd070fe8cb3102ac1"
+_V2_HASH = "d911e9af5381af8cea22f171fdd11f1a07f18ccdf2f703bdfbee1e4d096292f7"
 
 
 def _repair_policy_version(policy_hash: str | None) -> str | None:
@@ -797,7 +797,12 @@ class SegmentLLMRuntime:
                         attempt_no=2,
                         retrieval_reused=True,
                         queries=current.request.queries,
-                        repair_feedback=_repair_feedback(candidate, code, candidate.json_pointers, policy_hash=current.request.repair_policy_hash),
+                        repair_feedback=_repair_feedback(
+                            candidate,
+                            code,
+                            candidate.json_pointers,
+                            policy_hash=current.request.repair_policy_hash,
+                        ),
                     )
                     continue
                 return SegmentRunOutcome(
@@ -848,7 +853,13 @@ class SegmentLLMRuntime:
                         attempt_no=2,
                         retrieval_reused=True,
                         queries=current.request.queries,
-                        repair_feedback=_repair_feedback(candidate, exc.code, exc.json_pointers, policy_hash=current.request.repair_policy_hash, error=exc),
+                        repair_feedback=_repair_feedback(
+                            candidate,
+                            exc.code,
+                            exc.json_pointers,
+                            policy_hash=current.request.repair_policy_hash,
+                            error=exc,
+                        ),
                     )
                     continue
                 return SegmentRunOutcome(

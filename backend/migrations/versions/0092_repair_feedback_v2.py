@@ -10,7 +10,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 _V1_HASH = "d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b"
-_V2_HASH = "22ccaa931e2b17aa8b4ec6dd485ccbc864c0af37c47b32dcd070fe8cb3102ac1"
+_V2_HASH = "d911e9af5381af8cea22f171fdd11f1a07f18ccdf2f703bdfbee1e4d096292f7"
 
 _OLD = (
     "provider_operation <> 'llm_debate_turn' OR "

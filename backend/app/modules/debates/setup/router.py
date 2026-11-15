@@ -6,9 +6,8 @@ only expose the teacher-scoped create/list/get/update/start setup boundary.
 
 from __future__ import annotations
 
-from uuid import UUID
-
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 from sqlalchemy.orm import Session
@@ -99,7 +98,7 @@ def get_round_unit_cap_defaults(
     course_id: UUID,
     language: Literal["en", "zh"],
     participants: int = Query(..., ge=2, le=5),
-    rate: float = Query(1.0, gt=0),
+    rate: float = Query(1.0, ge=0.5, le=2.0, allow_inf_nan=False),
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> DebateRoundUnitCapDefaults:

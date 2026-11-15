@@ -1526,7 +1526,7 @@ class ProviderExportManifest(Base):
             "'d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b') OR "
             "(max_attempts = 2 AND repair_policy_version = 'repair_feedback_v2' "
             "AND repair_policy_hash = "
-            "'22ccaa931e2b17aa8b4ec6dd485ccbc864c0af37c47b32dcd070fe8cb3102ac1') OR "
+            "'d911e9af5381af8cea22f171fdd11f1a07f18ccdf2f703bdfbee1e4d096292f7') OR "
             "(max_attempts = 1 AND repair_policy_version IS NULL "
             "AND repair_policy_hash IS NULL)",
             name="ck_provider_export_manifests_llm_retry_policy",

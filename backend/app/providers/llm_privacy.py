@@ -18,7 +18,7 @@ LLM_REPAIR_FEEDBACK_POLICY_HASH: Final = (
 )
 LLM_REPAIR_FEEDBACK_POLICY_VERSION: Final = "repair_feedback_v1"
 LLM_REPAIR_FEEDBACK_V2_HASH: Final = (
-    "22ccaa931e2b17aa8b4ec6dd485ccbc864c0af37c47b32dcd070fe8cb3102ac1"
+    "d911e9af5381af8cea22f171fdd11f1a07f18ccdf2f703bdfbee1e4d096292f7"
 )
 LLM_REPAIR_FEEDBACK_V2_VERSION: Final = "repair_feedback_v2"
 LLM_REPAIR_FEEDBACK_POLICIES: Final = {
@@ -35,6 +35,8 @@ def repair_policy_is_current(version: str | None, policy_hash: str | None) -> bo
         and isinstance(policy_hash, str)
         and LLM_REPAIR_FEEDBACK_POLICIES.get(version) == policy_hash
     )
+
+
 LLM_REPAIR_FEEDBACK_FIELD_CLASS: Final = "server_authored_structure_repair_feedback"
 LLM_ANONYMOUS_BARRAGE_FIELD_CLASS: Final = "anonymous_classroom_barrage"
 LLM_SESSION_DISCUSSION_MEMORY_FIELD_CLASS: Final = "session_discussion_memory"
@@ -555,7 +557,11 @@ __all__ = [
     "LLMPrivacyError",
     "LLM_REQUIRED_OUTBOUND_FIELD_CLASSES",
     "LLM_REPAIR_FEEDBACK_FIELD_CLASS",
-    "LLM_REPAIR_FEEDBACK_POLICY_HASH", "LLM_REPAIR_FEEDBACK_V2_HASH", "LLM_REPAIR_FEEDBACK_V2_VERSION", "LLM_REPAIR_FEEDBACK_POLICIES", "repair_policy_is_current",
+    "LLM_REPAIR_FEEDBACK_POLICY_HASH",
+    "LLM_REPAIR_FEEDBACK_V2_HASH",
+    "LLM_REPAIR_FEEDBACK_V2_VERSION",
+    "LLM_REPAIR_FEEDBACK_POLICIES",
+    "repair_policy_is_current",
     "LLM_REPAIR_FEEDBACK_POLICY_VERSION",
     "OutboundLLMDataError",
     "scan_debate_card_outbound_messages",

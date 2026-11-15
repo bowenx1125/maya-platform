@@ -14,7 +14,6 @@ import pytest
 from app.core.config import configured_llm_model
 from app.core.db import Database
 from app.core.models import Job, StoredFile
-from app.modules.debates.generation_params import RULESET_CONTRACT_V4
 from app.modules.debates.generation import (
     GenerationContext,
     LLMTurnRuntime,
@@ -23,6 +22,7 @@ from app.modules.debates.generation import (
 )
 from app.modules.debates.generation.recovery_input import build_llm_recovery_input
 from app.modules.debates.generation.runtime import LLMDeferredPublicationV1
+from app.modules.debates.generation_params import RULESET_CONTRACT_V4
 from app.modules.debates.models import Debate, DebatePlaybackState, DebateTurn, TurnSource
 from app.modules.debates.playback.audio import AudioStore
 from app.modules.debates.playback.llm_publication import SqlLLMPublication
@@ -199,8 +199,8 @@ def _seed_running_product_debate(
                     {"agent_id": kaikai_id, "stance_mode": "assigned", "assigned_stance": "oppose"},
                 ],
                 "round_count": 4,
-            "round_unit_caps": [200, 200, 200, 200]
-        },
+                "round_unit_caps": [200, 200, 200, 200],
+            },
         )
         assert response.status_code == 201, response.text
         debate_id = response.json()["id"]
@@ -209,8 +209,17 @@ def _seed_running_product_debate(
         with database.session() as db:
             debate = db.get(Debate, debate_id)
             snapshot = json.loads(debate.rule_snapshot_json)
-            snapshot["contract_version"] = RULESET_CONTRACT_V4
-            snapshot["target_minutes"] = 5
+            from app.modules.debates.teaching_rules import freeze_teaching_rules
+
+            snapshot.update(
+                freeze_teaching_rules(
+                    prompts=snapshot["teaching_prompts"],
+                    llm_params=snapshot["llm_params"],
+                    voice_params=snapshot["voice_params"],
+                    target_minutes=5,
+                )
+            )
+            assert snapshot["contract_version"] == RULESET_CONTRACT_V4
             snapshot.pop("round_unit_caps", None)
             snapshot.pop("over_length_ratio", None)
             snapshot.pop("repair_feedback_version", None)

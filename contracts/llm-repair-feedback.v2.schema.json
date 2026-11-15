@@ -4,10 +4,7 @@
   "title": "RepairFeedbackV2",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schema_version",
-    "json_pointers"
-  ],
+  "required": ["schema_version", "json_pointers"],
   "properties": {
     "schema_version": {
       "type": "string",
@@ -47,22 +44,15 @@
     },
     "language": {
       "type": "string",
-      "enum": [
-        "zh",
-        "en"
-      ]
+      "enum": ["zh", "en"]
     }
   },
   "anyOf": [
     {
-      "required": [
-        "code"
-      ]
+      "required": ["code"]
     },
     {
-      "required": [
-        "safe_error_code"
-      ]
+      "required": ["safe_error_code"]
     }
   ]
 }

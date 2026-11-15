@@ -78,6 +78,7 @@ from app.modules.debates.generation.segments import (
 from app.modules.debates.generation.segments_runtime import SegmentLLMRuntime
 from app.modules.debates.generation.types import MutualLearningTurnResultV1
 from app.modules.debates.generation.validator import count_turn_words
+from app.modules.debates.generation_params import uses_v5_speech_limits
 from app.modules.debates.models import DebateParticipant, DebateTurn
 from app.modules.debates.output_language import debate_output_language
 from app.modules.debates.owned_copies import frozen_owner
@@ -87,7 +88,6 @@ from app.modules.debates.round_count import (
     uses_segment_protocol,
     visible_turn_predecessors,
 )
-from app.modules.debates.generation_params import uses_v5_speech_limits
 from app.modules.debates.teaching_rules import (
     frozen_llm_settings,
     frozen_round_unit_caps,
@@ -1377,7 +1377,11 @@ class SqlTurnPreparer:
                 debate, [row for row in predecessor_rows if row.round_no < round_count]
             )
         target_minutes, _legacy_rate = frozen_speech_length(debate.rule_snapshot_json)
-        voice_rate = frozen_voice_rate(debate.rule_snapshot_json)
+        voice_rate = (
+            frozen_voice_rate(debate.rule_snapshot_json)
+            if uses_v5_speech_limits(frozen_llm_settings(debate.rule_snapshot_json))
+            else _legacy_rate
+        )
         context = GenerationContext(
             debate_id=debate_id,
             topic=model_topic(debate.topic, debate.background or ""),
