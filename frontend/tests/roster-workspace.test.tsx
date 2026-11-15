@@ -324,7 +324,7 @@ describe("teacher account management", () => {
     );
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Class History 2026, switch class",
+        name: "Class 2026, switch class",
       }),
     );
     expect(

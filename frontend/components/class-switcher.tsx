@@ -25,8 +25,8 @@ const FOCUS =
   "focus-visible:outline-[3px] focus-visible:outline-[#111] focus-visible:outline-offset-2";
 const KEY = `relative min-h-11 min-w-11 cursor-pointer border-[3px] border-[#111] bg-white text-ink font-extrabold ${FOCUS} ${PRESS_MOTION} ${PRESS_HIT}`;
 
-function suffix(name: string) {
-  return name.startsWith("Maya") ? name.slice(4) : name;
+export function classLabel(name: string): string {
+  return name.match(/\d+/)?.[0] ?? name;
 }
 
 function Chevron({ open }: { open: boolean }) {
@@ -182,7 +182,7 @@ export function ClassSwitcher({
   // and opened the menu again.
   const pressedTrigger = useRef(false);
   const id = useId();
-  const name = current ? suffix(current.name) : "";
+  const name = current ? classLabel(current.name) : "";
   const numericName = /^\d+$/.test(name);
   const title = current ? `Mayaform-${name}` : "Mayaform";
   const capsule = !collapsed;
