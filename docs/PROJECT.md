@@ -1,6 +1,6 @@
 # Maya Platform
 
-Progress authority;[AGENTS.md](../AGENTS.md):work;latest user decision wins.
+Progress:[AGENTS.md](../AGENTS.md);latest user wins.
 
 ## Approved 4 rounds—Sep8,2026
 
@@ -97,9 +97,9 @@ Bowen0090(after0089):schema-only;UI/security unchanged;acceptance pending.
 
 Nov12:Bowen RAG/Knowledge lists use login class,no picker;others unchanged. Voice idle hint/key removed;ARIA fixed,guards kept. 0 calls/deploy.
 
-Nov12 local Chatform:composer shell focuses Message;controls kept. History avatar/date pass clicks to card button;visuals unchanged. 0 calls/deploy.
+Nov12 Chatform:composer focus;avatar/date clicks reach card.0 calls/deploy.
 
-## Nov12 3D engine (in progress)
+## Nov12 3D engine(in progress)
 
 DEBATE_TTS_ENGINE=cosyvoice:Debate TTS(qwen3 default;pre-request-refusal fallback);word_timestamps->debates/performance(gestures+visemes). AudioStore:WAV-sibling performance.json;ticket-gated GET /debates/{id}/performance/{turn}(404=plain audio). beta-stage:media.prepared sibling;ScholarScene:timeline+clock;scholar-stage:visemes+gesture clips over procedural frame. Bones:UE spine_02/neck_01,AdvSkel Chest_M/Neck_M,Mixamo Spine2/Neck;fix head-only collar clipping;hide watermark.Tripo-refined/Mixamo-rigged:elder-scholar.glb,noble-scholar.glb(noble2),female_1.glb.
 
@@ -109,10 +109,12 @@ Nov12 #419(live Nov13):capsule second press closes;trigger pathname key removed.
 
 ## Nov13 deploy
 
-f1087c4d live:3D/gesture v2/3 figures/#419;replaces334fbd94(missed #419).Local image save/load;3.5G server:no build/test.Backup maya-pre-334fbd94-20261112-213724.dump:102M,pg_restore list pass,PG-only.Schema0091_quiz_show_results;ready/HTTPS200.Backend240/319 chunked;known voice+2 load-adaptive failures,no regressions.
+f1087c4d live:3D/gesture v2/3 figures/#419;replaces334fbd94(missed #419).Image save/load;3.5G server:no build/test.Backup maya-pre-334fbd94-20261112-213724.dump:102M,pg_restore list pass,PG-only.Schema0091_quiz_show_results;ready/HTTPS200.Backend240/319;known voice+2 load-adaptive failures.
 
 Nov14 UI:Teams ?/Agent New RAG hint removed;tour omits voices.Capsule:shared teacher layout/session-API/user/course caches,B2b kept;Chromium1440/390 width70.15625px stable.UX:page-rise520ms/reduced motion/teacher shell kept;Immerse loading hides Back.Quiz ZIP:participant XLSX/snapshot questions/grades.1387UI/13skip;build/gates pass;PG3521pass/129baselinefail/new0.0 calls/deploy.
 
-Nov15 #426:LoadingPage flat #CEDAE3;390/1440 reviewed;1387UI/13skip,build pass.0 calls/deploy.
+Nov15 #426:LoadingPage #CEDAE3;390/1440 reviewed;1387UI/13skip/build pass.0 calls/deploy.
 
-Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs;Team/assessment bytes kept.473 focused pass;no real LLM.Prettier baseline:performance-player.ts.
+Nov15 #425:single Chat memory;RAG/Knowledge=evidence.48 golden pairs;Team/assessment kept.473 focused pass;0 calls.Prettier baseline:performance-player.ts.
+
+#427 local(in progress):Egg/C2,GLB base;no drawing/migration.Preview V2:stateless one-sentence,own Voice/RAG/AGENT.md,current form;no Chat/memory.0 calls/remotes.
