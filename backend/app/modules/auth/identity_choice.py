@@ -3,12 +3,12 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import case, delete, select, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError
 from app.core.models import Course, CourseMember, Group, GroupMember, User
-from app.modules.auth.models import LoginIdentityChallenge
+from app.modules.auth.models import DemoAccountBinding, LoginIdentityChallenge
 from app.modules.auth.schemas import (
     LoginIdentityChoice,
     LoginIdentityChoiceRequest,
@@ -16,8 +16,8 @@ from app.modules.auth.schemas import (
     LoginIdentityOptions,
 )
 from app.modules.auth.service import lock_user_profile, new_raw_session_token, session_hash
-from app.modules.org.classes import SECOND_CLASS_GROUP_ID, SECOND_CLASS_ID
-from app.seed import BOWEN_ID, COURSE_ID, GROUP_DEMO_ID, TEACHER_ID, seed_uuid
+from app.modules.org.classes import SECOND_CLASS_ID, default_class_group
+from app.seed import BOWEN_ID, COURSE_ID, GROUP_DEMO_ID, TEACHER_ID
 
 CHOICE_COURSE_IDS = (SECOND_CLASS_ID, COURSE_ID)
 CHOICE_TTL_SECONDS = 300
@@ -70,13 +70,55 @@ def _student_landing_group(db: Session, course_id: str) -> Group | None:
         demo = next((row for row in rows if row.id == GROUP_DEMO_ID), None)
         if demo is not None:
             return demo
-    protected = (
-        SECOND_CLASS_GROUP_ID
-        if course_id == SECOND_CLASS_ID
-        else seed_uuid(f"class-students-{course_id}")
-    )
+    protected = default_class_group(db, course_id).id
     ordinary = [row for row in rows if row.id != protected]
     return ordinary[0] if ordinary else None
+
+
+def student_landing_group(db: Session, user: User, course_id: str) -> Group | None:
+    """Prefer the saved choice, then a non-default existing membership.
+
+    A binding is a preference, never a grant: revoked memberships and the
+    separate bowen1 account must not supply a landing group for this user.
+    """
+
+    default_id = default_class_group(db, course_id).id
+    return db.scalar(
+        select(Group)
+        .join(GroupMember, GroupMember.group_id == Group.id)
+        .outerjoin(
+            DemoAccountBinding,
+            (DemoAccountBinding.user_id == GroupMember.user_id)
+            & DemoAccountBinding.active.is_(True),
+        )
+        .where(GroupMember.user_id == user.id, Group.course_id == course_id)
+        .order_by(
+            case((Group.id == DemoAccountBinding.selected_group_id, 0), else_=1),
+            case((Group.id == default_id, 1), else_=0),
+            Group.id,
+        )
+        .limit(1)
+    )
+
+
+def enter_student_class(db: Session, user: User, course_id: str, timestamp: datetime) -> None:
+    """Bowen enters additively; existing grants, including revocations, stay intact."""
+
+    membership = db.get(CourseMember, (course_id, user.id))
+    if membership is not None and membership.role != "student":
+        raise PlatformError("identity_choice_unavailable", "Login choice is unavailable.", 401)
+    if membership is None:
+        db.add(
+            CourseMember(course_id=course_id, user_id=user.id, role="student", created_at=timestamp)
+        )
+        # A revoked or changed grant is left alone: this only runs when he
+        # has no course row yet. The Students shell is not a landing group.
+        group = _student_landing_group(db, course_id)
+        if group is not None and db.get(GroupMember, (group.id, user.id)) is None:
+            db.add(
+                GroupMember(group_id=group.id, user_id=user.id, role="member", created_at=timestamp)
+            )
+    db.flush()
 
 
 def consume_choice(
@@ -114,23 +156,5 @@ def consume_choice(
         course_id = str(payload.course_id)
         if db.get(Course, course_id) is None:
             raise PlatformError("identity_choice_course_invalid", "Choose an available class.", 422)
-        membership = db.get(CourseMember, (course_id, BOWEN_ID))
-        if membership is not None and membership.role != "student":
-            raise PlatformError("identity_choice_unavailable", "Login choice is unavailable.", 401)
-        if membership is None:
-            db.add(
-                CourseMember(
-                    course_id=course_id, user_id=BOWEN_ID, role="student", created_at=timestamp
-                )
-            )
-            # A revoked or changed grant is left alone: this only runs when he
-            # has no course row yet. The Students shell is not a landing group.
-            group = _student_landing_group(db, course_id)
-            if group is not None and db.get(GroupMember, (group.id, BOWEN_ID)) is None:
-                db.add(
-                    GroupMember(
-                        group_id=group.id, user_id=BOWEN_ID, role="member", created_at=timestamp
-                    )
-                )
-        db.flush()
+        enter_student_class(db, user, course_id, timestamp)
     return user

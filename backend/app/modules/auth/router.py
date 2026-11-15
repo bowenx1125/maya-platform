@@ -35,7 +35,7 @@ from app.modules.auth.dependencies import (
     require_demo_quick_login,
     require_same_origin,
 )
-from app.modules.auth.identity_choice import consume_choice, issue_choice
+from app.modules.auth.identity_choice import consume_choice, issue_choice, student_landing_group
 from app.modules.auth.models import UserCredential
 from app.modules.auth.profile import (
     change_group,
@@ -143,6 +143,10 @@ def _current_user(db: Session, user: User, active_course_id: str | None = None) 
         .where(WorkspaceMember.user_id == user.id)
         .order_by(WorkspaceMember.group_id)
     ).all()
+    if user.id == BOWEN_ID and course_rows:
+        landing = student_landing_group(db, user, active_course_id or course_rows[0].course_id)
+        if landing is not None:
+            group_rows = sorted(group_rows, key=lambda row: row.group_id != landing.id)
     return CurrentUser(
         id=UUID(user.id),
         username=user.username,
@@ -431,6 +435,7 @@ def update_current_user(
         if payload.group_name is not None:
             raise PlatformError("registration_invalid", "Change class and group separately.", 422)
         change_class(db, context.user, str(payload.course_id))
+        context.session.active_course_id = str(payload.course_id)
     if payload.group_name is not None:
         change_group(
             db,

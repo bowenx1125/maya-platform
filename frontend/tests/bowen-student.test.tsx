@@ -14,8 +14,8 @@ const state = vi.hoisted(() => ({
     ],
     groups: [
       { group_id: "shell-1002", role: "member" },
-      { group_id: "shell-1001", role: "member" },
       { group_id: "demo-1001", role: "member" },
+      { group_id: "shell-1001", role: "member" },
     ],
   },
 }));
@@ -98,20 +98,22 @@ describe("Bowen student class", () => {
     );
   });
 
-  it("lands on the first non-Students group of that class, in list order", () => {
+  it("preserves server preference regardless of group name, within the login class", () => {
     const groups = [
       { id: "shell-1002", name: "Students", course_id: "maya1002" },
       { id: "shell-1001", name: "Students", course_id: "maya1001" },
       { id: "later", name: "Later Team", course_id: "maya1001" },
       { id: "demo-1001", name: "Demo Group", course_id: "maya1001" },
     ];
-    expect(bowenLandingGroup(groups, "maya1001")?.id).toBe("later");
+    expect(bowenLandingGroup(groups, "maya1001")?.id).toBe("shell-1001");
+    groups[1].name = "No Group";
+    expect(bowenLandingGroup(groups, "maya1001")?.id).toBe("shell-1001");
     expect(bowenLandingGroup(groups, "maya1002")?.name).toBe("Students");
   });
 });
 
 describe("Bowen student home", () => {
-  it("uses the login class and skips the Students shell and the other class", async () => {
+  it("uses server-ordered memberships in the login class, excluding the other class", async () => {
     render(<StudentDashboard />);
     const rag = await screen.findByRole("link", { name: /Add the RAG/ });
     expect(rag.getAttribute("href")).toBe(

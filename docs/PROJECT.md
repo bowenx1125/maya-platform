@@ -73,7 +73,7 @@ Visits:hide Knowledge,renew/20min,end notice->Accounts. Debate "?":Chinese hover
 
 3081da2(base b6c2047b) onto 535d2272->28b8bf8e. Teacher pages:class-scoped;register:group join/create.0086:group choice;0087:erasure keeps contributors' work. Hard-delete student-owned work/grades/Quiz attempts. #390 merged;local0082->0087/build/1187 UI/82 focused passed. 535d227:3073 pass/139 fail/1 skip;main reproduced135,four fixed.
 
-Nov10:Maya1002/Maya1001,stable IDs;teacher scopes fixed;RAG follows class bar. 47 PG,1188 UI;optional choice answer;no empty Agents card;chat omits missing group/editor.
+Nov10:Maya1002/Maya1001 stable IDs;teacher/RAG class scopes;optional choice answer;no empty Agents card;chat omits missing group/editor.
 
 Nov12:removals/deactivation prune empty/inactive-only non-default groups;work FKs guard,accounts kept;course locks ordered;0 calls/deploy.
 
@@ -89,9 +89,9 @@ Builds:`markdown-structure-600t-v3`,150-900 tokens,no overlap;keep v2 snapshots 
 
 0089:new v4 participants start `compiling`;each frozen AGENT.md compiles once before its Agent's first turn(`llm_debate_card`,Debate model,strict schema,1 ledgered attempt,60s) to identity/position/reasoning/style/voice/dropped,≤600 Han/400 words. Ready->card persona;failure/Mock->raw AGENT.md;null(old):keep pinned bytes. R1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style.0 calls;quality unverified.
 
-Nov11:Agents/Teams<768px:black banner shadow,no orange ring;390/1440+tour/1247UI/build pass.Agent list:no agent_md/docs;early /auth/me;idle Debate poll15s.
+Nov11:Agents/Teams<768px:black banner shadow,no orange ring;390/1440+tour/1247UI/build pass.List:no agent_md/docs;early /auth/me;idle Debate poll15s.
 
-Bowen0090(after0089):schema-only;UI/security unchanged;acceptance pending.
+Bowen0090 follows0089:chooser schema.
 
 #412 integration:main8241a9f2 retained;quiz migration renumbered0091;both endpoints/security tests retained;merge7aef7004+origin/main797cbe3c.
 
@@ -105,16 +105,18 @@ DEBATE_TTS_ENGINE=cosyvoice:Debate TTS(qwen3 default;pre-request-refusal fallbac
 
 Gesture v2:upper/forearm/hand figure-space axis-angle;per-rig local=A⁻¹·E·A·rest;shared Mixamo clips. Postures:hand_behind_back(right behind,left chest),hand_on_chest(mirror),open_palm_listening;free-left-arm clips:emphasis,settle_calm,doubt_shrug,invite_present,chin_stroke,palm_open_sweep,lean_in,object_raise.Thoughtful/friendly->hand_on_chest.Headless-render QA:all3;153 frontend files/1259 tests green.
 
-Nov12 #419(live Nov13):capsule second press closes;trigger pathname key removed. Bowen student pages use the login class's first non-Students group;moves stay in that session class. New usernames 3-64 letters/digits;older `.` `_` `-` names still sign in. Private→Public is the owner.
+Nov12 #419(live Nov13):capsule toggles;pathname key removed.New usernames3-64 letters/digits;legacy `.` `_` `-` sign in.Private→Public=owner.
 
 ## Nov13 deploy
 
 f1087c4d live:3D/gesture v2/3 figures/#419;replaces334fbd94(missed #419).Local image→3.5G server.Backup maya-pre-334fbd94-20261112-213724.dump:102M/list pass,PG-only.Schema0091_quiz_show_results;ready/HTTPS200.Backend240/319;known voice+2 load-adaptive failures,no regressions.
 
-Nov14 UI:Teams ?/Agent New RAG hint removed;tour omits voices.Capsule:shared teacher layout/session-API/user/course caches,B2b kept;Chromium1440/390 width70.15625px stable.UX:page-rise520ms/reduced motion/teacher shell kept;Immerse loading hides Back.Quiz ZIP:participant XLSX/snapshot questions/grades.1387UI/13skip;build/gates pass;PG3521pass/129baselinefail/new0.0 calls/deploy.
+Nov14:Teams ?/Agent New RAG hint removed;tour omits voices.Capsule:shared teacher shell/session-API/user/course caches,B2b;1440/390 width70.15625px.UX:page-rise520ms/reduced motion;Immerse loading hides Back.Quiz ZIP:participant XLSX/paper/grades.1387UI/13skip/build/gates pass;PG3521pass/129baselinefail/new0.0 calls/deploy.
 
-Nov15 #426:LoadingPage flat #CEDAE3;390/1440 reviewed;1387UI/13skip,build pass.0 calls/deploy.
+Nov15 #426:LoadingPage #CEDAE3;390/1440/1387UI/13skip/build pass.0 calls/deploy.
 
 Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs;Team/assessment bytes kept.473 focused pass;no real LLM.
 
-Nov16 local gates:format performance-player.ts and wrap unchanged Voice preview strings;Python AST identical.0 calls/deploy.
+Nov16:performance-player/Voice preview formatting;Python ASTs unchanged.0 calls/deploy.
+
+Nov16 #435 local:Profile class Save updates session scope;Bowen class entry preserves grants;landing uses saved binding/member then non-default ids,never names.Catalog sync keeps cross-class choice/no revoked grant restoration.Current/renamed default fixtures pass;140 targetedPG/1397UI/13skip;gates pass.0 calls/deploy.
