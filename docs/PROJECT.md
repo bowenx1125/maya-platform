@@ -71,9 +71,9 @@ Visits:hide Knowledge,renew/20min,end notice->Accounts. Debate "?":Chinese hover
 
 ## Nov9 classes/accounts(in progress)
 
-3081da2(base b6c2047b) onto 535d2272->28b8bf8e. Teacher pages:class-scoped;register:group join/create.0086:group choice;0087:erasure keeps contributors' work. Hard-delete student-owned work/grades/Quiz attempts. #390 merged;local0082->0087/build/1187 UI/82 focused passed. 535d227:3073 pass/139 fail/1 skip;main reproduced135,four fixed.
+0086:class-scoped Teacher pages;register:group join/create.0087:erasure keeps contributors' work;hard-delete student-owned work/grades/Quiz attempts. #390 merged;local migration/build/focused checks passed.
 
-Nov10:Maya1002/Maya1001,stable IDs;teacher scopes fixed;RAG follows class bar. 47 PG,1188 UI;optional choice answer;no empty Agents card;chat omits missing group/editor.
+Nov10:Maya1002/Maya1001 stable IDs;teacher scopes/RAG follow class bar;optional choice answer;no empty Agents card;chat omits missing group/editor.
 
 Nov12:removals/deactivation prune empty/inactive-only non-default groups;work FKs guard,accounts kept;course locks ordered;0 calls/deploy.
 
@@ -89,7 +89,7 @@ Builds:`markdown-structure-600t-v3`,150-900 tokens,no overlap;keep v2 snapshots 
 
 0089:new v4 participants start `compiling`;each frozen AGENT.md compiles once before its Agent's first turn(`llm_debate_card`,Debate model,strict schema,1 ledgered attempt,60s) to identity/position/reasoning/style/voice/dropped,≤600 Han/400 words. Ready->card persona;failure/Mock->raw AGENT.md;null(old):keep pinned bytes. R1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style.0 calls;quality unverified.
 
-Nov11:Agents/Teams<768px:black banner shadow,no orange ring;Mock Chromium390/1440+tour,desktop diff0,1247UI/build pass.Agent list:no agent_md/docs;early /auth/me;idle Debate poll15s.
+Nov11:Agents/Teams<768px:black banner shadow,no orange ring;Mock390/1440+tour/build passed.Agent list:no agent_md/docs;early /auth/me;idle Debate poll15s.
 
 Bowen0090(after0089):schema-only;UI/security unchanged;acceptance pending.
 
@@ -117,4 +117,6 @@ Nov15 #426:LoadingPage flat #CEDAE3;390/1440 reviewed;1387UI/13skip,build pass.0
 
 Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs;Team/assessment bytes kept.473 focused pass;no real LLM.Prettier baseline:performance-player.ts.
 
-Nov16 local A:class capsule/home labels use first digit run for any class name;no-digit names retain truncation. Menu/tooltips keep full names;Class ARIA and home title use short label.0 calls/deploy.
+Nov16 local A:class capsule/home/ARIA use first digit run;no-digit names retain truncation;menu/tooltips keep full names.81 targeted UI pass;0 calls/deploy.
+
+Nov16 local C:Members Teachers heading follows role/names;legacy ungrouped students separate under Students;Removed stays folded;absent group summary —.29 targeted UI pass;0 calls/deploy.

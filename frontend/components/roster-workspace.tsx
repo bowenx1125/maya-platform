@@ -315,7 +315,11 @@ function ClassRosterWorkspace({ courseId }: { courseId: string | undefined }) {
 
   function groupSummary(entry: RosterEntry) {
     const names = (entry.groups ?? []).map((group) => group.name);
-    return names.length > 0 ? names.join(", ") : t("rosterNoGroup");
+    return entry.role === "teacher"
+      ? t("rosterTeachers")
+      : names.length > 0
+        ? names.join(", ")
+        : "—";
   }
 
   // Accounts removed before deletion was real stay folded under their own
@@ -337,9 +341,9 @@ function ClassRosterWorkspace({ courseId }: { courseId: string | undefined }) {
   const removedAll = entries.filter((entry) => entry.status === "inactive");
 
   // Members are listed group by group, groups by name and people by name
-  // inside each; anyone without a group comes last.
+  // inside each; legacy ungrouped students and teachers stay separate.
   const sections = new Map<string, RosterEntry[]>();
-  for (const entry of current) {
+  for (const entry of current.filter((entry) => entry.role !== "teacher")) {
     const [first] = (entry.groups ?? [])
       .map((group) => group.name)
       .sort(byName);
@@ -351,12 +355,23 @@ function ClassRosterWorkspace({ courseId }: { courseId: string | undefined }) {
       left === "" ? 1 : right === "" ? -1 : byName(left, right),
     )
     .map(([key, members]) => ({
-      key,
-      name: key || t("rosterNoGroup"),
+      key: `group:${key}`,
+      name: key || t("homeStudentsCount"),
       members: [...members].sort((left, right) =>
         byName(left.display_name, right.display_name),
       ),
     }));
+
+  const teachers = current.filter((entry) => entry.role === "teacher");
+  if (teachers.length) {
+    memberSections.push({
+      key: "teachers",
+      name: t("rosterTeachers"),
+      members: teachers.sort((left, right) =>
+        byName(left.display_name, right.display_name),
+      ),
+    });
+  }
 
   function memberRow(entry: RosterEntry, inSection = false) {
     const pending = busy === entry.user_id || busy === "cleanup";

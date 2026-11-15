@@ -886,7 +886,7 @@ const enMessages = {
   groups: "Groups",
   enter: "Enter",
   leave: "Leave",
-  rosterNoGroup: "No group",
+  rosterTeachers: "Teachers",
   rosterEmpty: "No members yet.",
   rosterNoGroups: "No groups yet.",
   editMember: "Edit",
