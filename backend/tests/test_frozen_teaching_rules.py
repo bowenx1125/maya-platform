@@ -133,6 +133,7 @@ def test_creation_freezes_two_languages_and_other_debates_remain_independent(
         "topic": "Water?",
         "participants": [{"agent_id": agent, "stance_mode": "open"} for agent in ids],
         "teaching_prompts": {"zh": "# 中文课堂", "en": "# Original English lesson"},
+        "round_unit_caps": [200, 200, 200, 200],
     }
     response = client.post(
         f"/api/v1/courses/{COURSE_ID}/debates",

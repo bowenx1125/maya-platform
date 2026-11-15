@@ -78,6 +78,7 @@ from app.modules.debates.generation.segments import (
 from app.modules.debates.generation.segments_runtime import SegmentLLMRuntime
 from app.modules.debates.generation.types import MutualLearningTurnResultV1
 from app.modules.debates.generation.validator import count_turn_words
+from app.modules.debates.generation_params import uses_v5_speech_limits
 from app.modules.debates.models import DebateParticipant, DebateTurn
 from app.modules.debates.output_language import debate_output_language
 from app.modules.debates.owned_copies import frozen_owner
@@ -89,8 +90,10 @@ from app.modules.debates.round_count import (
 )
 from app.modules.debates.teaching_rules import (
     frozen_llm_settings,
+    frozen_round_unit_caps,
     frozen_speech_length,
     frozen_system_prompt,
+    frozen_voice_rate,
 )
 from app.modules.debates.topic_language import model_topic
 from app.modules.knowledge.providers.adapters import (
@@ -145,7 +148,11 @@ from app.providers.llm_price_card import (
     LLM_RESERVED_OUTPUT_TOKEN_CAP,
     LLMBudgetCapV1,
 )
-from app.providers.llm_privacy import LLMOutboundManifestV1
+from app.providers.llm_privacy import (
+    LLM_REPAIR_FEEDBACK_V2_HASH,
+    LLM_REPAIR_FEEDBACK_V2_VERSION,
+    LLMOutboundManifestV1,
+)
 from app.providers.llm_segments import (
     SegmentLLMAdapter,
     SegmentRecoveryInputV2,
@@ -481,7 +488,13 @@ class SqlTurnPreparer:
             # same authorized request sent once more with frozen feedback, and
             # it is what lets a real provider turn recover from a first reply
             # that misses a phase field instead of failing the whole Debate.
-            outbound_manifest = LLMOutboundManifestV1()
+            if uses_v5_speech_limits(frozen_llm_settings(debate.rule_snapshot_json)):
+                outbound_manifest = LLMOutboundManifestV1(
+                    repair_policy_version=LLM_REPAIR_FEEDBACK_V2_VERSION,
+                    repair_policy_hash=LLM_REPAIR_FEEDBACK_V2_HASH,
+                )
+            else:
+                outbound_manifest = LLMOutboundManifestV1()
             self.llm.outbound_manifest = outbound_manifest
         if uses_segment_protocol(debate):
             outbound_manifest = replace(
@@ -1363,7 +1376,12 @@ class SqlTurnPreparer:
             barrages = final_barrages_for_generation(
                 debate, [row for row in predecessor_rows if row.round_no < round_count]
             )
-        target_minutes, voice_rate = frozen_speech_length(debate.rule_snapshot_json)
+        target_minutes, _legacy_rate = frozen_speech_length(debate.rule_snapshot_json)
+        voice_rate = (
+            frozen_voice_rate(debate.rule_snapshot_json)
+            if uses_v5_speech_limits(frozen_llm_settings(debate.rule_snapshot_json))
+            else _legacy_rate
+        )
         context = GenerationContext(
             debate_id=debate_id,
             topic=model_topic(debate.topic, debate.background or ""),
@@ -1384,6 +1402,7 @@ class SqlTurnPreparer:
             barrages=barrages,
             target_minutes=target_minutes,
             voice_rate=voice_rate,
+            round_unit_caps=frozen_round_unit_caps(debate.rule_snapshot_json),
         )
         llm_runtime, llm_runtime_options, llm_manifest_preparer = self._llm_runtime_for_turn(
             db,

@@ -188,6 +188,7 @@ def test_sql_defer_restores_pending_job_and_turn_without_failing_debate(
                 ],
                 "rule_set_id": MUTUAL_LEARNING_RULE_SET_ID,
                 "round_count": 4,
+                "round_unit_caps": [200, 200, 200, 200],
             },
         )
         assert created.status_code == 201, created.text

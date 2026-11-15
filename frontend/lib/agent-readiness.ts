@@ -6,7 +6,6 @@ export type AgentIssueKind =
   | "agent_not_current"
   | "agent_not_found"
   | "rag_missing"
-  | "agent_md_invalid"
   | "avatar_missing"
   | "voice_missing";
 
@@ -24,7 +23,6 @@ export const AGENT_ISSUE_MESSAGES: Record<AgentIssueKind, MessageKey> = {
   agent_not_current: "agentIssueNotCurrent",
   agent_not_found: "agentIssueNotFound",
   rag_missing: "agentIssueRagMissing",
-  agent_md_invalid: "agentIssueAgentMdInvalid",
   avatar_missing: "agentIssueAvatarMissing",
   voice_missing: "agentIssueVoiceMissing",
 };

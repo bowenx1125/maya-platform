@@ -653,6 +653,8 @@ class GenerationContext:
     # v4 length inputs frozen into the Debate; unused by earlier contracts.
     target_minutes: int | None = None
     voice_rate: float | None = None
+    # v5 per-round caps frozen into the Debate; unused by earlier contracts.
+    round_unit_caps: tuple[int, int, int, int] | None = None
 
     def __post_init__(self) -> None:
         if self.turn_protocol not in {"legacy_v1", "segments_v2"}:

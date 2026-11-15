@@ -120,3 +120,13 @@ Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not command
 Nov16 local A:class capsule/home/ARIA use first digit run;no-digit names retain truncation;menu/tooltips keep full names.81 targeted UI pass;0 calls/deploy.
 
 Nov16 local C:Members Teachers heading follows role/names;legacy ungrouped students separate under Students;Removed stays folded;absent group summary —.29 targeted UI pass;0 calls/deploy.
+
+## Nov16 local paired review
+
+Base cc2a7321;#432=4b06c1cd;#433=43cbd7d2;integration556226e4.Local;0 real calls.Strict caps/finite rate/repair-policy pair;legacy rate kept,v1 unchanged,v2 repinned.Cards:one attempt/ledger assertions restored,English fallback.PG:sole0092;0091 round trip keeps old rows;v2 blocks lossy downgrade.UI:English caps/shared Input;helper prose removed;defaults await/refresh fixed.PG3721/129main/1skip(+1bench);UI1405/13skip;169ops;English error copy.
+
+D1:remove `agent_md_invalid` AGENT.md heading readiness gate;keep empty/other checks/legacy enum.
+
+Merge inputs:HEAD 0988a2322832c6db264ff13a0780b97bfa96dc51 + origin/main 5e5f349a004729cc594db2821235407a2548224a (#438/#432/#433);headingless create:v5 round_unit_caps.
+
+Integration inputs:local a1ff6af9 + origin/main 7e7087442a584897aad0cd0ce445e2f97ca30d98;preserve class labels/Teachers and #438/#439.

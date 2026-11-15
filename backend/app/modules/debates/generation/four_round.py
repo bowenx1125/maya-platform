@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from fractions import Fraction
 from typing import TYPE_CHECKING, cast
 
@@ -53,8 +53,60 @@ def turn_unit_cap(
     return max(MIN_TURN_UNITS[language], math.floor(share / 5) * 5)
 
 
-def over_length_limit(cap: int) -> int:
-    return math.floor(cap * OVER_LENGTH_RATIO)
+# Hard ceiling accepted on a new Debate's four caps; lower bound is MIN_TURN_UNITS.
+ROUND_UNIT_CAP_MAX = 2000
+
+
+def over_length_limit(cap: int, ratio: Fraction | None = None) -> int:
+    return math.floor(cap * (OVER_LENGTH_RATIO if ratio is None else ratio))
+
+
+def default_round_unit_caps(
+    language: str, *, participants: int, voice_rate: float = 1.0, minutes: int = 5
+) -> list[int]:
+    """The four default caps the create form starts from (same formula as v4)."""
+
+    return [
+        turn_unit_cap(
+            language,
+            minutes=minutes,
+            voice_rate=voice_rate,
+            participants=participants,
+            round_number=round_number,
+        )
+        for round_number in range(1, 5)
+    ]
+
+
+def estimated_duration_minutes(
+    caps: Sequence[int],
+    *,
+    language: str,
+    participants: int,
+    voice_rate: float = 1.0,
+) -> float:
+    """Read-only full-debate estimate from §3.2; not a runtime cap."""
+
+    total_units = sum(int(item) for item in caps) * participants
+    assumed_rate = 1.0 if voice_rate <= 0 else float(voice_rate)
+    denominator = UNITS_PER_MINUTE[language] * assumed_rate * Fraction(9, 10)
+    return float(total_units / denominator)
+
+
+def speech_language_mismatch(text: str, language: str) -> bool:
+    """Conservative language-deviation heuristic for a v5 rewrite.
+
+    Target zh with zero Han characters, or target en with more Han than
+    English words. Anything less clear does not trigger a rewrite.
+    """
+
+    han = speech_units(text, "zh")
+    words = speech_units(text, "en")
+    if language == "zh":
+        return han == 0
+    if language == "en":
+        return han > words
+    return False
 
 
 _STANCES = {
@@ -122,8 +174,10 @@ def sentence_limit(language: str, cap: int) -> int:
     return max(3, math.ceil(cap / (22 if language == "zh" else 18)))
 
 
-def turn_task(context: GenerationContext, *, minutes: int) -> dict[str, object]:
-    """The code-written v4 task group for this speaker's turn.
+def turn_task(
+    context: GenerationContext, *, minutes: int, unit_cap: int | None = None
+) -> dict[str, object]:
+    """The code-written task group for this speaker's turn.
 
     Names follow the same cyclic order as ``question_target_id``: round 2
     questions the next Agent, so round 3 answers the previous one unless a
@@ -143,12 +197,16 @@ def turn_task(context: GenerationContext, *, minutes: int) -> dict[str, object]:
         received = received_questions(context)
         asker = received[0]["from_id"] if received else ids[(index - 1) % len(ids)]
         other = names.get(asker, names[ids[(index - 1) % len(ids)]])
-    cap = turn_unit_cap(
-        language,
-        minutes=minutes,
-        voice_rate=context.voice_rate or 1.0,
-        participants=len(ids),
-        round_number=round_number,
+    cap = (
+        unit_cap
+        if unit_cap is not None
+        else turn_unit_cap(
+            language,
+            minutes=minutes,
+            voice_rate=context.voice_rate or 1.0,
+            participants=len(ids),
+            round_number=round_number,
+        )
     )
     task: dict[str, object] = {
         "round_task": _round_task(language, round_number, other, sentence_limit(language, cap)),

@@ -235,7 +235,12 @@ export type MemoryEntryResult = {
 export type PublishedAgentSummary =
   components["schemas"]["PublishedAgentSummary"];
 export type DebateSummary = components["schemas"]["DebateSummary"];
-export type DebateDetail = components["schemas"]["DebateDetail"];
+export type DebateDetail = Omit<
+  components["schemas"]["DebateDetail"],
+  "participants"
+> & {
+  participants: DebateParticipant[];
+};
 export type DebateCleanupRequest =
   components["schemas"]["DebateCleanupRequest"];
 export type DebateCleanupResult = components["schemas"]["DebateCleanupResult"];
@@ -566,8 +571,31 @@ export type DemoRuntimeStatus = {
   dirty_debates: number;
   dirty_interactions: number;
 };
-export type DebateDraftRequest =
-  operations["createDebate"]["requestBody"]["content"]["application/json"];
+export type RoundUnitCaps = [number, number, number, number];
+export type DebateCardTeacherReason = Exclude<
+  NonNullable<
+    components["schemas"]["DebateParticipant"]["card_teacher_reason"]
+  >,
+  null
+>;
+export type RoundUnitCapDefaultsInput = {
+  courseId: string;
+  language: "zh" | "en";
+  participants: number;
+  rate: number;
+};
+export type RoundUnitCapDefaults = Omit<
+  components["schemas"]["DebateRoundUnitCapDefaults"],
+  "round_unit_caps"
+> & {
+  round_unit_caps: RoundUnitCaps;
+};
+export type DebateDraftRequest = Omit<
+  operations["createDebate"]["requestBody"]["content"]["application/json"],
+  "target_minutes" | "round_unit_caps"
+> & {
+  round_unit_caps: RoundUnitCaps;
+};
 export type DebateLLMDefaults = components["schemas"]["DebateLLMDefaults"];
 export type DebateRulesetDefaults =
   components["schemas"]["DebateRulesetDefaults"];
@@ -2919,6 +2947,44 @@ export class PlatformApi {
         params: { path: { course_id: courseId } },
       }),
     );
+  }
+
+  async loadRoundUnitCapDefaults(
+    input: RoundUnitCapDefaultsInput,
+  ): Promise<RoundUnitCapDefaults> {
+    const raw = await unwrap(
+      await this.client.GET(
+        "/courses/{course_id}/debate-round-unit-cap-defaults",
+        {
+          params: {
+            path: { course_id: input.courseId },
+            query: {
+              language: input.language,
+              participants: input.participants,
+              rate: input.rate,
+            },
+          },
+        },
+      ),
+    );
+    const minimum = input.language === "zh" ? 40 : 25;
+    const caps = raw.round_unit_caps;
+    if (
+      !Array.isArray(caps) ||
+      caps.length !== 4 ||
+      !caps.every(
+        (value) =>
+          typeof value === "number" &&
+          Number.isInteger(value) &&
+          value >= minimum &&
+          value <= 2000,
+      )
+    ) {
+      throw new PlatformApiError(502, "debate_round_unit_caps_invalid", {
+        code: "debate_round_unit_caps_invalid",
+      });
+    }
+    return { ...raw, round_unit_caps: caps as RoundUnitCaps };
   }
 
   async publishedAgents(courseId: string): Promise<PublishedAgentSummary[]> {

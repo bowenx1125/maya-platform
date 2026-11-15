@@ -34,7 +34,6 @@ from app.core.models import ProviderPolicySnapshot
 from app.modules.agents.markdown import AgentMarkdown, markdown_hash
 from app.modules.debates.generation.four_round import speech_units
 from app.modules.debates.generation.prompt_budget import preflight_prompt_budget
-from app.modules.debates.generation_params import CONTRACT_VERSION
 from app.modules.debates.models import DebateParticipant
 from app.modules.debates.owned_copies import frozen_owner
 from app.modules.debates.schemas import DebateCardDropReason
@@ -160,16 +159,86 @@ def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+CARD_TEACHER_FALLBACK_NOTICE = (
+    "This Agent will use its original AGENT.md. This session can continue."
+)
+CardTeacherReason = Literal[
+    "compile_timeout",
+    "format_invalid",
+    "card_too_long",
+    "service_busy",
+    "config_problem",
+    "other",
+]
+_TIMEOUT_TYPES = {
+    "TimeoutError",
+    "ReadTimeout",
+    "ConnectTimeout",
+    "WriteTimeout",
+    "PoolTimeout",
+    "asyncio.TimeoutError",
+}
+
+
 def initial_card_status(rule_snapshot_json: str) -> CardStatus | None:
-    """New Debates on the v4 contract compile cards; older ones never do."""
+    """New Debates on the v4 or v5 code contract compile cards; older ones never do."""
+
+    from app.modules.debates.generation_params import uses_code_contract
 
     try:
         snapshot = json.loads(rule_snapshot_json)
     except (TypeError, ValueError):
         return None
-    if isinstance(snapshot, dict) and snapshot.get("contract_version") == CONTRACT_VERSION:
+    if uses_code_contract(snapshot if isinstance(snapshot, dict) else None):
         return "compiling"
     return None
+
+
+def _card_error_stem(code: str | None) -> str:
+    raw = str(code or "")
+    return raw.removeprefix("debate_card_")
+
+
+def card_teacher_reason(
+    code: str | None, *, transport_timeout: bool | None = None
+) -> CardTeacherReason | None:
+    """Map an internal card error to the teacher-facing coarse reason.
+
+    Only fallback rows should call this; ready and missing codes stay null.
+    """
+
+    if not code:
+        return None
+    raw = _card_error_stem(code)
+    if raw.startswith("llm_outbound_"):
+        return "config_problem"
+    if raw == "too_long":
+        return "card_too_long"
+    if raw in {"invalid", "http_rejected"}:
+        return "format_invalid"
+    if raw == "acceptance_unknown":
+        return "compile_timeout"
+    if raw in {"admission_refused", "not_sent"}:
+        return "service_busy"
+    if raw == "transport_failed":
+        if transport_timeout is True:
+            return "compile_timeout"
+        if transport_timeout is False:
+            return "service_busy"
+        return "compile_timeout"
+    if raw in {"preflight_blocked", "budget_invalid", "agent_md_missing"}:
+        return "config_problem"
+    return "other"
+
+
+def card_teacher_projection(card_status: object, safe_error_code: object) -> dict[str, str | None]:
+    if card_status != "fallback":
+        return {"card_teacher_reason": None, "card_teacher_notice": None}
+    reason = card_teacher_reason(str(safe_error_code) if safe_error_code else None)
+    return {
+        "card_teacher_reason": reason,
+        "card_teacher_notice": CARD_TEACHER_FALLBACK_NOTICE,
+    }
 
 
 def card_system_prompt(language: str) -> str:
@@ -247,6 +316,51 @@ def _line(value: object, pointer: str) -> str:
     if len(text) > CARD_MAX_LINE_CHARS:
         raise CardRejected("debate_card_invalid", pointer)
     return text
+
+
+def correct_card_payload(value: object) -> object:
+    """Deterministic display/metadata fixes applied before ``validate_card``.
+
+    Identity, position, speaking style and non-empty reasoning are left alone.
+    """
+
+    if not isinstance(value, Mapping):
+        return value
+    card = dict(value)
+    dropped = card.get("dropped")
+    if isinstance(dropped, list):
+        cleaned: list[object] = []
+        for item in dropped:
+            if item in (None, {}, ""):
+                continue
+            if isinstance(item, Mapping):
+                excerpt = item.get("excerpt")
+                reason = item.get("reason")
+                if (excerpt is None or (isinstance(excerpt, str) and not excerpt.strip())) and (
+                    reason is None or (isinstance(reason, str) and not str(reason).strip())
+                ):
+                    continue
+                item = dict(item)
+                if isinstance(excerpt, str) and len(excerpt) > CARD_MAX_LINE_CHARS:
+                    item["excerpt"] = excerpt[:CARD_MAX_LINE_CHARS]
+            cleaned.append(item)
+            if len(cleaned) >= CARD_MAX_DROPPED_ITEMS:
+                break
+        card["dropped"] = cleaned
+    reasoning = card.get("reasoning")
+    if isinstance(reasoning, list):
+        card["reasoning"] = [
+            item
+            for item in reasoning
+            if not (item is None or (isinstance(item, str) and not item.strip()))
+        ]
+    voice = card.get("voice_style")
+    if isinstance(voice, str):
+        if not voice.strip():
+            card["voice_style"] = None
+        elif len(voice) > CARD_MAX_LINE_CHARS:
+            card["voice_style"] = voice[:CARD_MAX_LINE_CHARS]
+    return card
 
 
 def validate_card(value: object, language: str) -> dict[str, object]:
@@ -461,7 +575,7 @@ def _response_card(response: object, language: str) -> tuple[dict[str, object], 
         raise
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
         raise CardRejected("debate_card_invalid", "/choices/0/message/content") from exc
-    return validate_card(value, language), _sha256(content)
+    return validate_card(correct_card_payload(value), language), _sha256(content)
 
 
 def compile_card_with_provider(
@@ -617,6 +731,7 @@ def compile_card_with_provider(
     ]
     if existing:
         return _fallback(row, "debate_card_attempt_used")
+
     try:
         operation = repository.create_prepared(
             ProviderReservationRequestV1(
@@ -686,8 +801,15 @@ def compile_card_with_provider(
     try:
         repository.mark_accepted(operation.id, response_hash=response_hash)
         repository.mark_succeeded(operation.id)
-    except Exception:
-        return _fallback(row, "debate_card_ledger_failed")
+    except Exception as exc:
+        LOGGER.warning(
+            "debate_card_ledger_settle_failed code=debate_card_ledger_failed "
+            "debate_id=%s participant_id=%s operation_id=%s error=%s",
+            row.debate_id,
+            row.id,
+            operation.id,
+            type(exc).__name__,
+        )
     return CardOutcome("ready", card=card)
 
 
@@ -715,6 +837,7 @@ def _settle(repository: ProviderRepository, operation_id: str, state: str, code:
 
 __all__ = [
     "CARD_MAX_UNITS",
+    "correct_card_payload",
     "CARD_OPERATION",
     "CARD_SCHEMA",
     "CardOutcome",
