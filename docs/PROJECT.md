@@ -115,4 +115,4 @@ Nov14 UI:Teams ?/Agent New RAG hint removed;tour omits voices.Capsule:shared tea
 
 Nov15 #426:LoadingPage flat #CEDAE3;390/1440 reviewed;1387UI/13skip,build pass.0 calls/deploy.
 
-Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs/ce52b274;Team/assessment bytes kept.473 focused pass;no real LLM.
+Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs;Team/assessment bytes kept.473 focused pass;no real LLM.Prettier baseline:performance-player.ts.
