@@ -1,6 +1,6 @@
 # Maya Platform
 
-Progress authority;[AGENTS.md](../AGENTS.md):work;latest user decision wins.
+[AGENTS.md](../AGENTS.md);user wins.
 
 ## Approved 4 rounds—Sep8,2026
 
@@ -75,7 +75,7 @@ Visits:hide Knowledge,renew/20min,end notice->Accounts. Debate "?":Chinese hover
 
 Nov10:Maya1002/Maya1001,stable IDs;teacher scopes fixed;RAG follows class bar. 47 PG,1188 UI;optional choice answer;no empty Agents card;chat omits missing group/editor.
 
-Nov12:removals/deactivation prune empty/inactive-only non-default groups;work FKs guard,accounts kept;course locks ordered;0 calls/deploy.
+Nov12:prune empty/inactive-only non-default groups after removal/deactivation;keep work FKs/accounts;order course locks;0 calls/deploy.
 
 ## Nov10 Debate prompt v4(replaces Oct24 contract-in-Ruleset)
 
@@ -91,7 +91,7 @@ Builds:`markdown-structure-600t-v3`,150-900 tokens,no overlap;keep v2 snapshots 
 
 Nov11:Agents/Teams<768px:black banner shadow,no orange ring;Mock Chromium390/1440+tour,desktop diff0,1247UI/build pass.Agent list:no agent_md/docs;early /auth/me;idle Debate poll15s.
 
-Bowen0090(after0089):schema-only;UI/security unchanged;acceptance pending.
+Bowen0090(after0089):schema only;UI/security kept;acceptance pending.
 
 #412 integration:main8241a9f2 retained;quiz migration renumbered0091;both endpoints/security tests retained;merge7aef7004+origin/main797cbe3c.
 
@@ -113,6 +113,8 @@ f1087c4d live:3D/gesture v2/3 figures/#419;replaces334fbd94(missed #419).Local i
 
 Nov14 UI:Teams ?/Agent New RAG hint removed;tour omits voices.Capsule:shared teacher layout/session-API/user/course caches,B2b kept;Chromium1440/390 width70.15625px stable.UX:page-rise520ms/reduced motion/teacher shell kept;Immerse loading hides Back.Quiz ZIP:participant XLSX/snapshot questions/grades.1387UI/13skip;build/gates pass;PG3521pass/129baselinefail/new0.0 calls/deploy.
 
-Nov15 #426:LoadingPage flat #CEDAE3;390/1440 reviewed;1387UI/13skip,build pass.0 calls/deploy.
+Nov15 #426:flat LoadingPage #CEDAE3;390/1440 reviewed;1387UI/13skip,build pass.
 
-Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs;Team/assessment bytes kept.473 focused pass;no real LLM.Prettier baseline:performance-player.ts.
+Nov15 #425:Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs;Team/assessment bytes kept.473 tests pass;no LLM.Prettier baseline:performance-player.ts.
+
+D1:drop AGENT.md heading gate;keep empty/other checks/legacy enum.

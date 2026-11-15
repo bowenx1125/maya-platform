@@ -635,8 +635,6 @@ const enMessages = {
   agentIssueNotPublished:
     "Agent “{name}” has no published version. Open it and press Done to publish it.",
   agentIssueRagMissing: "Agent “{name}” needs at least one RAG file.",
-  agentIssueAgentMdInvalid:
-    "Agent “{name}” has a non-standard AGENT.md: it needs a heading line starting with # and some text under it.",
   agentIssueAvatarMissing: "Agent “{name}” has no usable Avatar.",
   agentIssueVoiceMissing:
     "Agent “{name}” has no Voice (Voice is None). The Debate will use the platform voice or show text only.",

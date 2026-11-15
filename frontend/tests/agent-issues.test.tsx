@@ -14,6 +14,7 @@ import {
   agentIssuesFromError,
   debateFieldProblems,
   mergeIssues,
+  readinessIssues,
 } from "../lib/agent-readiness";
 
 const useSessionMock = vi.hoisted(() => vi.fn());
@@ -103,6 +104,26 @@ describe("agent readiness rules", () => {
       },
     ]);
     expect(agentIssuesFromError(new Error("plain"))).toBeNull();
+  });
+
+  it("ignores the retired heading issue with or without a blocking flag", () => {
+    for (const blocking of [undefined, true, false]) {
+      const issues = [
+        {
+          agent_id: "a",
+          agent_name: "Agent",
+          issue: "agent_md_invalid",
+          blocking,
+        },
+      ];
+      expect(readinessIssues({ readiness_issues: issues })).toEqual([]);
+      expect(
+        agentIssuesFromError({
+          code: "debate_agents_not_ready",
+          details: { issues },
+        }),
+      ).toBeNull();
+    }
   });
 
   it("merges the server's and the form's issues once, filling unknown names", () => {
@@ -224,6 +245,16 @@ describe("Debate create names every Agent problem", () => {
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("creates a Debate without showing or blocking on the retired heading issue", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "debate-1" });
+    const first = candidate("a", "A", ["agent_md_invalid"]);
+    first.current_version.agent_md = "A perspective without a heading.";
+    renderCreate([first, candidate("b", "B")], create);
+    await pickAndSubmit(["A", "B"]);
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(document.querySelector(".agent-hint-bar")).toBeNull();
   });
 
   it("shows a refusal in the same bar, names the Agent, and reads the list again", async () => {
