@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
+import pytest
 from app.modules.demo_baseline.service import ensure_demo_baseline
 from app.modules.learning.attempts import start_or_resume_attempt
 from app.modules.workspace import team_runtime as runtime
@@ -107,11 +108,31 @@ def test_strip_of_only_teammate_lines_is_empty() -> None:
     assert _strip("读心师: 全是别人的话\n第二行") == ""
 
 
-def test_identity_line_says_to_write_only_as_itself() -> None:
-    system = runtime._member_system("# Member\n\nSpeak.", "{}", speaker_name="读心师")
+@pytest.mark.parametrize("assessment_capable", [False, True])
+@pytest.mark.parametrize("is_leader", [False, True])
+@pytest.mark.parametrize("viewer_is_teacher", [False, True])
+def test_identity_line_says_to_write_only_as_itself(
+    assessment_capable: bool, is_leader: bool, viewer_is_teacher: bool
+) -> None:
+    system = runtime._member_system(
+        "# Member\n\nSpeak.",
+        "{}",
+        speaker_name="读心师",
+        assessment_capable=assessment_capable,
+        is_leader=is_leader,
+        viewer_is_teacher=viewer_is_teacher,
+    )
     assert "Write only 读心师's own reply" in system
     assert "never start a line with another member's name and a colon" in system
     assert "[队友 … 的发言]" in system
+    identity = runtime._speaker_identity(
+        "读心师", assessment_capable=assessment_capable, viewer_is_teacher=viewer_is_teacher
+    )
+    # #86 bracketed the prompt after members claimed other roster identities;
+    # #181 copied that fix and #203 strengthened both copies for impersonation.
+    assert system.startswith(identity)
+    assert system.endswith(identity)
+    assert system.count(identity) == 2
 
 
 def test_history_sends_only_own_replies_as_assistant(

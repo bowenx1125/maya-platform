@@ -89,7 +89,7 @@ Builds:`markdown-structure-600t-v3`,150-900 tokens,no overlap;keep v2 snapshots 
 
 0089:new v4 participants start `compiling`;each frozen AGENT.md compiles once before its Agent's first turn(`llm_debate_card`,Debate model,strict schema,1 ledgered attempt,60s) to identity/position/reasoning/style/voice/dropped,≤600 Han/400 words. Ready->card persona;failure/Mock->raw AGENT.md;null(old):keep pinned bytes. R1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style.0 calls;quality unverified.
 
-Nov11:Agents/Teams<768px:black banner shadow,no orange ring;Mock Chromium390/1440+ tour,desktop diff0,1247 UI/build pass. Speed:Agent list omits agent_md/docs;early /auth/me;idle Debate poll15s.
+Nov11:Agents/Teams<768px:black banner shadow,no orange ring;Mock Chromium390/1440+tour,desktop diff0,1247UI/build pass.Agent list:no agent_md/docs;early /auth/me;idle Debate poll15s.
 
 Bowen0090(after0089):schema-only;UI/security unchanged;acceptance pending.
 
@@ -103,7 +103,7 @@ Nov12 local Chatform:composer shell focuses Message;controls kept. History avata
 
 DEBATE_TTS_ENGINE=cosyvoice:Debate TTS(qwen3 default;pre-request-refusal fallback);word_timestamps->debates/performance(gestures+visemes). AudioStore:WAV-sibling performance.json;ticket-gated GET /debates/{id}/performance/{turn}(404=plain audio). beta-stage:media.prepared sibling;ScholarScene:timeline+clock;scholar-stage:visemes+gesture clips over procedural frame. Bones:UE spine_02/neck_01,AdvSkel Chest_M/Neck_M,Mixamo Spine2/Neck;fix head-only collar clipping;hide watermark.Tripo-refined/Mixamo-rigged:elder-scholar.glb,noble-scholar.glb(noble2),female_1.glb.
 
-Gesture v2:upper/forearm/hand figure-space axis-angle;scholar-stage per-rig parent rest quats(local=A⁻¹·E·A·rest),shared clips across Mixamo axes. Postures: hand_behind_back (right behind back, left at chest), hand_on_chest (mirror), open_palm_listening; clips emphasis, settle_calm, doubt_shrug, invite_present, chin_stroke, palm_open_sweep, lean_in, object_raise gesture with the free left arm. Compiler defaults thoughtful/friendly to hand_on_chest. Headless-render QA on all three; 153 frontend files / 1259 tests green.
+Gesture v2:upper/forearm/hand figure-space axis-angle;per-rig local=A⁻¹·E·A·rest;shared Mixamo clips. Postures:hand_behind_back(right behind,left chest),hand_on_chest(mirror),open_palm_listening;free-left-arm clips:emphasis,settle_calm,doubt_shrug,invite_present,chin_stroke,palm_open_sweep,lean_in,object_raise.Thoughtful/friendly->hand_on_chest.Headless-render QA:all3;153 frontend files/1259 tests green.
 
 Nov12 #419(live Nov13):capsule second press closes;trigger pathname key removed. Bowen student pages use the login class's first non-Students group;moves stay in that session class. New usernames 3-64 letters/digits;older `.` `_` `-` names still sign in. Private→Public is the owner.
 
@@ -111,8 +111,6 @@ Nov12 #419(live Nov13):capsule second press closes;trigger pathname key removed.
 
 f1087c4d live:3D/gesture v2/3 figures/#419;replaces334fbd94(missed #419).Local image save/load;3.5G server:no build/test.Backup maya-pre-334fbd94-20261112-213724.dump:102M,pg_restore list pass,PG-only.Schema0091_quiz_show_results;ready/HTTPS200.Backend240/319 chunked;known voice+2 load-adaptive failures,no regressions.
 
-Nov14:Teams ?/Agent New RAG hint removed;tour drops voices.UI1372/13skip,build passed.0 calls/deploy.
+Nov14:Teams ?/Agent New RAG hint removed;tour drops voices.1372UI/13skip,build pass. Capsule:teacher layout/session-API/user/course caches fix empty-name remounts;B2b kept.Chromium1440/390:class44-70.15625px→70.15625px stable;1380UI/13skip(+8),build/gates pass. UX:page-rise520ms/reduced motion;teacher shell retained;Immerse loading hides Back.Quiz ZIP:participant XLSX,snapshot questions/grades.1387UI/13skip,build pass;PG3521pass/129baselinefail,new0.Each:0 calls/deploy.
 
-Nov14 capsule:shared teacher layout/session-API/user/course caches fix empty-name remounts.B2b kept.Chromium1440/390:class44-70.15625px→70.15625px stable;1380UI/13skip(+8),build/gates pass.0 calls/deploy.
-
-Nov14 local UX:shared page-rise520ms/reduced motion;teacher shell retained;Immerse loading hides Back.Quiz ZIP:participant XLSX,snapshot questions/grades.1387UI/13skip,build pass;PG3521pass/129baselinefail;new0.0 calls/deploy.
+Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs/ce52b274;Team/assessment bytes kept;identity kept.473 focused pass.0 calls/deploy;no real LLM.
