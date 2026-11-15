@@ -164,6 +164,22 @@ const enMessages = {
   debateTopicRequired: "Enter a topic.",
   debateSelectAtLeast: "Select at least two Agents.",
   debateSelectAtMost: "A Demo debate supports at most five Agents.",
+  debateRoundCapsTitle: "Speech length by round",
+  debateEstimatedDuration: "Estimated total debate length",
+  debateRoundCapInvalid:
+    "{round} must be an integer from {minimum} to 2,000 {unit}.",
+  debateRoundCapsUnitChanged:
+    "The counting unit changed; edited values were kept.",
+  debateCardReasonCompileTimeout: "Card compilation timed out.",
+  debateCardReasonFormatInvalid:
+    "The card could not be read in the expected format.",
+  debateCardReasonTooLong: "The card exceeded the safe length limit.",
+  debateCardReasonServiceBusy: "The card service was temporarily unavailable.",
+  debateCardReasonConfigProblem:
+    "The card service could not prepare this Agent's card.",
+  debateCardReasonOther: "The card could not be prepared.",
+  debateCardFallbackContinues:
+    "This Agent will use its original AGENT.md. This session can continue.",
   debateCurrent: "current",
   debateRounds: "{count} Rounds",
   debateStageTitle: "Classroom debate",
@@ -635,8 +651,6 @@ const enMessages = {
   agentIssueNotPublished:
     "Agent “{name}” has no published version. Open it and press Done to publish it.",
   agentIssueRagMissing: "Agent “{name}” needs at least one RAG file.",
-  agentIssueAgentMdInvalid:
-    "Agent “{name}” has a non-standard AGENT.md: it needs a heading line starting with # and some text under it.",
   agentIssueAvatarMissing: "Agent “{name}” has no usable Avatar.",
   agentIssueVoiceMissing:
     "Agent “{name}” has no Voice (Voice is None). The Debate will use the platform voice or show text only.",

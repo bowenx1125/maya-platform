@@ -113,6 +113,7 @@ const implemented = new Set([
   "advanceDebatePlayback",
   "prefetchNextDebateAudio",
   "getDebateLLMDefaults",
+  "getDebateRoundUnitCapDefaults",
   "reportClientMetrics",
   "freezeFinalInput",
   "deleteDebateVoice",

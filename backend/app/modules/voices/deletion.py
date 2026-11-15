@@ -301,7 +301,7 @@ def delete_voice_profile(
     profile = current
 
     def finish(result_profile: VoiceProfile, *, remove: bool = True) -> Any:
-        result = voice_profile_dto(result_profile)
+        result = voice_profile_dto(db, result_profile)
         if remove and _delete_is_settled(db, result_profile):
             from app.modules.real_delete import hard_delete_voice
 

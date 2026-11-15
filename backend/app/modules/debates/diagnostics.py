@@ -30,7 +30,7 @@ from app.modules.debates.generation.segments import (
     load_stored_segment_turn_result,
     self_repetition_ratio,
 )
-from app.modules.debates.generation_params import uses_code_contract
+from app.modules.debates.generation_params import uses_code_contract, uses_v5_speech_limits
 from app.modules.debates.grounding import GroundingClass, matched_gram_flags, measure_grounding
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn
 from app.modules.debates.output_language import debate_output_language
@@ -39,6 +39,7 @@ from app.modules.debates.setup.service import require_teacher_course
 from app.modules.debates.teaching_rules import (
     DEFAULT_TARGET_MINUTES,
     frozen_llm_settings,
+    frozen_round_unit_caps,
     frozen_speech_length,
 )
 
@@ -156,6 +157,12 @@ def _unit_cap(
         or round_no not in ROUND_WEIGHTS
     ):
         return None
+    frozen_llm = frozen_llm_settings(debate.rule_snapshot_json)
+    if uses_v5_speech_limits(frozen_llm):
+        caps = frozen_round_unit_caps(debate.rule_snapshot_json)
+        if caps is None or round_no < 1 or round_no > len(caps):
+            return None
+        return caps[round_no - 1]
     minutes, voice_rate = frozen_speech_length(debate.rule_snapshot_json)
     return turn_unit_cap(
         language,

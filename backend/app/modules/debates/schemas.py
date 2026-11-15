@@ -8,7 +8,7 @@ field.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -123,6 +123,16 @@ class DebateLLMDefaults(_ClosedModel):
     voice_params: list[DebateVoiceParamSpec]
 
 
+class DebateRoundUnitCapDefaults(_ClosedModel):
+    language: Literal["en", "zh"]
+    participants: int = Field(ge=2, le=5)
+    rate: float
+    round_unit_caps: list[Annotated[int, Field(strict=True, ge=1, le=2000)]] = Field(
+        min_length=4, max_length=4
+    )
+    estimated_duration_minutes: float
+
+
 class DebateDraftRequest(_ClosedModel):
     topic: str = Field(
         min_length=1, description="Non-empty topic; any script or symbols are accepted."
@@ -141,7 +151,14 @@ class DebateDraftRequest(_ClosedModel):
     # Voice card values (cloned voices); omitted means the DEBATE_TTS_* defaults.
     voice_params: DebateVoiceParams | None = None
     # Spoken length the whole Debate aims for; omitted means five minutes.
+    # New creates ignore this when round_unit_caps is present; a create that
+    # only sends minutes is rejected with 422.
     target_minutes: int | None = Field(default=None, ge=3, le=10)
+    # Four per-speaker unit caps (rounds 1-4). Required on create; optional
+    # on a v4 draft update so old clients can omit it.
+    round_unit_caps: list[Annotated[int, Field(strict=True, ge=1, le=2000)]] | None = Field(
+        default=None, min_length=4, max_length=4
+    )
 
     @field_validator("teaching_prompts", mode="before")
     @classmethod
@@ -169,6 +186,27 @@ class DebateDraftRequest(_ClosedModel):
         if len(set(ids)) != len(ids):
             raise PydanticCustomError("participants_duplicate", "participants must be unique")
         return value
+
+    @model_validator(mode="after")
+    def validate_round_unit_caps_range(self) -> DebateDraftRequest:
+        caps = self.round_unit_caps
+        if caps is None:
+            return self
+        from app.modules.debates.generation.four_round import MIN_TURN_UNITS, ROUND_UNIT_CAP_MAX
+
+        minimum = MIN_TURN_UNITS[self.output_language]
+        for cap in caps:
+            if (
+                isinstance(cap, bool)
+                or not isinstance(cap, int)
+                or cap < minimum
+                or cap > ROUND_UNIT_CAP_MAX
+            ):
+                raise PydanticCustomError(
+                    "round_unit_caps_invalid",
+                    "round_unit_caps must be four integers between the language minimum and 2000",
+                )
+        return self
 
 
 class DebateDraftUpdateRequest(DebateDraftRequest):
@@ -325,6 +363,19 @@ class DebateParticipant(_ClosedModel):
     # the original AGENT.md; only "ready" carries a card.
     card_status: Literal["compiling", "ready", "fallback"] | None = None
     card: DebateCard | None = None
+    # Only set on fallback; ready and older rows stay null.
+    card_teacher_reason: (
+        Literal[
+            "compile_timeout",
+            "format_invalid",
+            "card_too_long",
+            "service_busy",
+            "config_problem",
+            "other",
+        ]
+        | None
+    ) = None
+    card_teacher_notice: str | None = None
 
 
 class DebateStall(_ClosedModel):
@@ -472,6 +523,14 @@ class DebateDetail(DebateSummary):
     insight_status: Literal["not_started", "generating", "ready", "failed"]
     report_status: Literal["not_started", "generating", "ready", "failed"]
     mutual_learning_synthesis: MutualLearningSynthesisV1 | None = None
+    contract_version: str | None = None
+    # Frozen minutes on a v4 Debate; null on v5.
+    target_minutes: int | None = None
+    # Frozen per-round caps on a v5 Debate; null on older rows.
+    round_unit_caps: list[int] | None = None
+    estimated_duration_minutes: float | None = None
+    # The frozen or assumed voice rate used in the duration estimate.
+    estimated_duration_rate: float | None = None
 
 
 class DebateCleanupRequest(_ClosedModel):
@@ -529,6 +588,7 @@ class DebateRuleSnapshot(_ClosedModel):
 __all__ = [
     "AdvancePlaybackRequest",
     "DebateDetail",
+    "DebateRoundUnitCapDefaults",
     "DebateDraftRequest",
     "DebateDraftUpdateRequest",
     "DebateParticipant",

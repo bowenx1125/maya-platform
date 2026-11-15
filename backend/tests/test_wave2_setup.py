@@ -134,6 +134,7 @@ def test_request_validates_assigned_open_and_fixed_round_shapes() -> None:
             ),
             DebateParticipantInput(agent_id=uuid4(), stance_mode="open"),
         ],
+        round_unit_caps=[200, 200, 200, 200],
     )
     assert request.round_count == 4
 
@@ -288,6 +289,7 @@ def _create_payload(first_agent_id: str, second_agent_id: str, *, topic: str) ->
             DebateParticipantInput(agent_id=UUID(first_agent_id), stance_mode="open"),
             DebateParticipantInput(agent_id=UUID(second_agent_id), stance_mode="open"),
         ],
+        round_unit_caps=[230, 184, 184, 276],
     )
 
 
@@ -321,6 +323,7 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
         ],
         "round_count": 4,
         "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
+        "round_unit_caps": [200, 200, 200, 200],
     }
     response = client.post(
         f"/api/v1/courses/{COURSE_ID}/debates",
@@ -340,7 +343,8 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
         assert persisted_rule["rule_set_id"] == "ordered_multi_expert_mutual_learning_v1"
         # v4 (2026-11-10) stops freezing this never-read policy id; older
         # snapshots keep theirs.
-        assert persisted_rule["contract_version"] == "ruleset_contract_v4"
+        assert persisted_rule["contract_version"] == "ruleset_contract_v5"
+        assert persisted_rule["round_unit_caps"] == [200, 200, 200, 200]
         assert "retrieval_policy_id" not in persisted_rule
     assert [item["slot"] for item in created["participants"]] == ["A", "B"]
     assert [item["agent_id"] for item in created["participants"]] == [bowen_id, kaikai_id]
@@ -370,7 +374,7 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
     conflict_response = client.post(
         f"/api/v1/courses/{COURSE_ID}/debates",
         headers=headers(csrf, **{"Idempotency-Key": "wave2-create-debate-001"}),
-        json={**body, "topic": "different"},
+        json={**body, "round_unit_caps": [200, 200, 200, 200], "topic": "different"},
     )
     assert conflict_response.status_code == 409
     assert conflict_response.json()["code"] == "idempotency_conflict"
@@ -508,6 +512,7 @@ def test_embedding_only_slice_keeps_mock_voice_fallback(
             ],
             "round_count": 4,
             "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
+            "round_unit_caps": [200, 200, 200, 200],
         },
     )
     assert response.status_code == 201, response.text
@@ -536,7 +541,12 @@ def test_invalid_topic_is_a_stable_422_before_create_claim_or_update_cas(
     rejected = client.post(
         f"/api/v1/courses/{COURSE_ID}/debates",
         headers=headers(csrf, **{"Idempotency-Key": "invalid-topic-create-001"}),
-        json={"topic": invalid_topic, "participants": participants, "round_count": 4},
+        json={
+            "topic": invalid_topic,
+            "participants": participants,
+            "round_count": 4,
+            "round_unit_caps": [200, 200, 200, 200],
+        },
     )
     assert rejected.status_code == 422, rejected.text
     assert rejected.json()["code"] == TOPIC_LANGUAGE_ERROR_CODE
@@ -559,6 +569,7 @@ def test_invalid_topic_is_a_stable_422_before_create_claim_or_update_cas(
             "participants": participants,
             "round_count": 4,
             "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
+            "round_unit_caps": [200, 200, 200, 200],
         },
     )
     assert created.status_code == 201, created.text
@@ -886,6 +897,7 @@ def test_teacher_student_and_outside_course_boundaries(
         ],
         "round_count": 4,
         "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
+        "round_unit_caps": [200, 200, 200, 200],
     }
     student_session, student_csrf = login(client, "bowen")
     del student_session
@@ -929,6 +941,7 @@ def test_commit_start_plan_writes_full_predecessor_prefix_without_public_start_s
             DebateParticipantInput(agent_id=UUID(ids[0]), stance_mode="open"),
             DebateParticipantInput(agent_id=UUID(ids[1]), stance_mode="open"),
         ],
+        round_unit_caps=[200, 200, 200, 200],
     )
     with database.session() as session:
         detail = create_debate_draft(
@@ -1166,6 +1179,7 @@ def test_topic_background_saved_separately_and_normalized_only_for_model(debate_
         "background": "Two students.\n\tOne asks:\u202e ‘为什么？’",
         "output_language": "en",
         "participants": [{"agent_id": agent_id, "stance_mode": "open"} for agent_id in agent_ids],
+        "round_unit_caps": [200, 200, 200, 200],
     }
     response = client.post(
         f"/api/v1/courses/{COURSE_ID}/debates",
@@ -1241,6 +1255,7 @@ def test_teacher_personal_agent_without_a_group_can_debate(
                 {"agent_id": personal_id, "stance_mode": "open"},
             ],
             "round_count": 4,
+            "round_unit_caps": [200, 200, 200, 200],
         },
     )
     assert response.status_code == 201, response.text

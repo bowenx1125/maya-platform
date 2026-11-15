@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "maya://schemas/repair_feedback_v2",
+  "title": "RepairFeedbackV2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "json_pointers"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "repair_feedback_v2"
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,79}$"
+    },
+    "safe_error_code": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,79}$"
+    },
+    "json_pointers": {
+      "type": "array",
+      "maxItems": 12,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160,
+        "pattern": "^/(?:[^~/]|~0|~1)*(?:/(?:[^~/]|~0|~1)*)*$"
+      }
+    },
+    "actual_units": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "unit_cap": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "repetition_ratio_percent": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "language": {
+      "type": "string",
+      "enum": ["zh", "en"]
+    }
+  },
+  "anyOf": [
+    {
+      "required": ["code"]
+    },
+    {
+      "required": ["safe_error_code"]
+    }
+  ]
+}

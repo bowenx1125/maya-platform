@@ -44,12 +44,13 @@ from app.core.models import (
 )
 from app.core.version_label import agent_version_label
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
-from app.modules.debates.cards import initial_card_status, stored_card
+from app.modules.debates.cards import card_teacher_projection, initial_card_status, stored_card
 from app.modules.debates.generation_params import (
-    CONTRACT_VERSION,
     UNSTORED_V4_PARAMS,
     resolve_params,
     resolve_voice_params,
+    uses_code_contract,
+    uses_v5_speech_limits,
 )
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
 from app.modules.debates.owned_copies import (
@@ -1025,6 +1026,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                 "current_position_summary": row.current_position_summary,
                 "card_status": row.card_status,
                 "card": stored_card(row),
+                **card_teacher_projection(row.card_status, row.card_safe_error_code),
             }
         )
         for row in participants
@@ -1186,6 +1188,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             "playback": playback_dto,
             **_classroom_statuses(db, debate.id),
             "mutual_learning_synthesis": synthesis,
+            **_speech_limit_fields(debate, participant_count=len(participant_dtos)),
         }
     )
 
@@ -1257,6 +1260,48 @@ def debate_summary(
     )
 
 
+def _speech_limit_fields(debate: Debate, *, participant_count: int) -> dict[str, object]:
+    from app.modules.debates.generation.four_round import estimated_duration_minutes
+    from app.modules.debates.teaching_rules import (
+        frozen_round_unit_caps,
+        frozen_speech_length,
+        frozen_voice_rate,
+    )
+
+    snapshot_json = debate.rule_snapshot_json
+    try:
+        snapshot = json.loads(snapshot_json) if snapshot_json else {}
+    except (TypeError, ValueError):
+        snapshot = {}
+    contract_version = snapshot.get("contract_version") if isinstance(snapshot, dict) else None
+    caps = frozen_round_unit_caps(snapshot_json)
+    minutes, _rate = frozen_speech_length(snapshot_json) if snapshot_json else (None, 1.0)
+    rate = frozen_voice_rate(snapshot_json)
+    language = "zh" if debate.output_language == "zh" else "en"
+    estimated = None
+    if caps is not None and participant_count >= 1:
+        estimated = estimated_duration_minutes(
+            caps, language=language, participants=participant_count, voice_rate=rate
+        )
+    return {
+        "contract_version": contract_version if isinstance(contract_version, str) else None,
+        "target_minutes": minutes,
+        "round_unit_caps": list(caps) if caps is not None else None,
+        "estimated_duration_minutes": estimated,
+        "estimated_duration_rate": rate if caps is not None or minutes is not None else None,
+    }
+
+
+def _require_create_round_unit_caps(payload: DebateDraftRequest) -> list[int]:
+    caps = payload.round_unit_caps
+    if caps is None:
+        raise validation_failure(
+            "New debates require four round unit caps.",
+            code="round_unit_caps_required",
+        )
+    return list(caps)
+
+
 def create_debate_draft(
     db: Session,
     *,
@@ -1315,6 +1360,8 @@ def create_debate_draft(
                 # Every speech (preview, live, regenerated) uses these voice values.
                 voice_params=resolve_voice_params(runtime_settings, payload.voice_params),
                 target_minutes=payload.target_minutes,
+                # Caps are required on create; a stray target_minutes is ignored.
+                round_unit_caps=_require_create_round_unit_caps(payload),
             ),
         ),
         status="draft",
@@ -1613,8 +1660,8 @@ def update_debate_draft(
     prompts, params = payload.teaching_prompts, payload.llm_params
     sent_prompts = prompts.model_dump() if prompts is not None else None
     sent_params = params.model_dump() if params is not None else None
-    if stored_rules.get("contract_version") == CONTRACT_VERSION:
-        # v4 froze these without the legacy contract section and the unstored
+    if uses_code_contract(stored_rules):
+        # v4/v5 froze these without the legacy contract section and the unstored
         # parameter, so the same form values still compare equal.
         if sent_prompts is not None:
             sent_prompts = {
@@ -1633,8 +1680,13 @@ def update_debate_draft(
             and payload.voice_params.model_dump() != stored_rules.get("voice_params")
         )
         or (
-            payload.target_minutes is not None
+            not uses_v5_speech_limits(stored_rules)
+            and payload.target_minutes is not None
             and payload.target_minutes != stored_rules.get("target_minutes")
+        )
+        or (
+            payload.round_unit_caps is not None
+            and list(payload.round_unit_caps) != list(stored_rules.get("round_unit_caps") or [])
         )
     ):
         raise invalid_state("Generation parameters are frozen when the debate is created.")
@@ -1647,6 +1699,10 @@ def update_debate_draft(
             "llm_params",
             "voice_params",
             "target_minutes",
+            "round_unit_caps",
+            "over_length_ratio",
+            "repair_feedback_version",
+            "repair_policy_version",
         )
         if key in stored_rules
     }
