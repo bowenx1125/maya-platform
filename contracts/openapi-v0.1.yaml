@@ -2747,6 +2747,51 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
+  /courses/{course_id}/debate-round-unit-cap-defaults:
+    parameters:
+    - $ref: '#/components/parameters/CourseId'
+    get:
+      tags:
+      - Debates
+      operationId: getDebateRoundUnitCapDefaults
+      description: Default four-round unit caps from turn_unit_cap(..., minutes=5) and the estimated duration at the given voice rate.
+      parameters:
+      - name: language
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - en
+          - zh
+      - name: participants
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 2
+          maximum: 5
+      - name: rate
+        in: query
+        required: false
+        schema:
+          type: number
+          minimum: 0.5
+          maximum: 2.0
+          default: 1.0
+      responses:
+        '200':
+          description: Default per-round unit caps and estimated duration for a new debate.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebateRoundUnitCapDefaults'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
   /courses/{course_id}/debates:
     parameters:
     - $ref: '#/components/parameters/CourseId'
@@ -3003,8 +3048,8 @@ paths:
                   - string
                   - 'null'
                   enum:
-                  - en
                   - zh
+                  - en
                   - null
                   default: null
                   description: Optional confirmation of the language saved in Preview; cannot change it.
@@ -9249,6 +9294,37 @@ components:
       - voice_params
       title: DebateLLMDefaults
       type: object
+    DebateRoundUnitCapDefaults:
+      type: object
+      additionalProperties: false
+      required:
+      - language
+      - participants
+      - rate
+      - round_unit_caps
+      - estimated_duration_minutes
+      properties:
+        language:
+          type: string
+          enum:
+          - en
+          - zh
+        participants:
+          type: integer
+          minimum: 2
+          maximum: 5
+        rate:
+          type: number
+        round_unit_caps:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            type: integer
+            minimum: 1
+            maximum: 2000
+        estimated_duration_minutes:
+          type: number
     DebateDraftRequest:
       type: object
       required:
@@ -9272,6 +9348,17 @@ components:
             maximum: 10
           - type: 'null'
           description: Spoken length the whole debate aims for; omitted means five minutes.
+        round_unit_caps:
+          anyOf:
+          - type: array
+            minItems: 4
+            maxItems: 4
+            items:
+              type: integer
+              minimum: 1
+              maximum: 2000
+          - type: 'null'
+          description: Four per-speaker unit caps for rounds 1-4. Required on create; optional on a v4 draft update.
         topic:
           type: string
           minLength: 1
@@ -9536,6 +9623,23 @@ components:
           anyOf:
           - $ref: '#/components/schemas/DebateCard'
           - type: 'null'
+        card_teacher_reason:
+          type:
+          - string
+          - 'null'
+          enum:
+          - compile_timeout
+          - format_invalid
+          - card_too_long
+          - service_busy
+          - config_problem
+          - other
+          - null
+          description: Only set on fallback; ready and older rows stay null.
+        card_teacher_notice:
+          type:
+          - string
+          - 'null'
     DebateCardDrop:
       type: object
       additionalProperties: false
@@ -9990,6 +10094,32 @@ components:
           mutual_learning_synthesis:
             oneOf:
             - $ref: '#/components/schemas/MutualLearningSynthesisV1'
+            - type: 'null'
+          contract_version:
+            type:
+            - string
+            - 'null'
+          target_minutes:
+            anyOf:
+            - type: integer
+            - type: 'null'
+            description: Frozen minutes on a v4 Debate; null on v5.
+          round_unit_caps:
+            anyOf:
+            - type: array
+              minItems: 4
+              maxItems: 4
+              items:
+                type: integer
+            - type: 'null'
+            description: Frozen per-round caps on a v5 Debate; null on older rows.
+          estimated_duration_minutes:
+            anyOf:
+            - type: number
+            - type: 'null'
+          estimated_duration_rate:
+            anyOf:
+            - type: number
             - type: 'null'
     AdvancedPlayback:
       allOf:

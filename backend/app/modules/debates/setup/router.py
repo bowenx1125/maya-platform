@@ -6,9 +6,10 @@ only expose the teacher-scoped create/list/get/update/start setup boundary.
 
 from __future__ import annotations
 
+from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.errors import Error
@@ -19,6 +20,7 @@ from app.modules.debates.schemas import (
     DebateDraftRequest,
     DebateDraftUpdateRequest,
     DebateLLMDefaults,
+    DebateRoundUnitCapDefaults,
     DebateRulesetContract,
     DebateRulesetDefaults,
     DebateSummary,
@@ -79,6 +81,45 @@ def get_llm_defaults(
 
     require_teacher_course(db, context.user.id, str(course_id))
     return DebateLLMDefaults.model_validate(defaults_payload(request.app.state.settings))
+
+
+@router.get(
+    "/courses/{course_id}/debate-round-unit-cap-defaults",
+    response_model=DebateRoundUnitCapDefaults,
+    operation_id="getDebateRoundUnitCapDefaults",
+    responses={
+        200: {"model": DebateRoundUnitCapDefaults},
+        403: {"model": Error},
+        404: {"model": Error},
+        422: {"model": Error},
+    },
+)
+def get_round_unit_cap_defaults(
+    course_id: UUID,
+    language: Literal["en", "zh"],
+    participants: int = Query(..., ge=2, le=5),
+    rate: float = Query(1.0, ge=0.5, le=2.0, allow_inf_nan=False),
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> DebateRoundUnitCapDefaults:
+    """Default four-round caps from turn_unit_cap(..., minutes=5)."""
+
+    from app.modules.debates.generation.four_round import (
+        default_round_unit_caps,
+        estimated_duration_minutes,
+    )
+
+    require_teacher_course(db, context.user.id, str(course_id))
+    caps = default_round_unit_caps(language, participants=participants, voice_rate=rate)
+    return DebateRoundUnitCapDefaults(
+        language=language,
+        participants=participants,
+        rate=rate,
+        round_unit_caps=caps,
+        estimated_duration_minutes=estimated_duration_minutes(
+            caps, language=language, participants=participants, voice_rate=rate
+        ),
+    )
 
 
 @router.get(

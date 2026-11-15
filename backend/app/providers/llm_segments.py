@@ -34,10 +34,10 @@ from app.modules.debates.generation.segments import (
     validate_segment_output,
 )
 from app.modules.debates.generation_params import (
-    CONTRACT_VERSION,
     RULESET_CONTRACT_V3,
     default_params,
     request_fields,
+    uses_code_contract,
 )
 from app.providers.llm_adapter import LLMAdapterError, LLMUsageV1
 from app.providers.llm_price_card import (
@@ -114,10 +114,10 @@ SEGMENT_REPAIR_PREFIX_ZH = (
 def segment_prompt_version(snapshot: SegmentInputSnapshot) -> str:
     if getattr(snapshot, "discussion_json", None) is None:
         return SEGMENT_PROMPT_VERSION
-    contract = _frozen_llm(snapshot).get("contract_version")
-    if contract == CONTRACT_VERSION:
+    frozen = _frozen_llm(snapshot)
+    if uses_code_contract(frozen):
         return OWNED_CONTRACT_PROMPT_VERSION
-    if contract == RULESET_CONTRACT_V3:
+    if frozen.get("contract_version") == RULESET_CONTRACT_V3:
         return RULESET_CONTRACT_PROMPT_VERSION
     return FOUR_ROUND_SEGMENT_PROMPT_VERSION
 
@@ -803,12 +803,12 @@ class SegmentLLMAdapter:
         system = build_segment_system_prompt(snapshot)
         zh = getattr(snapshot, "language", "en") == "zh"
         frozen_llm = _frozen_llm(snapshot)
-        # A Ruleset template (v3) or the code contract (v4) carries the no-copy
+        # A Ruleset template (v3) or the code contract (v4/v5) carries the no-copy
         # rule itself; Debates frozen before that keep having it appended.
-        if snapshot.history and frozen_llm.get("contract_version") not in {
-            RULESET_CONTRACT_V3,
-            CONTRACT_VERSION,
-        }:
+        if snapshot.history and not (
+            frozen_llm.get("contract_version") == RULESET_CONTRACT_V3
+            or uses_code_contract(frozen_llm)
+        ):
             system += SEGMENT_NO_HISTORY_COPY_RULE_ZH if zh else SEGMENT_NO_HISTORY_COPY_RULE
         if repair_feedback is not None:
             system += (SEGMENT_REPAIR_PREFIX_ZH if zh else SEGMENT_REPAIR_PREFIX) + _canonical(

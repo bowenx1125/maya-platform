@@ -59,10 +59,10 @@ from .llm_price_card import (
 )
 from .llm_privacy import (
     LLM_REPAIR_FEEDBACK_FIELD_CLASS,
-    LLM_REPAIR_FEEDBACK_POLICY_HASH,
     LLM_REPAIR_FEEDBACK_POLICY_VERSION,
     LLMOutboundManifestV1,
     LLMOutboundPrivacyError,
+    repair_policy_is_current,
     scan_llm_outbound_messages,
 )
 from .llm_tokenizer import (
@@ -683,13 +683,18 @@ def _validate_attempt_authorization(
         raise LLMAdapterError(code="llm_attempt_exceeds_manifest")
 
     if manifest.max_attempts == 2:
-        if manifest.repair_policy_version != LLM_REPAIR_FEEDBACK_POLICY_VERSION:
-            raise LLMAdapterError(code="llm_repair_policy_missing")
-        if manifest.repair_policy_hash != LLM_REPAIR_FEEDBACK_POLICY_HASH:
+        if not repair_policy_is_current(
+            manifest.repair_policy_version, manifest.repair_policy_hash
+        ):
+            if manifest.repair_policy_version not in {
+                LLM_REPAIR_FEEDBACK_POLICY_VERSION,
+                "repair_feedback_v2",
+            }:
+                raise LLMAdapterError(code="llm_repair_policy_missing")
             raise LLMAdapterError(code="llm_repair_policy_stale")
         if LLM_REPAIR_FEEDBACK_FIELD_CLASS not in manifest.field_classes:
             raise LLMAdapterError(code="llm_repair_field_missing")
-        if repair_policy_hash != LLM_REPAIR_FEEDBACK_POLICY_HASH:
+        if not repair_policy_is_current(manifest.repair_policy_version, repair_policy_hash):
             raise LLMAdapterError(code="llm_repair_policy_stale")
     elif (
         manifest.repair_policy_version is not None
@@ -703,7 +708,7 @@ def _validate_attempt_authorization(
             raise LLMAdapterError(code="llm_repair_feedback_unexpected")
         if not manifest.repair_feedback_allowed:
             raise LLMAdapterError(code="llm_repair_feedback_not_allowed")
-        if repair_policy_hash != LLM_REPAIR_FEEDBACK_POLICY_HASH:
+        if not repair_policy_is_current(manifest.repair_policy_version, repair_policy_hash):
             raise LLMAdapterError(code="llm_repair_policy_stale")
 
 
