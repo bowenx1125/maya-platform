@@ -67,7 +67,9 @@ Visits:hide Knowledge,renew/20min,end notice->Accounts. Debate "?":Chinese hover
 
 ## Nov5-8 Quiz
 
-0083-0085:Quiz publish≠taking;new epoch/start,1 attempt/epoch;ZIP. #380:detail/hand grading/hide/Record->Quiz;#383/4:opt-in AI grading. 1 page/quiz,Paper|Submissions;no Chat tests;New/Back/Done unified. [Contract](contracts/CLASSROOM_QUIZ_API.md). Agent name card;Private->Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)). 0088(in progress):epoch deadlines/one-shot taking,lazy+10s sweeper(non-test). 0091 follows0090:old show_results=true/new=false,revision unchanged. #412:V1 switch,cyan stickers,expandable student answers-only paper;post-commit/receipt visibility,fail-closed UI/DTOs,no duplicate help. Checks pass;PG owner-run;0 calls/deploy.
+0083-0085:publish≠taking;new epoch/start,1 attempt/epoch;ZIP. #380:detail/hand grades/hide/Record->Quiz;#383/4:opt-in AI grades. Quiz:Paper|Submissions;no Chat tests;New/Back/Done. [API](contracts/CLASSROOM_QUIZ_API.md). Agent card/Private->Public once:[ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md).0088(in progress):deadlines/one-shot,lazy+10s sweeper(non-test).0091 follows0090:old show_results=true/new=false,same revision.#412:V1 switch,cyan stickers,expandable student answers-only;post-commit/receipts,fail-closed UI/DTOs,no duplicate help.PG owner-run;0 calls/deploy.
+
+Nov16:Quiz list-checks;34 UI/8 PG pass;baseline lint failures;0 calls/deploy.
 
 ## Nov9 classes/accounts(in progress)
 
