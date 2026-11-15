@@ -115,6 +115,6 @@ Nov15 #426:LoadingPage flat #CEDAE3;390/1440 reviewed;1387UI/13skip,build pass.0
 
 Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs;Team/assessment bytes kept.473 focused pass;no real LLM.Prettier baseline:performance-player.ts.
 
-## Nov16 local paired review(in progress)
+## Nov16 local paired review
 
-Base cc2a73219fea5b5a2b281dceb2c1daf47df85041;#432=4b06c1cdab2b03f11cf84750bbccbeef5acb2233;#433=43cbd7d252490451f33494c5e1d01e51aa60cc2f;integration556226e4.Local;0 real calls.Strict caps/finite rate/repair-policy pair;legacy rate kept,v1 unchanged,v2 repinned.Cards:one attempt/ledger assertions restored,English fallback.PG:sole0092;0091 round trip keeps old rows;v2 blocks lossy downgrade.UI:English caps/shared Input;helper prose removed;defaults await/refresh fixed.UI1405/13skip;169 frozen ops;new error codes mapped to English copy.
+Base cc2a73219fea5b5a2b281dceb2c1daf47df85041;#432=4b06c1cdab2b03f11cf84750bbccbeef5acb2233;#433=43cbd7d252490451f33494c5e1d01e51aa60cc2f;integration556226e4.Local;0 real calls.Strict caps/finite rate/repair-policy pair;legacy rate kept,v1 unchanged,v2 repinned.Cards:one attempt/ledger assertions restored,English fallback.PG:sole0092;0091 round trip keeps old rows;v2 blocks lossy downgrade.UI:English caps/shared Input;helper prose removed;defaults await/refresh fixed.PG3721/129main/1skip(+1bench);UI1405/13skip;169ops;English error copy.
