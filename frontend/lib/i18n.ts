@@ -165,11 +165,7 @@ const enMessages = {
   debateSelectAtLeast: "Select at least two Agents.",
   debateSelectAtMost: "A Demo debate supports at most five Agents.",
   debateRoundCapsTitle: "Speech length by round",
-  debateRoundCapsFlexibility:
-    "Target / suggested upper limits; speeches can vary and are not cut off word for word.",
   debateEstimatedDuration: "Estimated total debate length",
-  debateEstimatedDurationAssumption:
-    "Assumes {participants} Agents, voice rate {rate}, and a 10% pause allowance. This is an estimate, not a timer or actual playback duration.",
   debateRoundCapInvalid:
     "{round} must be an integer from {minimum} to 2,000 {unit}.",
   debateRoundCapsUnitChanged:

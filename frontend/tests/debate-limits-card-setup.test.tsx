@@ -140,7 +140,7 @@ async function waitForDefaultCaps(values: string[]) {
         (round) =>
           (
             screen.getByRole("spinbutton", {
-              name: `R${round} — 每人每轮汉字数`,
+              name: `R${round} — Han characters per person per round`,
             }) as HTMLInputElement
           ).value,
       ),
@@ -175,25 +175,43 @@ describe("debate round unit caps", () => {
     await screen.findByRole("button", { name: "Bowen" });
     await waitForDefaultCaps(["140", "115", "115", "140"]);
 
-    fireEvent.change(screen.getByLabelText("R2 — 每人每轮汉字数"), {
-      target: { value: "123" },
-    });
+    fireEvent.change(
+      screen.getByLabelText("R2 — Han characters per person per round"),
+      {
+        target: { value: "123" },
+      },
+    );
     chooseAgents(3);
 
     await waitFor(() => {
       expect(
-        (screen.getByLabelText("R1 — 每人每轮汉字数") as HTMLInputElement)
-          .value,
+        (
+          screen.getByLabelText(
+            "R1 — Han characters per person per round",
+          ) as HTMLInputElement
+        ).value,
       ).toBe("90");
     });
     expect(
-      (screen.getByLabelText("R2 — 每人每轮汉字数") as HTMLInputElement).value,
+      (
+        screen.getByLabelText(
+          "R2 — Han characters per person per round",
+        ) as HTMLInputElement
+      ).value,
     ).toBe("123");
     expect(
-      (screen.getByLabelText("R3 — 每人每轮汉字数") as HTMLInputElement).value,
+      (
+        screen.getByLabelText(
+          "R3 — Han characters per person per round",
+        ) as HTMLInputElement
+      ).value,
     ).toBe("75");
     expect(
-      (screen.getByLabelText("R4 — 每人每轮汉字数") as HTMLInputElement).value,
+      (
+        screen.getByLabelText(
+          "R4 — Han characters per person per round",
+        ) as HTMLInputElement
+      ).value,
     ).toBe("90");
     expect(
       testController.loadRoundUnitCapDefaults?.mock.calls.at(-1)?.[0],
@@ -209,15 +227,26 @@ describe("debate round unit caps", () => {
     });
     await waitFor(() => {
       expect(
-        (screen.getByLabelText("R1 — 每人每轮汉字数") as HTMLInputElement)
-          .value,
+        (
+          screen.getByLabelText(
+            "R1 — Han characters per person per round",
+          ) as HTMLInputElement
+        ).value,
       ).toBe("115");
     });
     expect(
-      (screen.getByLabelText("R2 — 每人每轮汉字数") as HTMLInputElement).value,
+      (
+        screen.getByLabelText(
+          "R2 — Han characters per person per round",
+        ) as HTMLInputElement
+      ).value,
     ).toBe("123");
     expect(
-      (screen.getByLabelText("R3 — 每人每轮汉字数") as HTMLInputElement).value,
+      (
+        screen.getByLabelText(
+          "R3 — Han characters per person per round",
+        ) as HTMLInputElement
+      ).value,
     ).toBe("95");
     expect(
       testController.loadRoundUnitCapDefaults?.mock.calls.at(-1)?.[0],
@@ -228,9 +257,12 @@ describe("debate round unit caps", () => {
     renderCreate(controller());
     await screen.findByRole("button", { name: "Bowen" });
     await waitForDefaultCaps(["140", "115", "115", "140"]);
-    fireEvent.change(screen.getByLabelText("R1 — 每人每轮汉字数"), {
-      target: { value: "123" },
-    });
+    fireEvent.change(
+      screen.getByLabelText("R1 — Han characters per person per round"),
+      {
+        target: { value: "123" },
+      },
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "English" }));
     await waitFor(() => {
@@ -255,13 +287,12 @@ describe("debate round unit caps", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "中文" }));
     await waitFor(() =>
-      expect(screen.getByLabelText("R1 — 每人每轮汉字数")).toHaveProperty(
-        "value",
-        "123",
-      ),
+      expect(
+        screen.getByLabelText("R1 — Han characters per person per round"),
+      ).toHaveProperty("value", "123"),
     );
     expect(
-      screen.getByText("计数单位已变；已编辑的数字保持不变。"),
+      screen.getByText("The counting unit changed; edited values were kept."),
     ).toBeTruthy();
   });
 
@@ -275,7 +306,9 @@ describe("debate round unit caps", () => {
 
     [100, 200, 300, 400].forEach((value, index) => {
       fireEvent.change(
-        screen.getByLabelText(`R${index + 1} — 每人每轮汉字数`),
+        screen.getByLabelText(
+          `R${index + 1} — Han characters per person per round`,
+        ),
         { target: { value: String(value) } },
       );
     });
@@ -301,11 +334,8 @@ describe("debate round unit caps", () => {
         "17.78 min",
       ),
     );
-    expect(
-      screen.getByText(
-        "Assumes 3 Agents, voice rate 1.25, and a 10% pause allowance. This is an estimate, not a timer or actual playback duration.",
-      ),
-    ).toBeTruthy();
+    expect(screen.queryByText(/Assumes 3 Agents/)).toBeNull();
+    expect(screen.queryByText(/Target \/ suggested upper limits/)).toBeNull();
   });
 
   it.each(["39", "2001"])(
@@ -320,14 +350,14 @@ describe("debate round unit caps", () => {
       chooseAgents(2);
       enterTopic();
       const firstCap = screen.getByLabelText(
-        "R1 — 每人每轮汉字数",
+        "R1 — Han characters per person per round",
       ) as HTMLInputElement;
       fireEvent.change(firstCap, { target: { value } });
       fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
       expect(
         await screen.findByText(
-          "R1 must be an integer from 40 to 2,000 汉字数.",
+          "R1 must be an integer from 40 to 2,000 Han characters.",
         ),
       ).toBeTruthy();
       expect(firstCap.value).toBe(value);

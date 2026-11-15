@@ -1185,10 +1185,9 @@ describe("Wave 2 teacher debate setup", () => {
     render(<TeacherDebateCreate controller={controller} />);
     await screen.findByRole("button", { name: /Bowen/ });
     await waitFor(() =>
-      expect(screen.getByLabelText("R1 — 每人每轮汉字数")).toHaveProperty(
-        "value",
-        "140",
-      ),
+      expect(
+        screen.getByLabelText("R1 — Han characters per person per round"),
+      ).toHaveProperty("value", "140"),
     );
     await waitFor(() =>
       expect(
@@ -1196,27 +1195,24 @@ describe("Wave 2 teacher debate setup", () => {
           .disabled,
       ).toBe(false),
     );
-    expect(screen.getByLabelText("R2 — 每人每轮汉字数")).toHaveProperty(
-      "value",
-      "115",
-    );
-    expect(screen.getByLabelText("R3 — 每人每轮汉字数")).toHaveProperty(
-      "value",
-      "115",
-    );
-    expect(screen.getByLabelText("R4 — 每人每轮汉字数")).toHaveProperty(
-      "value",
-      "140",
-    );
+    expect(
+      screen.getByLabelText("R2 — Han characters per person per round"),
+    ).toHaveProperty("value", "115");
+    expect(
+      screen.getByLabelText("R3 — Han characters per person per round"),
+    ).toHaveProperty("value", "115");
+    expect(
+      screen.getByLabelText("R4 — Han characters per person per round"),
+    ).toHaveProperty("value", "140");
     expect(
       screen.queryByRole("group", { name: "Target length in minutes" }),
     ).toBeNull();
     expect(screen.queryByText("Target length")).toBeNull();
     expect(
-      screen.getByText(
+      screen.queryByText(
         "Target / suggested upper limits; speeches can vary and are not cut off word for word.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
     fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
     fireEvent.change(screen.getByLabelText("Topic"), {

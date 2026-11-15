@@ -46,6 +46,7 @@ import { DebateCleanupControls } from "../debate-cleanup-controls";
 import { DebateStatus } from "../debate-status";
 import { IconBust, IconPlay, IconPlus, IconSpinner } from "../../quiet-icons";
 import { Button } from "../../ui/button";
+import { Input } from "../../ui/input";
 import { NewButton } from "../../ui/agent-card";
 import { cn } from "../../../lib/utils";
 import { LIST_CARD_LIFT } from "../../agent-chrome";
@@ -535,9 +536,9 @@ export function TeacherDebateCreate({
   ]);
   const [roundCapsError, setRoundCapsError] = useState<string | null>(null);
   const [countingUnitChanged, setCountingUnitChanged] = useState(false);
-  const [roundDefaultsPending, setRoundDefaultsPending] = useState(
-    Boolean(courseId && effectiveController.loadRoundUnitCapDefaults),
-  );
+  const [settledRoundDefaultsKey, setSettledRoundDefaultsKey] = useState<
+    string | null
+  >(null);
   const [llmDefaults, setLLMDefaults] = useState<DebateLLMDefaults | null>(
     null,
   );
@@ -635,14 +636,21 @@ export function TeacherDebateCreate({
     voiceValues.rate > 0
       ? voiceValues.rate
       : 1;
+  const roundDefaultsKey = JSON.stringify([
+    courseId,
+    outputLanguage,
+    participantsForCaps,
+    assumedVoiceRate,
+  ]);
+  const roundDefaultsPending = Boolean(
+    courseId &&
+    effectiveController.loadRoundUnitCapDefaults &&
+    settledRoundDefaultsKey !== roundDefaultsKey,
+  );
   useEffect(() => {
     const loadDefaults = effectiveController.loadRoundUnitCapDefaults;
-    if (!courseId || !loadDefaults) {
-      setRoundDefaultsPending(false);
-      return;
-    }
+    if (!courseId || !loadDefaults) return;
     let active = true;
-    setRoundDefaultsPending(true);
     void Promise.resolve()
       .then(() =>
         loadDefaults({
@@ -667,7 +675,7 @@ export function TeacherDebateCreate({
         // Keep the editable minimum values if the defaults endpoint is unavailable.
       })
       .finally(() => {
-        if (active) setRoundDefaultsPending(false);
+        if (active) setSettledRoundDefaultsKey(roundDefaultsKey);
       });
     return () => {
       active = false;
@@ -678,6 +686,7 @@ export function TeacherDebateCreate({
     effectiveController,
     outputLanguage,
     participantsForCaps,
+    roundDefaultsKey,
   ]);
 
   const agentNames = useMemo(
@@ -789,7 +798,7 @@ export function TeacherDebateCreate({
         t("debateRoundCapInvalid", {
           round: `R${invalidRoundCapIndex + 1}`,
           minimum: minimumRoundUnits,
-          unit: outputLanguage === "zh" ? "汉字数" : "words",
+          unit: outputLanguage === "zh" ? "Han characters" : "words",
         }),
       );
     }
@@ -1234,7 +1243,7 @@ export function TeacherDebateCreate({
             {roundUnitCaps.map((value, index) => {
               const label =
                 outputLanguage === "zh"
-                  ? `R${index + 1} — 每人每轮汉字数`
+                  ? `R${index + 1} — Han characters per person per round`
                   : `R${index + 1} — words per person per round`;
               return (
                 <label
@@ -1243,7 +1252,7 @@ export function TeacherDebateCreate({
                   className="grid grid-cols-[1fr_112px] items-center gap-2 font-body text-[13px] leading-[normal] font-bold"
                 >
                   <span>{label}</span>
-                  <input
+                  <Input
                     id={`debate-round-cap-${index + 1}`}
                     aria-label={label}
                     aria-invalid={invalidRoundCapIndex === index}
@@ -1268,17 +1277,12 @@ export function TeacherDebateCreate({
               );
             })}
           </div>
-          <p className="mt-3 mb-0 font-body text-xs leading-normal text-[#4B5563]">
-            {t("debateRoundCapsFlexibility")}
-          </p>
           {countingUnitChanged ? (
             <p
               className="mt-2 mb-0 font-body text-xs leading-normal font-bold text-[#4B5563]"
               role="status"
             >
-              {outputLanguage === "zh"
-                ? "计数单位已变；已编辑的数字保持不变。"
-                : t("debateRoundCapsUnitChanged")}
+              {t("debateRoundCapsUnitChanged")}
             </p>
           ) : null}
           <div className="mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -1295,12 +1299,6 @@ export function TeacherDebateCreate({
                 : `${estimatedMinutes.toFixed(2)} min`}
             </span>
           </div>
-          <p className="mt-1 mb-0 font-body text-xs leading-normal text-[#4B5563]">
-            {t("debateEstimatedDurationAssumption", {
-              participants: participantsForCaps,
-              rate: assumedVoiceRate.toFixed(2),
-            })}
-          </p>
         </CreateCard>
 
         <RulesetEditor

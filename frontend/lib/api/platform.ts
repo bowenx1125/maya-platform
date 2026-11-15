@@ -2952,7 +2952,7 @@ export class PlatformApi {
   async loadRoundUnitCapDefaults(
     input: RoundUnitCapDefaultsInput,
   ): Promise<RoundUnitCapDefaults> {
-    const raw = unwrap(
+    const raw = await unwrap(
       await this.client.GET(
         "/courses/{course_id}/debate-round-unit-cap-defaults",
         {
@@ -2980,7 +2980,9 @@ export class PlatformApi {
           value <= 2000,
       )
     ) {
-      throw new PlatformApiError(502, "debate_round_unit_caps_invalid");
+      throw new PlatformApiError(502, "debate_round_unit_caps_invalid", {
+        code: "debate_round_unit_caps_invalid",
+      });
     }
     return { ...raw, round_unit_caps: caps as RoundUnitCaps };
   }
