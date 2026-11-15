@@ -71,6 +71,16 @@ describe("C2 ovoid profile", () => {
           5,
         );
     }
+    for (const [suffix, sign] of [
+      ["L", -1],
+      ["R", 1],
+    ] as const) {
+      const foot = egg.root.getObjectByName(`Foot_${suffix}`)!;
+      const join = egg.root.getObjectByName(`Fillet_Foot_${suffix}`)!;
+      expect(foot.position.toArray()).toEqual([sign * P.footX, 0.255, 0.17]);
+      expect(join.position.toArray()).toEqual([sign * P.footX, 0.355, 0.105]);
+      expect(join.scale.toArray()).toEqual([0.092, 0.095, 0.13]);
+    }
     egg.frame(1, true, true);
     egg.frame(1.1, true, true);
     expect(shell.scale.toArray()).toEqual([1, 1, 1]);

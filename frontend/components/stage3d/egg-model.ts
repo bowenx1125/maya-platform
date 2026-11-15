@@ -154,14 +154,14 @@ export function prepareEggModel(root: THREE.Object3D): EggModel {
     const foot = root.getObjectByName(`Foot_${suffix}`) as THREE.Mesh;
     foot.material = material;
     foot.scale.set(0.145, 0.105, 0.23);
-    foot.position.set(sign * P.footX, 0.105, 0.17);
+    foot.position.set(sign * P.footX, 0.255, 0.17);
     foot.rotation.set(0, sign * 0.05, 0);
     fillet(
       `Fillet_Foot_${suffix}`,
       sign * P.footX,
-      0.27,
+      0.355,
       0.105,
-      [0.092, 0.18, 0.13],
+      [0.092, 0.095, 0.13],
     );
   }
   shell.material = material;

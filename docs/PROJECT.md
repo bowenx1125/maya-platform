@@ -117,4 +117,4 @@ Nov15 #426:LoadingPage #CEDAE3;390/1440 reviewed;1387UI/13skip/build pass.0 call
 
 Nov15 #425:single Chat memory;RAG/Knowledge=evidence.48 golden pairs;Team/assessment kept.473 focused pass;0 calls.
 
-#427 local(in progress):Egg/C2;no drawing/migration.Preview V2:current form,one sentence,own Voice/RAG/AGENT.md;no Chat/memory/history.1403UI/40PG/build/gates pass;real Voice unverified.0 calls/remotes.
+#427 local:Egg/C2;Preview V2 own Voice/RAG/AGENT.md,no Chat/history/drawing/migration.Audit:null create version,short foot joins;Mock1440/390;1406UI/13PG/static pass.Real Voice unverified;0 calls/remotes.

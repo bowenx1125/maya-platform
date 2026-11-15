@@ -1744,7 +1744,7 @@ export function AgentWorkbench({
                       agent_md: agentMd,
                       avatar_config: avatarConfig,
                       voice_profile_id: voiceProfileId,
-                      version_id: version?.id ?? null,
+                      version_id: version?.id || null,
                       course_id: unsavedCreate?.courseId ?? null,
                       group_id: unsavedCreate?.groupId ?? null,
                       document_ids: selectedDocumentIds,

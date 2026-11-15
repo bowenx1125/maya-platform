@@ -114,6 +114,24 @@ def test_endpoint_is_stateless_and_uses_unsaved_persona_and_rag(
             }
 
 
+@pytest.mark.parametrize("version", [{}, {"version_id": None}])
+def test_teacher_create_preview_without_version_uses_mock_provider(
+    client: TestClient, version: dict[str, Any]
+) -> None:
+    _, csrf = login(client)
+    response = client.post(
+        "/api/v1/agents/preview",
+        headers=headers(csrf),
+        json=body(group_id=None, course_id=COURSE_ID, **version),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "answer": "This is a single-turn preview.",
+        "audio_base64": None,
+        "audio_content_type": None,
+    }
+
+
 def test_preview_rejects_foreign_sources_and_history(client: TestClient) -> None:
     _, csrf = login(client, "bowen")
     response = client.post(
