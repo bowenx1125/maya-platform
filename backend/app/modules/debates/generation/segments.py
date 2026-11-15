@@ -26,7 +26,7 @@ from app.modules.agents.persona import (
     PersonaSpecV1,
     PersonaSpecV2,
 )
-from app.modules.debates.generation_params import CONTRACT_VERSION
+from app.modules.debates.generation_params import uses_code_contract
 from app.modules.debates.teaching_rules import DEFAULT_TARGET_MINUTES
 
 from .four_round import (
@@ -34,6 +34,7 @@ from .four_round import (
     TEACHING_PROTOCOL,
     discussion_context,
     over_length_limit,
+    speech_language_mismatch,
     speech_units,
     system_prompt,
     turn_task,
@@ -201,10 +202,18 @@ class SegmentProtocolError(ValueError):
         *,
         code: str = "segment_protocol_invalid",
         json_pointers: Sequence[str] = (),
+        actual_units: int | None = None,
+        unit_cap: int | None = None,
+        language: str | None = None,
+        repetition_ratio_percent: int | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.json_pointers = tuple(dict.fromkeys(str(item) for item in json_pointers))[:16]
+        self.actual_units = actual_units
+        self.unit_cap = unit_cap
+        self.language = language
+        self.repetition_ratio_percent = repetition_ratio_percent
 
 
 def _error(
@@ -212,9 +221,21 @@ def _error(
     *,
     code: str = "segment_protocol_invalid",
     pointer: str | None = None,
+    actual_units: int | None = None,
+    unit_cap: int | None = None,
+    language: str | None = None,
+    repetition_ratio_percent: int | None = None,
 ) -> SegmentProtocolError:
     pointers = () if pointer is None else (pointer,)
-    return SegmentProtocolError(message, code=code, json_pointers=pointers)
+    return SegmentProtocolError(
+        message,
+        code=code,
+        json_pointers=pointers,
+        actual_units=actual_units,
+        unit_cap=unit_cap,
+        language=language,
+        repetition_ratio_percent=repetition_ratio_percent,
+    )
 
 
 def _text(value: object, label: str, *, max_chars: int | None = None) -> str:
@@ -1026,14 +1047,26 @@ class SegmentInputSnapshot:
         return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def _code_contract(frozen_llm_json: str | None) -> bool:
+def _frozen_llm_mapping(frozen_llm_json: str | None) -> Mapping[str, object] | None:
     if not frozen_llm_json:
-        return False
+        return None
     try:
         value = json.loads(frozen_llm_json)
     except ValueError:
-        return False
-    return isinstance(value, Mapping) and value.get("contract_version") == CONTRACT_VERSION
+        return None
+    return value if isinstance(value, Mapping) else None
+
+
+def _code_contract(frozen_llm_json: str | None) -> bool:
+    from app.modules.debates.generation_params import uses_code_contract
+
+    return uses_code_contract(_frozen_llm_mapping(frozen_llm_json))
+
+
+def _v5_speech_limits(snapshot: SegmentInputSnapshot) -> bool:
+    from app.modules.debates.generation_params import uses_v5_speech_limits
+
+    return uses_v5_speech_limits(_frozen_llm_mapping(snapshot.frozen_llm_json))
 
 
 def _context_round_total(context: GenerationContext, explicit: int | None) -> int:
@@ -1111,11 +1144,19 @@ def build_segment_input(
         barrages=barrages,
         snapshot_id=context.participant.snapshot_id or None,
         discussion=discussion_context(context) if teaching else None,
-        task=turn_task(context, minutes=context.target_minutes or DEFAULT_TARGET_MINUTES)
-        if teaching
-        and isinstance(context.frozen_llm, Mapping)
-        and context.frozen_llm.get("contract_version") == CONTRACT_VERSION
-        else None,
+        task=(
+            turn_task(
+                context,
+                minutes=context.target_minutes or DEFAULT_TARGET_MINUTES,
+                unit_cap=(
+                    context.round_unit_caps[context.turn.round_no - 1]
+                    if context.round_unit_caps is not None and 1 <= context.turn.round_no <= 4
+                    else None
+                ),
+            )
+            if teaching and uses_code_contract(context.frozen_llm)
+            else None
+        ),
     )
 
 
@@ -1956,14 +1997,53 @@ def validate_segment_output(
                         last, text=f"{last.text.rstrip()}{'' if language == 'zh' else ' '}{asked}"
                     ),
                 ]
-        limit = over_length_limit(cap)
-        if _segments_units(segments_list, language) > limit:
-            # Trimmed at once rather than sent back: a rewrite for length made
-            # the model fall back on sentences it had already said, and used up
-            # the one repair the repetition rules need.
-            segments_list = trim_trailing_sentences(
-                segments_list, limit, language, protected=protected
-            )
+        units = _segments_units(segments_list, language)
+        spoken = "\n\n".join(item.text for item in segments_list)
+        if _v5_speech_limits(snapshot):
+            from fractions import Fraction
+
+            if repair:
+                if speech_language_mismatch(spoken, language):
+                    raise _error(
+                        "the speech is not in the required language.",
+                        code="segment_language_mismatch",
+                        pointer="/segments",
+                        actual_units=units,
+                        unit_cap=cap,
+                        language=language,
+                    )
+                if units > cap:
+                    raise _error(
+                        "the speech is over the frozen unit cap.",
+                        code="segment_over_length",
+                        pointer="/segments",
+                        actual_units=units,
+                        unit_cap=cap,
+                        language=language,
+                    )
+                if units < cap * SEGMENT_STUMP_RATIO:
+                    raise _error(
+                        "the speech is too short of the frozen unit cap.",
+                        code="segment_too_short",
+                        pointer="/segments",
+                        actual_units=units,
+                        unit_cap=cap,
+                        language=language,
+                    )
+            limit = over_length_limit(cap, Fraction(3, 2))
+            if units > limit:
+                segments_list = trim_trailing_sentences(
+                    segments_list, limit, language, protected=protected
+                )
+        else:
+            limit = over_length_limit(cap)
+            if units > limit:
+                # Trimmed at once rather than sent back: a rewrite for length made
+                # the model fall back on sentences it had already said, and used up
+                # the one repair the repetition rules need.
+                segments_list = trim_trailing_sentences(
+                    segments_list, limit, language, protected=protected
+                )
     segments = tuple(segments_list)
     speech = "\n\n".join(item.text for item in segments)
     discussion = snapshot.discussion

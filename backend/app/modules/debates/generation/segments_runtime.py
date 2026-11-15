@@ -68,13 +68,51 @@ SEGMENT_REPAIR_CODES = frozenset(
         # v4 repetition rules; the repair attempt accepts what comes back.
         "segment_history_stump",
         "segment_self_repetition",
+        "segment_over_length",
+        "segment_too_short",
+        "segment_language_mismatch",
     }
 )
 
+_V2_HASH = "d911e9af5381af8cea22f171fdd11f1a07f18ccdf2f703bdfbee1e4d096292f7"
+
+
+def _repair_policy_version(policy_hash: str | None) -> str | None:
+    if not policy_hash:
+        return None
+    if policy_hash == _V2_HASH:
+        return "repair_feedback_v2"
+    return "repair_feedback_v1"
+
 
 def _repair_feedback(
-    _candidate: SegmentAcceptedCandidateV2, code: str, pointers: Sequence[str]
+    _candidate: SegmentAcceptedCandidateV2,
+    code: str,
+    pointers: Sequence[str],
+    *,
+    policy_hash: str | None = None,
+    error: object | None = None,
 ) -> dict[str, object]:
+    source = error if error is not None else _candidate
+    actual_units = getattr(source, "actual_units", None)
+    unit_cap = getattr(source, "unit_cap", None)
+    language = getattr(source, "language", None)
+    repetition = getattr(source, "repetition_ratio_percent", None)
+    if _repair_policy_version(policy_hash) == "repair_feedback_v2":
+        payload: dict[str, object] = {
+            "schema_version": "repair_feedback_v2",
+            "safe_error_code": code,
+            "json_pointers": list(pointers),
+        }
+        if isinstance(actual_units, int) and not isinstance(actual_units, bool):
+            payload["actual_units"] = actual_units
+        if isinstance(unit_cap, int) and not isinstance(unit_cap, bool):
+            payload["unit_cap"] = unit_cap
+        if language in {"zh", "en"}:
+            payload["language"] = language
+        if isinstance(repetition, int) and not isinstance(repetition, bool):
+            payload["repetition_ratio_percent"] = repetition
+        return payload
     return {"code": code, "json_pointers": list(pointers)}
 
 
@@ -522,9 +560,7 @@ class SegmentLLMRuntime:
             actual_cost_cny=candidate.actual_cost_cny,
             retrieval_reused=prepared.retrieval_reused,
             safe_error_code=candidate.safe_error_code,
-            repair_policy_version="repair_feedback_v1"
-            if prepared.request.repair_policy_hash
-            else None,
+            repair_policy_version=_repair_policy_version(prepared.request.repair_policy_hash),
             repair_policy_hash=prepared.request.repair_policy_hash or None,
             generation_fence=prepared.request.generation_fence,
         )
@@ -761,7 +797,12 @@ class SegmentLLMRuntime:
                         attempt_no=2,
                         retrieval_reused=True,
                         queries=current.request.queries,
-                        repair_feedback=_repair_feedback(candidate, code, candidate.json_pointers),
+                        repair_feedback=_repair_feedback(
+                            candidate,
+                            code,
+                            candidate.json_pointers,
+                            policy_hash=current.request.repair_policy_hash,
+                        ),
                     )
                     continue
                 return SegmentRunOutcome(
@@ -812,7 +853,13 @@ class SegmentLLMRuntime:
                         attempt_no=2,
                         retrieval_reused=True,
                         queries=current.request.queries,
-                        repair_feedback=_repair_feedback(candidate, exc.code, exc.json_pointers),
+                        repair_feedback=_repair_feedback(
+                            candidate,
+                            exc.code,
+                            exc.json_pointers,
+                            policy_hash=current.request.repair_policy_hash,
+                            error=exc,
+                        ),
                     )
                     continue
                 return SegmentRunOutcome(

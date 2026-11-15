@@ -52,19 +52,36 @@ PARAM_SPECS: tuple[ParamSpec, ...] = (
 PARAM_NAMES = tuple(spec.name for spec in PARAM_SPECS)
 # v3 Debates carry the execution contract inside their frozen Ruleset text; v4
 # (2026-11-10) freezes a code-owned contract beside it plus per-turn tasks and
-# enforced length/repetition rules. Each frozen Debate keeps its own version.
+# enforced length/repetition rules. v5 (2026-11-15) keeps that code contract
+# but freezes four round unit caps and a 150% trim floor. Each frozen Debate
+# keeps its own version. CONTRACT_VERSION stays the v4 literal so existing
+# snapshots and tests keep their meaning.
 RULESET_CONTRACT_V3 = "ruleset_contract_v3"
-CONTRACT_VERSION = "ruleset_contract_v4"
+RULESET_CONTRACT_V4 = "ruleset_contract_v4"
+RULESET_CONTRACT_V5 = "ruleset_contract_v5"
+CONTRACT_VERSION = RULESET_CONTRACT_V4
 # Stored and accepted on input before v4; a v4 Debate no longer stores it.
 UNSTORED_V4_PARAMS = frozenset({"frequency_penalty"})
+CODE_CONTRACT_VERSIONS = frozenset({RULESET_CONTRACT_V4, RULESET_CONTRACT_V5})
+
+
+def _contract_version(frozen_llm: Mapping[str, Any] | None) -> str | None:
+    if not isinstance(frozen_llm, Mapping):
+        return None
+    value = frozen_llm.get("contract_version")
+    return value if isinstance(value, str) else None
 
 
 def uses_code_contract(frozen_llm: Mapping[str, Any] | None) -> bool:
-    """Whether a Debate's frozen settings select the v4 code-owned contract."""
+    """Whether a Debate's frozen settings select the v4 or v5 code-owned contract."""
 
-    return (
-        isinstance(frozen_llm, Mapping) and frozen_llm.get("contract_version") == CONTRACT_VERSION
-    )
+    return _contract_version(frozen_llm) in CODE_CONTRACT_VERSIONS
+
+
+def uses_v5_speech_limits(frozen_llm: Mapping[str, Any] | None) -> bool:
+    """Whether length, repair v2 and the 150% trim floor come from frozen caps."""
+
+    return _contract_version(frozen_llm) == RULESET_CONTRACT_V5
 
 
 class DebateLLMParams(BaseModel):

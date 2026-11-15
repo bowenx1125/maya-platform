@@ -436,6 +436,7 @@ def test_start_rejects_legacy_invalid_draft_before_any_plan_job_audio_or_claim(
                 "participants": participants,
                 "round_count": 4,
                 "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
+                "round_unit_caps": [200, 200, 200, 200],
             },
         )
         assert created.status_code == 201, created.text
@@ -586,6 +587,7 @@ def test_sql_state_and_event_share_one_commit_or_rollback(app_factory: Any) -> N
                 ],
                 "round_count": 4,
                 "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
+                "round_unit_caps": [200, 200, 200, 200],
             },
         )
         assert created.status_code == 201, created.text
@@ -1943,6 +1945,7 @@ def test_sql_restart_fails_the_turn_owned_by_an_interrupted_job(app_factory: Any
                 ],
                 "round_count": 4,
                 "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
+                "round_unit_caps": [200, 200, 200, 200],
             },
         )
         assert created.status_code == 201, created.text
