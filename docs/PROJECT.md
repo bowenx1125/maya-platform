@@ -89,7 +89,7 @@ Builds:`markdown-structure-600t-v3`,150-900 tokens,no overlap;keep v2 snapshots 
 
 0089:new v4 participants start `compiling`;each frozen AGENT.md compiles once before its Agent's first turn(`llm_debate_card`,Debate model,strict schema,1 ledgered attempt,60s) to identity/position/reasoning/style/voice/dropped,≤600 Han/400 words. Ready->card persona;failure/Mock->raw AGENT.md;null(old):keep pinned bytes. R1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style.0 calls;quality unverified.
 
-Nov11:Agents/Teams<768px:black banner shadow,no orange ring;Mock Chromium390/1440+tour,desktop diff0,1247UI/build pass.Agent list:no agent_md/docs;early /auth/me;idle Debate poll15s.
+Nov11:Agents/Teams<768px:black banner shadow,no orange ring;390/1440+tour/1247UI/build pass.Agent list:no agent_md/docs;early /auth/me;idle Debate poll15s.
 
 Bowen0090(after0089):schema-only;UI/security unchanged;acceptance pending.
 
@@ -97,7 +97,7 @@ Bowen0090(after0089):schema-only;UI/security unchanged;acceptance pending.
 
 Nov12:Bowen RAG/Knowledge lists use login class,no picker;others unchanged. Voice idle hint/key removed;ARIA fixed,guards kept. 0 calls/deploy.
 
-Nov12 local Chatform:composer shell focuses Message;controls kept. History avatar/date pass clicks to card button;visuals unchanged. 0 calls/deploy.
+Nov12 Chatform:composer shell focuses Message;history avatar/date pass clicks to card;0 calls/deploy.
 
 ## Nov12 3D engine (in progress)
 
@@ -109,10 +109,12 @@ Nov12 #419(live Nov13):capsule second press closes;trigger pathname key removed.
 
 ## Nov13 deploy
 
-f1087c4d live:3D/gesture v2/3 figures/#419;replaces334fbd94(missed #419).Local image save/load;3.5G server:no build/test.Backup maya-pre-334fbd94-20261112-213724.dump:102M,pg_restore list pass,PG-only.Schema0091_quiz_show_results;ready/HTTPS200.Backend240/319 chunked;known voice+2 load-adaptive failures,no regressions.
+f1087c4d live:3D/gesture v2/3 figures/#419;replaces334fbd94(missed #419).Local image→3.5G server.Backup maya-pre-334fbd94-20261112-213724.dump:102M/list pass,PG-only.Schema0091_quiz_show_results;ready/HTTPS200.Backend240/319;known voice+2 load-adaptive failures,no regressions.
 
 Nov14 UI:Teams ?/Agent New RAG hint removed;tour omits voices.Capsule:shared teacher layout/session-API/user/course caches,B2b kept;Chromium1440/390 width70.15625px stable.UX:page-rise520ms/reduced motion/teacher shell kept;Immerse loading hides Back.Quiz ZIP:participant XLSX/snapshot questions/grades.1387UI/13skip;build/gates pass;PG3521pass/129baselinefail/new0.0 calls/deploy.
 
 Nov15 #426:LoadingPage flat #CEDAE3;390/1440 reviewed;1387UI/13skip,build pass.0 calls/deploy.
 
-Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs;Team/assessment bytes kept.473 focused pass;no real LLM.Prettier baseline:performance-player.ts.
+Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs;Team/assessment bytes kept.473 focused pass;no real LLM.
+
+Nov16 local gates:format performance-player.ts and wrap unchanged Voice preview strings;Python AST identical.0 calls/deploy.

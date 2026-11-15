@@ -23,14 +23,26 @@ from tests.conftest import login
 GROUP_A = "7813f937-902c-5534-bfb2-ad773a43aeda"
 
 EXPECTED_LINES = (
-    "如果遇见你不是奇迹，灵魂便不曾言语。If meeting you was not a miracle, then my soul has never spoken.",
+    (
+        "如果遇见你不是奇迹，灵魂便不曾言语。If meeting you was not "
+        "a miracle, then my soul has never spoken."
+    ),
     "不管需要多少年，我都要再见你一面。No matter how many years it takes, I will see you again.",
-    "重铸 Maya 荣光，吾辈义不容辞！To restore Maya to its former glory is our duty, and we shall not turn away!",
+    (
+        "重铸 Maya 荣光，吾辈义不容辞！To restore Maya to its "
+        "former glory is our duty, and we shall not turn away!"
+    ),
     "过得了我，再谈未来。Get past me first. Then we can talk about the future.",
     "我是要成为海贼王的男人！海賊王に、俺はなる！",
     "真相永远只有一个！真実はいつもひとつ！",
-    "或许是不知梦的缘故，流离之人追逐幻影。Perhaps because they do not know it is a dream, wandering souls keep chasing illusions.",
-    "这一路上我们将不彼此抛弃，不彼此出卖，直到死亡的尽头。We will neither abandon nor betray each other, not even at the very edge of death.",
+    (
+        "或许是不知梦的缘故，流离之人追逐幻影。Perhaps because they do "
+        "not know it is a dream, wandering souls keep chasing illusions."
+    ),
+    (
+        "这一路上我们将不彼此抛弃，不彼此出卖，直到死亡的尽头。We will neither "
+        "abandon nor betray each other, not even at the very edge of death."
+    ),
     "从这里开始吧。从一开始，不，从零开始！ここから始めましょう。一から、いいえ、ゼロから！",
 )
 
@@ -69,7 +81,8 @@ def test_the_nine_lines_are_exactly_as_specified() -> None:
     assert len(EXPECTED_LINES) == 9
     assert voice_preview.VOICE_PREVIEW_LINES == EXPECTED_LINES
     assert voice_preview.VOICE_PREVIEW_LINES[6] == (
-        "或许是不知梦的缘故，流离之人追逐幻影。Perhaps because they do not know it is a dream, wandering souls keep chasing illusions."
+        "或许是不知梦的缘故，流离之人追逐幻影。Perhaps because they do "
+        "not know it is a dream, wandering souls keep chasing illusions."
     )
 
 
