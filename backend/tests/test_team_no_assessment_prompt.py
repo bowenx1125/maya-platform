@@ -92,6 +92,20 @@ def test_ordinary_team_prompt_has_no_assessment_wording(
         assert ("You must reply" in system) is mentioned
         assert ("<team_informal>" in system) is (ruleset is not None)
         assert "write_agent_memory" in system
+        assert (
+            "If you have nothing to add, leave the reply empty. The server omits "
+            "an empty reply and does not treat that member as failed."
+        ) in system
+        mention_rule = (
+            "The user @-mentioned you by name in this message. You must reply "
+            "to it with substance; do not leave the reply empty."
+        )
+        assert (mention_rule in system) is mentioned
+        assert (
+            "In a Team, if it is unclear which member should keep it, the Leader asks who and does "
+            "not write yet. After the user names one or more members, the Leader calls "
+            "write_agent_memory with those member_names."
+        ) in system
 
 
 def test_assessment_team_prompt_is_unchanged_by_default() -> None:

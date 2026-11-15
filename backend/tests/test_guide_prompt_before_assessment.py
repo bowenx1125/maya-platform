@@ -44,6 +44,14 @@ def test_live_attempt_keeps_the_action_protocol() -> None:
         assert "Call assessment_action to classify" in active
         assert "No formal assessment has started" not in active
         assert "Do not call assessment_action for this message" not in active
+        assert (
+            "assessment_active is a server ledger flag. No Tool can set it. Do not write "
+            "已记录 unless assessment_action has already returned; the server writes that "
+            "fact sentence from the Tool receipt."
+        ) in active
+        assert (
+            "Authorization (ACL) overrides this ledger, and this ledger overrides the Team Ruleset."
+        ) in active
 
 
 def test_closed_attempt_keeps_the_earlier_guide_rule() -> None:
