@@ -169,7 +169,7 @@ def test_maya_session_writes_as_maya_and_logout_revokes_only_it(client, database
 @pytest.mark.parametrize(
     ("course_id", "group_id", "joins_group"),
     [
-        (SECOND_CLASS_ID, SECOND_CLASS_GROUP_ID, True),
+        (SECOND_CLASS_ID, SECOND_CLASS_GROUP_ID, False),
         (COURSE_ID, GROUP_DEMO_ID, True),
     ],
 )
@@ -254,7 +254,7 @@ def test_student_choice_joins_a_real_group_instead_of_the_students_shell(client,
     "course_id,group_id", [(SECOND_CLASS_ID, SECOND_CLASS_GROUP_ID), (COURSE_ID, GROUP_DEMO_ID)]
 )
 @pytest.mark.parametrize("moved", [False, True])
-def test_student_login_keeps_changed_grants_and_restores_missing_default(
+def test_student_login_preserves_revoked_or_changed_group_grants(
     client, database, course_id, group_id, moved
 ):
     enrolled = choose(client, challenge(client)["choice_token"], "student", course_id)
@@ -288,19 +288,11 @@ def test_student_login_keeps_changed_grants_and_restores_missing_default(
         assert response.status_code == 200, response.text
         assert response.json()["user"]["id"] == BOWEN_ID
         with database.session() as db:
-            assert (db.get(GroupMember, (group_id, BOWEN_ID)) is None) is moved
-            after_groups = {
+            assert db.get(GroupMember, (group_id, BOWEN_ID)) is None
+            assert {
                 (r.group_id, r.role, r.created_at)
                 for r in db.scalars(select(GroupMember).where(GroupMember.user_id == BOWEN_ID))
-            }
-            if moved:
-                assert after_groups == before_groups
-            else:
-                assert before_groups <= after_groups
-                added = after_groups - before_groups
-                assert len(added) == 1
-                added_group, added_role, _ = added.pop()
-                assert (added_group, added_role) == (group_id, "member")
+            } == before_groups
             membership = db.get(CourseMember, (course_id, BOWEN_ID))
             assert membership.role == "student"
             assert membership.created_at == before_enrollment
