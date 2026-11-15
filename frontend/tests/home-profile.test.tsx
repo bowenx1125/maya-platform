@@ -200,14 +200,14 @@ describe("profile group", () => {
     session.api.registrationOptions.mockResolvedValue({
       course_id: "maya1002",
       course_name: "Maya1002",
-      groups: [{ name: "Demo Group", member_count: 5 }],
+      groups: [{ name: "Project Team", member_count: 5 }],
       classes: [
         {
           course_id: "maya1002",
           course_name: "Maya1002",
           groups: [
-            { name: "Demo Group", member_count: 5 },
-            { name: "Students", member_count: 1 },
+            { name: "Project Team", member_count: 5 },
+            { name: "No Group", member_count: 1 },
           ],
         },
         {
@@ -215,7 +215,7 @@ describe("profile group", () => {
           course_name: "Maya1001",
           groups: [
             { name: "First Team", member_count: 3 },
-            { name: "Students", member_count: 2 },
+            { name: "No Group", member_count: 2 },
           ],
         },
       ],
@@ -224,15 +224,15 @@ describe("profile group", () => {
       if (groupId === "team")
         return { id: "team", name: "First Team", course_id: "maya1001" };
       if (groupId === "other")
-        return { id: "other", name: "Students", course_id: "maya1002" };
-      return { id: "shell", name: "Students", course_id: "maya1001" };
+        return { id: "other", name: "No Group", course_id: "maya1002" };
+      return { id: "shell", name: "No Group", course_id: "maya1001" };
     });
     inEnglish(<AccountSettings />);
     const picker = (await screen.findByLabelText("Group")) as HTMLSelectElement;
     await waitFor(() => expect(picker.value).toBe("First Team"));
     expect([...picker.options].map((option) => option.value)).toEqual([
       "First Team",
-      "Students",
+      "No Group",
     ]);
   });
 });

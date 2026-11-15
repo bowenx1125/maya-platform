@@ -6,6 +6,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.group_names import DEFAULT_GROUP_NAME
 from app.core.identity import group_name_key, normalize_group_name
 from app.core.locks import xact_lock
 from app.core.models import Group
@@ -15,6 +16,10 @@ from app.core.sqlutil import dialect_insert
 def resolve_named_group(db: Session, course_id: str, name: str) -> Group:
     normalized = normalize_group_name(name)
     key = group_name_key(normalized)
+    if key == group_name_key(DEFAULT_GROUP_NAME):
+        from app.modules.org.classes import default_class_group
+
+        return default_class_group(db, course_id)
     # Keep pruning from deleting a resolved row before its caller inserts the
     # membership; after a prune commits, the upsert instead creates a fresh row.
     xact_lock(db, f"course-groups:{course_id}")

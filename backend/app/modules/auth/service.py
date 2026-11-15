@@ -321,6 +321,7 @@ def _sync_graph_in_session(
         from app.modules.org.classes import (
             CLASS_TEACHER_COURSE_IDS,
             default_class_group,
+            ensure_student_group,
             registration_classes,
         )
 
@@ -504,6 +505,10 @@ def _sync_graph_in_session(
                         created_at=timestamp,
                     )
                 )
+
+            if account.role == "student":
+                for student_course_id in sorted(desired_courses):
+                    ensure_student_group(session, student_course_id, user.id)
 
             if binding is None:
                 session.add(

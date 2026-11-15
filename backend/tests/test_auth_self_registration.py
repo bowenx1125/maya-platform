@@ -179,7 +179,7 @@ def test_registration_options_expose_names_without_identities(client: TestClient
     assert payload["course_id"] == COURSE_ID
     names = {group["name"] for group in payload["groups"]}
     # The seeded groups are visible so a student can join an existing one.
-    assert "Demo Group" in names
+    assert "No Group" in names
     for group in payload["groups"]:
         assert set(group) == {"name", "member_count"}
         assert group["member_count"] >= 0

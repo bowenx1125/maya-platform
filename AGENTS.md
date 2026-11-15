@@ -166,8 +166,8 @@ updating both constants and the documents that quote the digest.
 
 Adding a migration means updating `ALEMBIC_HEAD` in `app/core/db.py`; the
 readiness probe compares the database against that constant and the container
-stays unhealthy until they agree. Keep one head: `0091_quiz_show_results`
-follows `0090_bowen_identity_choice`, which follows `0089_debate_cards`.
+stays unhealthy until they agree. Keep one head: `0093_default_group_no_group` follows
+`0092_repair_feedback_v2`, which follows `0091_quiz_show_results`.
 
 When adding an API operation, update the implemented operation set in
 `scripts/generate_route_fixture.mjs`, regenerate its fixture and update the exact

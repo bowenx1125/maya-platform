@@ -1,8 +1,10 @@
+import { isDefaultGroup } from "./group-names";
+
 /**
  * Bowen is the all-access account: one login, then Maya teacher or a student
  * in Maya1001 / Maya1002. He stays enrolled in both classes. These helpers
  * keep the student identity inside the class chosen at login (the session
- * lists that class first) and out of the protected Students shell when the
+ * lists that class first) and out of the protected No Group shell when the
  * class has a real group.
  */
 
@@ -14,11 +16,6 @@ type BowenUser = {
   username?: string;
   courses?: readonly BowenCourse[];
 } | null;
-
-/** The protected class shell. A group a student named "Students" is treated the same. */
-export function isProtectedStudentsShell(name: string): boolean {
-  return name === "Students";
-}
 
 /**
  * Class for this student session. The server puts the class chosen at login
@@ -34,7 +31,7 @@ export function bowenStudentClassId(user: BowenUser): string | undefined {
 
 /**
  * First group of `classId` in the order given (the order the home already
- * lists memberships), skipping the Students shell when the class has another
+ * lists memberships), skipping the No Group shell when the class has another
  * group. The shell is used only when it is the class's only group.
  */
 export function bowenLandingGroup<T extends BowenGroup>(
@@ -42,6 +39,6 @@ export function bowenLandingGroup<T extends BowenGroup>(
   classId: string,
 ): T | undefined {
   const inClass = groups.filter((group) => group.course_id === classId);
-  const open = inClass.filter((group) => !isProtectedStudentsShell(group.name));
+  const open = inClass.filter((group) => !isDefaultGroup(group.name));
   return (open.length ? open : inClass)[0];
 }

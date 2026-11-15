@@ -44,6 +44,7 @@ from app.core.models import (
 from app.modules.auth.models import DemoAccountBinding
 from app.modules.auth.service import lock_user_profile, revoke_user_sessions
 from app.modules.org.access import WorkspaceMember
+from app.modules.org.classes import ensure_student_group
 from app.modules.org.groups import prune_empty_groups
 from app.modules.org.names import resolve_named_group
 
@@ -290,6 +291,12 @@ def update_member(
         for member_course_id in sorted(groups_by_course):
             prune_empty_groups(db, member_course_id, groups_by_course[member_course_id])
 
+    for student_course_id in db.scalars(
+        select(CourseMember.course_id)
+        .where(CourseMember.user_id == user_id, CourseMember.role == "student")
+        .order_by(CourseMember.course_id)
+    ):
+        ensure_student_group(db, student_course_id, user_id)
     db.flush()
     return _roster_row(db, course_id, user_id)
 

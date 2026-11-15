@@ -39,7 +39,7 @@ def test_a_teacher_sees_groups_the_students_made(client: TestClient, app_factory
         login(teacher)
         groups = teacher.get(f"/api/v1/courses/{COURSE_ID}/groups").json()
         names = {group["name"] for group in groups}
-        assert {"Demo Group", "Team Aurora"} <= names
+        assert {"No Group", "Team Aurora"} <= names
 
 
 def test_a_student_cannot_join_a_group_it_did_not_choose(app_factory: Any) -> None:

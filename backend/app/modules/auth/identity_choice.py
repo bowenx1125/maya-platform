@@ -7,6 +7,8 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError
+from app.core.group_names import DEFAULT_GROUP_NAME
+from app.core.identity import group_name_key
 from app.core.models import Course, CourseMember, Group, GroupMember, User
 from app.modules.auth.models import LoginIdentityChallenge
 from app.modules.auth.schemas import (
@@ -16,7 +18,7 @@ from app.modules.auth.schemas import (
     LoginIdentityOptions,
 )
 from app.modules.auth.service import lock_user_profile, new_raw_session_token, session_hash
-from app.modules.org.classes import SECOND_CLASS_GROUP_ID, SECOND_CLASS_ID
+from app.modules.org.classes import SECOND_CLASS_GROUP_ID, SECOND_CLASS_ID, ensure_student_group
 from app.seed import BOWEN_ID, COURSE_ID, GROUP_DEMO_ID, TEACHER_ID, seed_uuid
 
 CHOICE_COURSE_IDS = (SECOND_CLASS_ID, COURSE_ID)
@@ -57,10 +59,8 @@ def issue_choice(db: Session, client: str, now: datetime | None = None) -> Login
 def _student_landing_group(db: Session, course_id: str) -> Group | None:
     """Group Bowen joins when he first enters a class as a student.
 
-    The Students row is the protected shell (Maya1001's default, and
-    ``class-students-{course}`` on later classes). Auto-enrolment into that
-    shell is what left him listed there alone. The original class's catalog
-    group is the real cohort. Existing memberships are not removed.
+    Prefer an ordinary cohort when available. The protected No Group shell
+    remains the fallback, including for an existing ungrouped course member.
     """
 
     rows = db.scalars(
@@ -75,7 +75,11 @@ def _student_landing_group(db: Session, course_id: str) -> Group | None:
         if course_id == SECOND_CLASS_ID
         else seed_uuid(f"class-students-{course_id}")
     )
-    ordinary = [row for row in rows if row.id != protected]
+    ordinary = [
+        row
+        for row in rows
+        if row.id != protected and row.name_key != group_name_key(DEFAULT_GROUP_NAME)
+    ]
     return ordinary[0] if ordinary else None
 
 
@@ -123,8 +127,7 @@ def consume_choice(
                     course_id=course_id, user_id=BOWEN_ID, role="student", created_at=timestamp
                 )
             )
-            # A revoked or changed grant is left alone: this only runs when he
-            # has no course row yet. The Students shell is not a landing group.
+            # Preserve existing grants; only first enrolment chooses a cohort.
             group = _student_landing_group(db, course_id)
             if group is not None and db.get(GroupMember, (group.id, BOWEN_ID)) is None:
                 db.add(
@@ -132,5 +135,6 @@ def consume_choice(
                         group_id=group.id, user_id=BOWEN_ID, role="member", created_at=timestamp
                     )
                 )
+        ensure_student_group(db, course_id, BOWEN_ID)
         db.flush()
     return user

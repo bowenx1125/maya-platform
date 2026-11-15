@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { DEFAULT_GROUP_NAME, isDefaultGroup } from "../lib/group-names";
 import { bowenLandingGroup, bowenStudentClassId } from "../lib/bowen-student";
 
 const state = vi.hoisted(() => ({
@@ -33,7 +34,7 @@ vi.mock("../components/session-provider", () => ({
           "shell-1002": {
             id: "shell-1002",
             course_id: "maya1002",
-            name: "Students",
+            name: "No Group",
             members: [
               {
                 user_id: "other-class",
@@ -45,7 +46,7 @@ vi.mock("../components/session-provider", () => ({
           "shell-1001": {
             id: "shell-1001",
             course_id: "maya1001",
-            name: "Students",
+            name: "No Group",
             members: [
               { user_id: "bowen", display_name: "Bowen", role: "member" },
               { user_id: "bowen1", display_name: "Bowen1", role: "member" },
@@ -54,7 +55,7 @@ vi.mock("../components/session-provider", () => ({
           "demo-1001": {
             id: "demo-1001",
             course_id: "maya1001",
-            name: "Demo Group",
+            name: "Project Team",
             members: [
               { user_id: "guyue", display_name: "Guyue", role: "member" },
               { user_id: "bowen", display_name: "Bowen", role: "member" },
@@ -82,6 +83,28 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
+describe("default group", () => {
+  it.each(["No Group", "no group", " NO   GROUP ", "Ｎｏ Ｇｒｏｕｐ"])(
+    "recognizes %s",
+    (name) => {
+      expect(DEFAULT_GROUP_NAME).toBe("No Group");
+      expect(isDefaultGroup(name)).toBe(true);
+      expect(
+        bowenLandingGroup(
+          [
+            { id: "shell", name, course_id: "class" },
+            { id: "team", name: "Team", course_id: "class" },
+          ],
+          "class",
+        )?.id,
+      ).toBe("team");
+    },
+  );
+  it("keeps ordinary student-named groups available", () => {
+    expect(isDefaultGroup("Students")).toBe(false);
+  });
+});
+
 describe("Bowen student class", () => {
   it("uses the first student course the session lists", () => {
     expect(
@@ -98,26 +121,26 @@ describe("Bowen student class", () => {
     );
   });
 
-  it("lands on the first non-Students group of that class, in list order", () => {
+  it("lands on the first non-default group of that class, in list order", () => {
     const groups = [
-      { id: "shell-1002", name: "Students", course_id: "maya1002" },
-      { id: "shell-1001", name: "Students", course_id: "maya1001" },
+      { id: "shell-1002", name: "No Group", course_id: "maya1002" },
+      { id: "shell-1001", name: "No Group", course_id: "maya1001" },
       { id: "later", name: "Later Team", course_id: "maya1001" },
-      { id: "demo-1001", name: "Demo Group", course_id: "maya1001" },
+      { id: "demo-1001", name: "Project Team", course_id: "maya1001" },
     ];
     expect(bowenLandingGroup(groups, "maya1001")?.id).toBe("later");
-    expect(bowenLandingGroup(groups, "maya1002")?.name).toBe("Students");
+    expect(bowenLandingGroup(groups, "maya1002")?.name).toBe("No Group");
   });
 });
 
 describe("Bowen student home", () => {
-  it("uses the login class and skips the Students shell and the other class", async () => {
+  it("uses the login class and skips the No Group shell and the other class", async () => {
     render(<StudentDashboard />);
     const rag = await screen.findByRole("link", { name: /Add the RAG/ });
     expect(rag.getAttribute("href")).toBe(
       "/student/rag?group_id=demo-1001&mode=rag-new",
     );
-    expect(screen.getByRole("heading", { name: "Demo Group" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Project Team" })).toBeTruthy();
     expect(screen.getByText("Bowen1")).toBeTruthy();
     expect(screen.queryByText("Other Class")).toBeNull();
   });
