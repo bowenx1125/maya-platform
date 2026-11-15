@@ -77,7 +77,7 @@ Historical ruleset_contract_v4(default_rules/contract/*.md):Ruleset style/tasks,
 
 Nov11 RAG/diagnostics:`markdown-structure-600t-v3`,150-900 tokens,no overlap;keep v2 snapshots till republish. Diagnostics:3-gram grounding,other-language unmeasured.
 
-Nov11 Debate cards/0089:new v4 participants start `compiling`;each frozen AGENT.md compiles once before its Agent's first turn(`llm_debate_card`,Debate model,strict schema,1 ledgered attempt,60s) to identity/position/reasoning/style/voice/dropped,≤600 Han/400 words. Ready->card persona;failure/Mock->raw AGENT.md;null(old):keep pinned bytes. R1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style.0 calls;quality unverified.
+Nov11 Debate cards/0089:new v4 participants start `compiling`;each frozen AGENT.md compiles once before its Agent's first turn(`llm_debate_card`,Debate model,strict schema,1 ledgered attempt,60s) to identity/position/reasoning/style/voice/dropped,≤600 Han/400 words. Ready->card persona;failure/Mock->fallback(no raw AGENT.md speech);null(old):keep pinned bytes. R1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style.0 calls;quality unverified.
 
 Nov11:Agents/Teams<768px black shadow,no orange ring;desktop unchanged. Lists omit agent_md/docs;early /auth/me;idle Debate poll15s.
 
@@ -138,3 +138,7 @@ Nov16 copy approval:two exact Avatar Save cause/fix messages;drawing bypasses ca
 #427 Option A: white Edit beside Preview opens the same board; merges eadd723b.
 
 Nov16 Option C:egg floor+crown;Roundtable Banner overlays.DRAFT;0 calls/deploy.
+
+## Nov16 D2 draft (PR442)
+
+Rebased onto `503857fe` (batch2 + Immerse Option C). Ordinary AGENT.md free text (`persona_required=False`); cards prefer salvaged extract; fail-open to original AGENT.md only when compile cannot yield a card; Check-card Ready/Compiling only; no migration (head stays 0093).

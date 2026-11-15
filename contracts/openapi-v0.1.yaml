@@ -9799,8 +9799,9 @@ components:
           - ready
           - fallback
           - null
-          description: Null for a Debate created before debate cards. fallback means the turns send the
-            original AGENT.md.
+          description: Null for a Debate created before debate cards (legacy pinned AGENT.md). ready
+            carries the extracted card. fallback is compile failure; turns do not speak from raw
+            AGENT.md.
         card:
           anyOf:
           - $ref: '#/components/schemas/DebateCard'

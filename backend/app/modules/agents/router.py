@@ -1064,7 +1064,9 @@ def create_agent(
             revision=0,
             agent_md="",
             raw_agent_md_hash=raw_agent_md_hash(""),
-            persona_required=True,
+            # Ordinary Agents author free-text AGENT.md; strict Persona compile
+            # stays for Demo baseline and explicit legacy paths only.
+            persona_required=False,
             avatar_config_json=validate_avatar_config(
                 payload.avatar_config or DEFAULT_AVATAR_CONFIG
             ).model_dump_json(),
@@ -1206,7 +1208,9 @@ def create_course_workspace_agent(
             revision=0,
             agent_md="",
             raw_agent_md_hash=raw_agent_md_hash(""),
-            persona_required=True,
+            # Ordinary Agents author free-text AGENT.md; strict Persona compile
+            # stays for Demo baseline and explicit legacy paths only.
+            persona_required=False,
             avatar_config_json=validate_avatar_config(
                 payload.avatar_config or DEFAULT_AVATAR_CONFIG
             ).model_dump_json(),
@@ -1601,7 +1605,9 @@ def create_next_agent_version(
         persona_confirmation_revision=None,
         student_confirmed_at=None,
         persona_confirming_user_id=None,
-        persona_required=True,
+        # Keep the published marker: Demo baseline stays Persona-gated;
+        # ordinary free-text Agents stay free-text.
+        persona_required=bool(current.persona_required),
         avatar_config_json=current.avatar_config_json,
         voice_profile_id=current.voice_profile_id,
         knowledge_snapshot_id=None,

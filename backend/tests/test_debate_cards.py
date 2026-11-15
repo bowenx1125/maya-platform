@@ -1,10 +1,10 @@
-"""Debate cards (owner decision 2026-11-10, phase B).
+"""Debate cards (owner decision 2026-11-10, phase B; D2 2026-11-16).
 
 Each participant's frozen Agent.md is compiled once into a bounded persona
-card before its first turn. A ready card is the persona every turn sends; any
-failure is a fallback to the original Agent.md, and nothing about a card can
-stop a Debate from being created or run. Debates created before cards keep
-their exact prompt bytes.
+card before its first turn. A ready card is the persona every turn sends.
+Compile failure settles as fallback after one authorized attempt and never
+injects the raw Agent.md into the speech path. Debates created before cards
+keep their exact prompt bytes.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 from app.core.config import configured_debate_llm_model
+from app.core.errors import PlatformError
 from app.modules.debates import cards
 from app.modules.debates.cards import (
     CARD_MAX_UNITS,
@@ -24,6 +25,8 @@ from app.modules.debates.cards import (
     DROP_REASONS,
     CardOutcome,
     CardRejected,
+    CardUnavailable,
+    card_persona,
     card_system_prompt,
     compile_card_with_provider,
     ensure_card_terminal,
@@ -123,14 +126,33 @@ def _wire(language: str, round_number: int, row: DebateParticipant) -> str:
 # --- old debates ------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("status", [None, "compiling", "fallback"])
 @pytest.mark.parametrize("case", sorted(PINNED))
-def test_participants_without_a_ready_card_send_the_bytes_from_before_cards(
-    case: str, status: str | None
-) -> None:
+def test_legacy_null_card_status_keeps_the_bytes_from_before_cards(case: str) -> None:
     language, round_number = case.split("/")
-    wire = _wire(language, int(round_number), _row(card_status=status))
+    wire = _wire(language, int(round_number), _row(card_status=None))
     assert hashlib.sha256(wire.encode()).hexdigest() == PINNED[case]
+
+
+@pytest.mark.parametrize("case", sorted(PINNED))
+def test_fallback_card_never_wires_raw_agent_md(case: str) -> None:
+    language, round_number = case.split("/")
+    with pytest.raises(PlatformError) as raised:
+        _wire(
+            language,
+            int(round_number),
+            _row(card_status="fallback", card_safe_error_code="debate_card_failed"),
+        )
+    assert raised.value.code == "debate_card_failed"
+    assert "SECRET-PERSONA-TEXT" not in str(raised.value)
+
+
+@pytest.mark.parametrize("case", sorted(PINNED))
+def test_compiling_peers_wire_name_stub_not_raw_agent_md(case: str) -> None:
+    language, round_number = case.split("/")
+    wire = _wire(language, int(round_number), _row(card_status="compiling"))
+    payload = json.loads(json.loads(wire)["user"])
+    assert payload["persona"] == {"name": "Ada", "markdown": "Ada"}
+    assert "SECRET-PERSONA-TEXT" not in wire
 
 
 # --- schema and bound -------------------------------------------------------------
@@ -201,7 +223,7 @@ def test_the_compile_prompt_states_every_rule_the_server_enforces(language: str)
         "at most 120 characters and not empty",
         "dropped does not count",
         "Chinese" if language == "zh" else "English",
-        "rejected, and the debate uses the original Agent.md instead",
+        "never sends the original Agent.md as a fallback",
         *DROP_REASONS,
     ):
         assert token in prompt, token
@@ -359,8 +381,11 @@ def test_creation_marks_cards_compiling_and_the_api_reports_each_state(debate_ap
     ready, fallback = detail["participants"]
     assert ready["card_status"] == "ready" and ready["card"] == CARD
     assert fallback["card_status"] == "fallback" and fallback["card"] is None
+    assert fallback["card_teacher_reason"] == "format_invalid"
+    assert fallback["card_teacher_notice"] is None
     # The safe code is for logs and diagnosis, not the browser.
     assert "debate_card_invalid" not in json.dumps(detail)
+    assert "original AGENT.md" not in json.dumps(detail)
 
 
 def test_debates_created_before_cards_report_no_card(debate_app) -> None:
@@ -434,7 +459,7 @@ def _first_turn(db: Any, debate_id: str) -> tuple[Debate, DebateTurn]:
     return debate, turn
 
 
-def test_the_first_turn_settles_the_card_and_mock_runs_keep_the_agent_md(debate_app) -> None:
+def test_the_first_turn_settles_mock_stub_card_without_raw_agent_md(debate_app) -> None:
     _app, database, client = debate_app
     debate_id = _create(client, database, key="mock-turn-01")
     llm = MockLLMProvider()
@@ -444,14 +469,51 @@ def test_the_first_turn_settles_the_card_and_mock_runs_keep_the_agent_md(debate_
         prepared = preparer(db, debate, turn, attempt=1, cancellation_generation=0)
         assert prepared.speech
     rows = _participants(database, debate_id)
-    assert (rows[0].card_status, rows[0].card_safe_error_code) == (
-        "fallback",
-        "debate_card_mock_provider",
-    )
+    assert rows[0].card_status == "ready"
+    assert rows[0].card_safe_error_code is None
+    card = json.loads(str(rows[0].card_json))
+    assert card["identity"] == rows[0].agent_name
+    assert card["dropped"] == []
     # Only the speaker's card is settled; the next Agent's waits for its turn.
     assert rows[1].card_status == "compiling"
     sent = json.loads(llm.prompts[0].messages[1][1])["persona"]
-    assert sent == {"name": rows[0].agent_name, "markdown": rows[0].agent_md_snapshot}
+    assert sent == {
+        "name": rows[0].agent_name,
+        "markdown": f"## Identity\n{rows[0].agent_name}",
+    }
+    assert rows[0].agent_md_snapshot not in sent["markdown"]
+
+
+def test_fallback_card_persona_never_returns_raw_agent_md() -> None:
+    row = _row(card_status="fallback", card_safe_error_code="debate_card_invalid")
+    with pytest.raises(CardUnavailable) as raised:
+        card_persona(row, AGENT_MD, "en")
+    assert raised.value.code == "debate_card_invalid"
+    legacy = _row(card_status=None)
+    authored, position = card_persona(legacy, AGENT_MD, "en")
+    assert authored.markdown == AGENT_MD and position == ""
+    pending = card_persona(_row(card_status="compiling"), AGENT_MD, "en")
+    assert pending[0].markdown == "Ada" and pending[1] == ""
+    assert AGENT_MD not in pending[0].markdown
+
+
+def test_forced_fallback_blocks_turn_prep_without_raw_agent_md(debate_app) -> None:
+    _app, database, client = debate_app
+    debate_id = _create(client, database, key="forced-fallback-01")
+    row_id = _participants(database, debate_id)[0].id
+    with database.session() as db:
+        row = db.get(DebateParticipant, row_id)
+        ensure_card_terminal(
+            db, row, lambda: CardOutcome("fallback", safe_error_code="debate_card_invalid")
+        )
+    llm = MockLLMProvider()
+    preparer = SqlTurnPreparer(llm=llm)
+    with database.session() as db:
+        debate, turn = _first_turn(db, debate_id)
+        with pytest.raises(PlatformError) as raised:
+            preparer(db, debate, turn, attempt=1, cancellation_generation=0)
+        assert raised.value.code == "debate_card_invalid"
+    assert not llm.prompts
 
 
 def test_a_ready_card_is_what_the_turn_sends_and_stays_for_a_regeneration(debate_app) -> None:

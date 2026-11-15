@@ -76,10 +76,11 @@ describe("debate cards on the teacher preview", () => {
       within(compiling).getByText(/The card is still compiling\./),
     ).toBeTruthy();
     expect(
-      within(fallback).getByText(
-        "Fallback: this Agent speaks from its original AGENT.md.",
-      ),
+      within(fallback).getByText("The card could not be prepared."),
     ).toBeTruthy();
+    expect(
+      within(fallback).queryByText(/original AGENT\.md/),
+    ).toBeNull();
   });
 
   it("names the Agent on the disclosure and lists nothing dropped plainly", () => {
@@ -99,7 +100,7 @@ describe("debate cards on the teacher preview", () => {
     expect(screen.queryByText("Voice")).toBeNull();
   });
 
-  it("shows a coarse teacher reason and the continue message for new fallbacks", () => {
+  it("shows a coarse teacher reason for fallbacks without a raw-AGENT.md path", () => {
     renderPreview(
       snapshot([
         {
@@ -116,15 +117,9 @@ describe("debate cards on the teacher preview", () => {
     expect(
       within(check).getByText("The card exceeded the safe length limit."),
     ).toBeTruthy();
+    expect(within(check).queryByText(/original AGENT\.md/)).toBeNull();
     expect(
-      within(check).getByText(
-        "This Agent will use its original AGENT.md. This session can continue.",
-      ),
-    ).toBeTruthy();
-    expect(
-      within(check).queryByText(
-        "Fallback: this Agent speaks from its original AGENT.md.",
-      ),
+      within(check).queryByText(/This session can continue/),
     ).toBeNull();
     expect(within(check).queryByText("card_too_long")).toBeNull();
     expect(within(check).queryByText("too_long")).toBeNull();

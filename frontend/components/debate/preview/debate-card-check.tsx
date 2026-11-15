@@ -88,18 +88,9 @@ export function DebateCardCheck({
           </p>
         ) : null}
         {status === "fallback" || (status === "ready" && !card) ? (
-          status === "fallback" && reasonCopy ? (
-            <>
-              <p className="m-0 text-[#6B7280]">{t(reasonCopy)}</p>
-              <p className="m-0 text-[#6B7280]">
-                {t("debateCardFallbackContinues")}
-              </p>
-            </>
-          ) : (
-            <p className="m-0 text-[#6B7280]">
-              Fallback: this Agent speaks from its original AGENT.md.
-            </p>
-          )
+          <p className="m-0 text-[#6B7280]">
+            {t(reasonCopy ?? "debateCardReasonOther")}
+          </p>
         ) : null}
         {status === "ready" && card ? <CardBody card={card} /> : null}
       </div>
