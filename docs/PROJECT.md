@@ -39,7 +39,7 @@ Oct9-13:Debates in Brainform/Chatform/Studyform;private read_memory pauses team_
 
 Voice/Rebirth recovery,speech routing,nonvoice,Coding-A locks;speech paused after Notice118434. Voice upload:sample rules,no side copy. Knowledge partial promote skips `provider_asset_invalid`;applied assets yield head(`prompt_v3`,`minItems:1`). Same published version+source manifest:reuse in-flight run. Teacher Chat:generation progress;Agent Chat:report links.
 
-Formal micro-rounds:Guide `# Team Ruleset`->`## Formal assessment`:answer_recorder/question_guide/scorer/summarizer;student_round_order uses roster names. Scorer=answer_recorder:write Tool,`已记录你的回答。` receipt. Explicit starts(正式测评/测试,开始测试,再来一轮,formal test/assessment):ledger first,Guide-only `收到，第一题是…`. All answered:Guide `答题全部结束`,Summarizer `正在总结答案`. Abandon:Guide `已放弃作答，你要重新开始吗，或者和我随便聊聊`,flag=false. MAYA-ASSESSMENT-ROLE never selects speakers;assessment_active=ledger flag. Ordinary chat:leader->members;@-named member must reply. ACL->ledger->Ruleset;only server appends report links.
+Historical formal micro-rounds:editable Team Ruleset roles/roster order;scorer=answer_recorder persists Tool+receipt.Explicit formal start ledger first,Guide-only opening;all answered->Guide end/Summarizer summary;abandon clears assessment_active.MAYA-ASSESSMENT-ROLE never selects speakers;ordinary leader->members,@named replies.ACL->ledger->Ruleset;server-only report links.Quiz supersedes Chat tests above.
 
 Oct16 ADR-010:PostgreSQL prod. Compose:BACKEND_REPLICAS,max_connections=200;sign-in overload->auth_login_queued. Oct15:Team revision0,no canned opening;Teachers list formal attempts without Enter;private Agents/Teams/RAG/voices need Enter. Free answers:model relevant=true else guidance. Formal start:shared Knowledge `## Opening`/`## 开场白`,then `收到，第一题是`. Student send:lock executor before model call;parallel call->chat_busy.
 
@@ -63,7 +63,7 @@ Visits:hide Knowledge,renew20min,end notice->Accounts.Debate ? Chinese hover.cor
 
 ## Nov5-6 Agent Chat/recovery
 
-#337/#338:Agent Chats send Agent name/AGENT.md/Knowledge/RAG;no assessment Tools/attempt;Teams same. Owner-only RAG Details:stored model input;scoring/summary Rubrics hidden. Nov6 off main70ecfa29(#356/#357). Replay=Rebirth;Review=playback,no rebirth lock. Revocalize:durable intent,3 workers,Back/F5 reseed/revision reconcile;admission refusal retries safely;keep ambiguous keys;show definitive failures/manual retry. 0 calls/deploy;volume untouched. Stalled needs backend receipt recovery;keep safety gates.
+#337/#338:Agent Chat=name/AGENT.md/Knowledge/RAG,no assessment Tools/attempt;Teams kept.Owner RAG Details=model input,hidden Rubrics.Nov6 base70ecfa29(#356/#357).Replay=Rebirth,Review=playback.Revocalize durable intent/3workers,Back/F5 reseed/revision reconcile,safe admission retry,ambiguous keys kept,definitive failures/manual retry.Stalled needs receipt recovery/safety gates.0 calls/deploy,volume untouched.
 
 ## Nov5-8 Quiz
 
@@ -126,3 +126,5 @@ Merge checks:17 static PASS;113 targeted PG PASS;160UI files/1412pass/13skip;bou
 #435:Profile class Save updates session course;Bowen entry keeps class grants/groups;landing prefers saved binding then existing non-default IDs,never labels.Catalog sync keeps cross-class saved choice without restoring revoked grants.Default/renamed fixtures checked;pre-merge140PG/1397UI/13skip,17gates;0 calls/deploy.Read-only verifier: scripts/verify_profile_groups.py;production acceptance pending.
 
 Exact inputs: codex/fix-435-group-switch abbc4a32ca4b915545ed7b6a617976ff5c9a2eb2 + origin/main 391802271fc1689c904e72fecb41db46fdb4507e. Voice conflicts use main's equivalent formatting,strings unchanged;main DTO attribution retained.#432/#433,v5 caps,sole0092_repair_feedback_v2,D1 and Voice maker/read visibility retained.No D2/#427/No Group migration;local only,0 provider calls.
+
+G merge input: codex/voice-preview-mayaform 75188b1137d25c333ac58ab9b1fbef4d68ca7fd0. Only preview line3 changes Maya->Mayaform in both languages;fresh synthesis unchanged,no cache reset,old previews expire normally.12-click test wraps through line3 and checks one synthesis/request.Main formatting/DTO preserved.
