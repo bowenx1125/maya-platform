@@ -10300,7 +10300,7 @@ export interface operations {
                      * @default null
                      * @enum {string|null}
                      */
-                    output_language?: "en" | "zh" | null;
+                    output_language?: "zh" | "en" | null;
                 };
             };
         };

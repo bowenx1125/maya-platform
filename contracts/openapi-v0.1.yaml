@@ -2776,7 +2776,8 @@ paths:
         required: false
         schema:
           type: number
-          exclusiveMinimum: 0
+          minimum: 0.5
+          maximum: 2.0
           default: 1.0
       responses:
         '200':
@@ -3047,8 +3048,8 @@ paths:
                   - string
                   - 'null'
                   enum:
-                  - en
                   - zh
+                  - en
                   - null
                   default: null
                   description: Optional confirmation of the language saved in Preview; cannot change it.
