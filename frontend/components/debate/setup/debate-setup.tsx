@@ -20,6 +20,8 @@ import {
   type DebateDraftRequest,
   type DebateLLMDefaults,
   type DebateRulesetDefaults,
+  type RoundUnitCapDefaultsInput,
+  type RoundUnitCaps,
   type DebateSummary,
   type PlatformApi,
   type PublishedAgentSummary,
@@ -87,6 +89,9 @@ export type DebateListController = {
 export type DebateCreateController = {
   loadRuleset: (courseId: string) => Promise<DebateRulesetDefaults>;
   loadCandidates: (courseId: string) => Promise<PublishedAgentSummary[]>;
+  loadRoundUnitCapDefaults?: (
+    input: RoundUnitCapDefaultsInput,
+  ) => Promise<{ round_unit_caps: RoundUnitCaps }>;
   /** The env defaults and ranges the parameter card starts from. Without
    * it the card is not shown and the server freezes those defaults itself. */
   loadLLMDefaults?: (courseId: string) => Promise<DebateLLMDefaults>;
@@ -466,6 +471,7 @@ type SetupDraftPayload = Omit<
   rule_set_id: DebateRuleSetId;
   participants: SetupParticipant[];
 };
+type RoundUnitCapInputs = [string, string, string, string];
 type ParticipantDraft = {
   mode: "assigned" | "open";
   stance: StanceValue | null;
@@ -481,6 +487,7 @@ function defaultCreateController(api: PlatformApi): DebateCreateController {
     loadCandidates: (courseId) => api.publishedAgents(courseId),
     loadRuleset: (courseId) => api.debateRulesetDefaults(courseId),
     loadLLMDefaults: (courseId) => api.debateLLMDefaults(courseId),
+    loadRoundUnitCapDefaults: (input) => api.loadRoundUnitCapDefaults(input),
     create: (courseId, payload, idempotency) =>
       api.createDebate(courseId, payload, { idempotency }),
   };
@@ -514,7 +521,23 @@ export function TeacherDebateCreate({
   });
   const [contract, setContract] = useState<TeachingPrompts | null>(null);
   const [rulesEditing, setRulesEditing] = useState(false);
-  const [targetMinutes, setTargetMinutes] = useState(DEFAULT_TARGET_MINUTES);
+  const [roundUnitCaps, setRoundUnitCaps] = useState<RoundUnitCapInputs>(
+    () =>
+      Array.from({ length: 4 }, () =>
+        String(MIN_TURN_UNITS.zh),
+      ) as RoundUnitCapInputs,
+  );
+  const dirtyRoundUnitCaps = useRef<[boolean, boolean, boolean, boolean]>([
+    false,
+    false,
+    false,
+    false,
+  ]);
+  const [roundCapsError, setRoundCapsError] = useState<string | null>(null);
+  const [countingUnitChanged, setCountingUnitChanged] = useState(false);
+  const [roundDefaultsPending, setRoundDefaultsPending] = useState(
+    Boolean(courseId && effectiveController.loadRoundUnitCapDefaults),
+  );
   const [llmDefaults, setLLMDefaults] = useState<DebateLLMDefaults | null>(
     null,
   );
@@ -605,6 +628,58 @@ export function TeacherDebateCreate({
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  const participantsForCaps = Math.max(2, selectedIds.length);
+  const assumedVoiceRate =
+    typeof voiceValues?.rate === "number" &&
+    Number.isFinite(voiceValues.rate) &&
+    voiceValues.rate > 0
+      ? voiceValues.rate
+      : 1;
+  useEffect(() => {
+    const loadDefaults = effectiveController.loadRoundUnitCapDefaults;
+    if (!courseId || !loadDefaults) {
+      setRoundDefaultsPending(false);
+      return;
+    }
+    let active = true;
+    setRoundDefaultsPending(true);
+    void Promise.resolve()
+      .then(() =>
+        loadDefaults({
+          courseId,
+          language: outputLanguage,
+          participants: participantsForCaps,
+          rate: assumedVoiceRate,
+        }),
+      )
+      .then(({ round_unit_caps: defaults }) => {
+        if (!active || !validRoundUnitCaps(defaults, outputLanguage)) return;
+        setRoundUnitCaps(
+          (current) =>
+            current.map((value, index) =>
+              dirtyRoundUnitCaps.current[index]
+                ? value
+                : String(defaults[index]),
+            ) as RoundUnitCapInputs,
+        );
+      })
+      .catch(() => {
+        // Keep the editable minimum values if the defaults endpoint is unavailable.
+      })
+      .finally(() => {
+        if (active) setRoundDefaultsPending(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    assumedVoiceRate,
+    courseId,
+    effectiveController,
+    outputLanguage,
+    participantsForCaps,
+  ]);
+
   const agentNames = useMemo(
     () =>
       Object.fromEntries(
@@ -618,6 +693,41 @@ export function TeacherDebateCreate({
     const candidate = candidates.find((item) => item.agent.id === agentId);
     return candidate ? readinessIssues(candidate) : [];
   });
+  const minimumRoundUnits = MIN_TURN_UNITS[outputLanguage];
+  const invalidRoundCapIndex = roundUnitCaps.findIndex((value) => {
+    if (value.trim() === "") return true;
+    const units = Number(value);
+    return (
+      !Number.isInteger(units) ||
+      units < minimumRoundUnits ||
+      units > MAX_TURN_UNITS
+    );
+  });
+  const estimatedMinutes = roundUnitCaps.every(
+    (value) => value.trim() !== "" && Number.isFinite(Number(value)),
+  )
+    ? (roundUnitCaps.reduce((total, value) => total + Number(value), 0) *
+        participantsForCaps) /
+      (UNITS_PER_MINUTE[outputLanguage] * assumedVoiceRate * 0.9)
+    : null;
+
+  function changeRoundUnitCap(index: number, value: string) {
+    dirtyRoundUnitCaps.current[index] = true;
+    setRoundUnitCaps(
+      (current) =>
+        current.map((cap, capIndex) =>
+          capIndex === index ? value : cap,
+        ) as RoundUnitCapInputs,
+    );
+    setRoundCapsError(null);
+  }
+
+  function changeOutputLanguage(language: "zh" | "en") {
+    if (language === outputLanguage) return;
+    setCountingUnitChanged(dirtyRoundUnitCaps.current.some(Boolean));
+    setRoundCapsError(null);
+    setOutputLanguage(language);
+  }
 
   function toggleCandidate(candidate: PublishedAgentSummary) {
     setFormError(null);
@@ -649,9 +759,11 @@ export function TeacherDebateCreate({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (rulesEditing || busy || !rulesLoaded.current) return;
+    if (rulesEditing || busy || roundDefaultsPending || !rulesLoaded.current)
+      return;
     setFormError(null);
     setFormAgent(null);
+    setRoundCapsError(null);
     setValidationAttempt((attempt) => attempt + 1);
     // Every problem at once, so the mascot lists them all in one bubble.
     const topicValidation = validateDebateTopic(topic);
@@ -672,10 +784,27 @@ export function TeacherDebateCreate({
       });
       setFormAgent(unstancedId);
     }
+    if (invalidRoundCapIndex !== -1) {
+      setRoundCapsError(
+        t("debateRoundCapInvalid", {
+          round: `R${invalidRoundCapIndex + 1}`,
+          minimum: minimumRoundUnits,
+          unit: outputLanguage === "zh" ? "汉字数" : "words",
+        }),
+      );
+    }
     if (problem) setFormError(problem);
     // The same checks the server makes, already on screen: nothing to send.
     if (blocking) setError(null);
-    if (!topicValidation.valid || blocking || problem || !courseId) return;
+    if (
+      !topicValidation.valid ||
+      blocking ||
+      problem ||
+      !courseId ||
+      invalidRoundCapIndex !== -1
+    )
+      return;
+    const roundUnitCapsPayload = roundUnitCaps.map(Number) as RoundUnitCaps;
     const payload: SetupDraftPayload = {
       topic: topicValidation.normalized,
       background,
@@ -694,7 +823,7 @@ export function TeacherDebateCreate({
       rule_set_id: ruleSetId,
       total_duration_seconds: null,
       turn_duration_seconds: null,
-      target_minutes: targetMinutes,
+      round_unit_caps: roundUnitCapsPayload,
       ...(llmValues ? { llm_params: paramsPayload(llmValues) } : {}),
       ...(voiceValues ? { voice_params: voicePayload(voiceValues) } : {}),
     };
@@ -764,7 +893,7 @@ export function TeacherDebateCreate({
     href: problem.anchor ? `#${problem.anchor}` : null,
   }));
   const mustFix =
-    Boolean(topicError || formError || fieldLines.length) ||
+    Boolean(topicError || formError || roundCapsError || fieldLines.length) ||
     issues.some((item) => item.blocking);
   const otherError =
     error && !agentIssuesFromError(error) && fieldLines.length === 0
@@ -774,6 +903,15 @@ export function TeacherDebateCreate({
     `/teacher/agents/${encodeURIComponent(agentId)}`;
   // In page order: the topic, then each Agent row top to bottom.
   const checklistItems: ChecklistItem[] = [
+    ...(roundCapsError
+      ? [
+          {
+            key: `round-caps:${roundCapsError}`,
+            text: roundCapsError,
+            target: `debate-round-cap-${invalidRoundCapIndex + 1}`,
+          },
+        ]
+      : []),
     ...(topicError
       ? [{ key: "topic", text: topicError, target: "debate-topic" }]
       : []),
@@ -802,6 +940,9 @@ export function TeacherDebateCreate({
   ];
   const entries = useCreateChecklist(checklistItems, validationAttempt);
   const topicEntry = entries.find((entry) => entry.key === "topic");
+  const roundCapsEntry = entries.find(
+    (entry) => entry.key === `round-caps:${roundCapsError}`,
+  );
   const agentEntry = (agentId: string) =>
     entries.find((entry) => entry.agentId === agentId && !entry.done);
   if (loading) return <LoadingCard />;
@@ -834,7 +975,7 @@ export function TeacherDebateCreate({
               name="done"
               placement="page"
               form="create-debate-form"
-              disabled={busy || candidates.length === 0}
+              disabled={busy || roundDefaultsPending || candidates.length === 0}
               busy={busy}
             />
           </>
@@ -1086,37 +1227,79 @@ export function TeacherDebateCreate({
         </CreateCard>
 
         <CreateCard
-          title="Target length"
+          title={t("debateRoundCapsTitle")}
           className="[--sh:#FDBA74]"
-          guide="debate.targetLength"
         >
-          <div className="mt-3 flex flex-wrap items-center gap-2.5">
-            <div
-              className={CREATE_SEG}
-              role="group"
-              aria-label="Target length in minutes"
-            >
-              {TARGET_MINUTES.map((minutes, index) => (
-                <button
-                  key={minutes}
-                  type="button"
-                  className={cn(CREATE_SEG_BUTTON, index === 0 && "border-l-0")}
-                  aria-label={`${minutes} minutes`}
-                  aria-pressed={targetMinutes === minutes}
-                  disabled={busy}
-                  onClick={() => setTargetMinutes(minutes)}
+          <div className="mt-3 grid grid-cols-2 gap-3 max-[600px]:grid-cols-1">
+            {roundUnitCaps.map((value, index) => {
+              const label =
+                outputLanguage === "zh"
+                  ? `R${index + 1} — 每人每轮汉字数`
+                  : `R${index + 1} — words per person per round`;
+              return (
+                <label
+                  key={index}
+                  htmlFor={`debate-round-cap-${index + 1}`}
+                  className="grid grid-cols-[1fr_112px] items-center gap-2 font-body text-[13px] leading-[normal] font-bold"
                 >
-                  {minutes}
-                </button>
-              ))}
-            </div>
-            <span className="font-body text-xs leading-[normal] font-bold">
-              minutes
+                  <span>{label}</span>
+                  <input
+                    id={`debate-round-cap-${index + 1}`}
+                    aria-label={label}
+                    aria-invalid={invalidRoundCapIndex === index}
+                    aria-describedby={
+                      invalidRoundCapIndex === index && roundCapsEntry
+                        ? checklistLineId(roundCapsEntry.n)
+                        : undefined
+                    }
+                    className="box-border h-auto min-h-0 w-full rounded-full border-[2.5px] border-[#111] bg-white px-2 py-1.5 text-center font-body text-[13px] leading-[normal] font-semibold text-[#111] shadow-none [appearance:textfield] disabled:opacity-60 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    type="number"
+                    min={minimumRoundUnits}
+                    max={MAX_TURN_UNITS}
+                    step={1}
+                    required
+                    disabled={busy}
+                    value={value}
+                    onChange={(event) =>
+                      changeRoundUnitCap(index, event.target.value)
+                    }
+                  />
+                </label>
+              );
+            })}
+          </div>
+          <p className="mt-3 mb-0 font-body text-xs leading-normal text-[#4B5563]">
+            {t("debateRoundCapsFlexibility")}
+          </p>
+          {countingUnitChanged ? (
+            <p
+              className="mt-2 mb-0 font-body text-xs leading-normal font-bold text-[#4B5563]"
+              role="status"
+            >
+              {outputLanguage === "zh"
+                ? "计数单位已变；已编辑的数字保持不变。"
+                : t("debateRoundCapsUnitChanged")}
+            </p>
+          ) : null}
+          <div className="mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <strong className="font-body text-sm leading-[normal]">
+              {t("debateEstimatedDuration")}
+            </strong>
+            <span
+              aria-label={t("debateEstimatedDuration")}
+              className="font-display text-lg leading-[normal] font-extrabold"
+              data-testid="estimated-debate-duration"
+            >
+              {estimatedMinutes === null
+                ? "—"
+                : `${estimatedMinutes.toFixed(2)} min`}
             </span>
           </div>
-          <p className="mt-2 mb-0 font-body text-xs leading-normal text-[#4B5563]">
-            Speeches are kept short enough for the whole debate to fit this
-            length.
+          <p className="mt-1 mb-0 font-body text-xs leading-normal text-[#4B5563]">
+            {t("debateEstimatedDurationAssumption", {
+              participants: participantsForCaps,
+              rate: assumedVoiceRate.toFixed(2),
+            })}
           </p>
         </CreateCard>
 
@@ -1125,7 +1308,7 @@ export function TeacherDebateCreate({
           contract={contract}
           language={outputLanguage}
           disabled={busy}
-          onLanguageChange={setOutputLanguage}
+          onLanguageChange={changeOutputLanguage}
           onSave={setTeachingPrompts}
           onEditingChange={setRulesEditing}
         />
@@ -1159,9 +1342,27 @@ export function TeacherDebateCreate({
   );
 }
 
-// The server accepts 3 to 10 and defaults to 5 (DebateDraftRequest).
-const TARGET_MINUTES = [3, 4, 5, 6, 7, 8, 9, 10] as const;
-const DEFAULT_TARGET_MINUTES = 5;
+const MIN_TURN_UNITS = { zh: 40, en: 25 } as const;
+const MAX_TURN_UNITS = 2000;
+const UNITS_PER_MINUTE = { zh: 230, en: 150 } as const;
+
+function validRoundUnitCaps(
+  caps: unknown,
+  language: "zh" | "en",
+): caps is RoundUnitCaps {
+  const minimum = MIN_TURN_UNITS[language];
+  return (
+    Array.isArray(caps) &&
+    caps.length === 4 &&
+    caps.every(
+      (value) =>
+        typeof value === "number" &&
+        Number.isInteger(value) &&
+        value >= minimum &&
+        value <= MAX_TURN_UNITS,
+    )
+  );
+}
 
 const AGENT_TONES = [
   "#FFE14D",

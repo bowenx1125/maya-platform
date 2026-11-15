@@ -8,6 +8,7 @@ import type { SegmentEvidence } from "../../../lib/evidence-grading";
 import { SegmentGrade } from "../../evidence/segment-grade";
 
 import { ErrorNotice, Notice, RetryPill } from "../../ui";
+import type { DebateCardTeacherReason } from "../../../lib/api";
 import { statusLabel, tm } from "../../../lib/i18n";
 import { cn } from "../../../lib/utils";
 import { buttonVariants } from "../../ui/button";
@@ -67,6 +68,7 @@ export type DebatePreviewParticipant = {
   agent_name: string;
   slot?: string;
   card_status?: DebateCardStatus | null;
+  card_teacher_reason?: DebateCardTeacherReason | null;
   card?: DebateCard | null;
 };
 
@@ -214,6 +216,7 @@ export function DebatePreview({
                   <DebateCardCheck
                     agentName={participant.agent_name}
                     status={participant.card_status}
+                    card_teacher_reason={participant.card_teacher_reason}
                     card={participant.card}
                   />
                 </div>

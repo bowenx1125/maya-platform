@@ -235,7 +235,12 @@ export type MemoryEntryResult = {
 export type PublishedAgentSummary =
   components["schemas"]["PublishedAgentSummary"];
 export type DebateSummary = components["schemas"]["DebateSummary"];
-export type DebateDetail = components["schemas"]["DebateDetail"];
+export type DebateDetail = Omit<
+  components["schemas"]["DebateDetail"],
+  "participants"
+> & {
+  participants: DebateParticipant[];
+};
 export type DebateCleanupRequest =
   components["schemas"]["DebateCleanupRequest"];
 export type DebateCleanupResult = components["schemas"]["DebateCleanupResult"];
@@ -566,8 +571,27 @@ export type DemoRuntimeStatus = {
   dirty_debates: number;
   dirty_interactions: number;
 };
-export type DebateDraftRequest =
-  operations["createDebate"]["requestBody"]["content"]["application/json"];
+export type RoundUnitCaps = [number, number, number, number];
+export type DebateCardTeacherReason =
+  | "compile_timeout"
+  | "format_invalid"
+  | "card_too_long"
+  | "service_busy"
+  | "config_problem"
+  | "other";
+export type RoundUnitCapDefaultsInput = {
+  courseId: string;
+  language: "zh" | "en";
+  participants: number;
+  rate: number;
+};
+export type RoundUnitCapDefaults = { round_unit_caps: RoundUnitCaps };
+export type DebateDraftRequest = Omit<
+  operations["createDebate"]["requestBody"]["content"]["application/json"],
+  "target_minutes"
+> & {
+  round_unit_caps: RoundUnitCaps;
+};
 export type DebateLLMDefaults = components["schemas"]["DebateLLMDefaults"];
 export type DebateRulesetDefaults =
   components["schemas"]["DebateRulesetDefaults"];
@@ -585,7 +609,12 @@ export type FinishDebateRequest =
   operations["finishDebate"]["requestBody"]["content"]["application/json"];
 export type RetryPreparationRequest =
   operations["retryDebatePreparation"]["requestBody"]["content"]["application/json"];
-export type DebateParticipant = components["schemas"]["DebateParticipant"];
+export type DebateParticipant = Omit<
+  components["schemas"]["DebateParticipant"],
+  "card_teacher_reason"
+> & {
+  card_teacher_reason?: DebateCardTeacherReason | null;
+};
 export type DebateTurn = components["schemas"]["DebateTurn"];
 export type DebatePlaybackState = components["schemas"]["PlaybackState"];
 export type DebateTranscript = components["schemas"]["Transcript"];
@@ -2919,6 +2948,38 @@ export class PlatformApi {
         params: { path: { course_id: courseId } },
       }),
     );
+  }
+
+  async loadRoundUnitCapDefaults(
+    input: RoundUnitCapDefaultsInput,
+  ): Promise<RoundUnitCapDefaults> {
+    const query = new URLSearchParams({
+      language: input.language,
+      participants: String(input.participants),
+      rate: String(input.rate),
+    });
+    const raw = await this.getJson<unknown>(
+      `courses/${encodeURIComponent(input.courseId)}/debate-round-unit-cap-defaults?${query.toString()}`,
+    );
+    const minimum = input.language === "zh" ? 40 : 25;
+    const caps =
+      raw && typeof raw === "object"
+        ? (raw as { round_unit_caps?: unknown }).round_unit_caps
+        : undefined;
+    if (
+      !Array.isArray(caps) ||
+      caps.length !== 4 ||
+      !caps.every(
+        (value) =>
+          typeof value === "number" &&
+          Number.isInteger(value) &&
+          value >= minimum &&
+          value <= 2000,
+      )
+    ) {
+      throw new PlatformApiError(502, "debate_round_unit_caps_invalid");
+    }
+    return { round_unit_caps: caps as RoundUnitCaps };
   }
 
   async publishedAgents(courseId: string): Promise<PublishedAgentSummary[]> {

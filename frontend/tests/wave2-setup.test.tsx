@@ -79,6 +79,41 @@ function candidate(id: string, name: string): PublishedAgentSummary {
   } as PublishedAgentSummary;
 }
 
+function roundUnitDefaults() {
+  const table: Record<string, [number, number, number, number]> = {
+    "zh:1:2": [140, 115, 115, 140],
+    "zh:1:3": [90, 75, 75, 90],
+    "zh:1:4": [70, 55, 55, 70],
+    "zh:1:5": [55, 45, 45, 55],
+    "en:1:2": [90, 75, 75, 90],
+    "en:1:3": [60, 50, 50, 60],
+    "en:1:4": [45, 35, 35, 45],
+    "en:1:5": [35, 30, 30, 35],
+  };
+  return {
+    loadRoundUnitCapDefaults: vi.fn(
+      async ({
+        language,
+        participants,
+        rate,
+      }: {
+        courseId: string;
+        language: "zh" | "en";
+        participants: number;
+        rate: number;
+      }) => {
+        const fallback = (
+          language === "zh" ? [40, 40, 40, 40] : [25, 25, 25, 25]
+        ) as [number, number, number, number];
+        return {
+          round_unit_caps:
+            table[`${language}:${rate}:${participants}`] ?? fallback,
+        };
+      },
+    ),
+  };
+}
+
 function createdDebate(): DebateDetail {
   return { id: "debate-id" } as DebateDetail;
 }
@@ -806,6 +841,7 @@ describe("Wave 2 teacher debate setup", () => {
           candidate("bowen", "Bowen"),
           candidate("kaikai", "Kaikai"),
         ]),
+      ...roundUnitDefaults(),
       create,
     };
 
@@ -990,6 +1026,7 @@ describe("Wave 2 teacher debate setup", () => {
           candidate("bowen", "Bowen"),
           candidate("kaikai", "Kaikai"),
         ]),
+      ...roundUnitDefaults(),
       create,
     };
 
@@ -1027,6 +1064,7 @@ describe("Wave 2 teacher debate setup", () => {
           candidate("bowen", "Bowen"),
           candidate("kaikai", "Kaikai"),
         ]),
+      ...roundUnitDefaults(),
       create,
     };
 
@@ -1045,6 +1083,12 @@ describe("Wave 2 teacher debate setup", () => {
     const input = screen.getByLabelText("Topic");
     const mixedTopic = "Should TikTok be banned? 推荐算法";
     fireEvent.change(input, { target: { value: mixedTopic } });
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: "Done" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
@@ -1075,6 +1119,7 @@ describe("Wave 2 teacher debate setup", () => {
           candidate("bowen", "Bowen"),
           candidate("kaikai", "Kaikai"),
         ]),
+      ...roundUnitDefaults(),
       create,
     };
 
@@ -1106,6 +1151,12 @@ describe("Wave 2 teacher debate setup", () => {
     fireEvent.change(screen.getByLabelText("Topic"), {
       target: { value: "A contract-free request" },
     });
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: "Done" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0][1].teaching_prompts).toEqual({
@@ -1114,7 +1165,7 @@ describe("Wave 2 teacher debate setup", () => {
     });
   });
 
-  it("sends the chosen target length, five minutes by default", async () => {
+  it("loads four round caps and submits them without target minutes", async () => {
     useSessionMock.mockReturnValue(teacherSession());
     const create = vi.fn().mockResolvedValue(createdDebate());
     const controller: DebateCreateController = {
@@ -1127,27 +1178,43 @@ describe("Wave 2 teacher debate setup", () => {
           candidate("bowen", "Bowen"),
           candidate("kaikai", "Kaikai"),
         ]),
+      ...roundUnitDefaults(),
       create,
     };
 
     render(<TeacherDebateCreate controller={controller} />);
     await screen.findByRole("button", { name: /Bowen/ });
-    const length = screen.getByRole("group", {
-      name: "Target length in minutes",
-    });
+    await waitFor(() =>
+      expect(screen.getByLabelText("R1 — 每人每轮汉字数")).toHaveProperty(
+        "value",
+        "140",
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: "Done" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
+    expect(screen.getByLabelText("R2 — 每人每轮汉字数")).toHaveProperty(
+      "value",
+      "115",
+    );
+    expect(screen.getByLabelText("R3 — 每人每轮汉字数")).toHaveProperty(
+      "value",
+      "115",
+    );
+    expect(screen.getByLabelText("R4 — 每人每轮汉字数")).toHaveProperty(
+      "value",
+      "140",
+    );
     expect(
-      within(length)
-        .getAllByRole("button")
-        .map((button) => button.textContent),
-    ).toEqual(["3", "4", "5", "6", "7", "8", "9", "10"]);
-    expect(
-      within(length)
-        .getByRole("button", { name: "5 minutes" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
+      screen.queryByRole("group", { name: "Target length in minutes" }),
+    ).toBeNull();
+    expect(screen.queryByText("Target length")).toBeNull();
     expect(
       screen.getByText(
-        "Speeches are kept short enough for the whole debate to fit this length.",
+        "Target / suggested upper limits; speeches can vary and are not cut off word for word.",
       ),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
@@ -1157,22 +1224,10 @@ describe("Wave 2 teacher debate setup", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
-    expect(create.mock.calls[0][1].target_minutes).toBe(5);
-
-    fireEvent.click(within(length).getByRole("button", { name: "8 minutes" }));
-    expect(
-      within(length)
-        .getByRole("button", { name: "8 minutes" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
-    expect(
-      within(length)
-        .getByRole("button", { name: "5 minutes" })
-        .getAttribute("aria-pressed"),
-    ).toBe("false");
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
-    expect(create.mock.calls[1][1].target_minutes).toBe(8);
+    expect(create.mock.calls[0][1].round_unit_caps).toEqual([
+      140, 115, 115, 140,
+    ]);
+    expect("target_minutes" in create.mock.calls[0][1]).toBe(false);
   });
 
   it("sends the card's parameters without frequency_penalty or max_tokens and restores defaults", async () => {
@@ -1189,6 +1244,7 @@ describe("Wave 2 teacher debate setup", () => {
           candidate("bowen", "Bowen"),
           candidate("kaikai", "Kaikai"),
         ]),
+      ...roundUnitDefaults(),
       loadLLMDefaults: vi.fn().mockResolvedValue({
         params: [
           {
@@ -1285,6 +1341,7 @@ describe("Wave 2 teacher debate setup", () => {
           candidate("bowen", "Bowen"),
           candidate("kaikai", "Kaikai"),
         ]),
+      ...roundUnitDefaults(),
       create,
     };
 
@@ -1334,6 +1391,12 @@ describe("Wave 2 teacher debate setup", () => {
     const input = screen.getByLabelText("Topic");
     const mixedTopic = "Should TikTok be banned? 推荐算法";
     fireEvent.change(input, { target: { value: mixedTopic } });
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: "Done" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
