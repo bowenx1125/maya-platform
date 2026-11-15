@@ -79,6 +79,25 @@ export function IconEye({ size = 16 }: { size?: number }) {
   );
 }
 
+export function IconTemplate({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M6 3h9l3 3v15H6Z" />
+      <path d="M14 3v4h4M9 11h6M9 15h6M9 18h4" />
+    </svg>
+  );
+}
+
 export function IconDownload({ size = 16 }: { size?: number }) {
   return (
     <svg

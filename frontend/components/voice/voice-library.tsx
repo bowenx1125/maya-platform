@@ -1152,7 +1152,7 @@ export function VoiceLibrary({
   ) : undefined;
 
   const createAction = listenOnly ? null : creating ? (
-    // Top-right, where New was: back to the list, nothing is uploaded. Icon
+    // In place of New: back to the list, nothing is uploaded. Icon
     // and word, in the same key as New (2026-11-03: it was icon only).
     <button
       className={
@@ -1336,10 +1336,12 @@ export function VoiceLibrary({
         // Match Agent Avatar / AGENT.md and Team SectionCard title metrics.
         <SectionCard
           title={t("voices")}
-          action={createAction}
           className={cn(agentCard("voices", profiles.length === 0), "mb-0")}
         >
           {body ?? <p className="muted-copy">{t("voiceNone")}</p>}
+          {createAction ? (
+            <div className="mt-4 flex justify-start">{createAction}</div>
+          ) : null}
         </SectionCard>
       ) : (
         <ModuleCard

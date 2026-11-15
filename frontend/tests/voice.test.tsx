@@ -1,3 +1,5 @@
+import "@testing-library/jest-dom/vitest";
+
 import {
   act,
   cleanup,
@@ -63,6 +65,52 @@ async function openEnrollForm() {
 }
 
 describe("M08 voice library", () => {
+  it.each([
+    { embedded: true, moduleCard: false, picker: true },
+    { embedded: true, moduleCard: false, picker: false },
+    { embedded: true, moduleCard: true, picker: true },
+    { embedded: false, moduleCard: false, picker: true },
+  ])(
+    "places New below the embedded Agent body only ($embedded/$moduleCard/$picker)",
+    async ({ embedded, moduleCard, picker }) => {
+      api.voiceProfiles.mockResolvedValue([]);
+      render(
+        <VoiceLibrary
+          groupId="group-a"
+          embedded={embedded}
+          moduleCard={moduleCard}
+          onSelect={picker ? vi.fn() : undefined}
+        />,
+      );
+      const create = screen.getByRole("button", { name: "New" });
+      await waitFor(() => expect(create).toBeEnabled());
+      expect(within(create).getByText("New")).toBeVisible();
+      expect(create.querySelector("svg")).toBeTruthy();
+      const heading = screen
+        .getAllByRole("heading", { name: "Voices" })
+        .at(-1)!;
+      if (embedded && !moduleCard) {
+        const body = picker
+          ? screen.getByRole("radiogroup", { name: "Voices" })
+          : screen.getByText("No voices yet.");
+        expect(create.closest(".section-card-header")).toBeNull();
+        expect(create.closest("section")).toBe(body.closest("section"));
+        expect(
+          body.compareDocumentPosition(create) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        if (picker) {
+          expect(screen.getByRole("radio", { name: "None" })).toBeChecked();
+        } else {
+          expect(body).toHaveClass("muted-copy");
+          expect(body.tagName).toBe("P");
+        }
+      } else {
+        expect(heading.parentElement).toContainElement(create);
+      }
+    },
+  );
+
   it("lets a groupmate choose and hear a ready voice but not rename or delete it", async () => {
     api.voiceProfiles.mockResolvedValue([
       {
@@ -1028,7 +1076,7 @@ describe("Agent voice picker", () => {
     await waitFor(() => expect(onSelect).toHaveBeenCalledWith(null));
   });
 
-  it("cancels voice creation from the top-right back arrow without touching the sidebar", async () => {
+  it("cancels embedded voice creation from the footer Back without touching the sidebar", async () => {
     api.voiceProfiles.mockResolvedValue([mine]);
     const onSelect = vi.fn();
     render(
