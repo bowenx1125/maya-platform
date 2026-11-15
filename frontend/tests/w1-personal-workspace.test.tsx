@@ -1,3 +1,5 @@
+import "@testing-library/jest-dom/vitest";
+
 import {
   cleanup,
   fireEvent,
@@ -9,6 +11,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentWorkbench } from "../components/agent-workspace";
+import { buildAgentTemplate } from "../components/agent-template";
 import { AppShell } from "../components/app-shell";
 import {
   TeacherDashboard,
@@ -126,7 +129,95 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function expectFooterAfter(control: HTMLElement, content: HTMLElement) {
+  expect(control.closest(".section-card-header")).toBeNull();
+  expect(control.closest("section")).toBe(content.closest("section"));
+  expect(
+    content.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+}
+
+function expectMarkdownFooter(markdown: string) {
+  const editor = screen.getByRole("textbox", { name: "AGENT.md editor" });
+  const card = editor.closest("section")!;
+  const count = within(card).getByText(
+    `${markdown.length.toLocaleString()} characters`,
+  );
+  expect(count.closest(".editor-footer")).toBeTruthy();
+  const template = within(card).getByRole("button", { name: "Template" });
+  const download = within(card).getByRole("button", {
+    name: "Download AGENT.md",
+  });
+  const upload = within(card).getByLabelText("Upload");
+  const uploadLabel = upload.closest("label")!;
+  for (const [control, label] of [
+    [template, "Template"],
+    [download, "Download"],
+    [uploadLabel, "Upload"],
+  ] as const) {
+    expect(within(control).getByText(label)).toBeVisible();
+    expect(control.querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+    expectFooterAfter(control, editor);
+    expectFooterAfter(control, count);
+  }
+  expect(download).toHaveAttribute("data-ui-guide", "agent.download");
+  expect(uploadLabel).toHaveAttribute("data-ui-guide", "agent.uploadMarkdown");
+  expect(upload).toHaveAttribute("accept", ".md,text/markdown");
+  return { editor, template, download, upload };
+}
+
 describe("W1 teacher personal workspace", () => {
+  it("keeps create card actions below their content and preserves the Name controls", async () => {
+    const api = {
+      workspaceDocuments: vi.fn().mockResolvedValue([]),
+      knowledgeSets: vi.fn().mockResolvedValue([]),
+      avatarTemplates: vi.fn().mockResolvedValue([]),
+      personalVoiceProfiles: vi.fn().mockResolvedValue([]),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(<TeacherPersonalAgentCreate />);
+    await screen.findByRole("radio", { name: "None" });
+
+    const { editor, template, download } = expectMarkdownFooter("");
+    expect(download).toBeDisabled();
+    fireEvent.change(editor, { target: { value: "# Notes" } });
+    expect(download).toBeEnabled();
+    expectMarkdownFooter("# Notes");
+    fireEvent.change(editor, { target: { value: "" } });
+    expect(download).toBeDisabled();
+    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
+      target: { value: "Teacher Lens" },
+    });
+    fireEvent.click(template);
+    expect(editor).toHaveValue(buildAgentTemplate("Teacher Lens"));
+    expect(download).toBeEnabled();
+
+    const name = screen.getByRole("textbox", { name: "Name" });
+    for (const label of ["Private", "Public"]) {
+      expectFooterAfter(screen.getByRole("button", { name: label }), name);
+    }
+    const ragUpload = screen.getByLabelText("Upload RAG");
+    const ragNew = ragUpload.closest("label")!;
+    const empty = screen.getByText("No RAG yet.");
+    expect(empty).toHaveClass("muted-copy");
+    expect(empty.tagName).toBe("P");
+    expectFooterAfter(ragNew, empty);
+    expect(ragNew).toHaveAttribute("data-ui-guide", "agent.uploadRag");
+    expect(within(ragNew).getByText("New")).toBeVisible();
+    fireEvent.change(ragUpload, {
+      target: { files: [new File(["# Source"], "queued.md")] },
+    });
+    const queued = await screen.findByRole("checkbox", { name: "queued.md" });
+    expectFooterAfter(ragNew, queued);
+    expect(screen.queryByText("No RAG yet.")).toBeNull();
+
+    const picker = screen.getByRole("radiogroup", { name: "Voices" });
+    const voiceCard = picker.closest("section")!;
+    const voiceNew = within(voiceCard).getByRole("button", { name: "New" });
+    expectFooterAfter(voiceNew, picker);
+    expect(screen.getByRole("radio", { name: "None" })).toBeChecked();
+  });
+
   it("shows the same public Agents on Studyform as on Mayaform Home", async () => {
     const agent = personalAgent() as AgentSummary;
     const published = {
@@ -647,6 +738,18 @@ describe("Agent Name card", () => {
         } as AgentDetail;
         return agent;
       }),
+      uploadAgentMd: vi.fn(async () => ({
+        ...currentDraft,
+        agent_md: "# Uploaded Agent",
+      })),
+      uploadWorkspaceKnowledge: vi.fn(async () => ({
+        agent_version: currentDraft,
+        document: {
+          ...document,
+          id: "uploaded-source",
+          source_filename: "uploaded.md",
+        },
+      })),
       publish: vi.fn(async () => ({ ...currentDraft, state: "published" })),
     };
     mockedUseSession.mockReturnValue(teacherSession(api));
@@ -660,6 +763,52 @@ describe("Agent Name card", () => {
     );
     return api;
   }
+
+  it("keeps edit Markdown and RAG footer uploads functional below the sticker list", async () => {
+    const api = editorApi();
+    await screen.findByRole("checkbox", { name: "private-notes.md" });
+    const { editor, download, upload } = expectMarkdownFooter(
+      draft(privateDocument()).agent_md!,
+    );
+    expect(download).toBeEnabled();
+    fireEvent.change(editor, { target: { value: "" } });
+    expect(download).toBeDisabled();
+    const markdownFile = new File(["# Uploaded Agent"], "AGENT.md", {
+      type: "text/markdown",
+    });
+    fireEvent.change(upload, { target: { files: [markdownFile] } });
+    await waitFor(() => expect(editor).toHaveValue("# Uploaded Agent"));
+    expect(api.uploadAgentMd).toHaveBeenCalledWith(versionId, markdownFile, 0);
+    expectMarkdownFooter("# Uploaded Agent");
+    expect(download).toBeEnabled();
+
+    const ragUpload = screen.getByLabelText("Upload RAG");
+    const ragNew = ragUpload.closest("label")!;
+    const rag = screen.getByRole("group", { name: "RAG" });
+    expectFooterAfter(ragNew, rag);
+    expect(ragNew).toHaveAttribute("data-ui-guide", "agent.uploadRag");
+    expect(within(rag).getByRole("button", { name: /View/ })).toBeVisible();
+    expect(within(rag).getByRole("button", { name: /Download/ })).toBeVisible();
+    const source = new File(["# Source"], "uploaded.md", {
+      type: "text/markdown",
+    });
+    fireEvent.change(ragUpload, { target: { files: [source] } });
+    const uploaded = await screen.findByRole("checkbox", {
+      name: "uploaded.md",
+    });
+    expectFooterAfter(ragNew, uploaded);
+    expect(api.uploadWorkspaceKnowledge).toHaveBeenCalledWith(
+      courseId,
+      versionId,
+      source,
+      0,
+      expect.objectContaining({ idempotency: expect.any(Object) }),
+    );
+    const name = screen.getByRole("textbox", { name: "Name" });
+    for (const label of ["Private", "Public"]) {
+      expectFooterAfter(screen.getByRole("button", { name: label }), name);
+    }
+  });
 
   it("makes a private Agent public once, after a confirm", async () => {
     const api = editorApi({

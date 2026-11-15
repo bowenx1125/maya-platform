@@ -54,7 +54,7 @@ import { buildAgentTemplate } from "./agent-template";
 import { PageAction } from "./page-action";
 import { PageBanner } from "./page-banner";
 import { ModuleUpload } from "./studyform-layout";
-import { IconDownload, IconUpload } from "./quiet-icons";
+import { IconDownload, IconTemplate, IconUpload } from "./quiet-icons";
 import { VoiceLibrary } from "./voice/voice-library";
 import {
   downloadText,
@@ -75,12 +75,7 @@ import {
   StatusBadge,
   StickerBadge,
 } from "./ui";
-import {
-  AGENT_ICON_BUTTON,
-  AGENT_NEW_BUTTON,
-  AGENT_PAGE,
-  agentCard,
-} from "./agent-chrome";
+import { AGENT_NEW_BUTTON, AGENT_PAGE, agentCard } from "./agent-chrome";
 import { celebrate } from "../lib/confetti";
 
 /** Create/Edit (O2, option A) card contents, ported from fin.mjs WB/R2/CMP. */
@@ -95,7 +90,6 @@ const MARKDOWN_CARD = cn(
   agentCard("markdown"),
   "[&_textarea.markdown-editor]:box-border [&_textarea.markdown-editor]:min-h-[240px] [&_textarea.markdown-editor]:w-full [&_textarea.markdown-editor]:rounded-[10px] [&_textarea.markdown-editor]:border-[3px] [&_textarea.markdown-editor]:border-[#111] [&_textarea.markdown-editor]:bg-white [&_textarea.markdown-editor]:font-mono [&_textarea.markdown-editor]:text-sm [&_textarea.markdown-editor]:leading-normal [&_textarea.markdown-editor]:font-medium",
   "[&_.editor-footer]:mt-2 [&_.editor-footer]:font-body [&_.editor-footer]:text-xs [&_.editor-footer]:[line-height:normal] [&_.editor-footer]:font-bold",
-  "[&_.button-row]:flex [&_.button-row]:items-center [&_.button-row]:gap-1.5",
 );
 const AVATAR_CARD = cn(
   agentCard("avatar"),
@@ -107,7 +101,7 @@ const AVATAR_CARD = cn(
   "[&_:is([aria-pressed=true],[aria-checked=true])]:bg-[#A3E635]",
   "max-[767px]:[&_[class*=canvasFrame]]:max-h-[300px]",
 );
-const TEMPLATE_BUTTON = `inline-flex h-11 box-border cursor-pointer items-center rounded-[10px] border-2 border-[#111] bg-white px-3.5 py-0 font-body text-sm font-bold text-[#111] no-underline disabled:cursor-not-allowed disabled:opacity-50 ${PRESS_MOTION}`;
+const TEMPLATE_BUTTON = `inline-flex h-11 box-border cursor-pointer items-center gap-1.5 rounded-[10px] border-2 border-[#111] bg-white px-3.5 py-0 font-body text-sm font-bold whitespace-nowrap text-[#111] no-underline disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:shrink-0 ${PRESS_MOTION}`;
 
 export function AgentOverview({ agentId }: { agentId: string }) {
   const t = useT();
@@ -1889,52 +1883,6 @@ export function AgentWorkbench({
                 title={t("agentMd")}
                 guide="agent.markdown"
                 className={MARKDOWN_CARD}
-                action={
-                  <div className="button-row">
-                    <button
-                      className={TEMPLATE_BUTTON}
-                      type="button"
-                      disabled={editingLocked}
-                      onClick={() => {
-                        abandonUploadIntent();
-                        abandonPublishIntent();
-                        setAgentMd(
-                          buildAgentTemplate(draftName.trim() || agent.name),
-                        );
-                      }}
-                    >
-                      {t("insertOutline")}
-                    </button>
-                    <button
-                      className={AGENT_ICON_BUTTON}
-                      type="button"
-                      disabled={editingLocked || !agentMd}
-                      aria-label={`${t("download")} AGENT.md`}
-                      data-ui-guide="agent.download"
-                      onClick={() => downloadText(agentMd, "AGENT.md")}
-                    >
-                      <IconDownload />
-                    </button>
-                    <label
-                      className={AGENT_ICON_BUTTON}
-                      data-ui-guide="agent.uploadMarkdown"
-                    >
-                      <IconUpload />
-                      <input
-                        className="sr-only"
-                        type="file"
-                        accept=".md,text/markdown"
-                        aria-label={t("uploadMd")}
-                        disabled={editingLocked}
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) void uploadAgentMd(file);
-                          event.currentTarget.value = "";
-                        }}
-                      />
-                    </label>
-                  </div>
-                }
               >
                 <textarea
                   className="markdown-editor"
@@ -1953,6 +1901,55 @@ export function AgentWorkbench({
                     {agentMd.length.toLocaleString()} {t("characters")}
                   </span>
                 </div>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 max-[767px]:flex-col max-[767px]:items-start">
+                  <button
+                    className={TEMPLATE_BUTTON}
+                    type="button"
+                    disabled={editingLocked}
+                    onClick={() => {
+                      abandonUploadIntent();
+                      abandonPublishIntent();
+                      setAgentMd(
+                        buildAgentTemplate(draftName.trim() || agent.name),
+                      );
+                    }}
+                  >
+                    <IconTemplate />
+                    {t("insertOutline")}
+                  </button>
+                  <div className="flex flex-nowrap items-center gap-2">
+                    <button
+                      className={TEMPLATE_BUTTON}
+                      type="button"
+                      disabled={editingLocked || !agentMd}
+                      aria-label={`${t("download")} AGENT.md`}
+                      data-ui-guide="agent.download"
+                      onClick={() => downloadText(agentMd, "AGENT.md")}
+                    >
+                      <IconDownload />
+                      <span>{t("download")}</span>
+                    </button>
+                    <label
+                      className={TEMPLATE_BUTTON}
+                      data-ui-guide="agent.uploadMarkdown"
+                    >
+                      <IconUpload />
+                      <span>{t("uploadMd")}</span>
+                      <input
+                        className="sr-only"
+                        type="file"
+                        accept=".md,text/markdown"
+                        aria-label={t("uploadMd")}
+                        disabled={editingLocked}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) void uploadAgentMd(file);
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
               </SectionCard>
               <div
                 className={cn(
@@ -1967,18 +1964,6 @@ export function AgentWorkbench({
                     agentCard("brainform", brainformEmpty),
                     "[&_label[data-ui-guide='agent.uploadRag']]:shadow-[6px_6px_0_#111]",
                   )}
-                  action={
-                    // RAG is added only here, inside its Agent, and takes the
-                    // Agent's Private or Public.
-                    <ModuleUpload
-                      className={AGENT_NEW_BUTTON}
-                      label={t("uploadRag")}
-                      caption={t("newAgent")}
-                      accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                      disabled={editingLocked}
-                      onFile={(file) => void uploadKnowledge(file)}
-                    />
-                  }
                 >
                   {knowledgeCheck.error ? (
                     <ErrorNotice inline error={knowledgeCheck.error} />
@@ -2159,6 +2144,18 @@ export function AgentWorkbench({
                         ))}
                       </div>
                     )}
+                  </div>
+                  <div className="mt-4 flex justify-start">
+                    {/* RAG is added only here, inside its Agent, and takes the
+                        Agent's Private or Public. */}
+                    <ModuleUpload
+                      className={AGENT_NEW_BUTTON}
+                      label={t("uploadRag")}
+                      caption={t("newAgent")}
+                      accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      disabled={editingLocked}
+                      onFile={(file) => void uploadKnowledge(file)}
+                    />
                   </div>
                 </SectionCard>
                 <VoiceLibrary
