@@ -473,7 +473,7 @@ function GhostSlot({
 }
 
 /** "+ New" on the Agents page (R2 .newbtn: shared Button default). */
-export const AGENTS_NEW_CLASS = `box-border inline-flex h-10 items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] bg-[#FF4D8D] px-4 font-body text-sm leading-none font-bold text-[#111] no-underline [&_svg]:size-4 [&_svg]:stroke-3 ${PRESS_MOTION} ${BUSY_MOTION_PRIMARY}`;
+export const AGENTS_NEW_CLASS = `box-border inline-flex h-10 items-center gap-1.5 rounded-[10px] border-[3px] border-[#111] bg-[var(--arc-cat-studyform)] px-4 font-body text-sm leading-none font-bold text-[#111] no-underline [&_svg]:size-4 [&_svg]:stroke-3 ${PRESS_MOTION} ${BUSY_MOTION_PRIMARY}`;
 
 /** Header New: the page's New button next to the page title ("+ New"). */
 export function NewButton({

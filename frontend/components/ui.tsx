@@ -43,7 +43,7 @@ export { NOTICE_TAIL_CLASS, useNoticeTray };
 
 export function LoadingPage() {
   return (
-    <main className="grid min-h-screen place-items-center bg-[#CEDAE3] px-4">
+    <main className="grid min-h-screen place-items-center px-4">
       <LoadingCard bare />
     </main>
   );
@@ -64,7 +64,7 @@ export function LoadingCard({
   count = 1,
 }: {
   label?: string;
-  /** No frame of its own (LoadingPage already paints the background). */
+  /** No frame of its own, so the app page background stays visible. */
   bare?: boolean;
   size?: LoaderSize;
   /** "dark" for a dark screen (the audience terminal): light label. */

@@ -3061,7 +3061,6 @@ function AgentChatScope({
           <PageAction
             name="new"
             placement="page"
-            className="bg-[#FF4D8D]"
             disabled={busy || teamBusy}
             onClick={openNewEntry}
           />

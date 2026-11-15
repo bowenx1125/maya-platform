@@ -483,7 +483,6 @@ export function TeacherStudyformWorkspace({
                 name="new"
                 placement="page"
                 href="/teacher/agents/new"
-                className="bg-[#FF4D8D]"
               />
             ) : null
           }

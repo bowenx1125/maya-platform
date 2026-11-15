@@ -62,6 +62,7 @@ import {
   KnowledgeRowActions,
   useKnowledgeCheck,
 } from "./knowledge-check";
+import { RagAlbumEmpty } from "./knowledge/rag-album";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import {
@@ -2033,7 +2034,7 @@ export function AgentWorkbench({
                     {documents.length === 0 &&
                     stagedRag.length === 0 &&
                     !queuedCreateRag ? (
-                      <p className="muted-copy">{t("noGroupMarkdown")}</p>
+                      <RagAlbumEmpty compact title={t("noGroupMarkdown")} />
                     ) : (
                       <div className={RAG_STICKERS}>
                         {queuedCreateRag ? (

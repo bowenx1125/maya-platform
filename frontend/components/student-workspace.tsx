@@ -756,7 +756,6 @@ function GroupWorkspaceSession({
                 name="new"
                 placement="page"
                 href={`/student/groups/${groupId}/agents/new`}
-                className="bg-[#FF4D8D]"
               />
             )
           }
