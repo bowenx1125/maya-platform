@@ -178,8 +178,7 @@ const enMessages = {
   debateCardReasonConfigProblem:
     "The card service could not prepare this Agent's card.",
   debateCardReasonOther: "The card could not be prepared.",
-  debateCardFallbackContinues:
-    "This Agent will use its original AGENT.md. This session can continue.",
+  debateCardFallbackContinues: "The card could not be prepared.",
   debateCurrent: "current",
   debateRounds: "{count} Rounds",
   debateStageTitle: "Classroom debate",
