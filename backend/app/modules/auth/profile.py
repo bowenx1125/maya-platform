@@ -68,16 +68,10 @@ def update_display_name(db: Session, user: User, raw: str) -> None:
     user.display_name = value
 
 
-def change_group(db: Session, user: User, raw: str, *, course_id: str | None = None) -> None:
-    """Move a student into another of their course's existing groups.
-
-    Only the membership moves. Agents, Teams, RAG and voices belong to the
-    group they were made in and stay there, as they do when a teacher moves
-    the student from Accounts.
-    """
-
-    lock_user_profile(db, user.id)
-    db.scalar(select(User).where(User.id == user.id).with_for_update())
+def resolve_student_group(
+    db: Session, user: User, raw: str, *, course_id: str | None = None
+) -> Group:
+    """Validate an existing group choice without changing memberships."""
     course_ids = db.scalars(
         select(CourseMember.course_id).where(
             CourseMember.user_id == user.id, CourseMember.role == "student"
@@ -89,11 +83,6 @@ def change_group(db: Session, user: User, raw: str, *, course_id: str | None = N
         key = group_name_key(raw)
     except ValueError:
         raise unprocessable("group_not_found", "Choose one of the course's groups.") from None
-    # Keep the existing-only choice and catalog binding valid through the move.
-    # The loop must not reuse the session course parameter: sorted ids end on
-    # the later course, and a session in the earlier one would follow that.
-    for locked_course_id in sorted(course_ids):
-        xact_lock(db, f"course-groups:{locked_course_id}")
     groups = list(
         db.scalars(
             select(Group).where(Group.course_id.in_(course_ids), Group.name_key == key)
@@ -107,7 +96,23 @@ def change_group(db: Session, user: User, raw: str, *, course_id: str | None = N
     # Students pick from the groups that exist; a new name never creates one.
     if len(groups) != 1:
         raise unprocessable("group_not_found", "Choose one of the course's groups.")
-    group = groups[0]
+    return groups[0]
+
+
+def change_group(db: Session, user: User, raw: str, *, course_id: str | None = None) -> None:
+    """Move membership only; work stays in the group where it was made."""
+
+    lock_user_profile(db, user.id)
+    db.scalar(select(User).where(User.id == user.id).with_for_update())
+    course_ids = db.scalars(
+        select(CourseMember.course_id).where(
+            CourseMember.user_id == user.id, CourseMember.role == "student"
+        )
+    ).all()
+    # Keep the existing-only choice valid through the move and catalog update.
+    for locked_course_id in sorted(course_ids):
+        xact_lock(db, f"course-groups:{locked_course_id}")
+    group = resolve_student_group(db, user, raw, course_id=course_id)
     move_to_group(db, group.course_id, user, group.name)
     binding = db.scalar(
         select(DemoAccountBinding).where(

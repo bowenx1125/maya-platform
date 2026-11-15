@@ -29,8 +29,8 @@ EXPECTED_LINES = (
     ),
     "不管需要多少年，我都要再见你一面。No matter how many years it takes, I will see you again.",
     (
-        "重铸 Maya 荣光，吾辈义不容辞！"
-        "To restore Maya to its former glory is our duty, and we shall not turn away!"
+        "重铸 Mayaform 荣光，吾辈义不容辞！"
+        "To restore Mayaform to its former glory is our duty, and we shall not turn away!"
     ),
     "过得了我，再谈未来。Get past me first. Then we can talk about the future.",
     "我是要成为海贼王的男人！海賊王に、俺はなる！",
@@ -108,8 +108,8 @@ def test_previews_rotate_through_nine_lines_in_global_click_order(
 
     monkeypatch.setattr(provider, "synthesize", capture)
     monkeypatch.setattr(voice_preview, "tts_provider", lambda _settings: provider)
-    # 11 clicks alternating voices: lines 1..9, then wrap to lines 1 and 2.
-    order = [first_voice if index % 3 else second_voice for index in range(11)]
+    # 12 clicks alternating voices: lines 1..9, then wrap to lines 1..3.
+    order = [first_voice if index % 3 else second_voice for index in range(12)]
     for profile_id in order:
         response = client.post(
             f"/api/v1/voice-profiles/{profile_id}/preview",
@@ -117,7 +117,8 @@ def test_previews_rotate_through_nine_lines_in_global_click_order(
         )
         assert response.status_code == 200, response.text
 
-    assert spoken == [*EXPECTED_LINES, EXPECTED_LINES[0], EXPECTED_LINES[1]]
+    assert spoken == [*EXPECTED_LINES, *EXPECTED_LINES[:3]]
+    assert provider.synthesize_calls == len(order)
 
 
 def test_counter_is_persisted_and_atomic_under_concurrent_clicks(

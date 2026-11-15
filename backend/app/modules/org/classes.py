@@ -11,7 +11,7 @@ from app.core.errors import conflict, forbidden, unprocessable
 from app.core.identity import normalize_group_name
 from app.core.models import Course, CourseMember, Group, GroupMember, User
 from app.core.sqlutil import begin_immediate
-from app.seed import COURSE_ID, COURSE_NAME, GROUP_DEMO_ID, seed_uuid
+from app.seed import BOWEN_ID, COURSE_ID, COURSE_NAME, GROUP_DEMO_ID, seed_uuid
 
 # These keys are persisted identities from the first rollout.
 SECOND_CLASS_ID = seed_uuid("class-maya1002")
@@ -152,6 +152,11 @@ def change_class(db: Session, user: User, course_id: str) -> None:
     course = next((item for item in registration_classes(db) if item.id == course_id), None)
     if course is None:
         raise unprocessable("class_not_found", "Choose an available class.")
+    if user.id == BOWEN_ID:
+        from app.modules.auth.identity_choice import enter_student_class
+
+        enter_student_class(db, user, course.id, datetime.now(UTC))
+        return
     if len(memberships) == 1 and memberships[0].course_id == course.id:
         return
     group = default_class_group(db, course.id)

@@ -29,7 +29,7 @@ export function AccountSettings({ onSaved }: { onSaved?: () => void }) {
   const { user, identityGeneration } = useSession();
   return user ? (
     <AccountSettingsForm
-      key={`${user.id}:${identityGeneration}`}
+      key={`${user.id}:${identityGeneration}:${user.courses?.map((course) => course.course_id).join(",")}`}
       onSaved={onSaved}
     />
   ) : null;
@@ -65,12 +65,12 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
     .filter((membership) => membership.role === "student")
     .map((membership) => membership.course_id)
     .join(",");
+  const activeCourseId = studentCourseIds.split(",").filter(Boolean)[0] ?? "";
   const currentGroupId = user?.groups?.[0]?.group_id;
   const [groupNames, setGroupNames] = useState<string[]>([]);
   const [currentGroup, setCurrentGroup] = useState("");
   const [groupChoice, setGroupChoice] = useState("");
   useEffect(() => {
-    const activeCourseId = studentCourseIds.split(",").filter(Boolean)[0] ?? "";
     if (!activeCourseId) return;
     // Bowen is in both classes, so the current membership may belong to the
     // other one. Everyone else still needs a group before the picker means
@@ -131,6 +131,7 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
     };
   }, [
     api,
+    activeCourseId,
     currentGroupId,
     identityGeneration,
     studentCourseIds,
@@ -141,9 +142,7 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
   const [classChoices, setClassChoices] = useState<
     { course_id: string; course_name: string }[]
   >([]);
-  const [classChoice, setClassChoice] = useState(
-    studentCourseIds.split(",")[0] ?? "",
-  );
+  const [classChoice, setClassChoice] = useState(activeCourseId);
   useEffect(() => {
     if (!studentCourseIds) return;
     let active = true;
@@ -161,8 +160,7 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
   }, [api, studentCourseIds]);
   async function saveClass(event: FormEvent) {
     event.preventDefault();
-    if (busy !== null || !classChoice || classChoice === studentCourseIds)
-      return;
+    if (busy !== null || !classChoice || classChoice === activeCourseId) return;
     if (
       !window.confirm(
         "Change class? Your existing work stays in the previous class.",
@@ -408,7 +406,7 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
                   ))}
                 </select>
               </label>
-              {classChoice !== studentCourseIds ? (
+              {classChoice !== activeCourseId ? (
                 <button
                   type="submit"
                   className={`primary-action ${PRESS}`}

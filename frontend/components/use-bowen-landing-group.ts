@@ -10,8 +10,8 @@ import {
 import { useSession } from "./session-provider";
 
 /**
- * The group Bowen should open as a student: first non-Students group of the
- * class chosen at login. Other students do not use this.
+ * The group Bowen should open as a student: server-preferred membership of
+ * the class chosen at login. Other students do not use this.
  */
 export function useBowenLandingGroupId(): {
   ready: boolean;

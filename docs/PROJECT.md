@@ -39,11 +39,11 @@ Oct9-13:Debates in Brainform/Chatform/Studyform;private read_memory pauses team_
 
 Voice/Rebirth recovery,speech routing,nonvoice,Coding-A locks;speech paused after Notice118434. Voice upload:sample rules,no side copy. Knowledge partial promote skips `provider_asset_invalid`;applied assets yield head(`prompt_v3`,`minItems:1`). Same published version+source manifest:reuse in-flight run. Teacher Chat:generation progress;Agent Chat:report links.
 
-Formal micro-rounds:Guide `# Team Ruleset`->`## Formal assessment`:answer_recorder/question_guide/scorer/summarizer;student_round_order uses roster names. Scorer=answer_recorder:write Tool,`已记录你的回答。` receipt. Explicit starts(正式测评/测试,开始测试,再来一轮,formal test/assessment):ledger first,Guide-only `收到，第一题是…`. All answered:Guide `答题全部结束`,Summarizer `正在总结答案`. Abandon:Guide `已放弃作答，你要重新开始吗，或者和我随便聊聊`,flag=false. MAYA-ASSESSMENT-ROLE never selects speakers;assessment_active=ledger flag. Ordinary chat:leader->members;@-named member must reply. ACL->ledger->Ruleset;only server appends report links.
+Historical formal micro-rounds:editable Team Ruleset roles/roster order;scorer=answer_recorder persists Tool+receipt.Explicit formal start ledger first,Guide-only opening;all answered->Guide end/Summarizer summary;abandon clears assessment_active.MAYA-ASSESSMENT-ROLE never selects speakers;ordinary leader->members,@named replies.ACL->ledger->Ruleset;server-only report links.Quiz supersedes Chat tests above.
 
 Oct16 ADR-010:PostgreSQL prod. Compose:BACKEND_REPLICAS,max_connections=200;sign-in overload->auth_login_queued. Oct15:Team revision0,no canned opening;Teachers list formal attempts without Enter;private Agents/Teams/RAG/voices need Enter. Free answers:model relevant=true else guidance. Formal start:shared Knowledge `## Opening`/`## 开场白`,then `收到，第一题是`. Student send:lock executor before model call;parallel call->chat_busy.
 
-Oct17 admission:adaptive login/create/write/LLM queue,danger brake,AIMD,scoring first;queue-full/180s-wait/chat_busy stores nothing;refused Debate segments not_sent;hung backend autoheal≈100s. Oct17:Record replaces Memory(0068);Accounts/group visits omit Test results;Revoked/unfinished visible,teacher delete hides(0072). System:qwen3-tts-flash;clones:voice-enrollment/temp upload,VOICE_CLONE_MODEL defaults qwen-audio-3.1-tts-flash(or3.0). 40/60-student Postgres passed;ledger6 commits/model call.0069 vote/barrage UPDATE…RETURNING:40 parallel submits stored1-40,collisions retry. Oct18:picked @mention adds space;no All picker,@All/bare sends reach everyone. Per-sign-in caches:6 parallel,10s reuse,429/503 back-off.0070 owner-only Chat Team+files. Phase-memoized Team ACL:812->448 SELECTs/turn. Oct19:uploaded Voices ready at once(0073);▷ listens only. Oct20-23 #225-#239/0076:answer guard,public editing/audit,Chat-independent Record,cascade recovery/no auto-retry,login fences,stale_base_version,PG poll REPEATABLE READ.50-user Mock:p95≤7.85s.
+Oct17:adaptive login/create/write/LLM queues,AIMD,scoring first;queue-full/180s/chat_busy saves nothing;refused segments not_sent;autoheal≈100s.Record0068 replaces Memory;Accounts visits omit results,revoked/unfinished visible,teacher delete hides0072.System qwen3-tts-flash;clone enrollment/temp upload,VOICE_CLONE_MODEL=qwen-audio-3.1-tts-flash(or3.0).40/60-user PG passed;ledger6 commits/call.0069 atomic vote/barrage increments,collision retry.Oct18:@pick adds space,no All picker,@All/bare sends reach all.Per-sign-in caches6parallel/10s/back-off.0070 owner Chat Team/files;ACL query reduction.Oct19 uploads ready0073,▷ listens.Oct20-23 #225-239/0076:answer guard,public audit,independent Record,cascade recovery/no auto-retry,login fences,stale_base_version,PG poll REPEATABLE READ.50-user Mock p95≤7.85s.
 
 ## Oct24 chats/deletion/Next/create
 
@@ -51,7 +51,7 @@ Oct17 admission:adaptive login/create/write/LLM queue,danger brake,AIMD,scoring 
 
 ## Oct24-25 infra(PRs A/A2/B/C/E)
 
-Timing:request_timing/debate_timing;browser25%->/client-metrics;slow_endpoints_report.py:p50/p95/p99,no user data. PostgreSQL only;tests:MAYA_TEST_POSTGRES_URL;budget/Agent-document/attempt races fixed. Stage:ready-speech blobs in order,≤3s else URL once. DEBATE_AUDIO_MP3:ffmpeg,64MB LRU,300s/304;offload.py,per-Debate lock,PG tickets0079. DEBATE_LLM__/DEBATE_TTS__ freeze in rule_snapshot_json(null=not sent),unset=previous;v3 Ruleset contract/pre-v3 legacy;0080 rate1.0. #305:Agents4/Teams3 columns,one LoadingCard.
+request_timing/debate_timing;browser25% metrics,slow_endpoints_report.py percentiles,no user data.PostgreSQL only;per-test MAYA_TEST_POSTGRES_URL;budget/document/attempt races fixed.Stage ordered ready blobs,≤3s then URL once.DEBATE_AUDIO_MP3 ffmpeg/64MB LRU/300s/304;offload.py,per-Debate locks,PG tickets0079.DEBATE_LLM__/TTS__ frozen in rule_snapshot_json(null=unsent),unset=previous;v3/pre-v3 pinned,0080 rate1.0.#305 Agents4/Teams3 columns,one LoadingCard.
 
 ## Nov2 Chatform lists
 
@@ -59,15 +59,17 @@ Timing:request_timing/debate_timing;browser25%->/client-metrics;slow_endpoints_r
 
 ## Nov3 cleanup/capacity
 
-Visits:hide Knowledge,renew/20min,end notice->Accounts. Debate "?":Chinese hover help. core/locks.py:all cross-process locks;SQLite gone. core/capacity.py:CPU caps×cores/2;high load needs CPU busy≥0.8. Idle polls30s;Agent lists:card label/theme. Debate Rulesets:goals,not bans. Accounts:filter,real DELETE /courses/{id}/members/{user}. Chat:one call;429->provider_rate_limited,502/503/504/529->provider_busy. Ordinary Team members≤3 reply together;assessment Teams sequential;history:one read. Brainform fits390px.
+Visits:hide Knowledge,renew20min,end notice->Accounts.Debate ? Chinese hover.core/locks.py cross-process;SQLite removed.CPU caps×cores/2,high-load busy≥0.8.Idle poll30s;Agent label/theme;Rulesets goals.Account filter/DELETE course members.Chat one call;429 rate-limited,502/503/504/529 busy.Ordinary Team≤3 parallel,assessment sequential;history one read.Brainform390px.
 
 ## Nov5-6 Agent Chat/recovery
 
-#337/#338:Agent Chats send Agent name/AGENT.md/Knowledge/RAG;no assessment Tools/attempt;Teams same. Owner-only RAG Details:stored model input;scoring/summary Rubrics hidden. Nov6 off main70ecfa29(#356/#357). Replay=Rebirth;Review=playback,no rebirth lock. Revocalize:durable intent,3 workers,Back/F5 reseed/revision reconcile;admission refusal retries safely;keep ambiguous keys;show definitive failures/manual retry. 0 calls/deploy;volume untouched. Stalled needs backend receipt recovery;keep safety gates.
+#337/#338:Agent Chat=name/AGENT.md/Knowledge/RAG,no assessment Tools/attempt;Teams kept.Owner RAG Details=model input,hidden Rubrics.Nov6 base70ecfa29(#356/#357).Replay=Rebirth,Review=playback.Revocalize durable intent/3workers,Back/F5 reseed/revision reconcile,safe admission retry,ambiguous keys kept,definitive failures/manual retry.Stalled needs receipt recovery/safety gates.0 calls/deploy,volume untouched.
 
 ## Nov5-8 Quiz
 
-0083-0085:Quiz publish≠taking;new epoch/start,1 attempt/epoch;ZIP. #380:detail/hand grading/hide/Record->Quiz;#383/4:opt-in AI grading. 1 page/quiz,Paper|Submissions;no Chat tests;New/Back/Done unified. [Contract](contracts/CLASSROOM_QUIZ_API.md). Agent name card;Private->Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)). 0088(in progress):epoch deadlines/one-shot taking,lazy+10s sweeper(non-test). 0091 follows0090:old show_results=true/new=false,revision unchanged. #412:V1 switch,cyan stickers,expandable student answers-only paper;post-commit/receipt visibility,fail-closed UI/DTOs,no duplicate help. Checks pass;PG owner-run;0 calls/deploy.
+0083-0085:publish≠taking;new epoch/start,1 attempt/epoch;ZIP. #380:detail/hand grades/hide/Record->Quiz;#383/4:opt-in AI grades. Quiz:Paper|Submissions;no Chat tests;New/Back/Done. [API](contracts/CLASSROOM_QUIZ_API.md). Agent card/Private->Public once:[ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md).0088(in progress):deadlines/one-shot,lazy+10s sweeper(non-test).0091 follows0090:old show_results=true/new=false,same revision.#412:V1 switch,cyan stickers,expandable student answers-only;post-commit/receipts,fail-closed UI/DTOs,no duplicate help.PG owner-run;0 calls/deploy.
+
+Nov16:Quiz list-checks;34 UI/8 PG pass;baseline lint failures;0 calls/deploy.
 
 ## Nov9 classes/accounts(ongoing)
 
@@ -75,15 +77,11 @@ Visits:hide Knowledge,renew/20min,end notice->Accounts. Debate "?":Chinese hover
 
 ## Nov10 v4(replaces Oct24 contract-in-Ruleset)
 
-ruleset_contract_v4:default_rules/contract/*.md,form read-only;Ruleset=style+round tasks;System=round task+contract. User JSON `task`{round_task,max_units,stance?};no teacher note. Length:target_minutes3-10(default5)×230 zh chars/150 en words×voice rate×0.9/(Agents×4),weights1.1/0.9/0.9/1.1;>1.25×cap:cut tail sentences,no repair. Append unspoken R2 question;received questions fromR3. Stump<40% cap or own5-gram overlap>25%(frozen35% kept):1 repair. R1 query:no Agent.md. v4 drops word limits/retrieval_policy_id/frequency_penalty/max_tokens;v3/older bytes pinned.
+Historical ruleset_contract_v4(default_rules/contract/*.md):Ruleset style/tasks,System task+contract,User task{round_task,max_units,stance?};3-10min weighted speech caps,tail cut>1.25×,one stump/repetition repair.R1 query omits Agent.md;R2 question received R3;v3/older bytes pinned.Current v5/caps below.
 
-## Nov11 RAG chunks/diagnostics
+Nov11 RAG/diagnostics:`markdown-structure-600t-v3`,150-900 tokens,no overlap;keep v2 snapshots till republish. Diagnostics:3-gram grounding,other-language unmeasured.
 
-Builds:`markdown-structure-600t-v3`,150-900 tokens,no overlap;keep v2 snapshots till republish. Diagnostics:3-gram grounding,other-language unmeasured.
-
-## Nov11 Debate cards
-
-0089:new v4 participants start `compiling`;each frozen AGENT.md compiles once before its Agent's first turn(`llm_debate_card`,Debate model,strict schema,1 ledgered attempt,60s) to identity/position/reasoning/style/voice/dropped,≤600 Han/400 words. Ready->card persona;failure/Mock->raw AGENT.md;null(old):keep pinned bytes. R1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style.0 calls;quality unverified.
+Nov11 Debate cards/0089:new v4 participants start `compiling`;each frozen AGENT.md compiles once before its Agent's first turn(`llm_debate_card`,Debate model,strict schema,1 ledgered attempt,60s) to identity/position/reasoning/style/voice/dropped,≤600 Han/400 words. Ready->card persona;failure/Mock->raw AGENT.md;null(old):keep pinned bytes. R1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style.0 calls;quality unverified.
 
 Nov11:Agents/Teams<768px black shadow,no orange ring;desktop unchanged. Lists omit agent_md/docs;early /auth/me;idle Debate poll15s.
 
@@ -97,17 +95,17 @@ Nov12 Chatform:composer focuses Message,controls kept;history avatar/date pass c
 
 ## Nov12 3D engine(ongoing)
 
-DEBATE_TTS_ENGINE=cosyvoice:Debate TTS(qwen3 default;pre-request-refusal fallback);word_timestamps->debates/performance(gestures+visemes). AudioStore:WAV-sibling performance.json;ticket-gated GET /debates/{id}/performance/{turn}(404=plain audio). beta-stage:media.prepared sibling;ScholarScene:timeline+clock;scholar-stage:visemes+gesture clips over procedural frame. Bones:UE spine_02/neck_01,AdvSkel Chest_M/Neck_M,Mixamo Spine2/Neck;fix head-only collar clipping;hide watermark.Tripo-refined/Mixamo-rigged:elder-scholar.glb,noble-scholar.glb(noble2),female_1.glb.
+DEBATE_TTS_ENGINE=cosyvoice(qwen3 default;pre-request-refusal fallback):word_timestamps->performance gestures/visemes. WAV-sibling performance.json;ticket-gated GET /debates/{id}/performance/{turn},404=plain audio;media.prepared sibling. ScholarScene clock/timeline;scholar-stage clips/visemes. UE/AdvSkel/Mixamo collar fix,watermark hidden. Models:elder-scholar,noble-scholar(noble2),female_1.glb.
 
-Gesture v2:upper/forearm/hand figure-space axis-angle;per-rig local=A⁻¹·E·A·rest;shared Mixamo clips. Postures:hand_behind_back(right behind,left chest),hand_on_chest(mirror),open_palm_listening;free-left-arm clips:emphasis,settle_calm,doubt_shrug,invite_present,chin_stroke,palm_open_sweep,lean_in,object_raise.Thoughtful/friendly->hand_on_chest.All3 render QA/UI pass.
+Gesture v2:figure-space arm/hand rotations,A⁻¹·E·A·rest,shared Mixamo clips;hand_behind_back/hand_on_chest/open_palm_listening;free-left clips emphasis/settle_calm/doubt_shrug/invite_present/chin_stroke/palm_open_sweep/lean_in/object_raise.Thoughtful/friendly->hand_on_chest.All3 render QA/UI pass.
 
-Nov12 #419:second capsule press closes;no trigger pathname key. Bowen student pages use the login class's first non-Students group;moves stay in that session class. New usernames 3-64 letters/digits;older `.` `_` `-` names still sign in. Private→Public is the owner.
+Nov12 #419:second capsule press closes;no trigger pathname key. New usernames 3-64 letters/digits;older `.` `_` `-` names still sign in. Private→Public is the owner.
 
 ## Nov13 deploy
 
 f1087c4d live:3D/gesture v2/3 figures/#419,replaces334fbd94.Local image save/load;3.5G server:no build/test.Backup maya-pre-334fbd94-20261112-213724.dump:102M,list pass,PG-only.0091_quiz_show_results;ready/HTTPS200.Backend240/319;known voice+2 load-adaptive failures,no regressions.
 
-Nov14:Teams ?/Agent New RAG hint removed;tour omits voices. Capsule:shared teacher layout/session-API/user/course caches,B2b kept;390/1440 stable. Page-rise520ms/reduced motion/teacher shell;Immerse loading hides Back. Quiz ZIP:participant XLSX/snapshot questions/grades.UI/build/gates/PG checked;new0;0 calls/deploy.
+Nov14:Teams ?/Agent RAG hint/tour voices removed.Capsule shared teacher shell/session/user/course caches,B2b;390/1440 stable.Page-rise520ms/reduced motion;Immerse loading hides Back.Quiz ZIP:XLSX/paper/grades.UI/build/gates/PG checked,new0;0 calls/deploy.
 
 Nov15 #426:flat LoadingPage #CEDAE3;390/1440/build checked.
 
@@ -124,3 +122,15 @@ Merge inputs:HEAD 0988a2322832c6db264ff13a0780b97bfa96dc51 + origin/main 5e5f349
 Nov16 Voice merge:f802eb72d76c407818a817da1cb570d07a74353c + origin/main 7e7087442a584897aad0cd0ce445e2f97ca30d98. #432/#433/#439 retained;Voice consent-actor owner_username(optional/nullable),peer usage ACL/private Agent filter,Retry. Merged contracts:169 platform operations. Voice pre-merge:155PG pass;0 calls/deploy. D2/#427/No Group migration excluded.
 
 Merge checks:17 static PASS;113 targeted PG PASS;160UI files/1412pass/13skip;boundary/reset/Ruff PASS.
+
+## Nov16 local I integration
+
+#435:Profile class Save updates session course;Bowen entry keeps class grants/groups;landing prefers saved binding then existing non-default IDs,never labels.Catalog sync keeps cross-class saved choice without restoring revoked grants.Default/renamed fixtures checked;pre-merge140PG/1397UI/13skip,17gates;0 calls/deploy.Read-only verifier: scripts/verify_profile_groups.py;production acceptance pending.
+
+Exact inputs: codex/fix-435-group-switch abbc4a32ca4b915545ed7b6a617976ff5c9a2eb2 + origin/main 391802271fc1689c904e72fecb41db46fdb4507e. Voice conflicts use main's equivalent formatting,strings unchanged;main DTO attribution retained.#432/#433,v5 caps,sole0092_repair_feedback_v2,D1 and Voice maker/read visibility retained.No D2/#427/No Group migration;local only,0 provider calls.
+
+G merge input: codex/voice-preview-mayaform 75188b1137d25c333ac58ab9b1fbef4d68ca7fd0. Only preview line3 changes Maya->Mayaform in both languages;fresh synthesis unchanged,no cache reset,old previews expire normally.12-click test wraps through line3 and checks one synthesis/request.Main formatting/DTO preserved.
+
+F merge input: codex/quiz-icon-list-checks 8af342ca64c05894003d771ef594b651d5ea2e33. Shared Quiz list-checks glyph/teacher nav,stroke1.65;stable quizzes key,distinct Debate glyph/selection/tour kept.Original34UI/8PG pass.
+
+Integration:17/17 static PASS;76 targeted PG PASS;full serial UI161files/1418pass/13skip;Next build PASS;generated-boundary/reset/bootstrap/production-routes/Ruff PASS.0 calls/push/deploy.

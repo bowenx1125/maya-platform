@@ -713,7 +713,7 @@ export function AppShell({
           {
             href: "/teacher/quizzes",
             label: t("quizzes"),
-            icon: "classroom" as const,
+            icon: "quiz" as const,
           },
           {
             href: "/teacher/roster",
@@ -977,9 +977,7 @@ export function AppShell({
           ["live", "classroom", "accounts", "quiz"].includes(link.icon),
         )
         .map((link) => ({
-          // Debates and Quizzes share the classroom icon; the row key must
-          // stay unique or both rows light together (litSidebarKey matches
-          // on it) and React sees duplicate keys.
+          // Keep the teacher Quizzes row's stable key independent of its icon.
           key: link.href === "/teacher/quizzes" ? "quizzes" : link.icon,
           href: link.href,
           label: link.label,

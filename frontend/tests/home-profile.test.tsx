@@ -172,6 +172,97 @@ describe("profile group", () => {
     confirm.mockRestore();
   });
 
+  it("keeps Maya1002 group choices aligned after Bowen changes class", async () => {
+    const names = ["Demo Group", "5", "Group 4", "Group4", "sxsc123——", "."];
+    session.user = {
+      ...student,
+      username: "bowen",
+      courses: [
+        { course_id: "maya1001", role: "student" },
+        { course_id: "maya1002", role: "student" },
+      ],
+      groups: [
+        { group_id: "demo", role: "member" },
+        { group_id: "first-five", role: "member" },
+      ],
+    };
+    session.api.registrationOptions.mockResolvedValue({
+      course_id: "maya1002",
+      groups: names.map((name) => ({ name, member_count: 1 })),
+      classes: [
+        {
+          course_id: "maya1001",
+          course_name: "Maya1001",
+          groups: [
+            { name: "Students", member_count: 1 },
+            { name: "5", member_count: 1 },
+          ],
+        },
+        {
+          course_id: "maya1002",
+          course_name: "Maya1002",
+          groups: names.map((name) => ({ name, member_count: 1 })),
+        },
+      ],
+    });
+    session.api.group.mockImplementation(async (id: string) =>
+      id === "demo"
+        ? { id, name: "Demo Group", course_id: "maya1002" }
+        : { id, name: "5", course_id: "maya1001" },
+    );
+    session.api.updateCurrentUser.mockResolvedValue(undefined);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      const view = inEnglish(<AccountSettings />);
+      const group = (await screen.findByLabelText(
+        "Group",
+      )) as HTMLSelectElement;
+      expect(group.value).toBe("5");
+      // Only Password has Save: membership count must not make Class dirty.
+      expect(screen.getAllByRole("button", { name: "Save" })).toHaveLength(1);
+      fireEvent.change(screen.getByLabelText("Class"), {
+        target: { value: "maya1002" },
+      });
+      expect([...group.options].map((option) => option.value)).toEqual([
+        "5",
+        "Students",
+      ]);
+      fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]);
+      await waitFor(() => expect(session.refresh).toHaveBeenCalled());
+      expect(session.api.updateCurrentUser).toHaveBeenLastCalledWith({
+        course_id: "maya1002",
+      });
+      session.user = {
+        ...session.user,
+        courses: [...session.user.courses!].reverse(),
+      };
+      view.rerender(<AccountSettings />);
+      const nextGroup = (await screen.findByLabelText(
+        "Group",
+      )) as HTMLSelectElement;
+      expect(nextGroup.value).toBe("Demo Group");
+      expect(
+        [...nextGroup.options].map((option) => option.value).sort(),
+      ).toEqual([...names].sort());
+      for (const name of names.slice(1)) {
+        fireEvent.change(nextGroup, { target: { value: name } });
+        fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]);
+        await waitFor(() =>
+          expect(session.api.updateCurrentUser).toHaveBeenLastCalledWith({
+            group_name: name,
+          }),
+        );
+        await waitFor(() =>
+          expect(screen.getAllByRole("button", { name: "Save" })).toHaveLength(
+            1,
+          ),
+        );
+      }
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
   it("gives a teacher no group picker", async () => {
     session.user = {
       ...student,
@@ -192,8 +283,8 @@ describe("profile group", () => {
         { course_id: "maya1002", role: "student" },
       ],
       groups: [
-        { group_id: "shell", role: "member" },
         { group_id: "team", role: "member" },
+        { group_id: "shell", role: "member" },
         { group_id: "other", role: "member" },
       ],
     };
