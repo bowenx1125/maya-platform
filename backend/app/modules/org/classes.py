@@ -16,7 +16,6 @@ from app.core.models import Course, CourseMember, Group, GroupMember, User
 from app.core.sqlutil import begin_immediate, dialect_insert
 from app.seed import BOWEN_ID, COURSE_ID, COURSE_NAME, GROUP_DEMO_ID, seed_uuid
 
-
 logger = logging.getLogger(__name__)
 
 # These keys are persisted identities from the first rollout.

@@ -32,7 +32,6 @@ EXPECTED_LINES = (
         "重铸 Mayaform 荣光，吾辈义不容辞！"
         "To restore Mayaform to its former glory is our duty, and we shall not turn away!"
     ),
-
     "过得了我，再谈未来。Get past me first. Then we can talk about the future.",
     "我是要成为海贼王的男人！海賊王に、俺はなる！",
     "真相永远只有一个！真実はいつもひとつ！",
