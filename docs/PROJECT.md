@@ -67,7 +67,9 @@ Visits:hide Knowledge,renew20min,end notice->Accounts.Debate ? Chinese hover.cor
 
 ## Nov5-8 Quiz
 
-0083-0085:Quiz publish≠taking;new epoch/start,1 attempt/epoch;ZIP. #380:detail/hand grading/hide/Record->Quiz;#383/4:opt-in AI grading. 1 page/quiz,Paper|Submissions;no Chat tests;New/Back/Done unified. [Contract](contracts/CLASSROOM_QUIZ_API.md). Agent name card;Private->Public once([ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md)). 0088(in progress):epoch deadlines/one-shot taking,lazy+10s sweeper(non-test). 0091 follows0090:old show_results=true/new=false,revision unchanged. #412:V1 switch,cyan stickers,expandable student answers-only paper;post-commit/receipt visibility,fail-closed UI/DTOs,no duplicate help. Checks pass;PG owner-run;0 calls/deploy.
+0083-0085:publish≠taking;new epoch/start,1 attempt/epoch;ZIP. #380:detail/hand grades/hide/Record->Quiz;#383/4:opt-in AI grades. Quiz:Paper|Submissions;no Chat tests;New/Back/Done. [API](contracts/CLASSROOM_QUIZ_API.md). Agent card/Private->Public once:[ADR-012](adr/ADR-012-agent-name-card-and-public-conversion.md).0088(in progress):deadlines/one-shot,lazy+10s sweeper(non-test).0091 follows0090:old show_results=true/new=false,same revision.#412:V1 switch,cyan stickers,expandable student answers-only;post-commit/receipts,fail-closed UI/DTOs,no duplicate help.PG owner-run;0 calls/deploy.
+
+Nov16:Quiz list-checks;34 UI/8 PG pass;baseline lint failures;0 calls/deploy.
 
 ## Nov9 classes/accounts(ongoing)
 
@@ -75,7 +77,7 @@ Visits:hide Knowledge,renew20min,end notice->Accounts.Debate ? Chinese hover.cor
 
 ## Nov10 v4(replaces Oct24 contract-in-Ruleset)
 
-Historical ruleset_contract_v4:default_rules/contract/*.md,read-only;Ruleset=style/tasks,System=task+contract,User task{round_task,max_units,stance?}. Length:3-10min(default5)×230zh/150en×rate×0.9/(Agents×4),weights1.1/0.9/0.9/1.1;>1.25×cap cuts tail,no repair. R2 unspoken question,R3 receives;stump<40% or own5-gram>25%(frozen35% kept):1 repair.R1 query:no Agent.md.v4 omits word limits/retrieval_policy_id/frequency_penalty/max_tokens;v3/older bytes pinned.Current v5/caps below.
+Historical ruleset_contract_v4(default_rules/contract/*.md):Ruleset style/tasks,System task+contract,User task{round_task,max_units,stance?};3-10min weighted speech caps,tail cut>1.25×,one stump/repetition repair.R1 query omits Agent.md;R2 question received R3;v3/older bytes pinned.Current v5/caps below.
 
 Nov11 RAG/diagnostics:`markdown-structure-600t-v3`,150-900 tokens,no overlap;keep v2 snapshots till republish. Diagnostics:3-gram grounding,other-language unmeasured.
 
@@ -128,3 +130,5 @@ Merge checks:17 static PASS;113 targeted PG PASS;160UI files/1412pass/13skip;bou
 Exact inputs: codex/fix-435-group-switch abbc4a32ca4b915545ed7b6a617976ff5c9a2eb2 + origin/main 391802271fc1689c904e72fecb41db46fdb4507e. Voice conflicts use main's equivalent formatting,strings unchanged;main DTO attribution retained.#432/#433,v5 caps,sole0092_repair_feedback_v2,D1 and Voice maker/read visibility retained.No D2/#427/No Group migration;local only,0 provider calls.
 
 G merge input: codex/voice-preview-mayaform 75188b1137d25c333ac58ab9b1fbef4d68ca7fd0. Only preview line3 changes Maya->Mayaform in both languages;fresh synthesis unchanged,no cache reset,old previews expire normally.12-click test wraps through line3 and checks one synthesis/request.Main formatting/DTO preserved.
+
+F merge input: codex/quiz-icon-list-checks 8af342ca64c05894003d771ef594b651d5ea2e33. Shared Quiz list-checks glyph/teacher nav,stroke1.65;stable quizzes key,distinct Debate glyph/selection/tour kept.Original34UI/8PG pass;integration checks pending.
