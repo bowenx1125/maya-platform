@@ -50,6 +50,7 @@ def _draft_debate(app_factory: Callable[..., Any]) -> tuple[Any, Any, str]:
             ],
             "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
             "round_count": 4,
+            "round_unit_caps": [200, 200, 200, 200]
         },
     )
     assert response.status_code == 201, response.text

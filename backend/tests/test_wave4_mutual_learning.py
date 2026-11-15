@@ -253,7 +253,8 @@ def test_new_debate_accepts_published_markdown_without_persona_and_rejects_legac
             ],
             "rule_set_id": RULE_SET,
             "round_count": 4,
-        }
+        "round_unit_caps": [200, 200, 200, 200]
+    }
         rejected = client.post(
             f"/api/v1/courses/{COURSE_ID}/debates",
             headers=_headers(csrf, **{"Idempotency-Key": "wave4-persona-required"}),
@@ -268,7 +269,8 @@ def test_new_debate_accepts_published_markdown_without_persona_and_rejects_legac
             json={
                 **payload,
                 "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
-            },
+            "round_unit_caps": [200, 200, 200, 200]
+        },
         )
         assert legacy.status_code == 400, legacy.text
         assert legacy.json()["code"] == "malformed_request"

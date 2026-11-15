@@ -121,6 +121,7 @@ def _create_voiced_debate(database: Any, client: Any, voice_id: str) -> str:
             ],
             "round_count": 4,
             "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
+            "round_unit_caps": [200, 200, 200, 200]
         },
     )
     assert response.status_code == 201, response.text

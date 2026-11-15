@@ -64,7 +64,8 @@ def test_renaming_next_draft_keeps_published_source_and_debate_participant_name(
                         {"agent_id": agent_id, "stance_mode": "open"} for agent_id in agents
                     ],
                     "round_count": 4,
-                },
+            "round_unit_caps": [200, 200, 200, 200]
+        },
             )
             assert created.status_code == 201, created.text
             with database.session() as db:

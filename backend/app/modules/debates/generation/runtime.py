@@ -566,7 +566,9 @@ class LLMTurnRuntime:
                 "public_predecessor_speech": prompt.request.transcript_hash,
                 "current_evidence_excerpt": prompt.request.receipt_hash,
                 "opaque_local_id": _hash_record((debate_id, turn_id)),
-                "server_authored_structure_repair_feedback": REPAIR_FEEDBACK_POLICY_HASH,
+                "server_authored_structure_repair_feedback": (
+                    manifest.repair_policy_hash or REPAIR_FEEDBACK_POLICY_HASH
+                ),
             }
             fields = tuple(
                 ExportFieldV1(field_class, class_hashes[field_class])

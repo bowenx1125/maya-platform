@@ -164,7 +164,8 @@ def _payload(agent_ids):
         participants=[
             DebateParticipantInput(agent_id=UUID(agent), stance_mode="open") for agent in agent_ids
         ],
-    )
+            round_unit_caps=[200, 200, 200, 200],
+)
 
 
 @pytest.mark.parametrize("rounds", [2, 3, 5])
