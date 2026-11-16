@@ -38,7 +38,7 @@ function options(): RegistrationOptions {
       {
         course_id: courseId,
         course_name: "Maya1001",
-        group_name: "Students",
+        group_name: "No Group",
         groups: [
           { name: "Team Aurora", member_count: 2 },
           { name: "Team Borealis", member_count: 1 },
@@ -48,7 +48,7 @@ function options(): RegistrationOptions {
       {
         course_id: "course-two",
         course_name: "Maya1002",
-        group_name: "Students",
+        group_name: "No Group",
         groups: [{ name: "Second class team", member_count: 1 }],
       },
     ],

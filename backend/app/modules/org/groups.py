@@ -6,6 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.db import registered_metadata
+from app.core.group_names import DEFAULT_GROUP_NAME
+from app.core.identity import group_name_key
 from app.core.locks import xact_lock
 from app.core.models import Group, GroupMember, User
 from app.modules.org.classes import SECOND_CLASS_GROUP_ID, default_class_group
@@ -38,7 +40,11 @@ def prune_empty_groups(db: Session, course_id: str, group_ids: Iterable[str]) ->
             .where(Group.course_id == course_id, Group.id == group_id)
             .with_for_update()
         )
-        if group is None or group.id in protected:
+        if (
+            group is None
+            or group.id in protected
+            or group.name_key == group_name_key(DEFAULT_GROUP_NAME)
+        ):
             continue
         # Account purges can remove memberships by database cascade, leaving
         # loaded ORM collections stale. Only explicitly inactive accounts can

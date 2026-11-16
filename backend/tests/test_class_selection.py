@@ -201,7 +201,7 @@ def test_registration_creates_or_joins_group_only_in_chosen_class(class_app: Any
     client, database, _ = class_app
     with database.session() as db:
         original = db.scalar(
-            select(Group).where(Group.course_id == COURSE_ID, Group.name == "Demo Group")
+            select(Group).where(Group.course_id == COURSE_ID, Group.name == "No Group")
         )
         original_id = original.id
         group_count = db.scalar(select(func.count()).select_from(Group))
@@ -227,10 +227,10 @@ def test_registration_creates_or_joins_group_only_in_chosen_class(class_app: Any
     options = client.get("/api/v1/auth/registration-options").json()
     choices = {item["course_id"]: item["groups"] for item in options["classes"]}
     assert {item["name"]: item["member_count"] for item in choices[SECOND_CLASS_ID]} == {
-        "Students": 0,
+        "No Group": 0,
         "Demo Group": 2,
     }
-    assert {item["name"]: item["member_count"] for item in choices[COURSE_ID]}["Demo Group"] == 3
+    assert {item["name"]: item["member_count"] for item in choices[COURSE_ID]}["No Group"] == 3
 
 
 def test_teacher_creates_named_class_visible_at_registration_and_restart(class_app: Any) -> None:
@@ -251,7 +251,7 @@ def test_teacher_creates_named_class_visible_at_registration_and_restart(class_a
     options = client.get("/api/v1/auth/registration-options").json()
     choice = next(item for item in options["classes"] if item["course_id"] == course_id)
     assert choice["course_name"] == "History 2026"
-    assert choice["groups"] == [{"name": "Students", "member_count": 0}]
+    assert choice["groups"] == [{"name": "No Group", "member_count": 0}]
     joined = client.post(
         "/api/v1/auth/register",
         json={
@@ -267,7 +267,7 @@ def test_teacher_creates_named_class_visible_at_registration_and_restart(class_a
     moved = client.patch("/api/v1/auth/me", headers=student_headers, json={"course_id": course_id})
     assert moved.status_code == 200, moved.text
     with database.session() as db:
-        assert db.get(Group, moved.json()["user"]["groups"][0]["group_id"]).name == "Students"
+        assert db.get(Group, moved.json()["user"]["groups"][0]["group_id"]).name == "No Group"
     _bootstrap_accounts(database, settings)
     for teacher, expected in [
         ("Maya1002", {COURSE_ID, course_id}),

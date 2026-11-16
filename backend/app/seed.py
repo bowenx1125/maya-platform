@@ -17,6 +17,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.db import Database
+from app.core.group_names import DEFAULT_GROUP_NAME
+from app.core.identity import group_name_key
 from app.core.models import Course, CourseMember, Group, GroupMember, User
 
 SEED_NAMESPACE = "a7cea9e2-390f-5b48-b129-4f388b0362e3"
@@ -90,7 +92,7 @@ USERS = (
 
 COURSE_CODE = "demo-course-001"
 COURSE_NAME = "Maya1002"
-GROUP_SPECS = ((GROUP_DEMO_ID, "Demo Group"),)
+GROUP_SPECS = ((GROUP_DEMO_ID, DEFAULT_GROUP_NAME),)
 
 
 def _existing_by_id(session: Session, model: Any, object_id: str) -> Any:
@@ -153,6 +155,19 @@ def _ensure_group(session: Session, group_id: str, name: str, now: datetime) -> 
         expected = _fingerprint({"course_id": COURSE_ID, "name": name})
         actual = row_fingerprint(existing, ("course_id", "name"))
         if actual != expected:
+            # A migration collision keeps the historical cohort intact.
+            if (
+                existing.course_id == COURSE_ID
+                and existing.name in {"Demo Group", "Students"}
+                and session.scalar(
+                    select(Group.id).where(
+                        Group.course_id == COURSE_ID,
+                        Group.name_key == group_name_key(DEFAULT_GROUP_NAME),
+                    )
+                )
+                is not None
+            ):
+                return existing
             raise SeedConflict(f"fixed group row conflicts: {group_id}")
         return existing
     duplicate = session.scalar(

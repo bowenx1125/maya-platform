@@ -1,6 +1,6 @@
 # Maya Platform
 
-[AGENTS.md](../AGENTS.md);user wins.
+Progress authority;[AGENTS.md](../AGENTS.md):work;latest user decision wins.
 
 ## Approved 4 rounds—Sep8,2026
 
@@ -22,10 +22,6 @@ Agno3.0.11/public SDK(ADR-009);Team additional_input history.0035:owner-first dr
 ## Oct7 MayaForm
 
 MayaForm v1.4:learning/Tools checkpoints;Brainform RAG/Knowledge/Memory,canonical Markdown/history. Manual RAG regen replaces head only on valid newer success. Actor/source ACL,task evaluator,Boundary grants stay. Tool roles:Public+Student or Public+Teacher. Formal attempts->Teacher reports,ordinary Chats excluded. General Chat:attempt actions in natural language,no lifecycle UI. Owner progress:phase-safe,history/completed evidence immutable.0055 submitted_at:built,not real-accepted;survey all if≤3,else half;server-validated evaluator follow-ups before Boundary. "end":submit answered work;only abandon/redo deletes learning records;keep accounting. Boundary/reports:mastery/weak/not-yet-verified. Student-majority language;off-topic/progress:help,never answers.
-
-Oct5:30db274/0053 ready/integrity/FK;backups20261005T110321Z/130151Z healthy;pending/sending0,unknown3 kept.Synthetic:1 Embedding+2 accepted Knowledge charges;Gen2/seq3 replaces seq2,history kept;denied0,fixtures withdrawn;ledger457 operations/charges.Oct7:authorized synthetic4-Agent/multi-student workflow;no learner/Private Chat data.
-
-[UI](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) replaces earlier plans. Studyform/Brainform:same structure,role permissions differ. Oct9:Studyform creates Agents/Voices;Teachers publish Maya Teams;Chats->Chatform. Oct11:New->Teams/Agents,Done->owner-only Chat. Brainform:no disclosure;`PROVIDER_STANDING_CONSENT` covers classroom/prod,else unlinked Teacher approvals. Teacher Accounts:Public-group read-only visits;return drops temp membership;Debates restored. Sidebar New/Back/Done contextual. Voice New module-right;consent->create,←cancel. Agent Voice=None;groupmates choose/hear ready voices,course teachers hear/bind/manage(1026). Brainform:3 columns,no title/eyebrow;RAG:Knowledge view/edit/download/delete,PDF/DOCX. View/New/edit:replace content,deep links,no bottom panel. Knowledge:asset-name entry,authorized Agent consumers,one canonical editor;Agent entry stays.
 
 Create AI Knowledge/New Agent;Private/Public labels only;Brainform:RAG/Knowledge. Teacher Agent Tool->Knowledge question bank/graph;others carry Knowledge/AGENT.md only. Team-shared RAG/Knowledge:own-material supplement;Maya Team/Agent versions match. Both roles create Teams;Teacher-only Maya Team publishing,label kept. Old-version assessment:Teacher update->Leader announces change/restart;delete unfinished,keep completed. Teacher reports:answers/statistics/student/Maya Team/time,no raw chat. Teacher save/generate/regenerate:exact Knowledge generation authorization,no second confirm;ACL/policy/manifest/accounting/idempotency/unknown kept. Four-Agent/classroom-load/real Team/report acceptance open.
 
@@ -119,18 +115,14 @@ D1:remove `agent_md_invalid` AGENT.md heading readiness gate;keep empty/other ch
 
 Merge inputs:HEAD 0988a2322832c6db264ff13a0780b97bfa96dc51 + origin/main 5e5f349a004729cc594db2821235407a2548224a (#438/#432/#433);headingless create:v5 round_unit_caps.
 
-Nov16 Voice merge:f802eb72d76c407818a817da1cb570d07a74353c + origin/main 7e7087442a584897aad0cd0ce445e2f97ca30d98. #432/#433/#439 retained;Voice consent-actor owner_username(optional/nullable),peer usage ACL/private Agent filter,Retry. Merged contracts:169 platform operations. Voice pre-merge:155PG pass;0 calls/deploy. D2/#427/No Group migration excluded.
+Nov16 Voice merge:f802eb72d76c407818a817da1cb570d07a74353c + origin/main 7e7087442a584897aad0cd0ce445e2f97ca30d98. #432/#433/#439 retained;Voice consent-actor owner_username(optional/nullable),peer usage ACL/private Agent filter,Retry. Merged contracts:169 platform operations. Voice pre-merge:155PG pass;0 calls/deploy. D2/#427 excluded.
 
-Merge checks:17 static PASS;113 targeted PG PASS;160UI files/1412pass/13skip;boundary/reset/Ruff PASS.
+## Nov16 local I / E / F / G (on main)
 
-## Nov16 local I integration
+#435:Profile class Save updates session course;Bowen entry keeps class grants/groups;landing prefers saved binding then existing non-default IDs,never labels.Catalog sync keeps cross-class saved choice without restoring revoked grants.Read-only verifier: scripts/verify_profile_groups.py.
 
-#435:Profile class Save updates session course;Bowen entry keeps class grants/groups;landing prefers saved binding then existing non-default IDs,never labels.Catalog sync keeps cross-class saved choice without restoring revoked grants.Default/renamed fixtures checked;pre-merge140PG/1397UI/13skip,17gates;0 calls/deploy.Read-only verifier: scripts/verify_profile_groups.py;production acceptance pending.
+G:preview line3 Maya->Mayaform both languages;12-click wrap;DTO attribution retained. F:Quiz list-checks glyph/teacher nav,stroke1.65;Debate glyph/selection/tour kept.
 
-Exact inputs: codex/fix-435-group-switch abbc4a32ca4b915545ed7b6a617976ff5c9a2eb2 + origin/main 391802271fc1689c904e72fecb41db46fdb4507e. Voice conflicts use main's equivalent formatting,strings unchanged;main DTO attribution retained.#432/#433,v5 caps,sole0092_repair_feedback_v2,D1 and Voice maker/read visibility retained.No D2/#427/No Group migration;local only,0 provider calls.
+## Nov16 DEPLOY 1 final integration
 
-G merge input: codex/voice-preview-mayaform 75188b1137d25c333ac58ab9b1fbef4d68ca7fd0. Only preview line3 changes Maya->Mayaform in both languages;fresh synthesis unchanged,no cache reset,old previews expire normally.12-click test wraps through line3 and checks one synthesis/request.Main formatting/DTO preserved.
-
-F merge input: codex/quiz-icon-list-checks 8af342ca64c05894003d771ef594b651d5ea2e33. Shared Quiz list-checks glyph/teacher nav,stroke1.65;stable quizzes key,distinct Debate glyph/selection/tour kept.Original34UI/8PG pass.
-
-Integration:17/17 static PASS;76 targeted PG PASS;full serial UI161files/1418pass/13skip;Next build PASS;generated-boundary/reset/bootstrap/production-routes/Ruff PASS.0 calls/push/deploy.
+Merge inputs: A/B/C tip df958a53583b179caf78f8f45370867aee8e48c3 + origin/main 90f753e0478f6abfd5999b478bfa25f5bb6bb78b (re-fetched; unchanged). Combined: A digits-only class capsule; B/C No Group+Teachers+active-only backfill (sole head 0093_default_group_no_group→0092→0091); #435 server preference/ID/login-class landing; E Voice Made by/Used by; F Quiz list-checks; G Mayaform preview; #438/#439. Nine conflicts resolved per handoff; catalog sync skips ensure_student_group while preserve_bowen_memberships so #435 revocations stay; Bowen identity tests take main. Local gates: ruff/mypy/prettier/typecheck/lint/script gates PASS; FE Vitest 161 files/1433 pass/13 skip; Next build PASS; targeted PG auth/group/voice/D1 PASS. Full PG vs 129-baseline log unavailable here (Backend host paths missing). D2/PR442/#427 out of scope. DRAFT PR only; Backend audits/merges/deploys.0 calls/deploy.

@@ -1,5 +1,6 @@
 """Class provisioning on the existing course and membership tables."""
 
+import logging
 import re
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -8,10 +9,14 @@ from sqlalchemy import case, delete, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import conflict, forbidden, unprocessable
-from app.core.identity import normalize_group_name
+from app.core.group_names import DEFAULT_GROUP_NAME
+from app.core.identity import group_name_key, normalize_group_name
+from app.core.locks import xact_lock
 from app.core.models import Course, CourseMember, Group, GroupMember, User
-from app.core.sqlutil import begin_immediate
+from app.core.sqlutil import begin_immediate, dialect_insert
 from app.seed import BOWEN_ID, COURSE_ID, COURSE_NAME, GROUP_DEMO_ID, seed_uuid
+
+logger = logging.getLogger(__name__)
 
 # These keys are persisted identities from the first rollout.
 SECOND_CLASS_ID = seed_uuid("class-maya1002")
@@ -75,7 +80,7 @@ def create_class(db: Session, user: User, name: str) -> Course:
         Group(
             id=seed_uuid(f"class-students-{course.id}"),
             course_id=course.id,
-            name="Students",
+            name=DEFAULT_GROUP_NAME,
             created_at=now,
         )
     )
@@ -114,16 +119,16 @@ def ensure_classes(db: Session) -> None:
         db.flush()
     else:
         second.name = SECOND_CLASS_NAME
-    if db.get(Group, SECOND_CLASS_GROUP_ID) is None:
-        db.add(
-            Group(
-                id=SECOND_CLASS_GROUP_ID, course_id=SECOND_CLASS_ID, name="Students", created_at=now
-            )
-        )
+    default_class_group(db, SECOND_CLASS_ID)
     db.flush()
 
 
 def default_class_group(db: Session, course_id: str) -> Group:
+    xact_lock(db, f"course-groups:{course_id}")
+    key = group_name_key(DEFAULT_GROUP_NAME)
+    group = db.scalar(select(Group).where(Group.course_id == course_id, Group.name_key == key))
+    if group is not None:
+        return group
     preferred = (
         GROUP_DEMO_ID
         if course_id == COURSE_ID
@@ -131,12 +136,51 @@ def default_class_group(db: Session, course_id: str) -> Group:
         if course_id == SECOND_CLASS_ID
         else seed_uuid(f"class-students-{course_id}")
     )
-    group = db.scalar(select(Group).where(Group.id == preferred, Group.course_id == course_id))
+    db.execute(
+        dialect_insert(db, Group)
+        .values(
+            id=preferred,
+            course_id=course_id,
+            name=DEFAULT_GROUP_NAME,
+            name_key=key,
+            created_at=datetime.now(UTC),
+        )
+        .on_conflict_do_nothing()
+    )
+    group = db.scalar(select(Group).where(Group.course_id == course_id, Group.name_key == key))
     if group is None:
-        group = db.scalar(select(Group).where(Group.course_id == course_id).order_by(Group.id))
-    if group is None:
-        raise unprocessable("registration_unavailable", "This class is not accepting students.")
+        logger.error("default_group_conflict")
+        raise conflict("default_group_conflict", "The class default group is unavailable.")
     return group
+
+
+def ensure_student_group(db: Session, course_id: str, user_id: str) -> None:
+    # Course membership alone never grants a student a usable workspace.
+    db.flush()
+    membership = db.get(CourseMember, (course_id, user_id))
+    user = db.get(User, user_id)
+    if (
+        membership is None
+        or membership.role != "student"
+        or user is None
+        or user.status != "active"
+    ):
+        return
+    xact_lock(db, f"course-groups:{course_id}")
+    grouped = db.scalar(
+        select(GroupMember.group_id)
+        .join(Group, Group.id == GroupMember.group_id)
+        .where(Group.course_id == course_id, GroupMember.user_id == user_id)
+        .limit(1)
+    )
+    if grouped is None:
+        group = default_class_group(db, course_id)
+        db.add(
+            GroupMember(
+                group_id=group.id, user_id=user_id, role="member", created_at=datetime.now(UTC)
+            )
+        )
+        db.flush()
 
 
 def change_class(db: Session, user: User, course_id: str) -> None:
@@ -158,6 +202,7 @@ def change_class(db: Session, user: User, course_id: str) -> None:
         enter_student_class(db, user, course.id, datetime.now(UTC))
         return
     if len(memberships) == 1 and memberships[0].course_id == course.id:
+        ensure_student_group(db, course.id, user.id)
         return
     group = default_class_group(db, course.id)
     from app.modules.auth.models import DemoAccountBinding

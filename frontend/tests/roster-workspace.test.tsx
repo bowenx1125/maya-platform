@@ -324,7 +324,7 @@ describe("teacher account management", () => {
     );
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Class History 2026, switch class",
+        name: "Class 2026, switch class",
       }),
     );
     expect(
@@ -463,7 +463,7 @@ describe("teacher account management", () => {
       (account.closest(".roster-section") as HTMLElement).querySelector(
         ".roster-section-title",
       )?.textContent,
-    ).toBe("Team Aurora3");
+    ).toBe("Team Aurora2");
     expect(within(account).queryByText("Team Aurora")).toBeNull();
     // Active is the normal state and is not labelled; only removed is.
     expect(within(account).queryByText(/^active$/i)).toBeNull();
@@ -685,8 +685,69 @@ describe("teacher account management", () => {
     expect(sections).toEqual([
       { title: "Group 22", people: ["Ada", "Bea"] },
       { title: "Group 101", people: ["Yan"] },
-      { title: "No group1", people: ["Zed"] },
+      { title: "Students1", people: ["Zed"] },
     ]);
+  });
+
+  it("keeps variable teacher names separate from legacy ungrouped students and real groups", async () => {
+    const api = apiForTeacher();
+    api.courseRoster.mockResolvedValue({
+      course_id: courseId,
+      entries: [
+        entry({
+          user_id: "teacher-1",
+          username: "maya",
+          display_name: "Maya",
+          role: "teacher",
+          groups: [],
+        }),
+        entry({
+          user_id: "teacher-2",
+          username: "alex",
+          display_name: "Alex",
+          role: "teacher",
+          groups: [{ id: "g", name: "Teachers" }],
+        }),
+        entry({
+          user_id: "student-1",
+          username: "legacy",
+          display_name: "Legacy",
+          groups: [],
+        }),
+        entry({
+          user_id: "student-2",
+          username: "grouped",
+          display_name: "Grouped",
+          groups: [{ id: "ng", name: "No Group" }],
+        }),
+        entry({
+          user_id: "student-3",
+          username: "inactive",
+          display_name: "Inactive",
+          status: "inactive",
+          groups: [],
+        }),
+      ],
+    } as CourseRoster);
+    const { container } = mount(api);
+    await screen.findByText("maya");
+    const sections = [...container.querySelectorAll(".roster-section")].map(
+      (section) => ({
+        title: section.querySelector(".roster-section-title")?.textContent,
+        people: [...section.querySelectorAll(".roster-headline strong")].map(
+          (name) => name.textContent,
+        ),
+      }),
+    );
+    expect(sections).toEqual([
+      { title: "No Group1", people: ["Grouped"] },
+      { title: "Students1", people: ["Legacy"] },
+      { title: "Teachers2", people: ["Alex", "Maya"] },
+    ]);
+    expect(screen.queryByText("No group")).toBeNull();
+    expect(container.querySelector(".roster-removed")?.textContent).toContain(
+      "Inactive",
+    );
   });
 
   it("shows an issued password once", async () => {

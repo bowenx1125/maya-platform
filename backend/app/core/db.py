@@ -94,7 +94,7 @@ def resolve_pool_config(
     return size, overflow, timeout
 
 
-ALEMBIC_HEAD = "0092_repair_feedback_v2"
+ALEMBIC_HEAD = "0093_default_group_no_group"
 # The oldest revision this checkout has (migrations squashed 2026-10-25).
 MIGRATION_BASELINE = "0080_drop_playback_rate"
 

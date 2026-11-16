@@ -64,3 +64,9 @@ records until voice deletion settles. Migrations never delete existing accounts.
 Teachers share one selected class across pages. Switching opens the new class's
 module list, clears old detail/group context and caches, and preserves server
 membership checks. Public resources are class-bound, not global to a teacher.
+
+Every class has a protected **No Group** group. Active students without a group
+in that class join it automatically; teachers stay outside student groups.
+`No Group` is reserved case-insensitively: choosing that name joins the
+protected group rather than creating another group. Existing custom groups
+and their work stay in place.

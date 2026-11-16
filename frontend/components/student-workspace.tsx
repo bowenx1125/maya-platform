@@ -192,6 +192,7 @@ export function StudentDashboard() {
   // Bowen stays in every class he has entered. The home, the guide and the
   // default group are the class chosen at login, not the other class and not
   // an arbitrary default group ahead of his saved choice.
+
   const scoped = classId
     ? groups.filter((overview) => overview.group.course_id === classId)
     : groups;

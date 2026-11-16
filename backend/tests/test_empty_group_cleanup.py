@@ -234,7 +234,7 @@ def test_all_inactive_members_of_protected_groups_survive(
                 if protected == "generated"
                 else str(uuid4())
             )
-            group = Group(id=group_id, course_id=course_id, name="Students", created_at=now)
+            group = Group(id=group_id, course_id=course_id, name="No Group", created_at=now)
             db.add(group)
             db.flush()
         db.add(GroupMember(group_id=group_id, user_id=user_id, role="member", created_at=now))
@@ -274,16 +274,19 @@ def test_deactivation_prunes_after_the_last_active_member_and_reactivation_keeps
     for user_id, _ in users:
         response = _update(client, csrf, user_id, status="active")
         assert response.status_code == 200, response.text
-        assert response.json()["groups"] == []
+        assert response.json()["groups"] == [{"id": GROUP_DEMO_ID, "name": "No Group"}]
     with database.session() as db:
         assert db.get(Group, group_id) is None
-        assert not list(
+        assert set(
+            db.scalars(select(GroupMember.user_id).where(GroupMember.group_id == GROUP_DEMO_ID))
+        ) >= {user_id for user_id, _ in users}
+        assert set(
             db.scalars(
-                select(GroupMember).where(
+                select(GroupMember.group_id).where(
                     GroupMember.user_id.in_([user_id for user_id, _ in users])
                 )
             )
-        )
+        ) == {GROUP_DEMO_ID}
 
 
 def test_deactivation_prunes_only_the_users_groups_across_courses(
@@ -404,7 +407,7 @@ def test_default_groups_survive_and_created_class_remains_joinable(
     assert response.status_code == 201, response.text
     course_id = response.json()["id"]
     group_id = seed_uuid(f"class-students-{course_id}")
-    user_id, joined = _register(client, course_id=course_id, group_name="Students")
+    user_id, joined = _register(client, course_id=course_id, group_name="No Group")
     assert joined == group_id
     _, csrf = login(client)
     response = client.delete(
@@ -421,10 +424,12 @@ def test_default_groups_survive_and_created_class_remains_joinable(
             assert db.get(Group, protected) is not None
     options = client.get("/api/v1/auth/registration-options").json()
     course = next(row for row in options["classes"] if row["course_id"] == course_id)
-    assert course["groups"] == [{"name": "Students", "member_count": 0}]
+    assert course["groups"] == [{"name": "No Group", "member_count": 0}]
 
 
-def test_default_fallback_is_protected(client: TestClient, database: Any) -> None:
+def test_missing_default_is_created_instead_of_protecting_an_arbitrary_group(
+    client: TestClient, database: Any
+) -> None:
     course_id, group_id = str(uuid4()), str(uuid4())
     now = datetime.now(UTC)
     with database.session() as db:
@@ -433,7 +438,11 @@ def test_default_fallback_is_protected(client: TestClient, database: Any) -> Non
         db.add(Group(id=group_id, course_id=course_id, name="Fallback group", created_at=now))
         db.flush()
         prune_empty_groups(db, course_id, [group_id, group_id])
-        assert db.get(Group, group_id) is not None
+        assert db.get(Group, group_id) is None
+        default = db.get(Group, seed_uuid(f"class-students-{course_id}"))
+        assert default is not None and default.name == "No Group"
+        prune_empty_groups(db, course_id, [default.id])
+        assert db.get(Group, default.id) is default
 
 
 def test_catalog_delete_never_prunes(client: TestClient, database: Any) -> None:

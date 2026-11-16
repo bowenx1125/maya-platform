@@ -130,6 +130,9 @@
     "debateStepFailed": {
       "en": "This Debate step couldn't continue. Refresh the stage and try again."
     },
+    "defaultGroupConflict": {
+      "en": "The class default group is unavailable."
+    },
     "demoDataLocked": {
       "en": "The demo data can't be changed this way."
     },
@@ -139,6 +142,7 @@
     "fileNoText": {
       "en": "No readable text was found in this file."
     },
+
     "fileProcessingFailed": {
       "en": "The file couldn't be processed. Try again."
     },
@@ -464,8 +468,10 @@
     "debate_not_regenerable": "debateStepFailed",
     "debate_rate_limited": "debateRateLimited",
     "debate_stopped": "debateEnded",
+    "default_group_conflict": "defaultGroupConflict",
     "demo_baseline_conflict": "demoDataLocked",
     "demo_baseline_immutable": "demoDataLocked",
+
     "direct_evidence_required": "aiStepFailed",
     "display_name_invalid": "displayNameInvalid",
     "display_name_managed": "accountFieldManaged",

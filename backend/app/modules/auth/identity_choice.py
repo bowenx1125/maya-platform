@@ -57,10 +57,8 @@ def issue_choice(db: Session, client: str, now: datetime | None = None) -> Login
 def _student_landing_group(db: Session, course_id: str) -> Group | None:
     """Group Bowen joins when he first enters a class as a student.
 
-    The Students row is the protected shell (Maya1001's default, and
-    ``class-students-{course}`` on later classes). Auto-enrolment into that
-    shell is what left him listed there alone. The original class's catalog
-    group is the real cohort. Existing memberships are not removed.
+    Prefer an ordinary cohort when available. The protected No Group shell
+    remains the fallback, including for an existing ungrouped course member.
     """
 
     rows = db.scalars(
@@ -112,7 +110,7 @@ def enter_student_class(db: Session, user: User, course_id: str, timestamp: date
             CourseMember(course_id=course_id, user_id=user.id, role="student", created_at=timestamp)
         )
         # A revoked or changed grant is left alone: this only runs when he
-        # has no course row yet. The Students shell is not a landing group.
+        # has no course row yet. The No Group shell is not a landing group.
         group = _student_landing_group(db, course_id)
         if group is not None and db.get(GroupMember, (group.id, user.id)) is None:
             db.add(

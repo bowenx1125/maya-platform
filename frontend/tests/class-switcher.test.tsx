@@ -36,7 +36,7 @@ vi.mock("../components/session-provider", () => ({
   RouteGuard: ({ children }: { children: ReactNode }) => children,
 }));
 
-import { ClassSwitcher } from "../components/class-switcher";
+import { classLabel, ClassSwitcher } from "../components/class-switcher";
 import { AppShell, SIDEBAR_COLLAPSED_KEY } from "../components/app-shell";
 import { useTeacherClasses } from "../components/use-teacher-classes";
 import TeacherLayout from "../app/teacher/layout";
@@ -93,7 +93,42 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("class label", () => {
+  it.each([
+    ["Maya1001", "1001"],
+    ["FE Lab 1003", "1003"],
+    ["1003", "1003"],
+    ["Maya Arts", "Maya Arts"],
+    ["  FE Lab 1003  ", "1003"],
+    ["Lab 12 room 345", "12"],
+    ["   ", "   "],
+    ["", ""],
+  ])("labels %j as %j", (name, expected) => {
+    expect(classLabel(name)).toBe(expected);
+  });
+});
+
 describe("class switcher", () => {
+  it("shows digits for spaced names while keeping full menu text and tooltips", async () => {
+    state.api.courses.mockResolvedValue([
+      { id: "a", name: "FE Lab 1003" },
+      { id: "b", name: "Maya1002" },
+    ]);
+    mount();
+    const button = await screen.findByRole("button", {
+      name: "Class 1003, switch class",
+    });
+    expect(button.textContent).toBe("1003");
+    expect(button.title).toBe("FE Lab 1003");
+    expect(button.dataset.numeric).toBe("true");
+    expect(screen.getByTestId("class-switcher-home").title).toBe(
+      "Mayaform-1003",
+    );
+    fireEvent.click(button);
+    expect(screen.getByTestId("class-switcher-item-a").textContent).toBe(
+      "✓FE Lab 1003Current",
+    );
+  });
   it("renders the home and trigger, with only teacher classes as checked radios", async () => {
     mount();
     const button = await trigger();
@@ -132,7 +167,7 @@ describe("class switcher", () => {
   });
 
   it("keeps the full home wordmark and long non-Maya class name in the title", async () => {
-    const name = "North Campus Evening Cohort Spring 2026";
+    const name = "North Campus Evening Cohort Spring";
     state.api.courses.mockResolvedValue([
       { id: "a", name },
       { id: "b", name: "Maya1002" },
