@@ -58,6 +58,7 @@ export function AvatarEditor({
   disabled = false,
   errorMessage,
   onPreview,
+  onEdit,
 }: AvatarEditorProps) {
   const t = useT();
   const displayFallbackLabel = fallbackLabel ?? t("avatar");
@@ -123,7 +124,16 @@ export function AvatarEditor({
         fallbackLabel={displayFallbackLabel}
       />
       {value.template_id === "egg" ? (
-        <div className="rounded-xl border-[3px] border-[#111] bg-white p-2.5 shadow-[3px_3px_0_#111] max-[767px]:p-[9px]">
+        <div className="grid grid-cols-2 gap-2 rounded-xl border-[3px] border-[#111] bg-white p-2.5 shadow-[3px_3px_0_#111] max-[767px]:p-[9px]">
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={onEdit}
+            className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-[10px] border-[3px] border-[#111] bg-white text-base font-bold shadow-[6px_6px_0_#111] max-[767px]:text-sm ${PRESS_MOTION}`}
+          >
+            <WorkspaceIcon name="pen" size={20} />
+            Edit
+          </button>
           <button
             type="button"
             disabled={disabled}

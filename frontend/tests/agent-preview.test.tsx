@@ -183,7 +183,7 @@ describe("single-turn Preview", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     expect(send).toHaveBeenCalledWith("Next?");
   });
-  it("Egg has only Preview; non-Egg has no content action and keeps customization", () => {
+  it("Option A exposes Edit and Preview only for Egg and keeps other customization", () => {
     const templates = [
       defaults["wave1-default-head"],
       defaults["maya-warm-scholar"],
@@ -195,15 +195,18 @@ describe("single-turn Preview", () => {
       available: true,
       supported_parameters: [],
     }));
+    const edit = vi.fn();
     const { rerender } = render(
       <AvatarEditor
         templates={templates}
         value={defaults.egg}
+        onEdit={edit}
         onChange={vi.fn()}
       />,
     );
     expect(screen.getByRole("button", { name: "Preview" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(edit).toHaveBeenCalledOnce();
     expect(screen.getAllByRole("radio").map((b) => b.textContent)).toEqual([
       "Default",
       "Scholar",
@@ -218,6 +221,7 @@ describe("single-turn Preview", () => {
       />,
     );
     expect(screen.queryByRole("button", { name: "Preview" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.getByLabelText("Material theme")).toBeTruthy();
   });
 });
