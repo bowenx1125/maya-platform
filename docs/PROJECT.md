@@ -97,15 +97,9 @@ Gesture v2:figure-space arm/hand rotations,A⁻¹·E·A·rest,shared Mixamo clip
 
 Nov12 #419:second capsule press closes;no trigger pathname key. New usernames 3-64 letters/digits;older `.` `_` `-` names still sign in. Private→Public is the owner.
 
-## Nov13 deploy
+## Nov13–15
 
-f1087c4d live:3D/gesture v2/3 figures/#419,replaces334fbd94.Local image save/load;3.5G server:no build/test.Backup maya-pre-334fbd94-20261112-213724.dump:102M,list pass,PG-only.0091_quiz_show_results;ready/HTTPS200.Backend240/319;known voice+2 load-adaptive failures,no regressions.
-
-Nov14:Teams ?/Agent RAG hint/tour voices removed.Capsule shared teacher shell/session/user/course caches,B2b;390/1440 stable.Page-rise520ms/reduced motion;Immerse loading hides Back.Quiz ZIP:XLSX/paper/grades.UI/build/gates/PG checked,new0;0 calls/deploy.
-
-Nov15 #426:flat LoadingPage #CEDAE3;390/1440/build checked.
-
-Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs;Team/assessment bytes kept.473 focused pass;no real LLM.Voice branch fixes baseline Prettier/Ruff formatting.
+#419 live+0091;Nov14 capsule/caches;Nov15 #426 LoadingPage,#425 single Chat memory.0 calls/deploy.
 
 ## Nov16 local paired review
 
@@ -129,7 +123,7 @@ A/B/C tip df958a53583b+main90f753e0: A digits-only class capsule; B/C No Group+T
 
 ## Nov16 #427 local integration
 
-Merge inputs: main 92592341b3006cb2032e8d59fabac5f2b52d9615 + Egg/Preview 1c0069b67088f27960a2b428dc27dff7edfa19aa (base cc2a73219fea5b5a2b281dceb2c1daf47df85041). Main Voice copy/tests retained;Egg C2/GLB/frozen Debate avatar/Preview V2/null version fix kept. Contracts regenerated;sole head0093. Preview now resolves the current published snapshot via shared Chat retrieval (controlled query embedding/identity vector search); no draft docs/history/memory or automatic retry. No snapshot→existing agent_not_published/shared English copy. Contract:170 routes; Preview document_ids removed. PG targeted:328 pass, including error-copy/no-match regressions. UI:1447 pass/13 skip; build pass. Ruff/mypy/route-compare/head checks pass; script gates (including 22 negative route cases), boundary probe and empty-DB upgrade pass. 0 external calls/deploy.
+#427+Voice:head0093;Preview=published snapshot via shared Chat retrieval;170 routes;PG328/UI1447;0 calls/deploy.
 
 #427 batch 2: bounded editable Egg strokes/masks/mouth;Avatar-only publication/CAS/idempotency;participant freeze reused.PR tray:Preview;Option A separate.Backend83/UI1455/static17/build/local WebGL passed;real Voice/deploy excluded.
 
@@ -137,4 +131,6 @@ Nov16 copy approval:two exact Avatar Save cause/fix messages;drawing bypasses ca
 
 #427 Option A: white Edit beside Preview opens the same board; merges eadd723b.
 
-Nov16 Option C:egg floor+crown;Roundtable Banner overlays.DRAFT;0 calls/deploy.
+Nov16 Option C:egg floor+crown;Roundtable Banner overlays.Live #448.
+
+Nov16 egg speak-yaw+list End:eggs turn to camera while speaking (snap if reduced-motion;front seat yaw unchanged);Debate list End skips EndRunningDebatePrompt,ErrorNotice on failure only.DRAFT;0 calls/deploy.
