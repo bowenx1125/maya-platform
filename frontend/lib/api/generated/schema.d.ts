@@ -3891,7 +3891,7 @@ export interface components {
             current_stance?: "support" | "oppose" | "neutral" | null;
             current_position_summary?: string;
             /**
-             * @description Null for a Debate created before debate cards. fallback means the turns send the original AGENT.md.
+             * @description Null for a Debate created before debate cards (legacy pinned AGENT.md). ready carries the extracted card. fallback is compile failure; turns do not speak from raw AGENT.md.
              * @enum {string|null}
              */
             card_status?: "compiling" | "ready" | "fallback" | null;

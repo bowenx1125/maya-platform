@@ -38,6 +38,7 @@ import { QrCode } from "../../interaction/qr-code";
 import { BarrageLane, type BarrageBullet } from "../../stage3d/barrage-lane";
 import { ScholarScene } from "../../stage3d/scholar-scene";
 import { bubbleProgressFrom, waitForBubblePaint } from "./bubble-progress";
+import { stageMouthVisual } from "./mouth-sync";
 import type { StageCharacter } from "../../stage3d/scholar-stage";
 import { cn } from "../../../lib/utils";
 import { useStageMusic } from "../../../lib/background-music";
@@ -1379,6 +1380,11 @@ export function BetaDebateStage({
           throw new Error("stale early start");
         }
         await audio.play();
+        // Mark live audio as soon as play() resolves; onPlaying also sets this.
+        // Mouth visuals key off audioPlayingTurnId, not server status.
+        if (audioTurnRef.current === turnId) {
+          setAudioPlayingTurnId(turnId);
+        }
       })();
       const pending = { key, play };
       earlyStartRef.current = pending;
@@ -1787,6 +1793,9 @@ export function BetaDebateStage({
               return;
             }
             await audio.play();
+            if (audioTurnRef.current === preparedTurnId) {
+              setAudioPlayingTurnId(preparedTurnId);
+            }
           };
           let playResult: Promise<void>;
           if (early?.key === key) {
@@ -3787,18 +3796,26 @@ export function BetaDebateStage({
       config: participant.avatar_config,
     }),
   );
+  // Mouth follows the audio element (onPlaying / play() resolve), not the
+  // server status flip to "playing". startEarly can be audible while status
+  // is still "ready"; waiting for started_ack left the mouth idle.
+  const mouthSpeakerId =
+    bubblePlayback?.participantId ??
+    bubbleTurn?.participant_id ??
+    currentParticipantId;
   const stageVisuals: Record<string, AvatarState> = {};
   for (const participant of detailState.participants) {
     const motion =
       derivedAvatars.find((item) => item.participant_id === participant.id)
         ?.motion_state ?? "idle";
-    stageVisuals[participant.id] =
-      motion === "speaking" &&
-      (playback.status !== "playing" ||
-        mediaRetryNeeded ||
-        audioPlayingTurnId !== playback.current_turn_id)
-        ? "idle"
-        : motion;
+    stageVisuals[participant.id] = stageMouthVisual({
+      derived: motion,
+      participantId: participant.id,
+      speakerId: mouthSpeakerId,
+      audioPlayingTurnId,
+      currentTurnId: playback.current_turn_id,
+      mediaRetryNeeded,
+    });
   }
 
   const phase = deriveClassroomPhase(

@@ -33,6 +33,7 @@ from app.core.models import (
 from app.modules.agents.markdown import markdown_hash
 from app.modules.debates.cards import (
     CardOutcome,
+    CardUnavailable,
     card_persona,
     compile_card_with_provider,
     ensure_card_terminal,
@@ -1856,9 +1857,20 @@ class SqlTurnPreparer:
 
     def _compile_card(self, db: Session, debate: Any, row: DebateParticipant) -> CardOutcome:
         if self.llm_runtime is not None or not isinstance(self.llm, DashScopeLLMAdapter):
-            # Mock and injected runtimes make no provider call, so the turn
-            # keeps the original Agent.md.
-            return CardOutcome("fallback", safe_error_code="debate_card_mock_provider")
+            # Mock and injected runtimes make no provider call. Prefer a
+            # name-only ready stub (usable extract) over fail-open to raw text.
+            del db, debate
+            return CardOutcome(
+                "ready",
+                card={
+                    "identity": str(row.agent_name),
+                    "position": "",
+                    "reasoning": [],
+                    "speaking_style": "",
+                    "voice_style": None,
+                    "dropped": [],
+                },
+            )
         policy_hash = self.llm_runtime_options.get("policy_hash") or _provider_policy_hash(
             self.settings, "llm"
         )
@@ -1885,8 +1897,22 @@ class SqlTurnPreparer:
             if str(version.knowledge_snapshot_id or "") != str(row.knowledge_snapshot_id):
                 raise ValueError("frozen AgentVersion snapshot does not match participant")
             agent_md = version.agent_md
-        # A ready card replaces the raw text; every other state sends it as before.
-        authored, card_position = card_persona(row, agent_md, language)
+        # Ready cards send the extracted persona. Legacy null keeps pinned
+        # bytes. Fallback after a compile that could not yield a card speaks
+        # from the original AGENT.md so the turn is not empty.
+        try:
+            authored, card_position = card_persona(row, agent_md, language)
+        except CardUnavailable as exc:
+            raise PlatformError(
+                exc.code,
+                (
+                    "The debate card could not be prepared from this Agent's "
+                    "AGENT.md, so this Agent will speak from its original "
+                    "AGENT.md for now. Open Check card, fix the Agent text if "
+                    "needed, then try again."
+                ),
+                503,
+            ) from exc
         return ParticipantContext(
             participant_id=row.id,
             agent_id=row.agent_id,
