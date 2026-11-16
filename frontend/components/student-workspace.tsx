@@ -1,5 +1,7 @@
 "use client";
 
+import type { AvatarConfig } from "./avatar/types";
+
 import { safeTeamsReturn } from "../lib/team-return";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -947,7 +949,11 @@ function CreateAgentFormSession({
     mutationStore.abandon(mutationIntent);
   }
 
-  async function createAgent(name: string, visibility: "private" | "public") {
+  async function createAgent(
+    name: string,
+    visibility: "private" | "public",
+    avatarConfig?: AvatarConfig,
+  ) {
     const handle = mutationStore.handleFor(mutationIntent);
     try {
       const created = groupId
@@ -957,6 +963,7 @@ function CreateAgentFormSession({
             "",
             { idempotency: handle },
             visibility,
+            ...(avatarConfig?.drawing ? [avatarConfig] : []),
           )
         : await api.createWorkspaceAgent(
             courseId ?? "",
@@ -964,6 +971,7 @@ function CreateAgentFormSession({
             "",
             { idempotency: handle },
             visibility,
+            ...(avatarConfig?.drawing ? [avatarConfig] : []),
           );
       mutationStore.finish(mutationIntent, handle);
       return created;

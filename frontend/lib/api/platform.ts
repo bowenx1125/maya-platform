@@ -1,3 +1,4 @@
+import type { AvatarConfig } from "../../components/avatar/types";
 import type { components, operations } from "./generated/schema";
 import type { LoginQueueNotice } from "../login-queue";
 import {
@@ -2152,6 +2153,7 @@ export class PlatformApi {
     description: string,
     options: IdempotentMutationOptions = {},
     visibility: "private" | "public" = "private",
+    avatarConfig?: AvatarConfig,
   ): Promise<AgentDetail> {
     return commitMutation(options.idempotency, async (key) => {
       const result = await this.client.POST("/groups/{group_id}/agents", {
@@ -2162,7 +2164,12 @@ export class PlatformApi {
             "X-CSRF-Token": this.csrfToken ?? "",
           },
         },
-        body: { name, description, visibility },
+        body: {
+          name,
+          description,
+          visibility,
+          ...(avatarConfig ? { avatar_config: avatarConfig } : {}),
+        },
       });
       return unwrap(result);
     });
@@ -2182,6 +2189,7 @@ export class PlatformApi {
     description: string,
     options: IdempotentMutationOptions = {},
     visibility: "private" | "public" = "private",
+    avatarConfig?: AvatarConfig,
   ): Promise<AgentDetail> {
     return commitMutation(options.idempotency, async (key) => {
       const result = await this.client.POST(
@@ -2194,7 +2202,12 @@ export class PlatformApi {
               "X-CSRF-Token": this.csrfToken ?? "",
             },
           },
-          body: { name, description, visibility },
+          body: {
+            name,
+            description,
+            visibility,
+            ...(avatarConfig ? { avatar_config: avatarConfig } : {}),
+          },
         },
       );
       return unwrap(result);
@@ -2312,6 +2325,25 @@ export class PlatformApi {
       content: await unwrap(result),
       filename: responseDownloadFilename(result.response, fallbackFilename),
     };
+  }
+
+  async saveAgentAvatar(
+    versionId: string,
+    body: components["schemas"]["SaveAvatarRequest"],
+    idempotencyKey: string,
+  ): Promise<AgentVersion> {
+    return unwrap(
+      await this.client.PUT("/agent-versions/{version_id}/avatar", {
+        params: {
+          path: { version_id: versionId },
+          header: {
+            "X-CSRF-Token": this.csrfToken ?? "",
+            "Idempotency-Key": idempotencyKey,
+          },
+        },
+        body,
+      }),
+    );
   }
 
   async updateDraft(
@@ -2802,6 +2834,12 @@ export class PlatformApi {
         { params: { path: { voice_profile_id: profileId } } },
       ),
     );
+  }
+
+  async previewAgent(
+    body: components["schemas"]["AgentPreviewRequest"],
+  ): Promise<components["schemas"]["AgentPreviewResponse"]> {
+    return this.postJson("agents/preview", body);
   }
 
   async avatarTemplates(): Promise<AvatarTemplate[]> {

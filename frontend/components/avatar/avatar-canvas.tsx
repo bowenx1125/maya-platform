@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { EggCanvas } from "./egg-canvas";
 import { useT } from "../../lib/i18n";
 import { LoadingCard } from "../ui";
 import type { AvatarConfig, AvatarState } from "./types";
@@ -29,7 +30,17 @@ function initials(label: string): string {
     .join("");
 }
 
-export function AvatarCanvas({
+export function AvatarCanvas(props: AvatarCanvasProps) {
+  if (props.config?.template_id === "egg")
+    return (
+      <div className={`w-full ${props.className ?? "aspect-square"}`}>
+        <EggCanvas drawing={props.config.drawing} />
+      </div>
+    );
+  return <LegacyAvatarCanvas {...props} />;
+}
+
+function LegacyAvatarCanvas({
   config,
   state = "idle",
   assetUrl,

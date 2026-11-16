@@ -1,3 +1,5 @@
+import { prepareEggModel, type EggModel } from "./egg-model";
+
 import type { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
 import * as THREE from "three";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
@@ -196,6 +198,7 @@ type MorphMesh = THREE.Mesh & {
 };
 
 type Character = {
+  egg: EggModel | null;
   spec: StageCharacter;
   root: THREE.Object3D;
   shadow: THREE.Mesh;
@@ -834,7 +837,8 @@ export class ScholarStage {
       document.exitPointerLock?.();
     for (const character of this.characters) {
       this.scene.remove(character.root);
-      disposeObject(character.root, false);
+      character.egg?.dispose();
+      disposeObject(character.root, Boolean(character.egg));
       this.scene.remove(character.shadow);
       disposeObject(character.shadow);
     }
@@ -859,16 +863,17 @@ export class ScholarStage {
   }
 
   private load(): void {
-    for (const url of STAGE_CHARACTER_ASSETS) {
+    const assets = [...STAGE_CHARACTER_ASSETS, "/avatars/Maya-Egg.glb"];
+    for (const url of assets) {
       if (!isStageAssetUrl(url)) {
         this.onError?.(new Error("stage_asset_rejected"));
         return;
       }
     }
-    this.loading = STAGE_CHARACTER_ASSETS.length;
-    this.templates = new Array(STAGE_CHARACTER_ASSETS.length);
-    this.templateScales = new Array(STAGE_CHARACTER_ASSETS.length);
-    STAGE_CHARACTER_ASSETS.forEach((url, index) => {
+    this.loading = assets.length;
+    this.templates = new Array(assets.length);
+    this.templateScales = new Array(assets.length);
+    assets.forEach((url, index) => {
       this.loader.load(
         url,
         (gltf) => {
@@ -1382,7 +1387,8 @@ export class ScholarStage {
   private rebuild(specs: StageCharacter[]): void {
     for (const character of this.characters) {
       this.scene.remove(character.root);
-      disposeObject(character.root, false);
+      character.egg?.dispose();
+      disposeObject(character.root, Boolean(character.egg));
       this.scene.remove(character.shadow);
       disposeObject(character.shadow);
     }
@@ -1392,11 +1398,17 @@ export class ScholarStage {
     specs.forEach((spec, index) => {
       // Deterministic variant per seat: load order is the roster order, so a
       // given roster always renders the same mix of the two figures.
-      const templateIndex = index % this.templates.length;
+      const isEgg = spec.config.template_id === "egg";
+      const templateIndex = isEgg
+        ? STAGE_CHARACTER_ASSETS.length
+        : index % STAGE_CHARACTER_ASSETS.length;
       const root = cloneSkinned(
         this.templates[templateIndex] as THREE.Object3D,
       );
-      root.scale.setScalar(this.templateScales[templateIndex]);
+      const egg = isEgg ? prepareEggModel(root, spec.config.drawing) : null;
+      root.scale.setScalar(
+        isEgg ? this.characterHeight / 2.7 : this.templateScales[templateIndex],
+      );
       const offset = standingPlacement(spec.slot);
       const standingX = offset.x;
       const standingZ = this.stageCenterZ + offset.z;
@@ -1408,7 +1420,7 @@ export class ScholarStage {
         hangProfileForAsset(STAGE_CHARACTER_ASSETS[templateIndex] ?? ""),
       );
       const meshes: MorphMesh[] = [];
-      this.styleFigure(root, spec.config, meshes);
+      if (!isEgg) this.styleFigure(root, spec.config, meshes);
       const groundY = this.groundCharacter(root);
       const shadow = new THREE.Mesh(
         new THREE.CircleGeometry(0.34, 32),
@@ -1459,6 +1471,7 @@ export class ScholarStage {
       const handRRestQ = handRBone?.quaternion.clone() ?? null;
 
       const character: Character = {
+        egg,
         spec,
         root,
         shadow,
@@ -1675,6 +1688,14 @@ export class ScholarStage {
     delta: number,
     elapsed: number,
   ): void {
+    if (character.egg) {
+      character.egg.frame(
+        elapsed,
+        character.state === "speaking",
+        this.reducedMotion,
+      );
+      return;
+    }
     const stateElapsed = (performance.now() - character.stateStartedAt) / 1000;
     const frame = avatarMotionFrame(
       this.reducedMotion ? "idle" : character.state,

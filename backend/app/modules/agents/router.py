@@ -52,10 +52,13 @@ from app.modules.agents.persona import (
 from app.modules.agents.schemas import (
     AgentCreateRequest,
     AgentDetail,
+    AgentPreviewRequest,
+    AgentPreviewResponse,
     AgentSummary,
     PublishAgentVersionRequest,
     PublishedAgentAuthor,
     PublishedAgentSummary,
+    SaveAvatarRequest,
     TestChatRequest,
     TestChatResponse,
     UpdateAgentDraftRequest,
@@ -986,6 +989,11 @@ def create_agent(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> AgentDetail:
+    if payload.avatar_config is not None:
+        try:
+            validate_avatar_config(payload.avatar_config)
+        except AvatarConfigValidationError as exc:
+            raise validation_failure(exc.message, exc.details, code=exc.code) from exc
     payload = payload.model_copy(update={"name": _clean_agent_name(payload.name)})
     # The sign-in check above opened a read transaction; end it so a
     # request queued for admission holds no pooled connection while it waits.
@@ -1057,7 +1065,9 @@ def create_agent(
             agent_md="",
             raw_agent_md_hash=raw_agent_md_hash(""),
             persona_required=True,
-            avatar_config_json=DEFAULT_AVATAR_CONFIG.model_dump_json(),
+            avatar_config_json=validate_avatar_config(
+                payload.avatar_config or DEFAULT_AVATAR_CONFIG
+            ).model_dump_json(),
             authorization_epoch=agent.authorization_epoch,
             draft_visibility=payload.visibility,
             published_visibility=None,
@@ -1124,6 +1134,11 @@ def create_course_workspace_agent(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> AgentDetail:
+    if payload.avatar_config is not None:
+        try:
+            validate_avatar_config(payload.avatar_config)
+        except AvatarConfigValidationError as exc:
+            raise validation_failure(exc.message, exc.details, code=exc.code) from exc
     payload = payload.model_copy(update={"name": _clean_agent_name(payload.name)})
     # The sign-in check above opened a read transaction; end it so a
     # request queued for admission holds no pooled connection while it waits.
@@ -1192,7 +1207,9 @@ def create_course_workspace_agent(
             agent_md="",
             raw_agent_md_hash=raw_agent_md_hash(""),
             persona_required=True,
-            avatar_config_json=DEFAULT_AVATAR_CONFIG.model_dump_json(),
+            avatar_config_json=validate_avatar_config(
+                payload.avatar_config or DEFAULT_AVATAR_CONFIG
+            ).model_dump_json(),
             authorization_epoch=agent.authorization_epoch,
             draft_visibility="private",
             published_visibility=None,
@@ -1516,6 +1533,8 @@ def create_next_agent_version(
     )
     if replay is not None:
         return replay  # type: ignore[return-value]
+    _begin_immediate(db, str(agent_id))
+    scoped = visible_student_agent(db, context, str(agent_id))
     assert_claim_owned(db, record)
     if scoped.agent.status != "active" or not scoped.agent.current_published_version_id:
         abandon_claim(db, record)
@@ -1619,6 +1638,54 @@ def create_next_agent_version(
     db.commit()
     saga_checkpoint("create_next_agent_version.after_final_commit")
     return result
+
+
+@router.put(
+    "/agent-versions/{version_id}/avatar",
+    response_model=AgentVersionDTO,
+    operation_id="saveAgentAvatar",
+    responses={
+        200: {"model": AgentVersionDTO, "description": "Avatar saved immediately."},
+        404: {"model": Error, "description": "Version not found."},
+        409: {"model": Error, "description": "Revision or base conflict."},
+        422: {"model": Error, "description": "Invalid avatar."},
+    },
+)
+def save_agent_avatar(
+    version_id: UUID,
+    payload: SaveAvatarRequest,
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> AgentVersionDTO:
+    from app.modules.agents.avatar_save import save_avatar
+
+    reject_baseline_version_mutation(str(version_id))
+    scoped = visible_student_version(db, context, str(version_id))
+    agent_id = scoped.agent.id
+    body_hash = parse_json_payload_hash(
+        "saveAgentAvatar", context, [str(version_id)], payload.model_dump(mode="json")
+    )
+    record, replay = claim_idempotency(db, context, "saveAgentAvatar", idempotency_key, body_hash)
+    if replay is not None:
+        return replay  # type: ignore[return-value]
+    _begin_immediate(db, agent_id)
+    try:
+        assert_claim_owned(db, record)
+        scoped = visible_student_version(db, context, str(version_id))
+        db.refresh(scoped.version, with_for_update=True)
+        version = save_avatar(db, scoped.agent, scoped.version, payload)
+        _touch_last_editor(db, agent_id, context.user.id)
+        db.flush()
+        result = _version_dto_for_actor(db, version, scoped.agent, context)
+        finish_idempotency(db, record, 200, result.model_dump(mode="json"))
+        db.commit()
+        return result
+    except PlatformError:
+        db.rollback()
+        abandon_claim(db, record)
+        raise
 
 
 @router.get(
@@ -2065,6 +2132,36 @@ def _publish_agent_version_admitted(
         # an injected crash or unexpected infrastructure error occurs.
         _recover_publish_guard(db, guard_id)
         abandon_claim(db, record)
+        raise
+
+
+@router.post(
+    "/agents/preview",
+    response_model=AgentPreviewResponse,
+    operation_id="previewAgent",
+    responses={
+        200: {
+            "model": AgentPreviewResponse,
+            "description": "Disposable single-sentence reply and optional voice.",
+        },
+        409: {"model": Error, "description": "Publish the first Agent version first."},
+        404: {"model": Error, "description": "Agent or source not found."},
+        422: {"model": Error, "description": "Invalid Preview input."},
+    },
+)
+def preview_agent_route(
+    payload: AgentPreviewRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> AgentPreviewResponse:
+    from app.modules.agents.preview import preview_agent
+
+    try:
+        return preview_agent(db, context, payload, settings)
+    except PlatformError as exc:
+        logger.warning("agent_preview_failed safe_code=%s", exc.code)
         raise
 
 

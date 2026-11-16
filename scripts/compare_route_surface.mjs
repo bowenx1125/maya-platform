@@ -48,6 +48,7 @@ const implementedOperationIds = new Set([
   "createNextAgentVersion",
   "getAgentVersion",
   "updateAgentDraft",
+  "saveAgentAvatar",
   "downloadAgentMd",
   "uploadAgentMd",
   "publishAgentVersion",

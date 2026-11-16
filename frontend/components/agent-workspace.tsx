@@ -1,5 +1,10 @@
 "use client";
 
+import { DrawingBoard } from "./avatar/drawing-board";
+import type { Drawing } from "./avatar/drawing";
+
+import { AgentPreview } from "./agent-preview/agent-preview";
+
 import { AgentHintBar } from "./agent-issue-list";
 import {
   issueKey,
@@ -94,7 +99,7 @@ const MARKDOWN_CARD = cn(
 );
 const AVATAR_CARD = cn(
   agentCard("avatar"),
-  "[background:radial-gradient(ellipse_at_50%_46%,#FFE14D_0_20%,transparent_21%),repeating-conic-gradient(from_0deg_at_50%_32%,#FDBA74_0_9deg,#FFE7CC_9deg_18deg)]",
+  "[background:#FDBA74_repeating-conic-gradient(from_0deg_at_50%_47%,#FFE9CB_0_9deg,transparent_9deg_18deg)]",
   "[&_[class*=canvasFrame]]:border-0 [&_[class*=canvasFrame]]:bg-none [&_[class*=canvasFrame]]:bg-transparent [&_canvas]:drop-shadow-[0_8px_0_#1113]",
   "[&_[class*=controlGrid]]:rounded-[12px] [&_[class*=controlGrid]]:border-[3px] [&_[class*=controlGrid]]:border-[#111] [&_[class*=controlGrid]]:bg-white [&_[class*=controlGrid]]:p-3 [&_[class*=controlGrid]]:shadow-[4px_4px_0_#111]",
   "[&_select]:h-10 [&_select]:rounded-[8px] [&_select]:border-2 [&_select]:border-[#111] [&_select]:bg-white",
@@ -306,6 +311,7 @@ export function AgentWorkbench({
     create: (
       name: string,
       visibility: "private" | "public",
+      avatarConfig?: AvatarConfig,
     ) => Promise<AgentDetail>;
     onIdentityEdit?: () => void;
   };
@@ -358,6 +364,9 @@ export function AgentWorkbench({
     useState<unknown>(null);
   const [avatarTemplatesLoading, setAvatarTemplatesLoading] = useState(false);
   const avatarLoadSequence = useRef(0);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [drawingOpen, setDrawingOpen] = useState(false);
+  const [previewDrawing, setPreviewDrawing] = useState<Drawing | null>(null);
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
   const [voiceProfileId, setVoiceProfileId] = useState<string | null>(null);
   const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfile[]>([]);
@@ -1056,7 +1065,9 @@ export function AgentWorkbench({
     let created = createdAgentRef.current;
     if (!created) {
       try {
-        created = await create(draftName.trim(), draftVisibility);
+        created = avatarConfig?.drawing
+          ? await create(draftName.trim(), draftVisibility, avatarConfig)
+          : await create(draftName.trim(), draftVisibility);
         if (!isCurrentScope(requestScope)) return null;
         createdAgentRef.current = created;
         setAgent(created);
@@ -1732,7 +1743,76 @@ export function AgentWorkbench({
             </div>
             <div className="stage sticky top-5 grid gap-11 self-start max-[767px]:static max-[767px]:order-2">
               {avatarConfig ? (
-                <SectionCard title={t("avatarDesign")} className={AVATAR_CARD}>
+                <DrawingBoard
+                  key={`drawing:${workbenchScope}`}
+                  open={drawingOpen}
+                  drawing={avatarConfig.drawing}
+                  onClose={() => setDrawingOpen(false)}
+                  onPreview={(drawing) => {
+                    setPreviewDrawing(drawing);
+                    setPreviewOpen(true);
+                  }}
+                  onSave={async (drawing, key) => {
+                    const config = { ...avatarConfig, drawing };
+                    if (unsavedCreate && !currentAgent.id) {
+                      unsavedCreate.onIdentityEdit?.();
+                      setAvatarConfig(config);
+                      return;
+                    }
+                    const requestScope = workbenchScope;
+                    const next = await api.saveAgentAvatar(
+                      currentVersion.id,
+                      {
+                        expected_revision: currentVersion.revision,
+                        expected_published_version_id:
+                          currentAgent.current_published_version_id ?? null,
+                        avatar_config: config,
+                      },
+                      key,
+                    );
+                    if (!isCurrentScope(requestScope)) return;
+                    setVersion(next);
+                    setAvatarConfig(next.avatar_config);
+                    if (next.state === "published")
+                      setAgent({
+                        ...currentAgent,
+                        current_published_version_id: next.id,
+                      });
+                  }}
+                />
+              ) : null}
+              {previewOpen && avatarConfig ? (
+                <AgentPreview
+                  key={workbenchScope}
+                  onClose={() => {
+                    setPreviewOpen(false);
+                    setPreviewDrawing(null);
+                  }}
+                  drawing={previewDrawing ?? avatarConfig.drawing}
+                  request={(message) =>
+                    api.previewAgent({
+                      message,
+                      agent_md: agentMd,
+                      avatar_config: previewDrawing
+                        ? { ...avatarConfig, drawing: previewDrawing }
+                        : avatarConfig,
+                      voice_profile_id: voiceProfileId,
+                      version_id: version?.id || null,
+                      course_id: unsavedCreate?.courseId ?? null,
+                      group_id: unsavedCreate?.groupId ?? null,
+                    })
+                  }
+                />
+              ) : null}
+              {avatarConfig ? (
+                <SectionCard
+                  title={t("avatarDesign")}
+                  className={cn(
+                    AVATAR_CARD,
+                    avatarConfig.template_id === "egg" &&
+                      "px-4 pt-[23px] pb-[18px] [&>.section-card-header]:mb-0 [&>.section-card-header]:min-h-0 max-[767px]:px-3 max-[767px]:pb-4",
+                  )}
+                >
                   {avatarTemplatesError ? (
                     <ErrorNotice
                       inline
@@ -1742,6 +1822,11 @@ export function AgentWorkbench({
                   ) : null}
                   {avatarTemplatesLoading ? <LoadingCard size="sm" /> : null}
                   <AvatarEditor
+                    onPreview={() => {
+                      setPreviewDrawing(null);
+                      setPreviewOpen(true);
+                    }}
+                    onEdit={() => setDrawingOpen(true)}
                     templates={avatarTemplates}
                     value={avatarConfig}
                     onChange={setAvatarConfig}

@@ -22,6 +22,7 @@ AVATAR_TEMPLATE_IDS: Final[tuple[str, ...]] = (
     "wave1-default-head",
     "maya-warm-scholar",
     "maya-civic-observer",
+    "egg",
 )
 MATERIAL_THEMES: Final[tuple[str, ...]] = (
     "demo",
@@ -48,6 +49,7 @@ EXPRESSION_STRENGTHS: Final[tuple[str, ...]] = ("low", "medium", "high")
 MOTION_STYLES: Final[tuple[str, ...]] = ("calm", "active")
 CONFIG_FIELDS: Final[frozenset[str]] = frozenset(
     {
+        "drawing",
         "template_id",
         "material_theme",
         "eye_color",
@@ -129,6 +131,13 @@ _CATALOG: Final[tuple[_CatalogEntry, ...]] = (
             "active",
         ),
     ),
+    _CatalogEntry(
+        id="egg",
+        name="Egg",
+        available=True,
+        asset_url="/avatars/Maya-Egg.glb",
+        defaults=_config("egg", "demo", None, "neutral", "medium", "calm"),
+    ),
 )
 _BY_ID: Final[dict[str, _CatalogEntry]] = {entry.id: entry for entry in _CATALOG}
 
@@ -154,7 +163,9 @@ def avatar_templates() -> list[AvatarTemplate]:
             id=entry.id,
             name=entry.name,
             available=entry.available,
-            supported_parameters=list(SUPPORTED_PARAMETERS),
+            supported_parameters=["template_id"]
+            if entry.id == "egg"
+            else list(SUPPORTED_PARAMETERS),
         )
         for entry in _CATALOG
     ]

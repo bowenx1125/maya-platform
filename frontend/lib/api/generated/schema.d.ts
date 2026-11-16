@@ -2350,10 +2350,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Agent Route */
+        post: operations["previewAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agent-versions/{version_id}/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save Agent Avatar */
+        put: operations["saveAgentAvatar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AgentPreviewRequest */
+        AgentPreviewRequest: {
+            /**
+             * Agent Md
+             * @default
+             */
+            agent_md: string;
+            avatar_config: components["schemas"]["AvatarConfig"];
+            /** Course Id */
+            course_id?: string | null;
+            /** Group Id */
+            group_id?: string | null;
+            /** Message */
+            message: string;
+            /** Version Id */
+            version_id?: string | null;
+            /** Voice Profile Id */
+            voice_profile_id?: string | null;
+        };
+        /** AgentPreviewResponse */
+        AgentPreviewResponse: {
+            /** Answer */
+            answer: string;
+            /** Audio Base64 */
+            audio_base64?: string | null;
+            /**
+             * Audio Content Type
+             * @enum {string|null}
+             */
+            audio_content_type?: "audio/wav" | null;
+        };
         /** ChatAgent */
         ChatAgent: {
             /**
@@ -3500,16 +3565,30 @@ export interface components {
              */
             visibility?: "private" | "public" | null;
         };
+        /** AvatarConfig */
         AvatarConfig: {
-            template_id: string;
-            material_theme: string;
-            eye_color?: string | null;
-            /** @enum {string} */
+            /**
+             * Default Expression
+             * @enum {string}
+             */
             default_expression: "neutral" | "attentive" | "happy" | "serious_angry" | "sad";
-            /** @enum {string} */
+            drawing?: components["schemas"]["AvatarDrawing"] | null;
+            /**
+             * Expression Strength
+             * @enum {string}
+             */
             expression_strength: "low" | "medium" | "high";
-            /** @enum {string} */
+            /** Eye Color */
+            eye_color?: string | null;
+            /** Material Theme */
+            material_theme: string;
+            /**
+             * Motion Style
+             * @enum {string}
+             */
             motion_style: "calm" | "active";
+            /** Template Id */
+            template_id: string;
         };
         AvatarTemplate: {
             id: string;
@@ -4388,6 +4467,7 @@ export interface components {
         };
         /** AgentCreateRequest */
         AgentCreateRequest: {
+            avatar_config?: components["schemas"]["AvatarConfig"] | null;
             /**
              * Description
              * @default
@@ -6850,6 +6930,71 @@ export interface components {
              * @constant
              */
             view: "teacher";
+        };
+        /** AvatarDrawing */
+        AvatarDrawing: {
+            mouth: components["schemas"]["DrawingMouth"];
+            /** Strokes */
+            strokes: components["schemas"]["DrawingStroke"][];
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+        };
+        /** DrawingPoint */
+        DrawingPoint: {
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** DrawingErase */
+        DrawingErase: {
+            /** Points */
+            points: components["schemas"]["DrawingPoint"][];
+            /** Width */
+            width: number;
+        };
+        /** DrawingStroke */
+        DrawingStroke: {
+            /** Color */
+            color: string;
+            /** Erasures */
+            erasures?: components["schemas"]["DrawingErase"][];
+            /** Id */
+            id: string;
+            /**
+             * Opacity
+             * @default 1
+             */
+            opacity: number;
+            /** Points */
+            points: components["schemas"]["DrawingPoint"][];
+            /** Width */
+            width: number;
+        };
+        /** DrawingMouth */
+        DrawingMouth: {
+            /**
+             * X
+             * @default 0.5
+             */
+            x: number;
+            /**
+             * Y
+             * @default 0.435
+             */
+            y: number;
+        };
+        /** SaveAvatarRequest */
+        SaveAvatarRequest: {
+            avatar_config: components["schemas"]["AvatarConfig"];
+            /** Expected Published Version Id */
+            expected_published_version_id: string | null;
+            /** Expected Revision */
+            expected_revision: number;
         };
     };
     responses: {
@@ -13259,6 +13404,106 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    previewAgent: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Disposable single-sentence reply and optional voice. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPreviewResponse"];
+                };
+            };
+            /** @description Agent or source not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Publish the first Agent version first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid Preview input. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    saveAgentAvatar: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveAvatarRequest"];
+            };
+        };
+        responses: {
+            /** @description Avatar saved immediately. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentVersion"];
+                };
+            };
+            /** @description Version not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Revision or base conflict. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

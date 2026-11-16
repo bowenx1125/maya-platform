@@ -1,4 +1,13 @@
 export type WorkspaceIconName =
+  | "pen"
+  | "stroke"
+  | "pixel"
+  | "mouth"
+  | "save"
+  | "palette"
+  | "move"
+  | "diamond"
+  | "send"
   | "home"
   | "classroom"
   | "accounts"
@@ -39,6 +48,16 @@ export type WorkspaceIconName =
   | "trash";
 
 const paths: Record<WorkspaceIconName, string> = {
+  pen: "m4 16 12-12 5 5-12 12H4v-5Zm9-9 5 5M4 16l5 5",
+  stroke: "m4 14 9-10 7 7-9 10H8l-4-4v-3Zm4-4 8 7M3 21h18",
+  pixel: "m4 14 9-10 7 7-9 10H8l-4-4v-3Zm4-4 8 7M18 19h3v3h-3",
+  mouth: "M3 8q9 10 18 0-3 14-18 0Z",
+  save: "M4 3h13l4 4v14H4zM8 3v7h9V3M8 21v-8h9v8",
+  palette:
+    "M21 12a9 9 0 1 0-9 9h2a2 2 0 0 0 0-4h-1a2 2 0 0 1 0-4h5a3 3 0 0 0 3-1ZM7 10h.01M10 6h.01M15 6h.01M18 10h.01",
+  move: "M12 2v20M2 12h20M8 6l4-4 4 4M8 18l4 4 4-4M6 8l-4 4 4 4M18 8l4 4-4 4",
+  diamond: "M12 3 21 12 12 21 3 12Z",
+  send: "m3 3 19 9-19 9 4-9Z M7 12h15",
   home: "M3 10 12 3l9 7M5 9v11h5v-6h4v6h5V9",
   classroom: "M4 4h16v12H4zM8 21l4-5 4 5M8 8h8M8 12h5",
   quiz: "M13 5h8 M13 12h8 M13 19h8 M3 17l2 2 4-4 M3 7l2 2 4-4",

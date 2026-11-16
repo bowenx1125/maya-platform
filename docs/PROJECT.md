@@ -126,3 +126,13 @@ G:preview line3 Maya->Mayaform both languages;12-click wrap;DTO attribution reta
 ## Nov16 DEPLOY 1 final integration
 
 Merge inputs: A/B/C tip df958a53583b179caf78f8f45370867aee8e48c3 + origin/main 90f753e0478f6abfd5999b478bfa25f5bb6bb78b (re-fetched; unchanged). Combined: A digits-only class capsule; B/C No Group+Teachers+active-only backfill (sole head 0093_default_group_no_group→0092→0091); #435 server preference/ID/login-class landing; E Voice Made by/Used by; F Quiz list-checks; G Mayaform preview; #438/#439. Nine conflicts resolved per handoff; catalog sync skips ensure_student_group while preserve_bowen_memberships so #435 revocations stay; Bowen identity tests take main. Local gates: ruff/mypy/prettier/typecheck/lint/script gates PASS; FE Vitest 161 files/1433 pass/13 skip; Next build PASS; targeted PG auth/group/voice/D1 PASS. Full PG vs 129-baseline log unavailable here (Backend host paths missing). D2/PR442/#427 out of scope. DRAFT PR only; Backend audits/merges/deploys.0 calls/deploy.
+
+## Nov16 #427 local integration
+
+Merge inputs: main 92592341b3006cb2032e8d59fabac5f2b52d9615 + Egg/Preview 1c0069b67088f27960a2b428dc27dff7edfa19aa (base cc2a73219fea5b5a2b281dceb2c1daf47df85041). Main Voice copy/tests retained;Egg C2/GLB/frozen Debate avatar/Preview V2/null version fix kept. Contracts regenerated;sole head0093. Preview now resolves the current published snapshot via shared Chat retrieval (controlled query embedding/identity vector search); no draft docs/history/memory or automatic retry. No snapshot→existing agent_not_published/shared English copy. Contract:170 routes; Preview document_ids removed. PG targeted:328 pass, including error-copy/no-match regressions. UI:1447 pass/13 skip; build pass. Ruff/mypy/route-compare/head checks pass; script gates (including 22 negative route cases), boundary probe and empty-DB upgrade pass. 0 external calls/deploy.
+
+#427 batch 2: bounded editable Egg strokes/masks/mouth;Avatar-only publication/CAS/idempotency;participant freeze reused.PR tray:Preview;Option A separate.Backend83/UI1455/static17/build/local WebGL passed;real Voice/deploy excluded.
+
+Nov16 copy approval:two exact Avatar Save cause/fix messages;drawing bypasses catalog only for those code/message pairs.Other copy kept.Inputs:preview fa76bc76;Option A e7d18f79.Backend64/UI28 targeted,ruff/mypy/typecheck/lint pass.0 calls/migrations/deploy.
+
+#427 Option A: white Edit beside Preview opens the same board; merges eadd723b.

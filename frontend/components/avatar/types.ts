@@ -65,6 +65,14 @@ export const AVATAR_EYE_COLORS = [
  * closed instead of receiving a fabricated configuration.
  */
 export const AVATAR_TEMPLATE_DEFAULT_CONFIGS = {
+  egg: {
+    template_id: "egg",
+    material_theme: "demo",
+    eye_color: null,
+    default_expression: "neutral",
+    expression_strength: "medium",
+    motion_style: "calm",
+  },
   "wave1-default-head": {
     template_id: "wave1-default-head",
     material_theme: "demo",
@@ -165,6 +173,7 @@ export const AVATAR_DECODER_PATH = "/avatars/draco/";
  * registered for that template id.
  */
 export const AVATAR_TEMPLATE_ASSETS = {
+  egg: "/avatars/Maya-Egg.glb",
   "wave1-default-head": "/avatars/female_1.glb",
   "maya-warm-scholar": "/avatars/elder-scholar.glb",
   "maya-civic-observer": "/avatars/noble-scholar.glb",
