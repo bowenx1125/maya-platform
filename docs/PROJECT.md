@@ -141,4 +141,4 @@ Students see/open/single-chat teacher Public Agents; edit/delete stay owner/cour
 
 Nov17 #453 fix pass(base2289c371):ordinary personal teacher Team Chats recover exact live/retained publication;group teacher Public Teams share frozen member/shared resources under owner checks,no direct source access.FE filters mixed Team lists,keeps own personal Teams and teacher visits.Original errors restored;Agent editor roles unchanged.PG71/UI72+5skip/static17/build pass.0 real calls/deploy.
 
-Nov17 #453 merge origin/main `5f742a79` (#452):docs conflict kept both; OpenAPI hash regenerated from merged yaml.
+Nov17 #453 merge origin/main `5f742a79` (#452 per-agent cards/0094); docs compacted ≤20KB; OpenAPI hash regenerated; visibility rules unchanged.
