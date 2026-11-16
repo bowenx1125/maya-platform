@@ -1440,23 +1440,37 @@ def _normalize_card_status(
     return None
 
 
-def _stored_card_status(
+def _read_stored_card(
     db: Session, agent_id: str
+) -> tuple[str, Literal["compiling", "ready", "fallback"]] | None:
+    row = db.execute(
+        select(AgentDebateCard.agent_version_id, AgentDebateCard.card_status).where(
+            AgentDebateCard.agent_id == agent_id
+        )
+    ).first()
+    if row is None:
+        return None
+    status = _normalize_card_status(row.card_status)
+    if status is None:
+        return None
+    return (row.agent_version_id, status)
+
+
+def _stored_card_status(
+    db: Session, agent_id: str, version_id: str
 ) -> Literal["compiling", "ready", "fallback"] | None:
-    """The agent's stored debate card, or None when no row exists.
+    """Status of the card compiled for this version, or None.
 
     This is a read of ``agent_debate_cards``. It must not claim, compile, or
-    create a row: the editor tag asks for the stored state before Check card.
+    create a row. The row is one per Agent, so a card compiled for a different
+    version stays hidden: a reader of an older public version must not learn
+    the status of a draft they cannot open.
     """
 
-    def read() -> Literal["compiling", "ready", "fallback"] | None:
-        return _normalize_card_status(
-            db.scalar(
-                select(AgentDebateCard.card_status).where(AgentDebateCard.agent_id == agent_id)
-            )
-        )
-
-    return prefetched(db, "agent_card_status", agent_id, read)
+    found = prefetched(db, "agent_card_status", agent_id, lambda: _read_stored_card(db, agent_id))
+    if found is None or found[0] != version_id:
+        return None
+    return found[1]
 
 
 def prefetch_agent_reads(
@@ -1466,9 +1480,9 @@ def prefetch_agent_reads(
 
     Covers the viewer's course and group roles, each Agent owner's course
     role, enabled documents, snapshot sources and snapshots, edit audits,
-    names, current version numbers, bound voices and stored card status. Every requested key is
-    stored, a missing row as None or an empty list, so the helpers answer
-    exactly what their own queries would.
+    names, current version numbers, bound voices and stored card status.
+    Every requested key is stored, a missing row as None or an empty list,
+    so the helpers answer exactly what their own queries would.
     """
 
     from app.core.prefetch import store
@@ -1591,15 +1605,21 @@ def prefetch_agent_reads(
         db, [(version, agents[version.agent_id]) for version in versions.values()]
     )
     # One read for the whole list. Missing rows stay None so a later helper
-    # does not query again, and this never compiles a card.
-    card_status: dict[str, Literal["compiling", "ready", "fallback"] | None] = dict.fromkeys(agents)
-    for agent_id, status in db.execute(
-        select(AgentDebateCard.agent_id, AgentDebateCard.card_status).where(
-            AgentDebateCard.agent_id.in_(agents)
-        )
+    # does not query again. The pair is (version id, status); the helper
+    # reports it only for that version, and this never compiles a card.
+    stored_cards: dict[str, tuple[str, Literal["compiling", "ready", "fallback"]] | None] = (
+        dict.fromkeys(agents)
+    )
+    for agent_id, version_id, status in db.execute(
+        select(
+            AgentDebateCard.agent_id,
+            AgentDebateCard.agent_version_id,
+            AgentDebateCard.card_status,
+        ).where(AgentDebateCard.agent_id.in_(agents))
     ).all():
-        card_status[agent_id] = _normalize_card_status(status)
-    store(db, "agent_card_status", card_status)
+        normalized = _normalize_card_status(status)
+        stored_cards[agent_id] = None if normalized is None else (version_id, normalized)
+    store(db, "agent_card_status", stored_cards)
 
 
 def blockers(db: Session, version: AgentVersion, agent: Agent) -> list[str]:
@@ -1804,7 +1824,7 @@ def version_dto(
             for document in docs
         ],
         publish_blockers=blockers(db, version, agent) if version.state == "draft" else [],
-        stored_card_status=_stored_card_status(db, agent.id),
+        stored_card_status=_stored_card_status(db, agent.id, version.id),
     )
 
 

@@ -156,8 +156,9 @@ class AgentVersion(BaseModel):
     enabled_documents: list[KnowledgeDocument] = Field(default_factory=list)
     publish_blockers: list[str] = Field(default_factory=list)
     knowledge_generation: KnowledgeGenerationReceipt | None = None
-    # The editor's collapsed tag reads the existing agent_debate_cards row.
-    # It is not a column, and reading it must not start a compile.
+    # Collapsed Check card reads the card compiled for this version. A card
+    # for another version is omitted. This is not a column, and reading it
+    # does not compile.
     stored_card_status: Literal["compiling", "ready", "fallback"] | None = None
 
 

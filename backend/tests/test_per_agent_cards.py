@@ -21,7 +21,7 @@ from sqlalchemy import inspect, select
 
 from tests.conftest import login
 from tests.test_debate_cards import CARD, _ok, _provider
-from tests.test_wave1_agents_knowledge import _headers, _make_agent
+from tests.test_wave1_agents_knowledge import COURSE_ID, _headers, _make_agent
 from tests.test_wave2_setup import GROUP_DEMO_ID, _insert_published_agent
 
 
@@ -157,6 +157,86 @@ def test_version_read_reports_stored_card_status_without_compiling(
     listed = client.get(f"/api/v1/agents/{agent_id}/versions")
     assert listed.status_code == 200, listed.text
     assert listed.json()[0]["stored_card_status"] == "fallback"
+
+
+def test_stored_card_status_stays_on_its_version(client, database, monkeypatch) -> None:
+    from uuid import uuid4
+
+    monkeypatch.setattr(service, "compile_source", lambda *args: CardOutcome("ready", card=CARD))
+    agent_id, published_id, csrf = _agent(client)
+    saved = _save(client, published_id, csrf, "Public persona")
+    assert saved.status_code == 200, saved.text
+    published = client.post(
+        f"/api/v1/agent-versions/{published_id}/publish",
+        headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
+        json={"expected_revision": saved.json()["revision"]},
+    )
+    assert published.status_code == 200, published.text
+    nxt = client.post(
+        f"/api/v1/agents/{agent_id}/versions",
+        headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
+    )
+    assert nxt.status_code == 201, nxt.text
+    draft_id = nxt.json()["id"]
+    with database.session() as db:
+        draft = db.get(AgentVersion, draft_id)
+        assert draft is not None
+        draft.draft_visibility = "private"
+        row = db.get(AgentDebateCard, agent_id)
+        assert row is not None
+        row.agent_version_id = draft_id
+        row.card_status = "fallback"
+        row.card_json = None
+        row.card_safe_error_code = "debate_card_failed"
+        row.salvaged = False
+
+    assert client.get(f"/api/v1/agent-versions/{draft_id}").json()["stored_card_status"] == (
+        "fallback"
+    )
+    published_body = client.get(f"/api/v1/agent-versions/{published_id}")
+    assert published_body.status_code == 200, published_body.text
+    assert published_body.json()["stored_card_status"] is None
+
+    login(client, "kaikai")
+    hidden = client.get(f"/api/v1/agent-versions/{draft_id}")
+    assert hidden.status_code == 404
+    assert "stored_card_status" not in hidden.text
+    visible = client.get(f"/api/v1/agent-versions/{published_id}")
+    assert visible.status_code == 200, visible.text
+    assert visible.json()["stored_card_status"] is None
+    detail = client.get(f"/api/v1/agents/{agent_id}")
+    assert detail.status_code == 200, detail.text
+    versions = detail.json()["versions"]
+    assert all(item["id"] != draft_id for item in versions)
+    assert all(item["stored_card_status"] is None for item in versions)
+    catalog = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
+    assert catalog.status_code == 200, catalog.text
+    listed = next(item for item in catalog.json() if item["agent"]["id"] == agent_id)
+    assert listed["current_version"]["stored_card_status"] is None
+
+
+def test_private_agent_card_status_is_hidden_from_another_user(client, monkeypatch) -> None:
+    from uuid import uuid4
+
+    monkeypatch.setattr(service, "compile_source", lambda *args: CardOutcome("ready", card=CARD))
+    _, csrf = login(client, "maya")
+    created = client.post(
+        f"/api/v1/courses/{COURSE_ID}/workspace-agents",
+        headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
+        json={"name": "Private card owner", "description": "Owner only."},
+    )
+    assert created.status_code == 201, created.text
+    agent_id = created.json()["id"]
+    version = created.json()["versions"][0]["id"]
+    assert _save(client, version, csrf, "Private persona").status_code == 200
+    assert client.get(f"/api/v1/agent-versions/{version}").json()["stored_card_status"] == "ready"
+
+    login(client, "bowen")
+    denied = client.get(f"/api/v1/agent-versions/{version}")
+    assert denied.status_code == 404
+    assert "stored_card_status" not in denied.text
+    assert client.get(f"/api/v1/agents/{agent_id}").status_code == 404
+    assert client.get(f"/api/v1/agents/{agent_id}/versions").status_code == 404
 
 
 def test_failed_save_does_not_enqueue(client, monkeypatch) -> None:
