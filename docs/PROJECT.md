@@ -136,3 +136,7 @@ Merge inputs: main 92592341b3006cb2032e8d59fabac5f2b52d9615 + Egg/Preview 1c0069
 Nov16 copy approval:two exact Avatar Save cause/fix messages;drawing bypasses catalog only for those code/message pairs.Other copy kept.Inputs:preview fa76bc76;Option A e7d18f79.Backend64/UI28 targeted,ruff/mypy/typecheck/lint pass.0 calls/migrations/deploy.
 
 #427 Option A: white Edit beside Preview opens the same board; merges eadd723b.
+
+## Nov16 Immerse Option C (Roundtable Banner)
+
+Owner picked Option C. Egg grounding: `prepareEggModel` recomputes Shell bbox after remap so feet share scholar `FLOOR_Y`. Anchors: eggs project Shell crown+pad (`eggCrownWorldPosition`); scholars keep head+0.18. Overlay chrome: white dialog card, pink LIVE header, stem+pink bead; white pill name tag + pink bead. Progressive text/IDs/debate logic unchanged. Vitest egg placement+crown; FE typecheck/prettier/lint (pre-existing warnings only). DRAFT PR; 0 calls/deploy.

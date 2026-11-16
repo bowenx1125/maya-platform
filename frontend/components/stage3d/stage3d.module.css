@@ -198,13 +198,14 @@
   color: var(--indigo-dark, #303c66);
 }
 
+/* Option C Roundtable Banner — name tag: white pill + pink crown bead. */
 .namePlate {
   position: absolute;
   z-index: 3;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 14px 6px;
+  padding: 5px 14px 7px;
   padding-inline: min(
     14px,
     max(0px, calc((var(--name-plate-width) - 2px) / 4))
@@ -213,19 +214,32 @@
   min-width: 0;
   transform: translate(
     clamp(var(--name-plate-left), -50%, calc(var(--name-plate-right) - 100%)),
-    -190%
+    calc(-100% - 12px)
   );
-  border: 1px solid rgba(211, 167, 74, 0.52);
-  border-radius: 6px;
-  background: rgba(251, 250, 246, 0.94);
-  box-shadow: 0 4px 14px rgba(36, 28, 20, 0.16);
-  color: var(--ink);
+  border: 3px solid var(--border, #111);
+  border-radius: var(--arc-radius-pill, 999px);
+  background: var(--arc-surface, #fff);
+  box-shadow: var(--arc-shadow-s, 3px 3px 0 #111);
+  color: var(--arc-ink, #111);
   font-size: clamp(0.95rem, 1.2vw, 1.15rem);
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.4;
   white-space: nowrap;
   pointer-events: none;
-  transition: background-color 200ms ease;
+}
+
+.namePlate::after {
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  width: 10px;
+  height: 10px;
+  border: 3px solid var(--border, #111);
+  border-radius: 50%;
+  background: var(--arc-main, #ff4d8d);
+  box-shadow: 1px 1px 0 var(--border, #111);
+  content: "";
+  transform: translateX(-50%);
 }
 
 .namePlateText {
@@ -235,50 +249,86 @@
 }
 
 .namePlate[data-current="true"] {
-  background: var(--indigo-dark);
-  color: #fff;
+  background: var(--arc-surface, #fff);
+  color: var(--arc-ink, #111);
 }
 
-/* Keep the short current utterance above its speaker; the transcript below
-   retains the full turn. */
+/* Option C Roundtable Banner — dialog: white card, pink LIVE header,
+   stem + pink bead on the crown. */
 .bubble {
   position: absolute;
   z-index: 5;
   width: min(290px, 62%);
   overflow-wrap: anywhere;
-  padding: 9px 12px 10px;
-  transform: translate(-50%, calc(-100% - 16px));
-  border: 1px solid var(--line, #dedee3);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 10px 26px rgba(39, 31, 23, 0.2);
-  color: var(--ink);
+  padding: 0;
+  transform: translate(-50%, calc(-100% - 28px));
+  border: 4px solid var(--border, #111);
+  border-radius: 18px 18px 18px 4px;
+  background: var(--arc-surface, #fff);
+  box-shadow: var(--arc-shadow-s, 5px 5px 0 #111);
+  color: var(--arc-ink, #111);
   font-size: 0.95rem;
-  line-height: 1.5;
-  font-family: var(--font-ui, system-ui);
+  line-height: 1.45;
+  font-family: var(--arc-font-body, var(--font-ui, system-ui));
   pointer-events: none;
+}
+
+.bubble::before {
+  position: absolute;
+  left: calc(50% + var(--bubble-pointer-offset, 0px));
+  top: 100%;
+  width: 4px;
+  height: 28px;
+  background: var(--border, #111);
+  content: "";
+  transform: translateX(-50%);
 }
 
 .bubble::after {
   position: absolute;
-  top: 100%;
   left: calc(50% + var(--bubble-pointer-offset, 0px));
-  width: 10px;
-  height: 10px;
-  border-right: 1px solid var(--line, #dedee3);
-  border-bottom: 1px solid var(--line, #dedee3);
-  background: rgba(255, 255, 255, 0.96);
+  top: calc(100% + 22px);
+  width: 14px;
+  height: 14px;
+  border: 4px solid var(--border, #111);
+  border-radius: 50%;
+  background: var(--arc-main, #ff4d8d);
+  box-shadow: 2px 2px 0 var(--border, #111);
   content: "";
-  transform: translate(-50%, -50%) rotate(45deg);
+  transform: translateX(-50%);
 }
 
 .bubbleWho {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 14px;
+  border-bottom: 4px solid var(--border, #111);
+  border-radius: 14px 14px 0 0;
+  background: var(--arc-main, #ff4d8d);
+  color: var(--arc-ink, #111);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bubbleWho::before {
+  display: inline-block;
+  padding: 2px 6px;
+  border: 2px solid var(--border, #111);
+  background: var(--arc-cat-studyform, #a3e635);
+  color: var(--arc-ink, #111);
+  content: "LIVE";
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.bubbleText {
   display: block;
-  margin-bottom: 3px;
-  color: var(--indigo-dark);
-  font-size: 0.95rem;
-  font-weight: 700;
-  text-transform: none;
+  padding: 10px 14px 12px;
 }
 
 /* ---------- barrage ---------- */
@@ -397,7 +447,7 @@
     );
     transform: translate(
       clamp(var(--name-plate-left), -50%, calc(var(--name-plate-right) - 100%)),
-      -160%
+      calc(-100% - 10px)
     );
     font-size: 0.8rem;
   }
@@ -409,6 +459,11 @@
     width: min(300px, calc(100% - 24px));
     max-width: none;
     transform: translateX(-50%);
+  }
+
+  .scene:not([data-layout="preview"]) .bubble::before,
+  .scene:not([data-layout="preview"]) .bubble::after {
+    display: none;
   }
 
   /* On a narrow screen the Public Debate panel moves below the scene. The
