@@ -33,7 +33,6 @@ from app.modules.knowledge.services import (
     course_member_role,
     observes_group,
     scoped_group_role_for_user,
-    teacher_public_agent_hidden_from,
 )
 from app.modules.knowledge_sets import service as knowledge_set_service
 from app.modules.knowledge_sets.models import (
@@ -54,6 +53,8 @@ from app.modules.teams.publication_access import (
     live_teacher_publication,
     log_team_chat_refused,
     teacher_uses_student_public_team,
+    team_owner_is_teacher,
+    uses_teacher_public_team,
 )
 from app.modules.teams.schemas import (
     CreateTeamRequest,
@@ -218,11 +219,7 @@ def _validate_members(
             )
         seen_agent_ids.add(agent.id)
         role = _agent_workspace_role(db, actor, agent)
-        if (
-            role is None
-            or not can_read_version(db, version, agent, role, context=actor)
-            or teacher_public_agent_hidden_from(db, actor, agent)
-        ):
+        if role is None or not can_read_version(db, version, agent, role, context=actor):
             raise not_found("An Agent version is not available to the current user.")
         if group_id is not None and agent.group_id != group_id:
             raise not_found("A group Team can only contain Agents from that group.")
@@ -842,6 +839,7 @@ def _team_summary(
         member_count=len(members),
         can_edit=team.owner_user_id == user_id,
         can_delete=_can_delete_team(db, user_id, team),
+        is_teacher_owned=team_owner_is_teacher(db, team),
         updated_at=team.updated_at,
         last_edited_by_name=owner_name,
         members=_face_members(members),
@@ -1241,6 +1239,21 @@ def delete_team(db: Session, actor: AuthContext, team_id: str) -> None:
     hard_delete_team(db, team)
 
 
+def _team_on_group_page(db: Session, team: Team, user_id: str, group_id: str) -> bool:
+    """Teams shown on a group's Studyform page.
+
+    That group's Teams, the caller's own Teams (including personal), and every
+    teacher-owned Public Team in the course. Never drops the caller's own
+    items behind a group filter.
+    """
+
+    if team.group_id == group_id:
+        return True
+    if team.owner_user_id == user_id:
+        return True
+    return team.visibility == "public" and team_owner_is_teacher(db, team)
+
+
 def list_course_teams(
     db: Session, actor: AuthContext, course_id: str, group_id: str | None = None
 ) -> list[TeamSummary]:
@@ -1248,17 +1261,21 @@ def list_course_teams(
 
     Only the group listing adds the private Teams of a group a teacher has
     entered: the course listing feeds Chatform and Memory, which would offer
-    a Team the teacher may read but not talk to.
+    a Team the teacher may read but not talk to. A group listing also keeps
+    teacher-owned Public Teams and the caller's own Teams (including personal).
     """
 
     user_id = actor.user.id
     _course_scope(db, user_id, course_id)
     query = select(Team).where(Team.course_id == course_id, Team.deleted_at.is_(None))
-    if group_id is not None:
-        query = query.where(Team.group_id == group_id)
     rows = db.scalars(query.order_by(Team.updated_at.desc(), Team.id)).all()
     readable = can_view_team if group_id is not None else can_read_team
-    shown = [team for team in rows if readable(db, user_id, team)]
+    shown = [
+        team
+        for team in rows
+        if readable(db, user_id, team)
+        and (group_id is None or _team_on_group_page(db, team, user_id, group_id))
+    ]
     owner_ids = {team.owner_user_id for team in shown if team.owner_user_id}
     owner_names: dict[str, str] = {}
     if owner_ids:
@@ -1366,6 +1383,21 @@ class FrozenTeamSelection:
     invokable_binding_ids: tuple[str, ...]
 
 
+def _team_chat_resource_actor(
+    db: Session, actor: AuthContext | str, team: Team
+) -> AuthContext | str:
+    # A teacher's group Public Team shares only its frozen member/shared resources.
+    # Validate those as its owner; this grants no direct access to the sources.
+    if (
+        team.ownership_scope == "group"
+        and team.group_id is not None
+        and team.owner_user_id is not None
+        and uses_teacher_public_team(db, _actor_id(actor), team)
+    ):
+        return team.owner_user_id
+    return actor
+
+
 def resolve_chat_entry(
     db: Session,
     actor: AuthContext | str,
@@ -1420,6 +1452,8 @@ def resolve_chat_entry(
         publication = None
         if not can_read_team(db, user_id, team):
             raise not_found()
+    resource_actor = _team_chat_resource_actor(db, actor, team)
+    resource_owner_id = publication.publisher_user_id if publication else _actor_id(resource_actor)
     members = _member_rows(db, version.id)
     all_member_ids = {member.id for member in members}
     requested_targets = all_member_ids if target_binding_ids is None else set(target_binding_ids)
@@ -1435,8 +1469,8 @@ def resolve_chat_entry(
                 team=team,
                 version=version,
                 member=member,
-                actor=actor,
-                resource_owner_id=publication.publisher_user_id if publication else user_id,
+                actor=resource_actor,
+                resource_owner_id=resource_owner_id,
                 publication=publication,
             )
         dto = _team_member_dto(member)
@@ -1460,7 +1494,6 @@ def resolve_chat_entry(
     if leader_id is None or len(resolved_members) < 2:
         raise not_found()
     shared_sets = [_required_set_id(row.knowledge_set_id) for row in _set_rows(db, version.id)]
-    resource_owner_id = publication.publisher_user_id if publication else user_id
     if requested_targets:
         _validate_shared_sets_current(db, team, version, resource_owner_id)
     return FrozenTeamSelection(
@@ -1687,6 +1720,15 @@ def _resolve_frozen_chat_selection(
         # publication: resource_owner_id below stays the teacher, so a member
         # or shared Set the teacher may not read is refused, never borrowed.
         pass
+    elif uses_teacher_public_team(db, user_id, team):
+        # Ordinary Chats do not store the personal Team's publication. Recover
+        # its exact live/retained version before checking publisher-owned resources.
+        publication = live_teacher_publication(db, team, version)
+        if publication is None and (team.ownership_scope != "group" or team.group_id is None):
+            log_team_chat_refused(
+                team, user_id, "teacher_publication_missing", check="team_recheck"
+            )
+            raise not_found()
     else:
         if team.group_id is not None:
             try:
@@ -1727,7 +1769,8 @@ def _resolve_frozen_chat_selection(
     current_sets = tuple(row.knowledge_set_id for row in _set_rows(db, version.id))
     if current_sets != frozen_selection.shared_knowledge_set_ids:
         raise not_found()
-    resource_owner_id = publication.publisher_user_id if publication else user_id
+    resource_actor = _team_chat_resource_actor(db, actor, team)
+    resource_owner_id = publication.publisher_user_id if publication else _actor_id(resource_actor)
     _validate_shared_sets_current(db, team, version, resource_owner_id)
     for member in current_members:
         frozen_member = frozen_members[member.id]
@@ -1745,7 +1788,7 @@ def _resolve_frozen_chat_selection(
                 team=team,
                 version=version,
                 member=member,
-                actor=actor,
+                actor=resource_actor,
                 resource_owner_id=resource_owner_id,
                 publication=publication,
             )

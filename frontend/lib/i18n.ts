@@ -97,6 +97,7 @@ const enMessages = {
   agentVisibility: "Visibility",
   privateOption: "Private",
   publicOption: "Public",
+  teacherOption: "Teacher",
   agentMakePublicConfirm:
     "Make this Agent public? Its RAG becomes public too, Done publishes it for your group, and it cannot go back to Private.",
   agentPublicIsFinal: "A public Agent stays public.",

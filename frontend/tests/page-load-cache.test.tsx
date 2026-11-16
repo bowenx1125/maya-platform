@@ -25,6 +25,10 @@ import { FRESH_MS } from "../lib/request-cache";
 
 const team = (name: string) => ({
   id: `team-${name}`,
+  course_id: "course-1",
+  group_id: "group-1",
+  owner_user_id: "student-a",
+  ownership_scope: "group",
   display_name: name,
   current_version_seq: 1,
   visibility: "public",
@@ -139,7 +143,9 @@ describe("Studyform page cache", () => {
 
   it("re-reads after deleting a Team instead of reusing the cached page", async () => {
     const api = signIn("student-delete");
-    api.teams.mockResolvedValue([{ ...team("Mine"), can_edit: true }]);
+    api.teams.mockResolvedValue([
+      { ...team("Mine"), owner_user_id: "student-delete", can_edit: true },
+    ]);
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const first = show();
     expect(await screen.findByText("Mine")).toBeTruthy();

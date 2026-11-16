@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { MASCOT_IDS } from "../components/academy/mascots";
@@ -23,7 +23,7 @@ vi.mock("next/link", () => ({
 
 function team(members: unknown, extra: Partial<TeamSummaryDto> = {}) {
   return {
-    id: "11111111-1111-4111-8111-111111111111",
+    id: extra.id ?? "11111111-1111-4111-8111-111111111111",
     member_count: 5,
     display_name: "Team Alpha",
     members,
@@ -79,5 +79,45 @@ describe("Team card faces from TeamSummary.members", () => {
     expect(hrefs.some((href) => !href || /null|undefined/.test(href))).toBe(
       false,
     );
+  });
+
+  it("reads Teacher on a teacher-owned Public Team and Public otherwise", () => {
+    render(
+      <TeamsPage
+        teams={[
+          {
+            team: team(
+              [{ agent_id: "a1", material_theme: null, is_leader: true }],
+              {
+                id: "22222222-2222-4222-8222-222222222222",
+                display_name: "Teacher Team",
+                visibility: "public",
+                is_teacher_owned: true,
+                member_count: 2,
+                current_version_seq: 1,
+              },
+            ),
+            href: "/student/teams?team_id=t-teacher",
+          },
+          {
+            team: team(
+              [{ agent_id: "a2", material_theme: null, is_leader: true }],
+              {
+                id: "33333333-3333-4333-8333-333333333333",
+                display_name: "Student Team",
+                visibility: "public",
+                is_teacher_owned: false,
+                member_count: 2,
+                current_version_seq: 1,
+              },
+            ),
+            href: "/student/teams?team_id=t-student",
+          },
+        ]}
+        deleting={false}
+      />,
+    );
+    expect(screen.getByText("Teacher")).toBeTruthy();
+    expect(screen.getByText("Public")).toBeTruthy();
   });
 });

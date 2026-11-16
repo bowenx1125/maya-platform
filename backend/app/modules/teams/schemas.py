@@ -93,6 +93,9 @@ class TeamSummary(StrictModel):
     # Same rule as DELETE /teams/{team_id}: the owner, still in the course and,
     # for a group Team, still inside that group.
     can_delete: bool
+    # Owner holds CourseMember.role == teacher in this course. Optional so
+    # older clients keep working; the Studyform sticker reads "Teacher".
+    is_teacher_owned: bool | None = None
     updated_at: datetime
     # No per-edit author is stored; only the owner can edit, so this is the
     # owner's display name (null when the owner account is gone).

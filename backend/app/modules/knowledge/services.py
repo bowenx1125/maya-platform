@@ -288,25 +288,14 @@ def _owner_has_course_access(db: Session, actor: AuthContext | str, course_id: s
 
 
 def _publisher_is_teacher(db: Session, agent: Agent) -> bool:
+    """True when the Agent's owner holds the course teacher role.
+
+    Any course teacher counts; never keyed to a single account.
+    """
+
     if agent.owner_user_id is None:
         return False
     return course_member_role(db, agent.owner_user_id, agent.course_id) == "teacher"
-
-
-def teacher_public_agent_hidden_from(db: Session, actor: AuthContext | str, agent: Agent) -> bool:
-    """Studyform: a teacher's public Agent is not a student-facing Agent.
-
-    Students may still meet it as a member of a teacher's public Team (the Team
-    runs it server-side), but they cannot list it, open its detail/prompt, or
-    start a single-Agent chat with it. Owners and teachers are unaffected.
-    """
-
-    user_id = _actor_user_id(actor)
-    if agent.owner_user_id == user_id or agent.visibility != "public":
-        return False
-    if course_member_role(db, user_id, agent.course_id) != "student":
-        return False
-    return _publisher_is_teacher(db, agent)
 
 
 def can_use_agent(db: Session, actor: AuthContext | str, agent: Agent) -> bool:
@@ -619,7 +608,7 @@ def version_sources_are_readable(
 
 def visible_agent(db: Session, context: AuthContext, agent_id: str) -> ScopedAgent:
     agent = db.get(Agent, agent_id)
-    if agent is None or teacher_public_agent_hidden_from(db, context, agent):
+    if agent is None:
         raise not_found()
     role = _agent_workspace_role(db, context, agent)
     if role == "owner":
@@ -671,8 +660,6 @@ def visible_version(db: Session, context: AuthContext, version_id: str) -> Scope
     if row is None:
         raise not_found()
     version, agent = row
-    if teacher_public_agent_hidden_from(db, context, agent):
-        raise not_found()
     role = _agent_workspace_role(db, context, agent)
     if can_read_version(db, version, agent, role, context=context):
         return ScopedVersion(version, agent, cast(str, role))
@@ -694,8 +681,6 @@ def visible_snapshot(db: Session, context: AuthContext, snapshot_id: str) -> Sco
     if row is None:
         raise not_found()
     snapshot, version, agent = row
-    if teacher_public_agent_hidden_from(db, context, agent):
-        raise not_found()
     if observes_private_agent(db, context, agent):
         if version.state not in {"published", "superseded"}:
             raise not_found()
@@ -752,6 +737,10 @@ def public_agent_editor_role(
         and agent.group_id is not None
         and scoped_group_role_for_user(db, user_id, agent.group_id) == "student"
     ):
+        # Groupmates edit student Public Agents only; teacher Agents stay
+        # owner/course-teacher editable even when students may use them.
+        if _publisher_is_teacher(db, agent):
+            return None
         return "groupmate"
     return None
 
@@ -1891,6 +1880,7 @@ def agent_summary(
         # can change the Agent's content without removing it.
         can_delete=editor is not None,
         is_creator=context is not None and agent.owner_user_id == context.user.id,
+        is_teacher_owned=_publisher_is_teacher(db, agent),
         last_edited_by_name=last_editor,
         last_edited_at=audit.last_edited_at if audit is not None else None,
         current_version_label=published_label,

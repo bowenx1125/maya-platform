@@ -13592,6 +13592,18 @@
             ],
             "title": "Is Creator"
           },
+          "is_teacher_owned": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Teacher Owned",
+            "description": "Owner holds CourseMember.role == teacher in this course. Optional; Studyform sticker reads Teacher when true on a Public Agent."
+          },
           "last_edited_at": {
             "anyOf": [
               {
@@ -13806,6 +13818,18 @@
               }
             ],
             "title": "Is Creator"
+          },
+          "is_teacher_owned": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Teacher Owned",
+            "description": "Owner holds CourseMember.role == teacher in this course. Optional; Studyform sticker reads Teacher when true on a Public Agent."
           },
           "last_edited_at": {
             "anyOf": [
@@ -20249,6 +20273,18 @@
             "title": "Can Delete",
             "description": "Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group)."
           },
+          "is_teacher_owned": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Teacher Owned",
+            "description": "Owner holds CourseMember.role == teacher in this course. Optional; Studyform sticker reads Teacher when true on a Public Team."
+          },
           "last_edited_by_name": {
             "title": "Last Edited By Name",
             "type": [
@@ -20519,6 +20555,18 @@
             "type": "boolean",
             "title": "Can Delete",
             "description": "Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group)."
+          },
+          "is_teacher_owned": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Teacher Owned",
+            "description": "Owner holds CourseMember.role == teacher in this course. Optional; Studyform sticker reads Teacher when true on a Public Team."
           },
           "updated_at": {
             "type": "string",

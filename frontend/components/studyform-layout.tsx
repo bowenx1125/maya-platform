@@ -105,6 +105,7 @@ export function VersionTile({
   label,
   pending,
   visibility,
+  isTeacherOwned = false,
   deleting = false,
   onDelete,
   deleteLabel,
@@ -133,6 +134,8 @@ export function VersionTile({
   label: string;
   pending: boolean;
   visibility?: "private" | "public";
+  /** Public sticker reads Teacher when the owner is a course teacher. */
+  isTeacherOwned?: boolean;
   deleting?: boolean;
   onDelete?: () => void;
   deleteLabel: string;
@@ -152,7 +155,7 @@ export function VersionTile({
       visibility={visibility}
       visibilityLabel={
         visibility === "public"
-          ? t("publicOption")
+          ? t(isTeacherOwned ? "teacherOption" : "publicOption")
           : visibility === "private"
             ? t("privateOption")
             : undefined

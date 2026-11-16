@@ -3322,6 +3322,11 @@ export interface components {
             id: string;
             /** Is Creator */
             is_creator?: boolean | null;
+            /**
+             * Is Teacher Owned
+             * @description Owner holds CourseMember.role == teacher in this course. Optional; Studyform sticker reads Teacher when true on a Public Agent.
+             */
+            is_teacher_owned?: boolean | null;
             /** Last Edited At */
             last_edited_at?: string | null;
             /** Last Edited By Name */
@@ -3408,6 +3413,11 @@ export interface components {
             id: string;
             /** Is Creator */
             is_creator?: boolean | null;
+            /**
+             * Is Teacher Owned
+             * @description Owner holds CourseMember.role == teacher in this course. Optional; Studyform sticker reads Teacher when true on a Public Agent.
+             */
+            is_teacher_owned?: boolean | null;
             /** Last Edited At */
             last_edited_at?: string | null;
             /** Last Edited By Name */
@@ -5331,6 +5341,11 @@ export interface components {
              */
             can_delete: boolean;
             /**
+             * Is Teacher Owned
+             * @description Owner holds CourseMember.role == teacher in this course. Optional; Studyform sticker reads Teacher when true on a Public Team.
+             */
+            is_teacher_owned?: boolean | null;
+            /**
              * Last Edited By Name
              * @description No per-edit author is stored and only the owner can edit, so this is the owner's display name; null if the owner account is gone.
              */
@@ -5469,6 +5484,11 @@ export interface components {
              * @description Same rule as DELETE /teams/{team_id} (owner, still a course member and, for a group Team, inside that group).
              */
             can_delete: boolean;
+            /**
+             * Is Teacher Owned
+             * @description Owner holds CourseMember.role == teacher in this course. Optional; Studyform sticker reads Teacher when true on a Public Team.
+             */
+            is_teacher_owned?: boolean | null;
             /**
              * Updated At
              * Format: date-time
