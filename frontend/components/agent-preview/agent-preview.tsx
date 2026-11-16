@@ -84,7 +84,7 @@ export function AgentPreview({
     >
       <div className={styles.courtyard} aria-hidden="true" />
       <div className={styles.stage}>
-        <EggCanvas playing={state.playing} drawing={drawing} />
+        <EggCanvas orbit playing={state.playing} drawing={drawing} />
       </div>
       <PreviewControls
         question={state.question}
