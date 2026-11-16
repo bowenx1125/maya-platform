@@ -171,19 +171,19 @@ const enMessages = {
   debateRoundCapsUnitChanged:
     "The counting unit changed; edited values were kept.",
   debateCardReasonCompileTimeout:
-    "Card compilation timed out. Wait a moment, then open Check card and try again.",
+    "Card compilation timed out, so this Agent will speak from its original AGENT.md for now. Wait a moment, then open Check card and try again.",
   debateCardReasonFormatInvalid:
-    "The card response was not in the expected format. Open Check card and try again; if it keeps failing, edit the Agent's AGENT.md and re-check.",
+    "The card response was not in the expected format, so this Agent will speak from its original AGENT.md for now. Open Check card and try again; if it keeps failing, edit the Agent's AGENT.md and re-check.",
   debateCardReasonTooLong:
     "The extracted card exceeded the safe length limit. Shorten the Agent's AGENT.md, then open Check card and try again.",
   debateCardReasonServiceBusy:
-    "The card service was temporarily unavailable. Wait a moment, then open Check card and try again.",
+    "The card service was temporarily unavailable, so this Agent will speak from its original AGENT.md for now. Wait a moment, then open Check card and try again.",
   debateCardReasonConfigProblem:
-    "The card could not be prepared because of a configuration problem. Try again later, or edit the Agent's AGENT.md and open Check card again.",
+    "The card could not be prepared because of a configuration problem, so this Agent will speak from its original AGENT.md for now. Try again later, or edit the Agent's AGENT.md and open Check card again.",
   debateCardReasonOther:
-    "The debate card could not be prepared from this Agent's AGENT.md. Open Check card, fix the Agent text if needed, then try again.",
+    "The debate card could not be prepared from this Agent's AGENT.md, so this Agent will speak from its original AGENT.md for now. Open Check card, fix the Agent text if needed, then try again.",
   debateCardFallbackContinues:
-    "The debate card could not be prepared from this Agent's AGENT.md. Open Check card, fix the Agent text if needed, then try again.",
+    "The debate card could not be prepared from this Agent's AGENT.md, so this Agent will speak from its original AGENT.md for now. Open Check card, fix the Agent text if needed, then try again.",
   debateCurrent: "current",
   debateRounds: "{count} Rounds",
   debateStageTitle: "Classroom debate",

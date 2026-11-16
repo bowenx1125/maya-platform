@@ -1907,8 +1907,9 @@ class SqlTurnPreparer:
                 exc.code,
                 (
                     "The debate card could not be prepared from this Agent's "
-                    "AGENT.md. Open Check card, fix the Agent text if needed, "
-                    "then try again."
+                    "AGENT.md, so this Agent will speak from its original "
+                    "AGENT.md for now. Open Check card, fix the Agent text if "
+                    "needed, then try again."
                 ),
                 503,
             ) from exc

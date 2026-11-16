@@ -141,4 +141,4 @@ Nov16 Option C:egg floor+crown;Roundtable Banner overlays.DRAFT;0 calls/deploy.
 
 ## Nov16 D2 draft (PR442)
 
-Rebased onto `503857fe` (batch2 + Immerse Option C). Ordinary AGENT.md free text (`persona_required=False`); cards prefer salvaged extract; fail-open to original AGENT.md only when compile cannot yield a card; Check-card Ready/Compiling only; Lead-approved fail-open cause+fix copy; no migration (head stays 0093).
+Rebased onto `503857fe` (batch2 + Immerse Option C). Ordinary AGENT.md free text (`persona_required=False`); cards prefer salvaged extract; fail-open to original AGENT.md only when compile cannot yield a card; Check-card Ready/Compiling only; Lead-approved fail-open clause in card error copy (too_long unchanged; no separate New notice); no migration (head stays 0093).

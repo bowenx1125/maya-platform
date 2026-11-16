@@ -79,10 +79,9 @@ describe("debate cards on the teacher preview", () => {
     expect(within(fallback).queryByText("Fallback")).toBeNull();
     expect(
       within(fallback).getByText(
-        "The debate card could not be prepared from this Agent's AGENT.md. Open Check card, fix the Agent text if needed, then try again.",
+        "The debate card could not be prepared from this Agent's AGENT.md, so this Agent will speak from its original AGENT.md for now. Open Check card, fix the Agent text if needed, then try again.",
       ),
     ).toBeTruthy();
-    expect(within(fallback).queryByText(/original AGENT\.md/)).toBeNull();
   });
 
   it("omits the Fallback status tag on extraction failure while keeping the reason", () => {
@@ -103,7 +102,7 @@ describe("debate cards on the teacher preview", () => {
     fireEvent.click(within(check).getByText("Check card"));
     expect(
       within(check).getByText(
-        "The card response was not in the expected format. Open Check card and try again; if it keeps failing, edit the Agent's AGENT.md and re-check.",
+        "The card response was not in the expected format, so this Agent will speak from its original AGENT.md for now. Open Check card and try again; if it keeps failing, edit the Agent's AGENT.md and re-check.",
       ),
     ).toBeTruthy();
     expect(screen.getByTestId("debate-card-check")).toBeTruthy();
@@ -145,7 +144,6 @@ describe("debate cards on the teacher preview", () => {
         "The extracted card exceeded the safe length limit. Shorten the Agent's AGENT.md, then open Check card and try again.",
       ),
     ).toBeTruthy();
-    expect(within(check).queryByText(/original AGENT\.md/)).toBeNull();
     expect(within(check).queryByText(/This session can continue/)).toBeNull();
     expect(within(check).queryByText("card_too_long")).toBeNull();
     expect(within(check).queryByText("too_long")).toBeNull();
@@ -168,7 +166,7 @@ describe("debate cards on the teacher preview", () => {
     expect(within(check).getByText(card.identity)).toBeTruthy();
     expect(
       within(check).queryByText(
-        "The debate card could not be prepared from this Agent's AGENT.md. Open Check card, fix the Agent text if needed, then try again.",
+        "The debate card could not be prepared from this Agent's AGENT.md, so this Agent will speak from its original AGENT.md for now. Open Check card, fix the Agent text if needed, then try again.",
       ),
     ).toBeNull();
     expect(
