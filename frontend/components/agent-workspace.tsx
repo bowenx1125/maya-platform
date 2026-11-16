@@ -4,6 +4,8 @@ import { DrawingBoard } from "./avatar/drawing-board";
 import type { Drawing } from "./avatar/drawing";
 
 import { AgentPreview } from "./agent-preview/agent-preview";
+import { DebateCardCheck } from "./debate/preview/debate-card-check";
+import { cardFromAgentMd } from "../lib/agent-tone";
 
 import { AgentHintBar } from "./agent-issue-list";
 import {
@@ -2037,6 +2039,15 @@ export function AgentWorkbench({
                   </div>
                 </div>
               </SectionCard>
+              {agentMd.trim() ? (
+                <DebateCardCheck
+                  agentName={draftName.trim() || agent.name || "Agent"}
+                  status="ready"
+                  card={cardFromAgentMd(agentMd)}
+                  voiceProfileId={voiceProfileId}
+                  agentMd={agentMd}
+                />
+              ) : null}
               <div
                 className={cn(
                   "duo grid min-w-0 gap-11",
@@ -2254,6 +2265,7 @@ export function AgentWorkbench({
                   }
                   embedded
                   selectedId={voiceProfileId}
+                  previewInstruction={cardFromAgentMd(agentMd).voice_style}
                   disabled={editingLocked}
                   // A teacher's personal Agent picks from that teacher's own
                   // voices, as on main (owner decision 2026-10-12). None is a

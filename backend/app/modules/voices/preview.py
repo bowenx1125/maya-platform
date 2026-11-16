@@ -296,6 +296,7 @@ def create_voice_preview(
     profile_id: str,
     settings: Settings,
     *,
+    instruction: str | None = None,
     provider: TTSProvider | None = None,
 ) -> PlaybackResource:
     """Generate bounded server-side preview bytes and return an opaque URL."""
@@ -325,11 +326,17 @@ def create_voice_preview(
     external_id = _tts_external_id(profile, settings)
     preview_text = next_preview_line(db)
     try:
+        tone = instruction.strip() if isinstance(instruction, str) and instruction.strip() else None
+        synthesize_kwargs: dict[str, object] = {
+            "language": "auto",
+            "target_model_key": profile.target_model_key,
+        }
+        if tone:
+            synthesize_kwargs["voice_params"] = {"instruction": tone[:500]}
         output = tts.synthesize(
             preview_text,
             external_id,
-            language="auto",
-            target_model_key=profile.target_model_key,
+            **synthesize_kwargs,  # type: ignore[arg-type]
         )
         raw = read_pcm16_wav_bytes(output.audio_bytes)
         validate_technical_audio(raw)

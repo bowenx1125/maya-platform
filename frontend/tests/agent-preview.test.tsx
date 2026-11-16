@@ -204,8 +204,13 @@ describe("single-turn Preview", () => {
         onChange={vi.fn()}
       />,
     );
-    expect(screen.getByRole("button", { name: "Preview" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const editButton = screen.getByRole("button", { name: "Edit" });
+    const previewButton = screen.getByRole("button", { name: "Preview" });
+    expect(editButton.parentElement).toBe(previewButton.parentElement);
+    expect(editButton.parentElement?.className).toBe("grid grid-cols-2 gap-2");
+    expect(editButton.classList.contains("bg-white")).toBe(true);
+    expect(previewButton.classList.contains("bg-[#FFE14D]")).toBe(true);
+    fireEvent.click(editButton);
     expect(edit).toHaveBeenCalledOnce();
     expect(screen.getAllByRole("radio").map((b) => b.textContent)).toEqual([
       "Default",

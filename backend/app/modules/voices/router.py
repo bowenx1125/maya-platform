@@ -25,6 +25,7 @@ from app.modules.knowledge.schemas import AffectedAgentDTO
 from app.modules.voices.schemas import (
     PlaybackResource,
     RenameVoiceProfileRequest,
+    VoicePreviewRequest,
     VoiceProfileResponse,
 )
 from app.modules.voices.service import (
@@ -348,13 +349,20 @@ def list_voice_profile_affected_agents(
 )
 def create_voice_preview_route(
     voice_profile_id: UUID,
+    body: VoicePreviewRequest | None = None,
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> PlaybackResource:
     try:
-        return create_voice_preview(db, context, str(voice_profile_id), settings)
+        return create_voice_preview(
+            db,
+            context,
+            str(voice_profile_id),
+            settings,
+            instruction=None if body is None else body.instruction,
+        )
     except PlatformError:
         raise
     except (RuntimeError, OSError) as exc:

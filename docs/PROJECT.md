@@ -77,7 +77,7 @@ Historical ruleset_contract_v4(default_rules/contract/*.md):Ruleset style/tasks,
 
 Nov11 RAG/diagnostics:`markdown-structure-600t-v3`,150-900 tokens,no overlap;keep v2 snapshots till republish. Diagnostics:3-gram grounding,other-language unmeasured.
 
-Nov11 Debate cards/0089:new v4 participants start `compiling`;each frozen AGENT.md compiles once before its Agent's first turn(`llm_debate_card`,Debate model,strict schema,1 ledgered attempt,60s) to identity/position/reasoning/style/voice/dropped,≤600 Han/400 words. Ready->card persona;failure/Mock->raw AGENT.md;null(old):keep pinned bytes. R1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style.0 calls;quality unverified.
+Nov11 Debate cards/0089:new v4 participants start `compiling`;each frozen AGENT.md compiles once before its Agent's first turn(`llm_debate_card`,Debate model,strict schema,1 ledgered attempt,60s) to identity/position/reasoning/style/voice/dropped,≤600 Han/400 words. Ready->card persona;failure/Mock->fallback(no raw AGENT.md speech);null(old):keep pinned bytes. R1 query:stance,else card position. Preview:Check card. Clone TTS instruction=card voice_style.0 calls;quality unverified.
 
 Nov11:Agents/Teams<768px black shadow,no orange ring;desktop unchanged. Lists omit agent_md/docs;early /auth/me;idle Debate poll15s.
 
@@ -97,40 +97,32 @@ Gesture v2:figure-space arm/hand rotations,A⁻¹·E·A·rest,shared Mixamo clip
 
 Nov12 #419:second capsule press closes;no trigger pathname key. New usernames 3-64 letters/digits;older `.` `_` `-` names still sign in. Private→Public is the owner.
 
-## Nov13–15
+## Nov13 deploy
 
-#419 live+0091;Nov14 capsule/caches;Nov15 #426 LoadingPage,#425 single Chat memory.0 calls/deploy.
+f1087c4d live:3D/gesture v2/3 figures/#419,replaces334fbd94.Local image save/load;3.5G server:no build/test.Backup maya-pre-334fbd94-20261112-213724.dump:102M,list pass,PG-only.0091_quiz_show_results;ready/HTTPS200.Backend240/319;known voice+2 load-adaptive failures,no regressions.
 
-## Nov16 local paired review
+Nov14:Teams ?/Agent RAG hint/tour voices removed.Capsule shared teacher shell/session/user/course caches,B2b;390/1440 stable.Page-rise520ms/reduced motion;Immerse loading hides Back.Quiz ZIP:XLSX/paper/grades.UI/build/gates/PG checked,new0;0 calls/deploy.
 
-Base cc2a7321;#432=4b06c1cd;#433=43cbd7d2;integration556226e4.Local;0 real calls.Strict caps/finite rate/repair-policy pair;legacy rate kept,v1 unchanged,v2 repinned.Cards:one attempt/ledger assertions restored,English fallback.PG:sole0092;0091 round trip keeps old rows;v2 blocks lossy downgrade.UI:English caps/shared Input;helper prose removed;defaults await/refresh fixed.PG3721/129main/1skip(+1bench);UI1405/13skip;169ops;English error copy.
+Nov15 #426:flat LoadingPage #CEDAE3;390/1440/build checked.
 
-D1:remove `agent_md_invalid` AGENT.md heading readiness gate;keep empty/other checks/legacy enum.
+Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not commands.48 golden pairs;Team/assessment bytes kept.473 focused pass;no real LLM.Voice branch fixes baseline Prettier/Ruff formatting.
 
-Merge inputs:HEAD 0988a2322832c6db264ff13a0780b97bfa96dc51 + origin/main 5e5f349a004729cc594db2821235407a2548224a (#438/#432/#433);headingless create:v5 round_unit_caps.
+## Nov16 paired/#427/DEPLOY1 (compact)
 
-Nov16 Voice merge:f802eb72d76c407818a817da1cb570d07a74353c + origin/main 7e7087442a584897aad0cd0ce445e2f97ca30d98. #432/#433/#439 retained;Voice consent-actor owner_username(optional/nullable),peer usage ACL/private Agent filter,Retry. Merged contracts:169 platform operations. Voice pre-merge:155PG pass;0 calls/deploy. D2/#427 excluded.
+#432/#433 caps/repair+0092;D1 drop `agent_md_invalid` heading gate;Voice merge owner_username/peer ACL/Retry;169ops. #435 class Save/landing IDs;G Mayaform preview;F Quiz list-checks. DEPLOY1:A digits capsule;B/C No Group head0093;E Made by/Used by. #427 Egg/Preview snapshot retrieval;batch2 Egg strokes+Preview tray;Option A Edit beside Preview;exact Avatar Save cause/fix.0 calls/deploy.
 
-## Nov16 local I / E / F / G (on main)
+## Nov16 Batch 4 impl (#434/#436/#437)
 
-#435:Profile class Save updates session course;Bowen entry keeps class grants/groups;landing prefers saved binding then existing non-default IDs,never labels.Catalog sync keeps cross-class saved choice without restoring revoked grants.Read-only verifier: scripts/verify_profile_groups.py.
-
-G:preview line3 Maya->Mayaform both languages;12-click wrap;DTO attribution retained. F:Quiz list-checks glyph/teacher nav,stroke1.65;Debate glyph/selection/tour kept.
-
-## Nov16 DEPLOY 1 final integration
-
-A/B/C tip df958a53583b+main90f753e0: A digits-only class capsule; B/C No Group+Teachers+active-only backfill (head0093→0092→0091); #435 preference/ID/login-class; E Voice Made by/Used by; F Quiz list-checks; G Mayaform preview; #438/#439. Catalog sync skips ensure_student_group while preserve_bowen_memberships. Gates PASS; FE1433/13skip; PG targeted PASS. D2/PR442/#427 out. DRAFT;0 calls/deploy.
-
-## Nov16 #427 local integration
-
-#427+Voice:head0093;Preview=published snapshot via shared Chat retrieval;170 routes;PG328/UI1447;0 calls/deploy.
-
-#427 batch 2: bounded editable Egg strokes/masks/mouth;Avatar-only publication/CAS/idempotency;participant freeze reused.PR tray:Preview;Option A separate.Backend83/UI1455/static17/build/local WebGL passed;real Voice/deploy excluded.
-
-Nov16 copy approval:two exact Avatar Save cause/fix messages;drawing bypasses catalog only for those code/message pairs.Other copy kept.Inputs:preview fa76bc76;Option A e7d18f79.Backend64/UI28 targeted,ruff/mypy/typecheck/lint pass.0 calls/migrations/deploy.
-
-#427 Option A: white Edit beside Preview opens the same board; merges eadd723b.
+Confirmed: #434 A Tone label + `Preview` (Identity/Position stay; Tone from AGENT.md else debate/env instruction; Agent/Voice Preview same Tone; student create/edit Check card). #436 C Stomp Line. #437 C Capsule Note-Face. No Alembic (OpenAPI VoicePreviewRequest only). Local: ruff/mypy/format/typecheck/prettier/script+route-compare PASS; FE 1467/13skip; targeted PG voice/preview/cards/tone 189 PASS. Full PG wave4 persona suite fails on clean main too in this env (question None).0 calls.
 
 Nov16 Option C:egg floor+crown;Roundtable Banner overlays.Live #448.
 
+Nov16 #427 hotfix(base503857fe):Save/Preview finish gestures;Save uses current ink.Back/Escape confirm discard;Pen starts unselected;row panel removed.Saved Egg drawing survives edit/create template switches.FE1477/13skip;focused77/1skip;PG29+freeze1/static/build pass.No backend/contract/freeze changes;0 calls/migrations/deploy.
+
+## Nov16 D2 draft (PR442)
+
+Rebased onto `503857fe` (batch2 + Immerse Option C). Ordinary AGENT.md free text (`persona_required=False`); cards prefer salvaged extract; fail-open to original AGENT.md only when compile cannot yield a card; Check-card Ready/Compiling only; Lead-approved fail-open clause in card error copy (too_long unchanged; no separate New notice); no migration (head stays 0093).
+
 Nov16 #449 DRAFT:egg speak-yaw;list End no confirm;mouth=audioPlaying;Preview drag-yaw;stage table removed(+wood/collider).0 calls/deploy.
+
+Merge inputs (#449 Phase A): caacc46f193e6462c8bdc1ce305aac37c121fcdc + origin/main 158c4563836a378fb09d7d25ecc1c92005c2f139. Docs conflict resolved; FE/static gates pending;0 calls/deploy.

@@ -3617,6 +3617,14 @@ export interface components {
             grounding_mode: "rag_grounded" | "mixed" | "general_reasoning";
             sources: components["schemas"]["RetrievalSource"][];
         };
+        /**
+         * VoicePreviewRequest
+         * @description Optional Tone line so Preview speech matches debate delivery.
+         */
+        VoicePreviewRequest: {
+            /** Instruction */
+            instruction?: string | null;
+        };
         VoiceProfile: {
             id: components["schemas"]["Uuid"];
             /** @enum {string} */
@@ -3883,7 +3891,7 @@ export interface components {
             current_stance?: "support" | "oppose" | "neutral" | null;
             current_position_summary?: string;
             /**
-             * @description Null for a Debate created before debate cards. fallback means the turns send the original AGENT.md.
+             * @description Null for a Debate created before debate cards (legacy pinned AGENT.md). ready carries the extracted card. fallback is compile failure; turns do not speak from raw AGENT.md.
              * @enum {string|null}
              */
             card_status?: "compiling" | "ready" | "fallback" | null;
@@ -9982,7 +9990,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["VoicePreviewRequest"] | null;
+            };
+        };
         responses: {
             /** @description Short-lived platform preview URL. */
             200: {

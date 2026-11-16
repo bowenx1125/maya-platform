@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef } from "react";
 
+import { useMusicOn } from "../../lib/background-music";
 import { useAcademyMood, type AcademyMood } from "./mood";
 import { usePrefersReducedMotion } from "./motion";
 
@@ -564,6 +565,7 @@ function Scholar({
 export function AcademyMascots({ label }: { label: string }) {
   const mood = useAcademyMood();
   const reduced = usePrefersReducedMotion();
+  const musicOn = useMusicOn("workspace");
   const ref = useRef<SVGSVGElement>(null);
   const nodes = useEyeTracking(ref, mood, !reduced);
 
@@ -575,6 +577,7 @@ export function AcademyMascots({ label }: { label: string }) {
       role="img"
       aria-label={label}
       data-mood={mood}
+      data-music={musicOn && !reduced ? "on" : undefined}
       data-reduced={reduced ? "true" : undefined}
     >
       {SCHOLARS.map((scholar) => (

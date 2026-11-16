@@ -60,6 +60,7 @@ import {
 import { NoticeTraySlot } from "./ui/error-kit";
 import { MusicKey } from "./music-key";
 import { ClassSwitcher } from "./class-switcher";
+import switcherStyles from "./class-switcher.module.css";
 import { useBowenLandingGroupId } from "./use-bowen-landing-group";
 
 type ActionRegistration = {
@@ -1288,13 +1289,7 @@ export function AppShell({
                 className={`nav-links grid content-start ${collapsed ? "justify-items-center gap-3" : "gap-4"}`}
               >
                 <div
-                  className={
-                    collapsed || mobile
-                      ? "contents"
-                      : teacherSurface
-                        ? "grid min-w-0"
-                        : "flex items-center justify-between gap-2"
-                  }
+                  className={collapsed || mobile ? "contents" : "grid min-w-0"}
                 >
                   {teacherSurface && !mobile ? (
                     <ClassSwitcher
@@ -1303,11 +1298,22 @@ export function AppShell({
                       mobile={false}
                       homeLink={brandHomeLink}
                     />
-                  ) : (
+                  ) : collapsed || mobile ? (
                     brandHomeLink()
-                  )}
-                  {collapsed || mobile || teacherSurface ? null : (
-                    <MusicKey channel="workspace" />
+                  ) : (
+                    <div
+                      className={`${switcherStyles.capsule} ${switcherStyles.segmented} relative flex min-w-0 rounded-full border-[3px] border-[#111] bg-white ${PRESS_MOTION}`}
+                    >
+                      {brandHomeLink(
+                        <span className="block truncate">{t("appName")}</span>,
+                        `${switcherStyles.capsuleHome} relative isolate flex min-h-11 min-w-11 flex-1 items-center gap-1.5 px-2 font-display text-sm font-extrabold text-ink no-underline [&>.brand-dot]:size-3.5! ${PRESS_HIT}`,
+                        t("appName"),
+                      )}
+                      <MusicKey
+                        channel="workspace"
+                        className={`${switcherStyles.capsuleTrigger} ${switcherStyles.segmentTrigger} !size-auto !h-auto !w-auto !min-h-11 !min-w-11 !rounded-none !border-0 !shadow-none active:!shadow-none`}
+                      />
+                    </div>
                   )}
                 </div>
                 {groups.map((group) => {

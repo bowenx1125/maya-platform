@@ -5,12 +5,18 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   DebatePreview,
   type DebatePreviewSnapshot,
 } from "../components/debate/preview";
+
+vi.mock("../components/session-provider", () => ({
+  useSession: () => ({
+    api: { createVoicePreview: vi.fn() },
+  }),
+}));
 
 afterEach(() => cleanup());
 
@@ -60,13 +66,15 @@ describe("debate cards on the teacher preview", () => {
     );
     expect(
       screen.getAllByTestId("debate-card-status").map((tag) => tag.textContent),
-    ).toEqual(["Ready", "Compiling", "Fallback"]);
+    ).toEqual(["Ready", "Compiling"]);
     const [ready, compiling, fallback] =
       screen.getAllByTestId("debate-card-check");
 
     fireEvent.click(within(ready).getByText("Check card"));
     expect(within(ready).getByText(card.identity)).toBeTruthy();
     expect(within(ready).getByText(card.position)).toBeTruthy();
+    expect(within(ready).getByText("Tone")).toBeTruthy();
+    expect(within(ready).getByText(card.voice_style!)).toBeTruthy();
     expect(within(ready).getByText("Dropped from AGENT.md")).toBeTruthy();
     expect(within(ready).getByText("Length limit")).toBeTruthy();
     expect(within(ready).getByText(card.dropped[0].excerpt)).toBeTruthy();
@@ -75,11 +83,37 @@ describe("debate cards on the teacher preview", () => {
     expect(
       within(compiling).getByText(/The card is still compiling\./),
     ).toBeTruthy();
+    expect(within(fallback).queryByTestId("debate-card-status")).toBeNull();
+    expect(within(fallback).queryByText("Fallback")).toBeNull();
     expect(
       within(fallback).getByText(
-        "Fallback: this Agent speaks from its original AGENT.md.",
+        "The debate card could not be prepared from this Agent's AGENT.md, so this Agent will speak from its original AGENT.md for now. Open Check card, fix the Agent text if needed, then try again.",
       ),
     ).toBeTruthy();
+  });
+
+  it("omits the Fallback status tag on extraction failure while keeping the reason", () => {
+    renderPreview(
+      snapshot([
+        {
+          id: "a",
+          agent_name: "Ada",
+          card_status: "fallback",
+          card_teacher_reason: "format_invalid",
+          card: null,
+        },
+      ]),
+    );
+    const check = screen.getByTestId("debate-card-check");
+    expect(within(check).queryByTestId("debate-card-status")).toBeNull();
+    expect(within(check).queryByText("Fallback")).toBeNull();
+    fireEvent.click(within(check).getByText("Check card"));
+    expect(
+      within(check).getByText(
+        "The card response was not in the expected format, so this Agent will speak from its original AGENT.md for now. Open Check card and try again; if it keeps failing, edit the Agent's AGENT.md and re-check.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByTestId("debate-card-check")).toBeTruthy();
   });
 
   it("names the Agent on the disclosure and lists nothing dropped plainly", () => {
@@ -96,10 +130,10 @@ describe("debate cards on the teacher preview", () => {
     expect(screen.getByLabelText("Check Ada card")).toBeTruthy();
     expect(screen.getByText("Nothing was dropped.")).toBeTruthy();
     expect(screen.queryByText("Position")).toBeNull();
-    expect(screen.queryByText("Voice")).toBeNull();
+    expect(screen.queryByText("Tone")).toBeNull();
   });
 
-  it("shows a coarse teacher reason and the continue message for new fallbacks", () => {
+  it("shows a coarse teacher reason for fallbacks without a raw-AGENT.md path", () => {
     renderPreview(
       snapshot([
         {
@@ -114,18 +148,11 @@ describe("debate cards on the teacher preview", () => {
     const check = screen.getByTestId("debate-card-check");
     fireEvent.click(within(check).getByText("Check card"));
     expect(
-      within(check).getByText("The card exceeded the safe length limit."),
-    ).toBeTruthy();
-    expect(
       within(check).getByText(
-        "This Agent will use its original AGENT.md. This session can continue.",
+        "The extracted card exceeded the safe length limit. Shorten the Agent's AGENT.md, then open Check card and try again.",
       ),
     ).toBeTruthy();
-    expect(
-      within(check).queryByText(
-        "Fallback: this Agent speaks from its original AGENT.md.",
-      ),
-    ).toBeNull();
+    expect(within(check).queryByText(/This session can continue/)).toBeNull();
     expect(within(check).queryByText("card_too_long")).toBeNull();
     expect(within(check).queryByText("too_long")).toBeNull();
   });
@@ -146,7 +173,9 @@ describe("debate cards on the teacher preview", () => {
     fireEvent.click(within(check).getByText("Check card"));
     expect(within(check).getByText(card.identity)).toBeTruthy();
     expect(
-      within(check).queryByText("The card could not be prepared."),
+      within(check).queryByText(
+        "The debate card could not be prepared from this Agent's AGENT.md, so this Agent will speak from its original AGENT.md for now. Open Check card, fix the Agent text if needed, then try again.",
+      ),
     ).toBeNull();
     expect(
       within(check).queryByText(
@@ -164,5 +193,24 @@ describe("debate cards on the teacher preview", () => {
     );
     expect(screen.queryByTestId("debate-card-check")).toBeNull();
     expect(screen.getByText("Ada")).toBeTruthy();
+  });
+
+  it("offers Preview on a ready card when a voice profile is known", () => {
+    renderPreview(
+      snapshot([
+        {
+          id: "a",
+          agent_name: "Ada",
+          card_status: "ready",
+          card,
+          effective_voice_profile_id: "voice-1",
+        },
+      ]),
+    );
+    const check = screen.getByTestId("debate-card-check");
+    fireEvent.click(within(check).getByText("Check card"));
+    expect(
+      within(check).getByTestId("debate-card-tone-preview").textContent,
+    ).toBe("Preview");
   });
 });

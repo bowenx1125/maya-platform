@@ -14,6 +14,11 @@ import {
   type AcademyMood,
 } from "../components/academy/mood";
 
+const musicOn = vi.hoisted(() => ({ value: false }));
+vi.mock("../lib/background-music", () => ({
+  useMusicOn: () => musicOn.value,
+}));
+
 const LABEL = "scholars";
 
 function MoodButtons() {
@@ -101,6 +106,7 @@ async function settle(frames = 40) {
 
 describe("academy mascots", () => {
   afterEach(() => {
+    musicOn.value = false;
     cleanup();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -214,5 +220,19 @@ describe("academy mascots", () => {
     expect(screen.getByRole("img", { name: LABEL }).dataset.reduced).toBe(
       "true",
     );
+  });
+
+  it("stomps when workspace music is on", () => {
+    musicOn.value = true;
+    mount();
+    expect(
+      document.querySelector(".academy-mascots")?.getAttribute("data-music"),
+    ).toBe("on");
+    cleanup();
+    musicOn.value = false;
+    mount();
+    expect(
+      document.querySelector(".academy-mascots")?.getAttribute("data-music"),
+    ).toBeNull();
   });
 });

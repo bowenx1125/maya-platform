@@ -1,22 +1,28 @@
 "use client";
 
+import { useRef, useState } from "react";
 import type { components } from "../../../lib/api/generated/schema";
 import type { DebateCardTeacherReason } from "../../../lib/api";
+import { extractTone } from "../../../lib/agent-tone";
 import { useT, type MessageKey } from "../../../lib/i18n";
 import { cn } from "../../../lib/utils";
+import { useSession } from "../../session-provider";
 import { IconEye } from "../../quiet-icons";
 import { DEBATE_BUTTON, DEBATE_TAG, DEBATE_TAG_TONE } from "../debate-chrome";
 
 export type DebateCard = components["schemas"]["DebateCard"];
 export type DebateCardStatus = "compiling" | "ready" | "fallback";
 
-const STATUS: Record<
-  DebateCardStatus,
-  { label: string; tone: keyof typeof DEBATE_TAG_TONE }
+const STATUS: Partial<
+  Record<
+    DebateCardStatus,
+    { label: string; tone: keyof typeof DEBATE_TAG_TONE }
+  >
 > = {
   compiling: { label: "Compiling", tone: "thinking" },
   ready: { label: "Ready", tone: "ready" },
-  fallback: { label: "Fallback", tone: "completed" },
+  // Fallback keeps the disclosure and reason body without a status tag.
+  // Honest fail-open notice copy awaits Lead approval before shipping.
 };
 
 const TEACHER_REASON_COPY: Record<DebateCardTeacherReason, MessageKey> = {
@@ -45,15 +51,23 @@ export function DebateCardCheck({
   status,
   card,
   card_teacher_reason,
+  voiceProfileId,
+  agentMd,
+  fallbackTone,
 }: {
   agentName: string;
   status?: DebateCardStatus | null;
   card?: DebateCard | null;
   card_teacher_reason?: DebateCardTeacherReason | null;
+  /** When set, ready cards can Preview speech with the resolved Tone. */
+  voiceProfileId?: string | null;
+  /** AGENT.md used to resolve Tone when the card has no voice_style. */
+  agentMd?: string | null;
+  fallbackTone?: string | null;
 }) {
   const t = useT();
   if (!status) return null;
-  const { label, tone } = STATUS[status];
+  const tag = STATUS[status];
   const reasonCopy =
     typeof card_teacher_reason === "string" &&
     Object.hasOwn(TEACHER_REASON_COPY, card_teacher_reason)
@@ -73,12 +87,18 @@ export function DebateCardCheck({
       >
         <IconEye size={18} />
         <span>Check card</span>
-        <span
-          className={cn(DEBATE_TAG, DEBATE_TAG_TONE[tone], "px-[7px] py-0")}
-          data-testid="debate-card-status"
-        >
-          {label}
-        </span>
+        {tag ? (
+          <span
+            className={cn(
+              DEBATE_TAG,
+              DEBATE_TAG_TONE[tag.tone],
+              "px-[7px] py-0",
+            )}
+            data-testid="debate-card-status"
+          >
+            {tag.label}
+          </span>
+        ) : null}
       </summary>
       <div className="mt-2 grid min-w-0 gap-2 rounded-[12px] border-2 border-[#111] bg-[#F1F7FF] p-2.5 text-sm leading-[1.45] [&_*]:[overflow-wrap:anywhere]">
         {status === "compiling" ? (
@@ -88,26 +108,38 @@ export function DebateCardCheck({
           </p>
         ) : null}
         {status === "fallback" || (status === "ready" && !card) ? (
-          status === "fallback" && reasonCopy ? (
-            <>
-              <p className="m-0 text-[#6B7280]">{t(reasonCopy)}</p>
-              <p className="m-0 text-[#6B7280]">
-                {t("debateCardFallbackContinues")}
-              </p>
-            </>
-          ) : (
-            <p className="m-0 text-[#6B7280]">
-              Fallback: this Agent speaks from its original AGENT.md.
-            </p>
-          )
+          <p className="m-0 text-[#6B7280]">
+            {t(reasonCopy ?? "debateCardReasonOther")}
+          </p>
         ) : null}
-        {status === "ready" && card ? <CardBody card={card} /> : null}
+        {status === "ready" && card ? (
+          <CardBody
+            card={card}
+            voiceProfileId={voiceProfileId}
+            agentMd={agentMd}
+            fallbackTone={fallbackTone}
+          />
+        ) : null}
       </div>
     </details>
   );
 }
 
-function CardBody({ card }: { card: DebateCard }) {
+function CardBody({
+  card,
+  voiceProfileId,
+  agentMd,
+  fallbackTone,
+}: {
+  card: DebateCard;
+  voiceProfileId?: string | null;
+  agentMd?: string | null;
+  fallbackTone?: string | null;
+}) {
+  const tone =
+    (typeof card.voice_style === "string" && card.voice_style.trim()
+      ? card.voice_style.trim()
+      : null) ?? extractTone(agentMd, fallbackTone, 120);
   return (
     <>
       <CardField title="Identity">{card.identity}</CardField>
@@ -126,8 +158,13 @@ function CardBody({ card }: { card: DebateCard }) {
       {card.speaking_style ? (
         <CardField title="Speaking style">{card.speaking_style}</CardField>
       ) : null}
-      {card.voice_style ? (
-        <CardField title="Voice">{card.voice_style}</CardField>
+      {tone ? (
+        <div className="grid gap-2">
+          <CardField title="Tone">{tone}</CardField>
+          {voiceProfileId ? (
+            <TonePreviewButton profileId={voiceProfileId} instruction={tone} />
+          ) : null}
+        </div>
       ) : null}
       <div className="border-0 border-t-2 border-dashed border-[#111] pt-2">
         <strong className="text-[13px]">Dropped from AGENT.md</strong>
@@ -152,6 +189,55 @@ function CardBody({ card }: { card: DebateCard }) {
         )}
       </div>
     </>
+  );
+}
+
+function TonePreviewButton({
+  profileId,
+  instruction,
+}: {
+  profileId: string;
+  instruction: string;
+}) {
+  const { api } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  async function play() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      audioRef.current?.pause();
+      const resource = await api.createVoicePreview(profileId, instruction);
+      const audio = new Audio(resource.playback_url);
+      audioRef.current = audio;
+      await audio.play();
+    } catch {
+      setError(
+        "Preview could not be generated because the voice service failed. Try again, or pick another voice.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-1">
+      <button
+        type="button"
+        className={cn(DEBATE_BUTTON, "w-fit py-1 pr-3 pl-3 text-xs")}
+        data-testid="debate-card-tone-preview"
+        data-ui-guide="voice.preview"
+        disabled={busy}
+        aria-busy={busy || undefined}
+        onClick={() => void play()}
+      >
+        Preview
+      </button>
+      {error ? <p className="m-0 text-[13px] text-[#B91C1C]">{error}</p> : null}
+    </div>
   );
 }
 

@@ -196,6 +196,7 @@ export function VoiceLibrary({
   moduleCard = false,
   initialCreate = false,
   selectedId = null,
+  previewInstruction = null,
   disabled = false,
   onSelect,
   onProfilesChange,
@@ -217,6 +218,8 @@ export function VoiceLibrary({
   /** The Agent's voice. With onSelect the list is a single-choice picker
    * whose None row stands for "no voice", so exactly one row is checked. */
   selectedId?: string | null;
+  /** Tone instruction so Preview matches debate speech (agent workbench). */
+  previewInstruction?: string | null;
   disabled?: boolean;
   onSelect?: (profileId: string | null) => void;
   onProfilesChange?: (profiles: VoiceProfile[]) => void;
@@ -562,7 +565,11 @@ export function VoiceLibrary({
     setFailure(null);
     setNotice(null);
     try {
-      const resource = await api.createVoicePreview(profileId);
+      const tone =
+        typeof previewInstruction === "string" ? previewInstruction.trim() : "";
+      const resource = tone
+        ? await api.createVoicePreview(profileId, tone)
+        : await api.createVoicePreview(profileId);
       if (!previewIsCurrent(resource.expires_at)) {
         invalidatePreview(profileId, "voicePreviewExpired");
         return;

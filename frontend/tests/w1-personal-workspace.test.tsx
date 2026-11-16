@@ -688,12 +688,13 @@ describe("W1 teacher personal workspace", () => {
     expect(
       screen.queryByRole("button", { name: /Make source private/ }),
     ).toBeNull();
-    expect(screen.queryByText("Ready")).toBeNull();
     // The RAG list has no per-file visibility control. (The Agent's own
     // Private / Public switch lives on its Name card, outside this list.)
+    // Check card may show Ready elsewhere; the RAG row itself must not.
     const ragList = screen
       .getByRole("checkbox", { name: "private-notes.md" })
       .closest("ul, ol, fieldset, section") as HTMLElement;
+    expect(within(ragList).queryByText("Ready")).toBeNull();
     expect(
       within(ragList).queryByRole("group", { name: "Visibility" }),
     ).toBeNull();
