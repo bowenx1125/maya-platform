@@ -117,4 +117,4 @@ Confirmed: #434 A Tone label + `Preview` (Identity/Position stay; Tone from AGEN
 
 Nov16 #427 hotfix(base503857fe):Save/Preview finish gestures;Save uses current ink.Back/Escape confirm discard;Pen starts unselected;row panel removed.Saved Egg drawing survives edit/create template switches.FE1477/13skip;focused77/1skip;PG29+freeze1/static/build pass.No backend/contract/freeze changes;0 calls/migrations/deploy.
 
-Nov16:Student music capsule hover overlay fixed;shared Button/music icon,collapsed key,dock chrome;83 focused FE+Chromium390/1440 pass;0 calls/deploy.
+Nov16:Student music capsule hover overlay fixed;shared Button/music icon,collapsed key,dock chrome. Phase2 vs main552d0286:static17/17,FE1491pass/13skip,build0;Chromium390/1440 before/after+real stage canvas checked. Backend/i18n/music state unchanged. Exact release bake Python exits0 on both refs but leaves stage fadeIn (newline excluded by function slice):pre-existing default-off defect;not fixed here.0 calls/deploy.
