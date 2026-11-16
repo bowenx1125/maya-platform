@@ -102,7 +102,10 @@ vi.mock("../components/stage3d/scholar-stage", () => ({
   ScholarStage: stageMock.MockScholarStage,
 }));
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 beforeEach(() => {
   stageMock.instances.length = 0;
@@ -143,6 +146,33 @@ function renderScene(
 }
 
 describe("ScholarScene asynchronous initialization", () => {
+  it("retains Start pressed before the renderer mounts and never waits for ready", async () => {
+    vi.useFakeTimers();
+    const props = {
+      characters: [character("participant-a", "A", "River Keeper")],
+      loadingLabel: "Loading",
+      unavailableLabel: "Unavailable",
+      visuals: {},
+      resting: true,
+    };
+    const view = render(<ScholarScene {...props} />);
+    expect(stageMock.instances).toHaveLength(0);
+    expect(view.getByTestId("stage-curtain").className).not.toContain("open");
+    view.rerender(<ScholarScene {...props} started />);
+    expect(view.getByTestId("stage-curtain").className).toContain("open");
+    await act(async () => {
+      await vi.dynamicImportSettled();
+    });
+    expect(stageMock.instances).toHaveLength(1);
+    expect(
+      view.container.firstElementChild?.getAttribute("data-scene-status"),
+    ).toBe("loading");
+    act(() => vi.advanceTimersByTime(600));
+    expect(view.queryByTestId("stage-curtain")).toBeNull();
+    act(() => stageMock.instances[0].options.onReady?.());
+    expect(view.queryByTestId("stage-curtain")).toBeNull();
+  });
+
   it("passes the initial roster to a stage created after the effects run", async () => {
     const initial = [character("participant-a", "A", "River Keeper")];
     const view = renderScene(initial, { "participant-a": "idle" });

@@ -3927,6 +3927,7 @@ export function BetaDebateStage({
       ) : null}
 
       <ScholarScene
+        started={startPressed}
         onSceneSettled={() => setSceneSettled(true)}
         bubbleOpen={bubbleOpen}
         bubbleText={bubbleText}

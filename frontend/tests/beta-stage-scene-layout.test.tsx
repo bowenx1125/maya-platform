@@ -163,6 +163,25 @@ function renderStage(readOnly = true) {
 }
 
 describe("BetaDebateStage scene layout", () => {
+  it("sends Start intent to the scene before the API or audio responds", () => {
+    const initial = detail();
+    initial.status = "draft";
+    initial.playback.status = "ready";
+    const startDebate = vi.fn(() => new Promise<DebateDetail>(() => {}));
+    render(
+      <BetaDebateStage
+        api={{ ...api, startDebate }}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => new IdleSocket()}
+      />,
+    );
+    expect(scholarSceneProps.at(-1)?.started).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Start debate" }));
+    expect(startDebate).toHaveBeenCalledTimes(1);
+    expect(scholarSceneProps.at(-1)?.started).toBe(true);
+  });
+
   it("keeps Transcript above the title and recovery actions above Transcript", () => {
     const layer = (classes: string) => {
       const z = classes
