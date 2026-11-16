@@ -32,6 +32,7 @@ from app.core.errors import PlatformError
 from app.core.llm_admission import debate_llm_slot
 from app.core.models import ProviderPolicySnapshot
 from app.modules.agents.markdown import AgentMarkdown, markdown_hash
+from app.modules.agents.tone import extract_card_tone
 from app.modules.debates.generation.four_round import speech_units
 from app.modules.debates.generation.prompt_budget import preflight_prompt_budget
 from app.modules.debates.models import DebateParticipant
@@ -278,8 +279,9 @@ def card_system_prompt(language: str) -> str:
         "- Write the card in plain modern language a secondary-school student follows, "
         "even when the Agent.md is written in a classical or academic register; keep the "
         "names of works and key terms.\n"
-        "- voice_style: one short line on vocal delivery when the Agent.md describes a "
-        f"voice or tone of voice, at most {CARD_MAX_LINE_CHARS} characters; otherwise null.\n"
+        "- voice_style: the Tone for speech — one short line on vocal delivery when the "
+        f"Agent.md describes a voice or tone of voice, at most {CARD_MAX_LINE_CHARS} "
+        "characters; otherwise null.\n"
         "- dropped: each piece of Agent.md content you leave out because it is not "
         f"persona, at most {CARD_MAX_DROPPED_ITEMS} items. Each item is {{excerpt, reason}}: "
         f"excerpt quotes the Agent.md as written, at most {CARD_MAX_LINE_CHARS} characters "
@@ -432,26 +434,32 @@ def render_card_markdown(card: Mapping[str, object], language: str) -> str:
 
 
 def voice_params_with_card(
-    base: Mapping[str, object], card_status: object, card_json: object
+    base: Mapping[str, object],
+    card_status: object,
+    card_json: object,
+    *,
+    agent_md: str | None = None,
 ) -> dict[str, object]:
-    """The Debate's voice values with this Agent's own delivery line, when it has one.
+    """The Debate's voice values with this Agent's Tone, when one is known.
 
-    The Debate-level instruction is one text for every speaker; a ready card's
-    ``voice_style`` is what the student wrote for this Agent, so it wins. The
-    card is in the Debate's language, which the supplier requires an
-    instruction to share with the text it reads. Any other state keeps the
-    Debate's values: a missing voice line never changes how a turn is voiced.
+    Order: ready card ``voice_style`` (Tone), else a ``- Tone:`` line in
+    AGENT.md, else the Debate-level / env instruction already in ``base``.
     """
 
     params = dict(base)
-    if card_status != "ready" or not isinstance(card_json, str):
-        return params
-    try:
-        style = json.loads(card_json).get("voice_style")
-    except (ValueError, AttributeError):
-        return params
-    if isinstance(style, str) and style.strip():
-        params["instruction"] = style.strip()[:CARD_MAX_LINE_CHARS]
+    if card_status == "ready" and isinstance(card_json, str):
+        try:
+            style = json.loads(card_json).get("voice_style")
+        except (ValueError, AttributeError):
+            style = None
+        if isinstance(style, str) and style.strip():
+            params["instruction"] = style.strip()[:CARD_MAX_LINE_CHARS]
+            return params
+    base_instruction = params.get("instruction")
+    fallback = base_instruction if isinstance(base_instruction, str) else None
+    tone = extract_card_tone(agent_md if isinstance(agent_md, str) else None, fallback=fallback)
+    if tone:
+        params["instruction"] = tone
     return params
 
 
@@ -462,15 +470,20 @@ def participant_voice_params(
 
     try:
         row = db.execute(
-            select(DebateParticipant.card_status, DebateParticipant.card_json).where(
-                DebateParticipant.id == str(participant_id)
-            )
+            select(
+                DebateParticipant.card_status,
+                DebateParticipant.card_json,
+                DebateParticipant.agent_md_snapshot,
+            ).where(DebateParticipant.id == str(participant_id))
         ).first()
     except (SQLAlchemyError, AttributeError, TypeError) as exc:
         # A host without the SQL participant table (tests, Mock) voices as before.
         LOGGER.info("debate_card_voice_unread error=%s", type(exc).__name__)
         return dict(base)
-    return voice_params_with_card(base, *row) if row is not None else dict(base)
+    if row is None:
+        return dict(base)
+    status, card_json, agent_md = row
+    return voice_params_with_card(base, status, card_json, agent_md=agent_md)
 
 
 def stored_card(row: Any) -> dict[str, object] | None:

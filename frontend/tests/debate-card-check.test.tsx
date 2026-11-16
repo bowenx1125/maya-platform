@@ -5,12 +5,18 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   DebatePreview,
   type DebatePreviewSnapshot,
 } from "../components/debate/preview";
+
+vi.mock("../components/session-provider", () => ({
+  useSession: () => ({
+    api: { createVoicePreview: vi.fn() },
+  }),
+}));
 
 afterEach(() => cleanup());
 
@@ -67,6 +73,8 @@ describe("debate cards on the teacher preview", () => {
     fireEvent.click(within(ready).getByText("Check card"));
     expect(within(ready).getByText(card.identity)).toBeTruthy();
     expect(within(ready).getByText(card.position)).toBeTruthy();
+    expect(within(ready).getByText("Tone")).toBeTruthy();
+    expect(within(ready).getByText(card.voice_style!)).toBeTruthy();
     expect(within(ready).getByText("Dropped from AGENT.md")).toBeTruthy();
     expect(within(ready).getByText("Length limit")).toBeTruthy();
     expect(within(ready).getByText(card.dropped[0].excerpt)).toBeTruthy();
@@ -96,7 +104,7 @@ describe("debate cards on the teacher preview", () => {
     expect(screen.getByLabelText("Check Ada card")).toBeTruthy();
     expect(screen.getByText("Nothing was dropped.")).toBeTruthy();
     expect(screen.queryByText("Position")).toBeNull();
-    expect(screen.queryByText("Voice")).toBeNull();
+    expect(screen.queryByText("Tone")).toBeNull();
   });
 
   it("shows a coarse teacher reason and the continue message for new fallbacks", () => {
@@ -164,5 +172,24 @@ describe("debate cards on the teacher preview", () => {
     );
     expect(screen.queryByTestId("debate-card-check")).toBeNull();
     expect(screen.getByText("Ada")).toBeTruthy();
+  });
+
+  it("offers Preview on a ready card when a voice profile is known", () => {
+    renderPreview(
+      snapshot([
+        {
+          id: "a",
+          agent_name: "Ada",
+          card_status: "ready",
+          card,
+          effective_voice_profile_id: "voice-1",
+        },
+      ]),
+    );
+    const check = screen.getByTestId("debate-card-check");
+    fireEvent.click(within(check).getByText("Check card"));
+    expect(
+      within(check).getByTestId("debate-card-tone-preview").textContent,
+    ).toBe("Preview");
   });
 });

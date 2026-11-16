@@ -67,6 +67,7 @@ export type DebatePreviewParticipant = {
   id: string;
   agent_name: string;
   slot?: string;
+  effective_voice_profile_id?: string | null;
   card_status?: DebateCardStatus | null;
   card_teacher_reason?: DebateCardTeacherReason | null;
   card?: DebateCard | null;
@@ -218,6 +219,7 @@ export function DebatePreview({
                     status={participant.card_status}
                     card_teacher_reason={participant.card_teacher_reason}
                     card={participant.card}
+                    voiceProfileId={participant.effective_voice_profile_id}
                   />
                 </div>
               );
