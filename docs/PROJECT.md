@@ -39,7 +39,7 @@ Historical formal micro-rounds:editable Team Ruleset roles/roster order;scorer=a
 
 Oct16 ADR-010:PostgreSQL prod. Compose:BACKEND_REPLICAS,max_connections=200;sign-in overload->auth_login_queued. Oct15:Team revision0,no canned opening;Teachers list formal attempts without Enter;private Agents/Teams/RAG/voices need Enter. Free answers:model relevant=true else guidance. Formal start:shared Knowledge `## Opening`/`## 开场白`,then `收到，第一题是`. Student send:lock executor before model call;parallel call->chat_busy.
 
-Oct17:adaptive queues/Record0068/Voices/PG load; ledger6. 
+Oct17:adaptive queues/Record0068/Voices/PG load; ledger6.
 
 ## Oct24 chats/deletion/Next/create
 
