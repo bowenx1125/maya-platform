@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Batch 4 · #436 Mascot dance · animation options</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Lexend:wght@400;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../shared/mock.css" />
+    <style>
+      body {
+        background: #dcebff;
+      }
+      .shot {
+        display: none;
+      }
+      body[data-shot] .sheet {
+        display: none;
+      }
+      body[data-shot] .shot {
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        padding: 24px;
+        background: #dcebff;
+      }
+      .hero {
+        width: min(720px, 100%);
+        min-height: 280px;
+        padding: 24px 28px 0;
+        border: 3px solid #111;
+        border-radius: 16px;
+        background: #fff7cc
+          repeating-conic-gradient(
+            from 0deg at 75% 100%,
+            #ffe14d8c 0deg 8deg,
+            transparent 8deg 16deg
+          );
+        box-shadow: 0 0 0 3px #fdba74, 8px 8px 0 3px #111;
+        position: relative;
+        overflow: hidden;
+      }
+      .hero h2 {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: 28px;
+      }
+      .floor {
+        position: absolute;
+        left: 18%;
+        right: 12%;
+        bottom: 22px;
+        height: 14px;
+        background: #a3e635;
+        border-bottom: 8px solid #111;
+      }
+      .cast {
+        position: absolute;
+        right: 40px;
+        bottom: 28px;
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        height: 170px;
+      }
+      .cast img {
+        height: 150px;
+        width: auto;
+        display: block;
+        transform-origin: 50% 100%;
+        will-change: transform;
+      }
+      .cast img:nth-child(1) {
+        height: 145px;
+      }
+      .cast img:nth-child(2) {
+        height: 130px;
+      }
+      .cast img:nth-child(3) {
+        height: 120px;
+      }
+      .cast img:nth-child(4) {
+        height: 160px;
+      }
+      .chip {
+        position: absolute;
+        right: 18px;
+        top: 18px;
+        width: 78px;
+        height: 78px;
+        border-radius: 999px;
+        border: 3px solid #111;
+        background: repeating-conic-gradient(#16a34a 0 15deg, #15803d 15deg 30deg);
+        box-shadow: inset 0 0 0 5px #fff, inset 0 0 0 8px #ff4d8d, 4px 4px 0 #111;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-family: var(--font-display);
+        font-size: 13px;
+        transform: rotate(10deg);
+      }
+      .badge {
+        position: absolute;
+        left: 18px;
+        bottom: 18px;
+        border: 3px solid #111;
+        background: #fff;
+        padding: 6px 10px;
+        font-weight: 800;
+        font-size: 12px;
+        box-shadow: 3px 3px 0 #111;
+      }
+      .badge[data-on="1"] {
+        background: #a3e635;
+      }
+
+      /* A · Bounce Band */
+      .dance-a img {
+        animation: bounce-band 0.55s ease-in-out infinite;
+      }
+      .dance-a img:nth-child(1) {
+        animation-delay: 0ms;
+      }
+      .dance-a img:nth-child(2) {
+        animation-delay: 90ms;
+      }
+      .dance-a img:nth-child(3) {
+        animation-delay: 180ms;
+      }
+      .dance-a img:nth-child(4) {
+        animation-delay: 40ms;
+      }
+      @keyframes bounce-band {
+        0%,
+        100% {
+          transform: translateY(0) scale(1, 1) rotate(0deg);
+        }
+        35% {
+          transform: translateY(-18px) scale(0.92, 1.1) rotate(-3deg);
+        }
+        55% {
+          transform: translateY(2px) scale(1.08, 0.9) rotate(2deg);
+        }
+      }
+
+      /* B · Groove Sway */
+      .dance-b img {
+        animation: groove-sway 0.7s cubic-bezier(0.4, 0.1, 0.2, 1) infinite;
+      }
+      .dance-b img:nth-child(1) {
+        animation-delay: 0ms;
+      }
+      .dance-b img:nth-child(2) {
+        animation-delay: 120ms;
+      }
+      .dance-b img:nth-child(3) {
+        animation-delay: 240ms;
+      }
+      .dance-b img:nth-child(4) {
+        animation-delay: 60ms;
+      }
+      @keyframes groove-sway {
+        0%,
+        100% {
+          transform: translateX(0) rotate(0deg) scale(1, 1);
+        }
+        25% {
+          transform: translateX(-10px) rotate(-8deg) scale(0.96, 1.05);
+        }
+        50% {
+          transform: translateX(0) rotate(0deg) translateY(-12px) scale(1.02, 0.96);
+        }
+        75% {
+          transform: translateX(10px) rotate(8deg) scale(0.96, 1.05);
+        }
+      }
+
+      /* C · Stomp Line */
+      .dance-c img {
+        animation: stomp-line 0.48s steps(2, end) infinite;
+      }
+      .dance-c img:nth-child(odd) {
+        animation-name: stomp-line;
+      }
+      .dance-c img:nth-child(even) {
+        animation-name: stomp-line-alt;
+      }
+      @keyframes stomp-line {
+        0%,
+        100% {
+          transform: translateY(0) scale(1.12, 0.88) rotate(-2deg);
+        }
+        50% {
+          transform: translateY(-14px) scale(0.9, 1.12) rotate(3deg);
+        }
+      }
+      @keyframes stomp-line-alt {
+        0%,
+        100% {
+          transform: translateY(-14px) scale(0.9, 1.12) rotate(3deg);
+        }
+        50% {
+          transform: translateY(0) scale(1.12, 0.88) rotate(-2deg);
+        }
+      }
+
+      .dance-off img {
+        animation: idle-bob 3.6s ease-in-out infinite;
+      }
+      .dance-off img:nth-child(2) {
+        animation-duration: 4.1s;
+      }
+      .dance-off img:nth-child(3) {
+        animation-duration: 3.7s;
+      }
+      .dance-off img:nth-child(4) {
+        animation-duration: 4.6s;
+      }
+      @keyframes idle-bob {
+        0%,
+        100% {
+          transform: translateY(0) scale(1, 1);
+        }
+        50% {
+          transform: translateY(-3px) scale(0.985, 1.02);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .cast img {
+          animation: none !important;
+        }
+      }
+    </style>
+  <script id="BATCH4_SHOT_BOOT">(()=>{const s=new URLSearchParams(location.search).get("shot");if(s){document.documentElement.dataset.shot=s;document.addEventListener("DOMContentLoaded",()=>{document.body.dataset.shot=s;for(const el of document.querySelectorAll(".shot")){el.style.display=el.getAttribute("data-id")===s?"block":"none";}const sheet=document.querySelector(".sheet");if(sheet)sheet.style.display="none";});}})();</script></head>
+  <body>
+    <div class="sheet">
+      <h1 class="sheet-title">#436 · Mascots dance while music plays</h1>
+      <p class="sheet-sub">
+        No copy changes. When workspace music is on, all four scholars dance;
+        when it stops, they return to idle bob. Respects prefers-reduced-motion
+        (no dance; idle still or none).
+      </p>
+
+      <div class="row cols-2">
+        <div class="panel">
+          <div class="panel-head">Current · music off <span class="tag white">baseline</span></div>
+          <div class="panel-body">
+            <div class="hero dance-off">
+              <h2>Welcome</h2>
+              <div class="chip">Holdem</div>
+              <div class="floor"></div>
+              <div class="cast">
+                <img src="assets/scroll.svg" alt="" />
+                <img src="assets/wreath.svg" alt="" />
+                <img src="assets/tablet.svg" alt="" />
+                <img src="assets/wave.svg" alt="" />
+              </div>
+              <div class="badge" data-on="0">music off · idle bob only</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">A · Bounce Band</div>
+          <div class="panel-body">
+            <div class="hero dance-a">
+              <h2>Welcome</h2>
+              <div class="chip">Holdem</div>
+              <div class="floor"></div>
+              <div class="cast">
+                <img src="assets/scroll.svg" alt="" />
+                <img src="assets/wreath.svg" alt="" />
+                <img src="assets/tablet.svg" alt="" />
+                <img src="assets/wave.svg" alt="" />
+              </div>
+              <div class="badge" data-on="1">music on · bounce band</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row cols-2">
+        <div class="panel">
+          <div class="panel-head">B · Groove Sway</div>
+          <div class="panel-body">
+            <div class="hero dance-b">
+              <h2>Welcome</h2>
+              <div class="chip">Holdem</div>
+              <div class="floor"></div>
+              <div class="cast">
+                <img src="assets/scroll.svg" alt="" />
+                <img src="assets/wreath.svg" alt="" />
+                <img src="assets/tablet.svg" alt="" />
+                <img src="assets/wave.svg" alt="" />
+              </div>
+              <div class="badge" data-on="1">music on · groove sway</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">C · Stomp Line</div>
+          <div class="panel-body">
+            <div class="hero dance-c">
+              <h2>Welcome</h2>
+              <div class="chip">Holdem</div>
+              <div class="floor"></div>
+              <div class="cast">
+                <img src="assets/scroll.svg" alt="" />
+                <img src="assets/wreath.svg" alt="" />
+                <img src="assets/tablet.svg" alt="" />
+                <img src="assets/wave.svg" alt="" />
+              </div>
+              <div class="badge" data-on="1">music on · stomp line</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="shot" data-id="current">
+      <div class="hero dance-off" style="width: 720px">
+        <h2>Welcome</h2>
+        <div class="chip">Holdem</div>
+        <div class="floor"></div>
+        <div class="cast">
+          <img src="assets/scroll.svg" alt="" />
+          <img src="assets/wreath.svg" alt="" />
+          <img src="assets/tablet.svg" alt="" />
+          <img src="assets/wave.svg" alt="" />
+        </div>
+        <div class="badge" data-on="0">music off</div>
+      </div>
+    </section>
+    <section class="shot" data-id="a">
+      <div class="hero dance-a" style="width: 720px">
+        <h2>Welcome</h2>
+        <div class="chip">Holdem</div>
+        <div class="floor"></div>
+        <div class="cast">
+          <img src="assets/scroll.svg" alt="" />
+          <img src="assets/wreath.svg" alt="" />
+          <img src="assets/tablet.svg" alt="" />
+          <img src="assets/wave.svg" alt="" />
+        </div>
+        <div class="badge" data-on="1">A · Bounce Band</div>
+      </div>
+    </section>
+    <section class="shot" data-id="b">
+      <div class="hero dance-b" style="width: 720px">
+        <h2>Welcome</h2>
+        <div class="chip">Holdem</div>
+        <div class="floor"></div>
+        <div class="cast">
+          <img src="assets/scroll.svg" alt="" />
+          <img src="assets/wreath.svg" alt="" />
+          <img src="assets/tablet.svg" alt="" />
+          <img src="assets/wave.svg" alt="" />
+        </div>
+        <div class="badge" data-on="1">B · Groove Sway</div>
+      </div>
+    </section>
+    <section class="shot" data-id="c">
+      <div class="hero dance-c" style="width: 720px">
+        <h2>Welcome</h2>
+        <div class="chip">Holdem</div>
+        <div class="floor"></div>
+        <div class="cast">
+          <img src="assets/scroll.svg" alt="" />
+          <img src="assets/wreath.svg" alt="" />
+          <img src="assets/tablet.svg" alt="" />
+          <img src="assets/wave.svg" alt="" />
+        </div>
+        <div class="badge" data-on="1">C · Stomp Line</div>
+      </div>
+    </section>
+  </body>
+</html>

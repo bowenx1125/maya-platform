@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Batch 4 · #437 Student sidebar header · mockups</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Lexend:wght@400;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../shared/mock.css" />
+    <style>
+      .shot {
+        display: none;
+      }
+      body[data-shot] .sheet {
+        display: none;
+      }
+      /* shot visibility controlled by BATCH4_SHOT_BOOT */
+      .note-buddy {
+        width: 22px;
+        height: 26px;
+        image-rendering: pixelated;
+      }
+      .pix {
+        width: 22px;
+        height: 26px;
+        display: grid;
+        grid-template-columns: repeat(11, 2px);
+        grid-template-rows: repeat(13, 2px);
+        gap: 0;
+      }
+      .pix i {
+        background: #111;
+      }
+      .sidebar-inner {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .group {
+        display: grid;
+        gap: 6px;
+      }
+    </style>
+  <script id="BATCH4_SHOT_BOOT">(()=>{const s=new URLSearchParams(location.search).get("shot");if(s){document.documentElement.dataset.shot=s;document.addEventListener("DOMContentLoaded",()=>{document.body.dataset.shot=s;for(const el of document.querySelectorAll(".shot")){el.style.display=el.getAttribute("data-id")===s?"block":"none";}const sheet=document.querySelector(".sheet");if(sheet)sheet.style.display="none";});}})();</script></head>
+  <body>
+    <div class="sheet">
+      <h1 class="sheet-title">#437 · Student sidebar Mayaform + music</h1>
+      <p class="sheet-sub">
+        Rebuild the student Mayaform control and music control to match the
+        teacher ClassSwitcher capsule. The class-switcher segment slot becomes
+        the music button. Shared components only; no new helper copy; preserve
+        music/test ids and behavior.
+      </p>
+
+      <div class="row cols-2">
+        <div class="panel">
+          <div class="panel-head">
+            Current student header
+            <span class="tag white">baseline</span>
+          </div>
+          <div class="panel-body">
+            <div class="sidebar" style="width: 260px; border: 3px solid #111">
+              <div class="header-row">
+                <a class="maya-key" href="#">
+                  <span class="brand-dot lit"></span>
+                  Mayaform
+                </a>
+                <button class="music-key" type="button" aria-label="Play music">
+                  ♪
+                </button>
+              </div>
+              <div class="nav-label">
+                <span class="nav-swatch"></span> STUDYFORM
+              </div>
+              <div class="nav-item active">Agents</div>
+            </div>
+            <p class="note" style="margin-top: 10px">
+              Today: separate Mayaform ITEM key + floating MusicKey. Teacher uses
+              a single capsule (Mayaform + class segment).
+            </p>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            Teacher reference capsule
+            <span class="tag pink">match this</span>
+          </div>
+          <div class="panel-body">
+            <div class="sidebar" style="width: 260px; border: 3px solid #111">
+              <div class="capsule">
+                <a class="capsule-home" href="#">
+                  <span class="brand-dot lit"></span>
+                  Mayaform
+                </a>
+                <button class="capsule-seg" type="button">3 ▾</button>
+              </div>
+              <div class="nav-label">
+                <span class="nav-swatch"></span> STUDYFORM
+              </div>
+              <div class="nav-item">Agents</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="option-label">A · Capsule Twin (MusicKey in class slot)</h2>
+      <div class="row cols-2">
+        <div class="panel">
+          <div class="panel-head">A · 1440 stopped</div>
+          <div class="panel-body">
+            <div class="sidebar" style="width: 260px; border: 3px solid #111">
+              <div class="capsule">
+                <a class="capsule-home" href="#" data-testid="class-switcher-home">
+                  <span class="brand-dot lit"></span>
+                  Mayaform
+                </a>
+                <button
+                  class="capsule-seg music-stop"
+                  type="button"
+                  data-music-key="workspace"
+                  data-music-state="stop"
+                  aria-label="Play music"
+                >
+                  ♪
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">A · 1440 playing</div>
+          <div class="panel-body">
+            <div class="sidebar" style="width: 260px; border: 3px solid #111">
+              <div class="capsule">
+                <a class="capsule-home" href="#">
+                  <span class="brand-dot lit"></span>
+                  Mayaform
+                </a>
+                <button
+                  class="capsule-seg music-play"
+                  type="button"
+                  data-music-key="workspace"
+                  data-music-state="playing"
+                  data-playing="true"
+                  aria-label="Pause music"
+                >
+                  ♫
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="option-label">B · Capsule Compact (44px note segment)</h2>
+      <div class="row cols-2">
+        <div class="panel">
+          <div class="panel-head">B · 1440</div>
+          <div class="panel-body">
+            <div class="sidebar" style="width: 260px; border: 3px solid #111">
+              <div class="capsule">
+                <a class="capsule-home" href="#">
+                  <span class="brand-dot lit"></span>
+                  Mayaform
+                </a>
+                <button
+                  class="capsule-seg music-stop"
+                  type="button"
+                  style="width: 44px; padding: 0"
+                  data-music-key="workspace"
+                  data-music-state="stop"
+                  aria-label="Play music"
+                >
+                  <svg width="18" height="20" viewBox="0 0 13 15" aria-hidden="true">
+                    <g fill="#111">
+                      <rect x="6" y="0" width="6" height="2" />
+                      <rect x="10" y="2" width="2" height="1" />
+                      <rect x="6" y="2" width="2" height="8" />
+                      <rect x="1" y="9" width="7" height="6" />
+                    </g>
+                    <rect x="2" y="10" width="5" height="4" fill="#fff" />
+                    <g fill="#111">
+                      <rect x="2" y="12" width="2" height="1" />
+                      <rect x="5" y="12" width="2" height="1" />
+                    </g>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">B · 390 drawer</div>
+          <div class="panel-body">
+            <div
+              class="sidebar mobile-drawer"
+              style="border: 3px solid #111; width: 300px"
+            >
+              <div style="position: relative">
+                <a class="maya-key" href="#" style="background: transparent; border-color: transparent; box-shadow: none">
+                  <span class="brand-dot"></span>
+                  Mayaform
+                </a>
+                <button
+                  class="music-key"
+                  type="button"
+                  style="position: absolute; top: 0; right: 0"
+                  aria-label="Play music"
+                >
+                  ♪
+                </button>
+              </div>
+              <p class="note">
+                Mobile keeps today’s absolute MusicKey placement; desktop uses
+                the capsule. Same test ids.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="option-label">C · Capsule Note-Face (MusicKey face inside capsule)</h2>
+      <div class="row cols-2">
+        <div class="panel">
+          <div class="panel-head">C · stop / play / empty</div>
+          <div class="panel-body" style="display: grid; gap: 12px">
+            <div class="capsule" style="width: 240px">
+              <a class="capsule-home" href="#">
+                <span class="brand-dot lit"></span>Mayaform
+              </a>
+              <button class="capsule-seg music-stop" type="button" aria-label="Play music">
+                <svg width="18" height="20" viewBox="0 0 13 15" aria-hidden="true">
+                  <g fill="#111">
+                    <rect x="6" y="0" width="6" height="2"></rect>
+                    <rect x="6" y="2" width="2" height="8"></rect>
+                    <rect x="1" y="9" width="7" height="6"></rect>
+                  </g>
+                  <rect x="2" y="10" width="5" height="4" fill="#fff"></rect>
+                </svg>
+              </button>
+            </div>
+            <div class="capsule" style="width: 240px">
+              <a class="capsule-home" href="#">
+                <span class="brand-dot lit"></span>Mayaform
+              </a>
+              <button
+                class="capsule-seg music-play"
+                type="button"
+                aria-label="Pause music"
+                data-playing="true"
+              >
+                <svg width="18" height="20" viewBox="0 0 13 15" aria-hidden="true">
+                  <g fill="#111">
+                    <rect x="6" y="0" width="6" height="2"></rect>
+                    <rect x="6" y="2" width="2" height="8"></rect>
+                    <rect x="1" y="9" width="7" height="6"></rect>
+                  </g>
+                  <rect x="2" y="10" width="5" height="4" fill="#fff"></rect>
+                  <g fill="#111">
+                    <rect x="3" y="11" width="1" height="1"></rect>
+                    <rect x="5" y="11" width="1" height="1"></rect>
+                    <rect x="3" y="13" width="3" height="1"></rect>
+                  </g>
+                </svg>
+              </button>
+            </div>
+            <div class="capsule" style="width: 240px">
+              <a class="capsule-home" href="#">
+                <span class="brand-dot lit"></span>Mayaform
+              </a>
+              <button
+                class="capsule-seg music-empty"
+                type="button"
+                aria-label="Music unavailable"
+                disabled
+              >
+                ♪
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">C · full shell 1440</div>
+          <div class="panel-body">
+            <div class="viewport short" data-w="1440" style="height: 280px">
+              <div class="shell" style="height: 280px">
+                <aside class="sidebar">
+                  <div class="capsule">
+                    <a class="capsule-home" href="#">
+                      <span class="brand-dot lit"></span>Mayaform
+                    </a>
+                    <button class="capsule-seg music-play" type="button"><svg width="18" height="20" viewBox="0 0 13 15" aria-hidden="true"><g fill="#111"><rect x="6" y="0" width="6" height="2"/><rect x="10" y="2" width="2" height="1"/><rect x="6" y="2" width="2" height="8"/><rect x="1" y="9" width="7" height="6"/></g><rect x="2" y="10" width="5" height="4" fill="#fff"/><g fill="#111"><rect x="3" y="11" width="1" height="1"/><rect x="5" y="11" width="1" height="1"/><rect x="3" y="13" width="3" height="1"/></g></svg></button>
+                  </div>
+                  <div class="group">
+                    <div class="nav-label">
+                      <span class="nav-swatch"></span> STUDYFORM
+                    </div>
+                    <div class="nav-item active">Agents</div>
+                    <div class="nav-item">Teams</div>
+                  </div>
+                </aside>
+                <div class="main">
+                  <div
+                    style="
+                      height: 120px;
+                      border: 3px solid #111;
+                      border-radius: 14px;
+                      background: #fff7cc;
+                      box-shadow: 6px 6px 0 #111;
+                    "
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="shot" data-id="current-1440">
+      <div class="viewport" data-w="1440">
+        <div class="shell">
+          <aside class="sidebar">
+            <div class="header-row">
+              <a class="maya-key" href="#"><span class="brand-dot lit"></span>Mayaform</a>
+              <button class="music-key" type="button" aria-label="Play music"><svg width="18" height="20" viewBox="0 0 13 15" aria-hidden="true"><g fill="#111"><rect x="6" y="0" width="6" height="2"/><rect x="10" y="2" width="2" height="1"/><rect x="6" y="2" width="2" height="8"/><rect x="1" y="9" width="7" height="6"/></g><rect x="2" y="10" width="5" height="4" fill="#fff"/><g fill="#111"><rect x="2" y="12" width="2" height="1"/><rect x="5" y="12" width="2" height="1"/></g></svg></button>
+            </div>
+            <div class="nav-label"><span class="nav-swatch"></span> STUDYFORM</div>
+            <div class="nav-item active">Agents</div>
+            <div class="nav-item">Teams</div>
+            <div class="nav-label"><span class="nav-swatch" style="background:#67e8f9"></span> BRAINFORM</div>
+            <div class="nav-item">RAG</div>
+            <div class="nav-item">Voices</div>
+          </aside>
+          <div class="main">
+            <div style="height:200px;border:3px solid #111;border-radius:16px;background:#fff7cc;box-shadow:8px 8px 0 #111"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="shot" data-id="current-390">
+      <div class="viewport" data-w="390">
+        <div class="shell mobile">
+          <aside class="sidebar mobile-drawer">
+            <div style="position:relative;min-height:48px">
+              <a class="maya-key" href="#" style="background:transparent;border-color:transparent;box-shadow:none;padding-left:0">
+                <span class="brand-dot"></span>Mayaform
+              </a>
+              <button class="music-key" style="position:absolute;right:0;top:0" type="button"><svg width="18" height="20" viewBox="0 0 13 15" aria-hidden="true"><g fill="#111"><rect x="6" y="0" width="6" height="2"/><rect x="10" y="2" width="2" height="1"/><rect x="6" y="2" width="2" height="8"/><rect x="1" y="9" width="7" height="6"/></g><rect x="2" y="10" width="5" height="4" fill="#fff"/><g fill="#111"><rect x="2" y="12" width="2" height="1"/><rect x="5" y="12" width="2" height="1"/></g></svg></button>
+            </div>
+            <div class="nav-label"><span class="nav-swatch"></span> STUDYFORM</div>
+            <div class="nav-item active">Agents</div>
+          </aside>
+        </div>
+      </div>
+    </section>
+    <section class="shot" data-id="teacher-ref-1440">
+      <div class="viewport" data-w="1440">
+        <div class="shell">
+          <aside class="sidebar">
+            <div class="capsule">
+              <a class="capsule-home" href="#"><span class="brand-dot lit"></span>Mayaform</a>
+              <button class="capsule-seg" type="button">3 ▾</button>
+            </div>
+            <div class="nav-label"><span class="nav-swatch"></span> STUDYFORM</div>
+            <div class="nav-item">Agents</div>
+          </aside>
+          <div class="main"><div style="height:160px;border:3px solid #111;border-radius:16px;background:#fff"></div></div>
+        </div>
+      </div>
+    </section>
+    <section class="shot" data-id="a-1440">
+      <div class="viewport" data-w="1440">
+        <div class="shell">
+          <aside class="sidebar">
+            <div class="capsule">
+              <a class="capsule-home" href="#"><span class="brand-dot lit"></span>Mayaform</a>
+              <button class="capsule-seg music-stop" data-music-key="workspace" data-music-state="stop" type="button"><svg width="18" height="20" viewBox="0 0 13 15" aria-hidden="true"><g fill="#111"><rect x="6" y="0" width="6" height="2"/><rect x="10" y="2" width="2" height="1"/><rect x="6" y="2" width="2" height="8"/><rect x="1" y="9" width="7" height="6"/></g><rect x="2" y="10" width="5" height="4" fill="#fff"/><g fill="#111"><rect x="2" y="12" width="2" height="1"/><rect x="5" y="12" width="2" height="1"/></g></svg></button>
+            </div>
+            <div class="nav-label"><span class="nav-swatch"></span> STUDYFORM</div>
+            <div class="nav-item active">Agents</div>
+            <div class="nav-item">Teams</div>
+          </aside>
+          <div class="main"><div style="height:200px;border:3px solid #111;border-radius:16px;background:#fff7cc;box-shadow:8px 8px 0 #111"></div></div>
+        </div>
+      </div>
+    </section>
+    <section class="shot" data-id="a-390">
+      <div class="viewport" data-w="390">
+        <aside class="sidebar mobile-drawer">
+          <div class="capsule">
+            <a class="capsule-home" href="#"><span class="brand-dot lit"></span>Mayaform</a>
+            <button class="capsule-seg music-play" data-music-state="playing" type="button"><svg width="18" height="20" viewBox="0 0 13 15" aria-hidden="true"><g fill="#111"><rect x="6" y="0" width="6" height="2"/><rect x="10" y="2" width="2" height="1"/><rect x="6" y="2" width="2" height="8"/><rect x="1" y="9" width="7" height="6"/></g><rect x="2" y="10" width="5" height="4" fill="#fff"/><g fill="#111"><rect x="3" y="11" width="1" height="1"/><rect x="5" y="11" width="1" height="1"/><rect x="3" y="13" width="3" height="1"/></g></svg></button>
+          </div>
+          <div class="nav-label"><span class="nav-swatch"></span> STUDYFORM</div>
+          <div class="nav-item active">Agents</div>
+        </aside>
+      </div>
+    </section>
+    <section class="shot" data-id="b-1440">
+      <div class="viewport" data-w="1440">
+        <div class="shell">
+          <aside class="sidebar">
+            <div class="capsule">
+              <a class="capsule-home" href="#"><span class="brand-dot lit"></span>Mayaform</a>
+              <button class="capsule-seg music-stop" style="width:44px;padding:0" type="button" aria-label="Play music">
+                <svg width="18" height="20" viewBox="0 0 13 15" aria-hidden="true"><g fill="#111"><rect x="6" y="0" width="6" height="2"/><rect x="6" y="2" width="2" height="8"/><rect x="1" y="9" width="7" height="6"/></g><rect x="2" y="10" width="5" height="4" fill="#fff"/></svg>
+              </button>
+            </div>
+            <div class="nav-label"><span class="nav-swatch"></span> STUDYFORM</div>
+            <div class="nav-item active">Agents</div>
+          </aside>
+          <div class="main"><div style="height:200px;border:3px solid #111;border-radius:16px;background:#fff7cc;box-shadow:8px 8px 0 #111"></div></div>
+        </div>
+      </div>
+    </section>
+    <section class="shot" data-id="b-390">
+      <div class="viewport" data-w="390">
+        <aside class="sidebar mobile-drawer">
+          <div class="capsule">
+            <a class="capsule-home" href="#"><span class="brand-dot lit"></span>Mayaform</a>
+            <button class="capsule-seg music-stop" style="width:44px;padding:0" type="button"><svg width="18" height="20" viewBox="0 0 13 15" aria-hidden="true"><g fill="#111"><rect x="6" y="0" width="6" height="2"/><rect x="10" y="2" width="2" height="1"/><rect x="6" y="2" width="2" height="8"/><rect x="1" y="9" width="7" height="6"/></g><rect x="2" y="10" width="5" height="4" fill="#fff"/><g fill="#111"><rect x="2" y="12" width="2" height="1"/><rect x="5" y="12" width="2" height="1"/></g></svg></button>
+          </div>
+          <div class="nav-item active">Agents</div>
+        </aside>
+      </div>
+    </section>
+    <section class="shot" data-id="c-1440">
+      <div class="viewport" data-w="1440">
+        <div class="shell">
+          <aside class="sidebar">
+            <div class="capsule">
+              <a class="capsule-home" href="#"><span class="brand-dot lit"></span>Mayaform</a>
+              <button class="capsule-seg music-play" data-playing="true" type="button"><svg width="18" height="20" viewBox="0 0 13 15" aria-hidden="true"><g fill="#111"><rect x="6" y="0" width="6" height="2"/><rect x="10" y="2" width="2" height="1"/><rect x="6" y="2" width="2" height="8"/><rect x="1" y="9" width="7" height="6"/></g><rect x="2" y="10" width="5" height="4" fill="#fff"/><g fill="#111"><rect x="3" y="11" width="1" height="1"/><rect x="5" y="11" width="1" height="1"/><rect x="3" y="13" width="3" height="1"/></g></svg></button>
+            </div>
+            <div class="nav-label"><span class="nav-swatch"></span> STUDYFORM</div>
+            <div class="nav-item active">Agents</div>
+            <div class="nav-item">Teams</div>
+          </aside>
+          <div class="main"><div style="height:200px;border:3px solid #111;border-radius:16px;background:#fff7cc;box-shadow:8px 8px 0 #111"></div></div>
+        </div>
+      </div>
+    </section>
+    <section class="shot" data-id="c-390">
+      <div class="viewport" data-w="390">
+        <aside class="sidebar mobile-drawer">
+          <div class="capsule">
+            <a class="capsule-home" href="#"><span class="brand-dot lit"></span>Mayaform</a>
+            <button class="capsule-seg music-empty" disabled type="button"><svg width="18" height="20" viewBox="0 0 13 15" aria-hidden="true"><g fill="#111"><rect x="6" y="0" width="6" height="2"/><rect x="10" y="2" width="2" height="1"/><rect x="6" y="2" width="2" height="8"/><rect x="1" y="9" width="7" height="6"/></g><rect x="2" y="10" width="5" height="4" fill="#fff"/><g fill="#111"><rect x="2" y="12" width="2" height="1"/><rect x="5" y="12" width="2" height="1"/></g></svg></button>
+          </div>
+          <div class="nav-item active">Agents</div>
+        </aside>
+      </div>
+    </section>
+  </body>
+</html>

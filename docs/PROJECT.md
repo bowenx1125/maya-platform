@@ -126,3 +126,7 @@ G:preview line3 Maya->Mayaform both languages;12-click wrap;DTO attribution reta
 ## Nov16 DEPLOY 1 final integration
 
 Merge inputs: A/B/C tip df958a53583b179caf78f8f45370867aee8e48c3 + origin/main 90f753e0478f6abfd5999b478bfa25f5bb6bb78b (re-fetched; unchanged). Combined: A digits-only class capsule; B/C No Group+Teachers+active-only backfill (sole head 0093_default_group_no_group→0092→0091); #435 server preference/ID/login-class landing; E Voice Made by/Used by; F Quiz list-checks; G Mayaform preview; #438/#439. Nine conflicts resolved per handoff; catalog sync skips ensure_student_group while preserve_bowen_memberships so #435 revocations stay; Bowen identity tests take main. Local gates: ruff/mypy/prettier/typecheck/lint/script gates PASS; FE Vitest 161 files/1433 pass/13 skip; Next build PASS; targeted PG auth/group/voice/D1 PASS. Full PG vs 129-baseline log unavailable here (Backend host paths missing). D2/PR442/#427 out of scope. DRAFT PR only; Backend audits/merges/deploys.0 calls/deploy.
+
+## Nov16 Batch 4 UI proposals (awaiting Xu Bowen)
+
+Proposal-only under `docs/ui-proposals/batch4/` from main `92592341`: #434 Debate Tone A/B/C + Preview wiring notes (no Alembic if Tone=`voice_style`); #436 mascot dance A Bounce Band / B Groove Sway / C Stomp Line (GIF+MP4, reduced-motion); #437 student Mayaform+music capsule A/B/C vs teacher ClassSwitcher. No product code.0 calls.
