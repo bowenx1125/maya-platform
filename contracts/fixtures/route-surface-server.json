@@ -14070,6 +14070,19 @@
             "title": "State",
             "type": "string"
           },
+          "stored_card_status": {
+            "enum": [
+              "compiling",
+              "ready",
+              "fallback",
+              null
+            ],
+            "title": "Stored Card Status",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "student_confirmed_at": {
             "anyOf": [
               {

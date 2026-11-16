@@ -334,8 +334,12 @@ export function AgentWorkbench({
       ? `agent-version:${versionId}`
       : `agent-create:${unsavedCreate?.groupId ?? unsavedCreate?.courseId ?? "course"}`);
   const workbenchScopeRef = useRef(workbenchScope);
+  // Check card on a new Agent materializes once. Later polls must reuse that
+  // version; the click closure still sees the empty placeholder id.
+  const materializedCheckVersion = useRef<AgentVersion | null>(null);
   useLayoutEffect(() => {
     workbenchScopeRef.current = workbenchScope;
+    materializedCheckVersion.current = null;
   }, [workbenchScope]);
   const workbenchMounted = useRef(true);
   useEffect(() => {
@@ -2042,12 +2046,25 @@ export function AgentWorkbench({
               </SectionCard>
               {agentMd.trim() ? (
                 <AgentDebateCardCheck
-                  key={`${workbenchScope}:${agentMd}`}
+                  key={workbenchScope}
                   agentName={draftName.trim() || agent.name || "Agent"}
+                  storedStatus={version.stored_card_status ?? null}
                   load={async () => {
-                    const target =
-                      version ?? (await writeUnsavedAgent())?.version;
-                    if (!target) throw new Error(t("draftNotFound"));
+                    // The create form holds a placeholder version until Done.
+                    // Materialize that draft so Check card compiles the editor
+                    // text. Still no version: stay Compiling, do not fail open.
+                    const current = version.id
+                      ? version
+                      : materializedCheckVersion.current;
+                    const target = current?.id
+                      ? current
+                      : ((await writeUnsavedAgent())?.version ?? null);
+                    if (target?.id) materializedCheckVersion.current = target;
+                    if (!target?.id)
+                      return {
+                        card_status: "compiling" as const,
+                        keepPolling: false,
+                      };
                     return api.checkAgentDebateCard(target.id, agentMd);
                   }}
                   voiceProfileId={voiceProfileId}

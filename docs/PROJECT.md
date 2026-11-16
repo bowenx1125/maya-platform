@@ -105,13 +105,13 @@ Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not command
 
 ## Nov16 Batch 4 impl (#434/#436/#437)
 
-Confirmed: #434 A Tone label + `Preview` (Identity/Position stay; Tone from AGENT.md else debate/env instruction; Agent/Voice Preview same Tone; student create/edit Check card). #436 C Stomp Line. #437 C Capsule Note-Face. No Alembic (OpenAPI VoicePreviewRequest only). Local: ruff/mypy/format/typecheck/prettier/script+route-compare PASS; FE 1467/13skip; targeted PG voice/preview/cards/tone 189 PASS. Full PG wave4 persona suite fails on clean main too in this env (question None).0 calls.
+Confirmed: #434 A Tone label + `Preview` (Identity/Position stay; Tone from AGENT.md else debate/env instruction; Agent/Voice Preview same Tone; student create/edit Check card). #436 C Stomp Line. #437 C Capsule Note-Face. No Alembic (OpenAPI VoicePreviewRequest only). Local: ruff/mypy/format/typecheck/prettier/script+route-compare PASS; FE 1467/13skip; targeted PG voice/preview/cards/tone 189 PASS.0 calls.
 
 Nov16 Option C:egg floor+crown;Roundtable Banner overlays.Live #448.
 
 Nov16 #427 hotfix(base503857fe):Save/Preview finish gestures;Save uses current ink.Back/Escape confirm discard;Pen starts unselected;row panel removed.Saved Egg drawing survives edit/create template switches.FE1477/13skip;focused77/1skip;PG29+freeze1/static/build pass.No backend/contract/freeze changes;0 calls/migrations/deploy.
 
-Nov16:Student music capsule hover overlay fixed;shared Button/music icon,collapsed key,dock chrome. Phase2 vs main552d0286:static17/17,FE1491pass/13skip,build0;Chromium390/1440 before/after+real stage canvas checked. Backend/i18n/music state unchanged. Historical Phase2 bake check left stage fadeIn:pre-existing source default-off defect, resolved by B1 below.0 calls/deploy.
+Nov16:Student music capsule hover overlay fixed;shared Button/music icon,collapsed key,dock chrome. Phase2 vs main552d0286:static17/17,FE1491pass/13skip,build0;Chromium390/1440 before/after+real stage canvas checked. Backend/i18n/music state unchanged. Phase2 fadeIn defect resolved by B1.0 calls/deploy.
 
 ## Nov16 D2 draft (PR442)
 
@@ -121,7 +121,7 @@ Nov17 #452 (0094_agent_debate_cards after0093):Done/upload/publish compile post-
 
 Nov16 #449 DRAFT:egg speak-yaw;list End no confirm;mouth=audioPlaying;Preview drag-yaw;stage table removed(+wood/collider).0 calls/deploy.
 
-Merge inputs (#449 Phase A): caacc46f193e6462c8bdc1ce305aac37c121fcdc + origin/main 158c4563836a378fb09d7d25ecc1c92005c2f139. Docs conflict resolved; FE/static gates pending;0 calls/deploy.
+Merge inputs (#449 Phase A): caacc46f193e6462c8bdc1ce305aac37c121fcdc + origin/main 158c4563836a378fb09d7d25ecc1c92005c2f139. 0 calls/deploy.
 
 Nov17 #451 integration:audited head c724562a6b0e2a7babd60f553de6e00289720f6f + origin/main c3506fe6f86799d37d1b1c8c44a9b4019faee52f. Docs-only conflict kept both histories;code merged without conflicts;music-fix files unchanged.0 calls/deploy.
 
@@ -131,7 +131,7 @@ Students see/open/single-chat teacher Public Agents; edit/delete stay owner/cour
 
 Nov17 #453 fix pass(base2289c371):ordinary personal teacher Team Chats recover exact live/retained publication;group teacher Public Teams share frozen member/shared resources under owner checks,no direct source access.FE filters mixed Team lists,keeps own personal Teams and teacher visits.Original errors restored;Agent editor roles unchanged.PG71/UI72+5skip/static17/build pass.0 real calls/deploy;no main integration.
 
-Nov17 stage fixes:8198b142 curtain no longer waits for all assets;opens on Start,with independent3s fallback. b310aed7 all models use egg speak-yaw timing/easing and audioPlayingTurnId,then return to seat yaw. 55186384 Preview inverted dx subtraction corrected;face follows pointer,including release inertia. 82354314 restores unused music-hop after #451 replaced NoteBuddy with static WorkspaceIcon;animation follows real playing/pause/end/error/autoplay refusal across expanded/collapsed/mobile,not requested on/off.0 calls/deploy.
+Nov17 stage fixes:8198b142 curtain no longer waits for all assets;opens on Start,with independent3s fallback. b310aed7 all models use egg speak-yaw timing/easing and audioPlayingTurnId,then return to seat yaw. 55186384 Preview inverted dx subtraction corrected;face follows pointer,including release inertia. 82354314 restores music-hop on real playback across shells.0 calls/deploy.
 
 Nov17 B1/Task5:stage entry now sets wanted=false, resets the first track and publishes state without fadeIn/play;each visit waits for its own MusicKey. Workspace account preferences/handoff/fades retained. Corrected auto-start expectations;configured-track BetaDebateStage regression covers entry,Start,unrelated gestures,reentry after on;stage key also covers playing/pause/end/error/autoplay refusal. Requested9 FE files:73pass;new regression failed before fix. Source no longer relies on release-bake patch;infrastructure untouched.0 calls/deploy.
 
@@ -140,3 +140,4 @@ Nov17 B1/Task5:stage entry now sets wanted=false, resets the first track and pub
 Nov17 stage-fix integration: `28fb2db79daeb57c18cf9c9602558b7d331f8e03` + `origin/main`=`5f742a79f32b4eced5a3b0bc65682838d312bb55`;only PROJECT.md conflicted;both histories and all five fix SHAs retained.0 calls/deploy.
 
 #453 integration: `787a9ce2e7446a8e608fe0696463467230dbd817` + main `b93767c7926980f31c4f7842f3e0c8252eebd272`;0094/cards/snapshot,stage/music,visibility/Team ACL/errors/B1 retained. PG73/UI72+5skip/static17/build pass. Concurrent branch `6e03b23bb90842834ef968438183361b1a6700ff` merged into `61985e9215564292beda358c6b25063e7f777e25`;identical code;gates rerun.0 calls/deploy.
+Nov17 Check card: collapsed tag reads stored card status (`AgentVersion.stored_card_status`, no migration, no compile). A new Agent not yet Done materializes the draft and compiles editor text, or stays Compiling. No new strings. PG 97 card tests + query ceiling; FE 19; typecheck/lint/build pass. 0 calls.

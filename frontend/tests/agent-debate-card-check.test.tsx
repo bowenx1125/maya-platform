@@ -56,6 +56,71 @@ it("refreshes a competing compiling claim until its stored card is terminal", as
   expect(load).toHaveBeenCalledTimes(2);
 });
 
+it("shows the stored Ready tag while collapsed and does not load", () => {
+  const load = vi.fn(async () => ({ card_status: "ready" as const, card }));
+  render(
+    <AgentDebateCardCheck
+      agentName="Ada"
+      agentMd="Plain persona"
+      storedStatus="ready"
+      load={load}
+    />,
+  );
+  expect(screen.getByTestId("debate-card-status").textContent).toBe("Ready");
+  expect(screen.queryByText(/could not be prepared/)).toBeNull();
+  expect(load).not.toHaveBeenCalled();
+});
+
+it("shows Compiling for a stored compiling card and no tag for a stored failure", () => {
+  const compiling = vi.fn();
+  const { rerender } = render(
+    <AgentDebateCardCheck
+      agentName="Ada"
+      agentMd="Plain persona"
+      storedStatus="compiling"
+      load={compiling}
+    />,
+  );
+  expect(screen.getByTestId("debate-card-status").textContent).toBe(
+    "Compiling",
+  );
+  expect(compiling).not.toHaveBeenCalled();
+  const failed = vi.fn();
+  rerender(
+    <AgentDebateCardCheck
+      agentName="Ada"
+      agentMd="Plain persona"
+      storedStatus="fallback"
+      load={failed}
+    />,
+  );
+  expect(screen.getByText("Check card")).toBeTruthy();
+  expect(screen.queryByTestId("debate-card-status")).toBeNull();
+  expect(screen.queryByText("Compiling")).toBeNull();
+  expect(screen.queryByText(/could not be prepared/)).toBeNull();
+  expect(failed).not.toHaveBeenCalled();
+});
+
+it("shows Compiling instead of the failure message when no version exists yet", async () => {
+  const load = vi.fn(async () => ({
+    card_status: "compiling" as const,
+    keepPolling: false,
+  }));
+  render(
+    <AgentDebateCardCheck
+      agentName="Ada"
+      agentMd="Plain persona"
+      load={load}
+    />,
+  );
+  fireEvent.click(screen.getByText("Check card"));
+  expect((await screen.findByTestId("debate-card-status")).textContent).toBe(
+    "Compiling",
+  );
+  expect(screen.queryByText(/could not be prepared/)).toBeNull();
+  expect(load).toHaveBeenCalledOnce();
+});
+
 it("shows the existing approved fallback reason after an endpoint failure", async () => {
   const load = vi.fn(async () => {
     throw new Error("unavailable");

@@ -32,6 +32,7 @@ from app.core.errors import (
 )
 from app.core.models import (
     Agent,
+    AgentDebateCard,
     AgentEditAudit,
     AgentVersion,
     AgentVersionDocument,
@@ -1431,6 +1432,33 @@ def snapshot_source_rows(
     )
 
 
+def _normalize_card_status(
+    value: object,
+) -> Literal["compiling", "ready", "fallback"] | None:
+    if value in {"compiling", "ready", "fallback"}:
+        return value
+    return None
+
+
+def _stored_card_status(
+    db: Session, agent_id: str
+) -> Literal["compiling", "ready", "fallback"] | None:
+    """The agent's stored debate card, or None when no row exists.
+
+    This is a read of ``agent_debate_cards``. It must not claim, compile, or
+    create a row: the editor tag asks for the stored state before Check card.
+    """
+
+    def read() -> Literal["compiling", "ready", "fallback"] | None:
+        return _normalize_card_status(
+            db.scalar(
+                select(AgentDebateCard.card_status).where(AgentDebateCard.agent_id == agent_id)
+            )
+        )
+
+    return prefetched(db, "agent_card_status", agent_id, read)
+
+
 def prefetch_agent_reads(
     db: Session, pairs: Sequence[tuple[Agent, AgentVersion]], *, viewer_id: str
 ) -> None:
@@ -1438,7 +1466,7 @@ def prefetch_agent_reads(
 
     Covers the viewer's course and group roles, each Agent owner's course
     role, enabled documents, snapshot sources and snapshots, edit audits,
-    names, current version numbers and bound voices. Every requested key is
+    names, current version numbers, bound voices and stored card status. Every requested key is
     stored, a missing row as None or an empty list, so the helpers answer
     exactly what their own queries would.
     """
@@ -1562,6 +1590,16 @@ def prefetch_agent_reads(
     prefetch_bound_voices(
         db, [(version, agents[version.agent_id]) for version in versions.values()]
     )
+    # One read for the whole list. Missing rows stay None so a later helper
+    # does not query again, and this never compiles a card.
+    card_status: dict[str, Literal["compiling", "ready", "fallback"] | None] = dict.fromkeys(agents)
+    for agent_id, status in db.execute(
+        select(AgentDebateCard.agent_id, AgentDebateCard.card_status).where(
+            AgentDebateCard.agent_id.in_(agents)
+        )
+    ).all():
+        card_status[agent_id] = _normalize_card_status(status)
+    store(db, "agent_card_status", card_status)
 
 
 def blockers(db: Session, version: AgentVersion, agent: Agent) -> list[str]:
@@ -1766,6 +1804,7 @@ def version_dto(
             for document in docs
         ],
         publish_blockers=blockers(db, version, agent) if version.state == "draft" else [],
+        stored_card_status=_stored_card_status(db, agent.id),
     )
 
 

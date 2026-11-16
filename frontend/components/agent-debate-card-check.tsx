@@ -5,19 +5,23 @@ import type { components } from "../lib/api/generated/schema";
 import { DebateCardCheck } from "./debate/preview/debate-card-check";
 
 type StoredCard = components["schemas"]["AgentCardResponse"];
+type LoadedCard = StoredCard & { keepPolling?: boolean };
 
 export function AgentDebateCardCheck({
   agentName,
   agentMd,
   voiceProfileId,
+  storedStatus = null,
   load,
 }: {
   agentName: string;
   agentMd: string;
   voiceProfileId?: string | null;
-  load: () => Promise<StoredCard>;
+  /** Status of the stored agent_debate_cards row. Null when none exists. */
+  storedStatus?: StoredCard["card_status"] | null;
+  load: () => Promise<LoadedCard>;
 }) {
-  const [result, setResult] = useState<StoredCard | null>(null);
+  const [result, setResult] = useState<LoadedCard | null>(null);
   const pending = useRef(false);
   const active = useRef(true);
   useEffect(() => {
@@ -37,7 +41,14 @@ export function AgentDebateCardCheck({
         const next = await load();
         if (!active.current) return;
         setResult(next);
-        if (next.card_status !== "compiling" || Date.now() >= deadline) break;
+        // A missing version is Compiling, not a failed card, and there is no
+        // in-flight compile to poll.
+        if (
+          next.card_status !== "compiling" ||
+          next.keepPolling === false ||
+          Date.now() >= deadline
+        )
+          break;
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     } catch {
@@ -50,7 +61,9 @@ export function AgentDebateCardCheck({
   return (
     <DebateCardCheck
       agentName={agentName}
-      status={result?.card_status ?? "compiling"}
+      status={result?.card_status}
+      tagStatus={result ? null : storedStatus}
+      showWhenUnknown
       card={result?.card}
       card_teacher_reason={result?.card_teacher_reason}
       voiceProfileId={voiceProfileId}

@@ -54,6 +54,8 @@ export function DebateCardCheck({
   voiceProfileId,
   agentMd,
   fallbackTone,
+  tagStatus,
+  showWhenUnknown = false,
   onCheck,
 }: {
   agentName: string;
@@ -65,11 +67,19 @@ export function DebateCardCheck({
   /** AGENT.md used to resolve Tone when the card has no voice_style. */
   agentMd?: string | null;
   fallbackTone?: string | null;
+  /**
+   * Tag only, before a body has loaded. Passing a stored Ready status as
+   * `status` with no card would show the fail-open notice.
+   */
+  tagStatus?: DebateCardStatus | null;
+  /** A new Agent has no stored card yet and still needs the Check card control. */
+  showWhenUnknown?: boolean;
   onCheck?: () => void;
 }) {
   const t = useT();
-  if (!status) return null;
-  const tag = STATUS[status];
+  const displayStatus = status ?? tagStatus ?? undefined;
+  if (!displayStatus && !showWhenUnknown) return null;
+  const tag = displayStatus ? STATUS[displayStatus] : undefined;
   const reasonCopy =
     typeof card_teacher_reason === "string" &&
     Object.hasOwn(TEACHER_REASON_COPY, card_teacher_reason)

@@ -114,6 +114,51 @@ def test_save_commits_before_compile_and_survives_errors(
         assert row.salvaged is False
 
 
+def test_version_read_reports_stored_card_status_without_compiling(
+    client, database, monkeypatch
+) -> None:
+    agent_id, version, csrf = _agent(client)
+    calls = []
+    monkeypatch.setattr(
+        service,
+        "compile_source",
+        lambda *args: calls.append(1) or CardOutcome("ready", card=CARD),
+    )
+
+    def read_status() -> str | None:
+        response = client.get(f"/api/v1/agent-versions/{version}")
+        assert response.status_code == 200, response.text
+        return response.json()["stored_card_status"]
+
+    assert read_status() is None
+    assert calls == []
+    assert _save(client, version, csrf, "Stored ready persona").status_code == 200
+    assert calls == [1]
+    calls.clear()
+
+    def refuse_compile(*_args, **_kwargs):
+        raise AssertionError("reading stored card status must not compile")
+
+    monkeypatch.setattr(service, "ensure_agent_card", refuse_compile)
+    monkeypatch.setattr(service, "compile_source", refuse_compile)
+    assert read_status() == "ready"
+    with database.session() as db:
+        row = db.get(AgentDebateCard, agent_id)
+        row.card_status = "compiling"
+        row.card_json = None
+    assert read_status() == "compiling"
+    with database.session() as db:
+        row = db.get(AgentDebateCard, agent_id)
+        row.card_status = "fallback"
+        row.card_json = None
+        row.card_safe_error_code = "debate_card_failed"
+        row.salvaged = False
+    assert read_status() == "fallback"
+    listed = client.get(f"/api/v1/agents/{agent_id}/versions")
+    assert listed.status_code == 200, listed.text
+    assert listed.json()[0]["stored_card_status"] == "fallback"
+
+
 def test_failed_save_does_not_enqueue(client, monkeypatch) -> None:
     _, version, csrf = _agent(client)
     calls = []
