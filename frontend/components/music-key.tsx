@@ -4,6 +4,7 @@ import {
   musicAvailable,
   toggleMusic,
   useMusicOn,
+  useMusicPlaying,
   type MusicChannelName,
 } from "../lib/background-music";
 import { useT } from "../lib/i18n";
@@ -20,6 +21,7 @@ export function MusicKey({
 }) {
   const t = useT();
   const on = useMusicOn(channel);
+  const playing = useMusicPlaying(channel);
   const available = musicAvailable(channel);
   const state = !available ? "empty" : on ? "playing" : "stop";
   return (
@@ -28,9 +30,11 @@ export function MusicKey({
       size="icon"
       data-music-key={channel}
       data-music-state={state}
-      data-playing={on || undefined}
+      data-playing={playing || undefined}
       className={cn(
         "relative size-11 shrink-0 rounded-[10px] border-[3px] aria-pressed:bg-main",
+        playing &&
+          "[&_svg]:origin-bottom [&_svg]:animate-[music-hop_0.6s_ease-in-out_infinite] motion-reduce:[&_svg]:animate-none",
         className,
       )}
       aria-label={
