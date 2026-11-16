@@ -804,6 +804,82 @@ describe("Studyform Team cards", () => {
     ).toEqual(["/student/teams?group_id=group-1&mode=team-new"]);
   });
 
+  it.each(["student", "teacher"])(
+    "filters a mixed Team response for a %s while keeping own personal Teams",
+    async (role) => {
+      state.role = role;
+      state.userId = "team-chat-student";
+      state.api.group = vi.fn().mockResolvedValue({
+        id: "group-1",
+        course_id: "course",
+        name: "Demo",
+      });
+      state.api.agents = vi.fn().mockResolvedValue([]);
+      const visible = [
+        { ...team, id: "own-private", display_name: "Own private" },
+        {
+          ...publicTeam,
+          id: "own-public",
+          display_name: "Own public",
+        },
+        {
+          ...team,
+          id: "own-other-group",
+          display_name: "Own other group",
+          group_id: "group-2",
+        },
+        {
+          ...publicTeam,
+          id: "teacher-personal",
+          display_name: "Teacher personal",
+          owner_user_id: "teacher-1",
+          is_teacher_owned: true,
+          can_edit: false,
+        },
+        {
+          ...publicTeam,
+          id: "teacher-other-group",
+          display_name: "Teacher other group",
+          owner_user_id: "teacher-2",
+          group_id: "group-2",
+          is_teacher_owned: true,
+          can_edit: false,
+        },
+        {
+          ...publicTeam,
+          id: "peer-team",
+          display_name: "Same group peer",
+          owner_user_id: "peer-1",
+          group_id: "group-1",
+          can_edit: false,
+        },
+      ];
+      const otherGroup = {
+        ...publicTeam,
+        id: "other-group",
+        display_name: "Other group student",
+        owner_user_id: "peer-2",
+        group_id: "group-2",
+        is_teacher_owned: false,
+        can_edit: false,
+      };
+      state.api.teams.mockResolvedValue([...visible, otherGroup]);
+      render(<GroupWorkspace groupId="group-1" view="teams" />);
+
+      await screen.findByRole("heading", { name: "Teams" });
+      for (const item of visible) {
+        expect(
+          screen.getByRole("link", { name: new RegExp(item.display_name) }),
+        ).toBeTruthy();
+      }
+      const otherGroupLink = screen.queryByRole("link", {
+        name: /Other group student/,
+      });
+      if (role === "teacher") expect(otherGroupLink).toBeTruthy();
+      else expect(otherGroupLink).toBeNull();
+    },
+  );
+
   it("shows a visiting teacher the group's Teams read-only, without creating one", async () => {
     state.role = "teacher";
     state.api.group = vi.fn().mockResolvedValue({

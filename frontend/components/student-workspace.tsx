@@ -560,7 +560,16 @@ function GroupWorkspaceSession({
           courseAgents: nextPublished.filter(
             (item) => !listedIds.has(item.agent.id),
           ),
-          teams: Array.isArray(nextTeams) ? nextTeams : [],
+          teams: Array.isArray(nextTeams)
+            ? nextTeams.filter(
+                (team) =>
+                  teacherCourseIds.includes(nextGroup.course_id) ||
+                  team.owner_user_id === user?.id ||
+                  (team.is_teacher_owned === true &&
+                    team.visibility === "public") ||
+                  (team.group_id === groupId && team.visibility === "public"),
+              )
+            : [],
           chatAgents: Array.isArray(nextChatAgents) ? nextChatAgents : [],
           items: nextAgents.map((agent) => ({ agent })),
         };
@@ -588,7 +597,7 @@ function GroupWorkspaceSession({
         setLoading(false);
       }
     },
-    [api, cacheIdentity, groupId, snapshotKey, teacherCourseIds],
+    [api, cacheIdentity, groupId, snapshotKey, teacherCourseIds, user?.id],
   );
   useEffect(() => {
     const timer = window.setTimeout(() => {

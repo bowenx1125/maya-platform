@@ -152,10 +152,7 @@ def _read_authorized_provenance(
                 log_team_chat_refused(
                     team, user_id, "not_in_team_group", check="learning_provenance"
                 )
-                raise not_found(
-                    "This Team belongs to another group. Open a Team from your "
-                    "own group, a teacher Public Team, or one you own."
-                )
+                raise not_found()
             if (
                 not teacher_use
                 and not teacher_public
@@ -175,10 +172,7 @@ def _read_authorized_provenance(
                     "not_owner_and_not_public_to_caller",
                     check="learning_provenance",
                 )
-                raise not_found(
-                    "This Team is not available to you. Use a Team you own, a "
-                    "Public Team in your group, or a teacher Public Team."
-                )
+                raise not_found()
         else:
             if conversation.origin != "published_course_team" or not conversation.publication_id:
                 raise not_found()

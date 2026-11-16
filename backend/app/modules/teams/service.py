@@ -220,10 +220,7 @@ def _validate_members(
         seen_agent_ids.add(agent.id)
         role = _agent_workspace_role(db, actor, agent)
         if role is None or not can_read_version(db, version, agent, role, context=actor):
-            raise not_found(
-                "An Agent version is not available to the current user. "
-                "Choose an Agent you can open, or ask its publisher to make it Public."
-            )
+            raise not_found("An Agent version is not available to the current user.")
         if group_id is not None and agent.group_id != group_id:
             raise not_found("A group Team can only contain Agents from that group.")
         # Other members can read a public Team's roster, so a private Agent
@@ -1386,6 +1383,21 @@ class FrozenTeamSelection:
     invokable_binding_ids: tuple[str, ...]
 
 
+def _team_chat_resource_actor(
+    db: Session, actor: AuthContext | str, team: Team
+) -> AuthContext | str:
+    # A teacher's group Public Team shares only its frozen member/shared resources.
+    # Validate those as its owner; this grants no direct access to the sources.
+    if (
+        team.ownership_scope == "group"
+        and team.group_id is not None
+        and team.owner_user_id is not None
+        and uses_teacher_public_team(db, _actor_id(actor), team)
+    ):
+        return team.owner_user_id
+    return actor
+
+
 def resolve_chat_entry(
     db: Session,
     actor: AuthContext | str,
@@ -1440,6 +1452,8 @@ def resolve_chat_entry(
         publication = None
         if not can_read_team(db, user_id, team):
             raise not_found()
+    resource_actor = _team_chat_resource_actor(db, actor, team)
+    resource_owner_id = publication.publisher_user_id if publication else _actor_id(resource_actor)
     members = _member_rows(db, version.id)
     all_member_ids = {member.id for member in members}
     requested_targets = all_member_ids if target_binding_ids is None else set(target_binding_ids)
@@ -1455,8 +1469,8 @@ def resolve_chat_entry(
                 team=team,
                 version=version,
                 member=member,
-                actor=actor,
-                resource_owner_id=publication.publisher_user_id if publication else user_id,
+                actor=resource_actor,
+                resource_owner_id=resource_owner_id,
                 publication=publication,
             )
         dto = _team_member_dto(member)
@@ -1480,7 +1494,6 @@ def resolve_chat_entry(
     if leader_id is None or len(resolved_members) < 2:
         raise not_found()
     shared_sets = [_required_set_id(row.knowledge_set_id) for row in _set_rows(db, version.id)]
-    resource_owner_id = publication.publisher_user_id if publication else user_id
     if requested_targets:
         _validate_shared_sets_current(db, team, version, resource_owner_id)
     return FrozenTeamSelection(
@@ -1708,19 +1721,21 @@ def _resolve_frozen_chat_selection(
         # or shared Set the teacher may not read is refused, never borrowed.
         pass
     elif uses_teacher_public_team(db, user_id, team):
-        # Teacher-owned Public Teams (personal or group) are usable by every
-        # course member; do not refuse with not_in_team_group.
-        pass
+        # Ordinary Chats do not store the personal Team's publication. Recover
+        # its exact live/retained version before checking publisher-owned resources.
+        publication = live_teacher_publication(db, team, version)
+        if publication is None and (team.ownership_scope != "group" or team.group_id is None):
+            log_team_chat_refused(
+                team, user_id, "teacher_publication_missing", check="team_recheck"
+            )
+            raise not_found()
     else:
         if team.group_id is not None:
             try:
                 _can_access_group_scope(db, user_id, team.group_id, team.course_id)
             except PlatformError:
                 log_team_chat_refused(team, user_id, "not_in_team_group", check="team_recheck")
-                raise not_found(
-                    "This Team belongs to another group. Open a Team from your "
-                    "own group, a teacher Public Team, or one you own."
-                ) from None
+                raise
         if team.owner_user_id != user_id and (
             team.ownership_scope != "group"
             or team.visibility != "public"
@@ -1739,10 +1754,7 @@ def _resolve_frozen_chat_selection(
                 log_team_chat_refused(
                     team, user_id, "not_owner_and_not_public_to_caller", check="team_recheck"
                 )
-                raise not_found(
-                    "This Team is not available to you. Use a Team you own, a "
-                    "Public Team in your group, or a teacher Public Team."
-                )
+                raise not_found()
 
     current_members = _member_rows(db, version.id)
     frozen_members = {member.binding_id: member for member in frozen_selection.members}
@@ -1757,7 +1769,8 @@ def _resolve_frozen_chat_selection(
     current_sets = tuple(row.knowledge_set_id for row in _set_rows(db, version.id))
     if current_sets != frozen_selection.shared_knowledge_set_ids:
         raise not_found()
-    resource_owner_id = publication.publisher_user_id if publication else user_id
+    resource_actor = _team_chat_resource_actor(db, actor, team)
+    resource_owner_id = publication.publisher_user_id if publication else _actor_id(resource_actor)
     _validate_shared_sets_current(db, team, version, resource_owner_id)
     for member in current_members:
         frozen_member = frozen_members[member.id]
@@ -1775,7 +1788,7 @@ def _resolve_frozen_chat_selection(
                 team=team,
                 version=version,
                 member=member,
-                actor=actor,
+                actor=resource_actor,
                 resource_owner_id=resource_owner_id,
                 publication=publication,
             )
