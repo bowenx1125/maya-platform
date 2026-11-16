@@ -142,9 +142,7 @@ describe("debate cards on the teacher preview", () => {
       within(check).getByText("The card exceeded the safe length limit."),
     ).toBeTruthy();
     expect(within(check).queryByText(/original AGENT\.md/)).toBeNull();
-    expect(
-      within(check).queryByText(/This session can continue/),
-    ).toBeNull();
+    expect(within(check).queryByText(/This session can continue/)).toBeNull();
     expect(within(check).queryByText("card_too_long")).toBeNull();
     expect(within(check).queryByText("too_long")).toBeNull();
   });

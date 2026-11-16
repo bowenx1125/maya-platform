@@ -11,7 +11,10 @@ export type DebateCard = components["schemas"]["DebateCard"];
 export type DebateCardStatus = "compiling" | "ready" | "fallback";
 
 const STATUS: Partial<
-  Record<DebateCardStatus, { label: string; tone: keyof typeof DEBATE_TAG_TONE }>
+  Record<
+    DebateCardStatus,
+    { label: string; tone: keyof typeof DEBATE_TAG_TONE }
+  >
 > = {
   compiling: { label: "Compiling", tone: "thinking" },
   ready: { label: "Ready", tone: "ready" },
