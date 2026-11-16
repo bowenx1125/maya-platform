@@ -1,18 +1,13 @@
-"""Debate cards: one bounded persona per participant, compiled once.
+"""Bounded Agent persona cards, frozen into each Debate participant.
 
-A student's Agent.md mixes persona with instructions that belong to other
-layers (length, language, output format, debate procedure). When a Debate is
-created each participant's frozen Agent.md is compiled once into a closed card
-that keeps only persona. The card is compiled right before that participant's
-first turn is prepared, inside the same claimed preparation, so it is always
-terminal before the turn is generated: ``ready`` after a usable extract, or
-``fallback`` after the single authorized attempt cannot produce a card.
-Prefer a salvaged card (truncate over-long text; keep usable fields from a
-slightly off-format response). Only when compile truly cannot yield a card
-does the turn speak from the original Agent.md. Compiling peers still use a
-name-only stub in other speakers' prompts. A participant row without a card
-status (a Debate created before cards) never compiles and keeps its old
-prompt bytes.
+AGENT.md mixes persona with length, language, format and procedure instructions.
+The Agent service compiles it through the shared single-attempt provider core.
+Debate setup copies a matching terminal card; a cache miss resolves at Agent
+scope before that participant's first turn, then freezes the result.
+
+Prefer a salvaged extract. If no usable card can be produced, the participant
+speaks from its original frozen AGENT.md. Compiling peers use name-only stubs.
+Participants without a card status predate cards and keep their pinned bytes.
 """
 
 from __future__ import annotations

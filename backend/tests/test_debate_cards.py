@@ -482,7 +482,7 @@ def _first_turn(db: Any, debate_id: str) -> tuple[Debate, DebateTurn]:
     return debate, turn
 
 
-def test_the_first_turn_settles_mock_stub_card_without_raw_agent_md(debate_app) -> None:
+def test_the_first_turn_copies_agent_mock_fallback_with_fail_open_persona(debate_app) -> None:
     _app, database, client = debate_app
     debate_id = _create(client, database, key="mock-turn-01")
     llm = MockLLMProvider()
@@ -492,19 +492,13 @@ def test_the_first_turn_settles_mock_stub_card_without_raw_agent_md(debate_app) 
         prepared = preparer(db, debate, turn, attempt=1, cancellation_generation=0)
         assert prepared.speech
     rows = _participants(database, debate_id)
-    assert rows[0].card_status == "ready"
-    assert rows[0].card_safe_error_code is None
-    card = json.loads(str(rows[0].card_json))
-    assert card["identity"] == rows[0].agent_name
-    assert card["dropped"] == []
-    # Only the speaker's card is settled; the next Agent's waits for its turn.
+    assert rows[0].card_status == "fallback"
+    assert rows[0].card_safe_error_code == "debate_card_mock_provider"
+    assert rows[0].card_json is None
+    # Only the speaker resolves its missing Agent card; peers wait for their turn.
     assert rows[1].card_status == "compiling"
     sent = json.loads(llm.prompts[0].messages[1][1])["persona"]
-    assert sent == {
-        "name": rows[0].agent_name,
-        "markdown": f"## Identity\n{rows[0].agent_name}",
-    }
-    assert rows[0].agent_md_snapshot not in sent["markdown"]
+    assert sent == {"name": rows[0].agent_name, "markdown": rows[0].agent_md_snapshot}
 
 
 def test_fallback_card_persona_speaks_from_raw_agent_md() -> None:

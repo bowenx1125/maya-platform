@@ -44,6 +44,7 @@ from app.core.models import (
 )
 from app.core.version_label import agent_version_label
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
+from app.modules.debates.agent_cards import copy_stored_agent_card
 from app.modules.debates.cards import card_teacher_projection, initial_card_status, stored_card
 from app.modules.debates.generation_params import (
     UNSTORED_V4_PARAMS,
@@ -684,7 +685,7 @@ def _participant_row(
     voice_json, voice_cipher = voice_snapshot(
         db.get(VoiceProfile, effective_voice_id) if effective_voice_id else None
     )
-    return DebateParticipant(
+    participant = DebateParticipant(
         id=str(uuid4()),
         debate_id=debate.id,
         course_id=debate.course_id,
@@ -715,6 +716,8 @@ def _participant_row(
         created_at=timestamp,
         updated_at=timestamp,
     )
+    copy_stored_agent_card(db, participant)
+    return participant
 
 
 def _ensure_payload(payload: DebateDraftRequest, *, teaching_protocol: str | None = None) -> None:
