@@ -1,7 +1,7 @@
 "use client";
 
 import { WorkspaceIcon } from "../workspace-icon";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { DismissibleAlert } from "../dismissible-alert";
 import { PRESS_MOTION } from "../ui/button";
@@ -61,6 +61,7 @@ export function AvatarEditor({
   onEdit,
 }: AvatarEditorProps) {
   const t = useT();
+  const eggDrawing = useRef<AvatarConfig["drawing"]>(null);
   const displayFallbackLabel = fallbackLabel ?? t("avatar");
   const [uncontrolledState, setUncontrolledState] = useState<AvatarState>(
     () => previewState ?? "idle",
@@ -100,7 +101,14 @@ export function AvatarEditor({
             disabled={disabled}
             onClick={() => {
               const next = avatarDefaultConfigForTemplate(template);
-              if (next) onChange(next);
+              if (!next) return;
+              if (value.template_id === "egg")
+                eggDrawing.current = value.drawing;
+              onChange(
+                next.template_id === "egg" && eggDrawing.current
+                  ? { ...next, drawing: eggDrawing.current }
+                  : next,
+              );
             }}
             className={`flex h-11 min-w-0 flex-1 items-center justify-center gap-[3px] rounded-[9px] border-2 border-[#111] px-[5px] text-[11px] font-bold shadow-[0_3px_0_#111] max-[767px]:px-[3px] max-[767px]:text-[10px] ${PRESS_MOTION} ${value.template_id === template.id ? "bg-[#A3E635]" : "bg-white"}`}
           >
@@ -124,7 +132,7 @@ export function AvatarEditor({
         fallbackLabel={displayFallbackLabel}
       />
       {value.template_id === "egg" ? (
-        <div className="grid grid-cols-2 gap-2 rounded-xl border-[3px] border-[#111] bg-white p-2.5 shadow-[3px_3px_0_#111] max-[767px]:p-[9px]">
+        <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             disabled={disabled}

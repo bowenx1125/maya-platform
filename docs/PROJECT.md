@@ -138,3 +138,5 @@ Nov16 copy approval:two exact Avatar Save cause/fix messages;drawing bypasses ca
 #427 Option A: white Edit beside Preview opens the same board; merges eadd723b.
 
 Nov16 Option C:egg floor+crown;Roundtable Banner overlays.DRAFT;0 calls/deploy.
+
+Nov16 #427 hotfix(base503857fe):Save/Preview finish gestures;Save uses current ink.Back/Escape confirm discard;Pen starts unselected;row panel removed.Saved Egg drawing survives edit/create template switches.FE1477/13skip;focused77/1skip;PG29+freeze1/static/build pass.No backend/contract/freeze changes;0 calls/migrations/deploy.
