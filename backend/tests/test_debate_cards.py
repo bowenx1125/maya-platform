@@ -1,10 +1,9 @@
 """Debate cards (owner decision 2026-11-10, phase B; D2 2026-11-16).
 
 Each participant's frozen Agent.md is compiled once into a bounded persona
-card before its first turn. A ready card is the persona every turn sends.
-Compile failure settles as fallback after one authorized attempt and never
-injects the raw Agent.md into the speech path. Debates created before cards
-keep their exact prompt bytes.
+card before its first turn. Prefer a salvaged ready card; only when compile
+cannot yield a usable card does the turn speak from the original Agent.md.
+Debates created before cards keep their exact prompt bytes.
 """
 
 from __future__ import annotations
@@ -13,11 +12,10 @@ import hashlib
 import json
 from dataclasses import replace
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from app.core.config import configured_debate_llm_model
-from app.core.errors import PlatformError
 from app.modules.debates import cards
 from app.modules.debates.cards import (
     CARD_MAX_UNITS,
@@ -70,7 +68,8 @@ CARD = {
 # retrieval queries) for a participant built by SqlTurnPreparer._participant,
 # first computed at 3b43760, the last commit before cards existed, where they
 # equalled the merged tree's; re-pinned since only for deliberate v4 wording
-# changes. A participant with no card, a compiling card or a fallback card sends exactly these.
+# changes. A participant with no card or a fallback card sends these; compiling
+# peers use a name-only stub instead of the raw Agent.md.
 PINNED = {
     "zh/1": "75b6928cbf7c41c7e1a209d63f28f165a3df2626fefd4c61388456d4e0818b9d",
     "zh/2": "ed2cdf222761bea861dd2459875bcb7e7d1baf884018b8ee9e052cdb608b98e5",
@@ -134,16 +133,15 @@ def test_legacy_null_card_status_keeps_the_bytes_from_before_cards(case: str) ->
 
 
 @pytest.mark.parametrize("case", sorted(PINNED))
-def test_fallback_card_never_wires_raw_agent_md(case: str) -> None:
+def test_fallback_card_wires_raw_agent_md_like_pre_card_debates(case: str) -> None:
     language, round_number = case.split("/")
-    with pytest.raises(PlatformError) as raised:
-        _wire(
-            language,
-            int(round_number),
-            _row(card_status="fallback", card_safe_error_code="debate_card_failed"),
-        )
-    assert raised.value.code == "debate_card_failed"
-    assert "SECRET-PERSONA-TEXT" not in str(raised.value)
+    wire = _wire(
+        language,
+        int(round_number),
+        _row(card_status="fallback", card_safe_error_code="debate_card_failed"),
+    )
+    assert hashlib.sha256(wire.encode()).hexdigest() == PINNED[case]
+    assert "SECRET-PERSONA-TEXT" in wire
 
 
 @pytest.mark.parametrize("case", sorted(PINNED))
@@ -163,32 +161,38 @@ def test_a_valid_card_is_kept_and_strings_are_trimmed() -> None:
     assert card == CARD
 
 
-@pytest.mark.parametrize(
-    ("change", "pointer"),
-    [
-        ({"extra": "x"}, "/"),
-        ({"identity": "   "}, "/identity"),
-        ({"position": None}, "/position"),
-        ({"reasoning": ["a"] * 6}, "/reasoning"),
-        ({"reasoning": ["ok", " "]}, "/reasoning/1"),
-        ({"voice_style": "x" * 121}, "/voice_style"),
-        ({"voice_style": ""}, "/voice_style"),
-        ({"dropped": [{"excerpt": "x", "reason": "rudeness"}]}, "/dropped/0/reason"),
-        ({"dropped": [{"excerpt": "x" * 121, "reason": "length_limit"}]}, "/dropped/0/excerpt"),
-        ({"dropped": [{"excerpt": "x", "reason": "length_limit", "note": ""}]}, "/dropped/0"),
-        ({"dropped": [{"excerpt": "x", "reason": "length_limit"}] * 13}, "/dropped"),
-    ],
-)
-def test_schema_violations_are_rejected_with_a_field_pointer(
-    change: dict[str, object], pointer: str
-) -> None:
+def test_empty_identity_is_rejected_after_salvage() -> None:
     with pytest.raises(CardRejected) as caught:
-        validate_card({**CARD, **change}, "en")
+        validate_card(cards.correct_card_payload({**CARD, "identity": "   "}), "en")
     assert caught.value.code == "debate_card_invalid"
-    assert caught.value.pointer == pointer
-    missing = {key: value for key, value in CARD.items() if key != "voice_style"}
+    assert caught.value.pointer == "/identity"
     with pytest.raises(CardRejected):
-        validate_card(missing, "en")
+        validate_card("not a mapping", "en")
+
+
+def test_slightly_off_format_is_salvaged_into_a_ready_card() -> None:
+    salvaged = cards.correct_card_payload(
+        {
+            **CARD,
+            "extra": "x",
+            "reasoning": ["ok", " ", "kept", "a", "b", "c", "d"],
+            "voice_style": "x" * 121,
+            "dropped": [
+                {"excerpt": "x" * 121, "reason": "length_limit", "note": ""},
+                {"excerpt": "y", "reason": "rudeness"},
+                {"excerpt": "z", "reason": "length_limit"},
+            ]
+            + [{"excerpt": "n", "reason": "output_format"}] * 20,
+        }
+    )
+    card = validate_card(salvaged, "en")
+    assert "extra" not in card
+    assert card["reasoning"] == ["ok", "kept", "a", "b", "c"]
+    assert card["voice_style"] == "x" * 120
+    dropped = card["dropped"]
+    assert isinstance(dropped, list) and len(dropped) == 12
+    assert dropped[0] == {"excerpt": "x" * 120, "reason": "length_limit"}
+    assert all(isinstance(item, dict) and item["reason"] in DROP_REASONS for item in dropped)
 
 
 @pytest.mark.parametrize("language", ["zh", "en"])
@@ -200,11 +204,29 @@ def test_the_size_bound_is_one_constant_per_language(language: str) -> None:
     # Punctuation, digits and Latin letters do not count in zh.
     padding = "，2026 OK" if language == "zh" else ""
     assert validate_card({**base, "identity": unit * limit + padding}, language)
-    with pytest.raises(CardRejected) as caught:
-        validate_card({**base, "identity": unit * limit, "voice_style": unit}, language)
-    assert caught.value.code == "debate_card_too_long"
+    oversized = validate_card(
+        {**base, "identity": unit * limit, "voice_style": unit.strip() or unit}, language
+    )
+    from app.modules.debates.generation.four_round import speech_units
+
+    assert (
+        speech_units(
+            "\n".join(
+                (
+                    str(oversized["identity"]),
+                    str(oversized["position"]),
+                    *oversized["reasoning"],  # type: ignore[misc]
+                    str(oversized["speaking_style"]),
+                    str(oversized["voice_style"] or ""),
+                )
+            ),
+            language,
+        )
+        <= limit
+    )
+    assert str(oversized["identity"]).strip()
     # Dropped excerpts are a report, not persona, and do not count.
-    many = [{"excerpt": unit * 20, "reason": "output_format"}] * 12
+    many = [{"excerpt": (unit * 20)[:120], "reason": "output_format"}] * 12
     assert validate_card({**base, "identity": unit * limit, "dropped": many}, language)
 
 
@@ -223,7 +245,8 @@ def test_the_compile_prompt_states_every_rule_the_server_enforces(language: str)
         "at most 120 characters and not empty",
         "dropped does not count",
         "Chinese" if language == "zh" else "English",
-        "never sends the original Agent.md as a fallback",
+        "speaks from its original Agent.md",
+        "truncates over-long text",
         *DROP_REASONS,
     ):
         assert token in prompt, token
@@ -484,10 +507,12 @@ def test_the_first_turn_settles_mock_stub_card_without_raw_agent_md(debate_app) 
     assert rows[0].agent_md_snapshot not in sent["markdown"]
 
 
-def test_fallback_card_persona_never_returns_raw_agent_md() -> None:
+def test_fallback_card_persona_speaks_from_raw_agent_md() -> None:
     row = _row(card_status="fallback", card_safe_error_code="debate_card_invalid")
+    authored, position = card_persona(row, AGENT_MD, "en")
+    assert authored.markdown == AGENT_MD and position == ""
     with pytest.raises(CardUnavailable) as raised:
-        card_persona(row, AGENT_MD, "en")
+        card_persona(row, "   ", "en")
     assert raised.value.code == "debate_card_invalid"
     legacy = _row(card_status=None)
     authored, position = card_persona(legacy, AGENT_MD, "en")
@@ -497,7 +522,7 @@ def test_fallback_card_persona_never_returns_raw_agent_md() -> None:
     assert AGENT_MD not in pending[0].markdown
 
 
-def test_forced_fallback_blocks_turn_prep_without_raw_agent_md(debate_app) -> None:
+def test_forced_fallback_still_prepares_a_turn_from_raw_agent_md(debate_app) -> None:
     _app, database, client = debate_app
     debate_id = _create(client, database, key="forced-fallback-01")
     row_id = _participants(database, debate_id)[0].id
@@ -510,10 +535,11 @@ def test_forced_fallback_blocks_turn_prep_without_raw_agent_md(debate_app) -> No
     preparer = SqlTurnPreparer(llm=llm)
     with database.session() as db:
         debate, turn = _first_turn(db, debate_id)
-        with pytest.raises(PlatformError) as raised:
-            preparer(db, debate, turn, attempt=1, cancellation_generation=0)
-        assert raised.value.code == "debate_card_invalid"
-    assert not llm.prompts
+        prepared = preparer(db, debate, turn, attempt=1, cancellation_generation=0)
+        assert prepared.speech
+    assert llm.prompts
+    persona = json.loads(llm.prompts[0].messages[1][1])["persona"]
+    assert persona["markdown"] == _participants(database, debate_id)[0].agent_md_snapshot
 
 
 def test_a_ready_card_is_what_the_turn_sends_and_stays_for_a_regeneration(debate_app) -> None:
@@ -650,11 +676,44 @@ def test_a_valid_reply_is_a_ready_card_and_one_succeeded_charged_request(debate_
     assert transport.calls == [] and len(operations) == 1
 
 
+def test_overlong_or_slightly_off_provider_cards_are_salvaged_ready(debate_app) -> None:
+    from app.modules.debates.generation.four_round import speech_units
+
+    _app, database, client = debate_app
+    debate_id = _create(client, database, key="provider-salvage-01")
+    too_many, transport, operations = _compile(
+        database, debate_id, _ok({**CARD, "reasoning": ["x"] * 6})
+    )
+    assert too_many.status == "ready" and too_many.card is not None
+    assert cast(list[str], too_many.card["reasoning"]) == ["x"] * 5
+    assert len(transport.calls) == 1
+    assert operations[0].state == "succeeded"
+    assert operations[0].charged_request_count == 1
+
+    debate_id = _create(client, database, key="provider-salvage-02")
+    oversized, transport, operations = _compile(
+        database,
+        debate_id,
+        _ok(
+            {
+                **CARD,
+                "position": "",
+                "reasoning": [],
+                "speaking_style": "",
+                "identity": "word " * 401,
+            }
+        ),
+    )
+    assert oversized.status == "ready" and oversized.card is not None
+    assert speech_units(str(oversized.card["identity"]), "en") <= CARD_MAX_UNITS["en"]
+    assert str(oversized.card["identity"]).strip()
+    assert len(transport.calls) == 1
+    assert operations[0].charged_request_count == 1
+
+
 @pytest.mark.parametrize(
     ("outcome", "code", "state", "charged"),
     [
-        (_ok({**CARD, "reasoning": ["x"] * 6}), "debate_card_invalid", "failed", 1),
-        (_ok({**CARD, "identity": "word " * 401}), "debate_card_too_long", "failed", 1),
         (_Response(500, {}), "debate_card_http_rejected", "failed", 1),
         (
             LLMAcceptanceUnknown(),
@@ -665,7 +724,7 @@ def test_a_valid_reply_is_a_ready_card_and_one_succeeded_charged_request(debate_
         (LLMTransportNotSent(), "debate_card_not_sent", "not_sent", 0),
     ],
 )
-def test_every_failure_is_a_fallback_with_its_ledger_state(
+def test_every_true_compile_failure_is_a_fallback_with_its_ledger_state(
     debate_app, outcome: object, code: str, state: str, charged: int
 ) -> None:
     _app, database, client = debate_app

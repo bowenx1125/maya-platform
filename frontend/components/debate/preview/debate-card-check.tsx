@@ -18,8 +18,8 @@ const STATUS: Partial<
 > = {
   compiling: { label: "Compiling", tone: "thinking" },
   ready: { label: "Ready", tone: "ready" },
-  // Extraction failure keeps the disclosure and reason body, but no status
-  // tag: "Fallback" implied a raw-AGENT.md path that no longer exists.
+  // Fallback keeps the disclosure and reason body without a status tag.
+  // Honest fail-open notice copy awaits Lead approval before shipping.
 };
 
 const TEACHER_REASON_COPY: Record<DebateCardTeacherReason, MessageKey> = {

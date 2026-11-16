@@ -1857,9 +1857,8 @@ class SqlTurnPreparer:
 
     def _compile_card(self, db: Session, debate: Any, row: DebateParticipant) -> CardOutcome:
         if self.llm_runtime is not None or not isinstance(self.llm, DashScopeLLMAdapter):
-            # Mock and injected runtimes make no provider call and must not
-            # inject raw AGENT.md. Settle a name-only extracted stub card so
-            # local turns can run without a raw-text fallback path.
+            # Mock and injected runtimes make no provider call. Prefer a
+            # name-only ready stub (usable extract) over fail-open to raw text.
             del db, debate
             return CardOutcome(
                 "ready",
@@ -1899,7 +1898,8 @@ class SqlTurnPreparer:
                 raise ValueError("frozen AgentVersion snapshot does not match participant")
             agent_md = version.agent_md
         # Ready cards send the extracted persona. Legacy null keeps pinned
-        # bytes. Fallback after the one authorized compile never uses raw text.
+        # bytes. Fallback after a compile that could not yield a card speaks
+        # from the original AGENT.md so the turn is not empty.
         try:
             authored, card_position = card_persona(row, agent_md, language)
         except CardUnavailable as exc:
