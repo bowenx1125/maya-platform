@@ -353,6 +353,38 @@ class Agent(Base):
     )
 
 
+class AgentDebateCard(Base):
+    __tablename__ = "agent_debate_cards"
+
+    agent_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("agents.id", ondelete="CASCADE"), primary_key=True
+    )
+    agent_version_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("agent_versions.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_md_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    language: Mapped[str] = mapped_column(String(2), nullable=False)
+    card_status: Mapped[str] = mapped_column(String(16), nullable=False)
+    card_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    card_safe_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    salvaged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    prompt_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    compiled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    claim_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "card_status IN ('compiling', 'ready', 'fallback')", name="ck_agent_card_status"
+        ),
+        CheckConstraint("language IN ('zh', 'en')", name="ck_agent_card_language"),
+        CheckConstraint("NOT salvaged OR card_status = 'ready'", name="ck_agent_card_salvaged"),
+        CheckConstraint("retry_count >= 0 AND retry_count <= 3", name="ck_agent_card_retries"),
+    )
+
+
 class AgentVersion(Base):
     __tablename__ = "agent_versions"
 

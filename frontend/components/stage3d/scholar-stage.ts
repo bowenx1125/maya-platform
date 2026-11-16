@@ -189,24 +189,24 @@ export function stageCameraTurnSign(command: StageCameraCommand): -1 | 0 | 1 {
 }
 
 /** Root yaw that faces the default stage camera (+Z). */
-export const EGG_FRONT_YAW = 0;
-const EGG_FRONT_YAW_EPS = THREE.MathUtils.degToRad(1);
+export const STAGE_FRONT_YAW = 0;
+const STAGE_FRONT_YAW_EPS = THREE.MathUtils.degToRad(1);
 /** Speaking / restore body-yaw smoothing (higher = snappier). */
-const EGG_SPEAK_YAW_LAMBDA = 6;
+const SPEAK_YAW_LAMBDA = 6;
 
 /** True when the seat rest pose already faces the camera/front. */
-export function eggSeatFacesFront(seatYaw: number): boolean {
+export function stageSeatFacesFront(seatYaw: number): boolean {
   const delta = Math.atan2(
-    Math.sin(seatYaw - EGG_FRONT_YAW),
-    Math.cos(seatYaw - EGG_FRONT_YAW),
+    Math.sin(seatYaw - STAGE_FRONT_YAW),
+    Math.cos(seatYaw - STAGE_FRONT_YAW),
   );
-  return Math.abs(delta) < EGG_FRONT_YAW_EPS;
+  return Math.abs(delta) < STAGE_FRONT_YAW_EPS;
 }
 
-/** Egg body yaw while idle (seat) or speaking (front, unless already front). */
-export function eggBodyYawTarget(seatYaw: number, speaking: boolean): number {
-  if (!speaking || eggSeatFacesFront(seatYaw)) return seatYaw;
-  return EGG_FRONT_YAW;
+/** Body yaw while idle (seat) or speaking (front, unless already front). */
+export function stageBodyYawTarget(seatYaw: number, speaking: boolean): number {
+  if (!speaking || stageSeatFacesFront(seatYaw)) return seatYaw;
+  return STAGE_FRONT_YAW;
 }
 
 function shortestYawDelta(from: number, to: number): number {
@@ -262,7 +262,7 @@ type Character = {
   jawBone: THREE.Object3D | null;
   jawRest: THREE.Quaternion | null;
   hasSpeechMorph: boolean;
-  /** Authored standing yaw; eggs restore to this when idle. */
+  /** Authored standing yaw to restore when idle. */
   seatYaw: number;
   state: AvatarState;
   stateStartedAt: number;
@@ -1619,27 +1619,24 @@ export class ScholarStage {
     delta: number,
     elapsed: number,
   ): void {
+    character.egg?.frame(
+      elapsed,
+      character.state === "speaking",
+      this.reducedMotion,
+    );
+    const yawTarget = stageBodyYawTarget(
+      character.seatYaw,
+      character.state === "speaking",
+    );
+    if (this.reducedMotion) {
+      character.root.rotation.y = yawTarget;
+    } else {
+      const current = character.root.rotation.y;
+      const step = shortestYawDelta(current, yawTarget);
+      character.root.rotation.y =
+        current + step * (1 - Math.exp(-SPEAK_YAW_LAMBDA * delta));
+    }
     if (character.egg) {
-      character.egg.frame(
-        elapsed,
-        character.state === "speaking",
-        this.reducedMotion,
-      );
-      // Eggs only: turn the shell to face the camera while speaking, then
-      // restore the seat yaw. A seat that already faces front never moves.
-      const yawTarget = eggBodyYawTarget(
-        character.seatYaw,
-        character.state === "speaking",
-      );
-      if (this.reducedMotion) {
-        character.root.rotation.y = yawTarget;
-      } else {
-        const current = character.root.rotation.y;
-        const step = shortestYawDelta(current, yawTarget);
-        character.root.rotation.y =
-          current + step * (1 - Math.exp(-EGG_SPEAK_YAW_LAMBDA * delta));
-      }
-      // egg.frame already updated matrices before this yaw write.
       character.root.updateMatrixWorld(true);
       return;
     }

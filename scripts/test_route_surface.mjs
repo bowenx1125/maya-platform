@@ -91,7 +91,7 @@ try {
   // the teacher's per-Agent Debate diagnostics read and the retained-turn
   // performance timeline read add two; Quiz results visibility and the Bowen
   // identity chooser add two more; stateless Agent Preview and Avatar Save add two.
-  if (platformOperationCount !== 171 || placeholderCount !== 0) {
+  if (platformOperationCount !== 172 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

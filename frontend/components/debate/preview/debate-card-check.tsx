@@ -54,6 +54,7 @@ export function DebateCardCheck({
   voiceProfileId,
   agentMd,
   fallbackTone,
+  onCheck,
 }: {
   agentName: string;
   status?: DebateCardStatus | null;
@@ -64,6 +65,7 @@ export function DebateCardCheck({
   /** AGENT.md used to resolve Tone when the card has no voice_style. */
   agentMd?: string | null;
   fallbackTone?: string | null;
+  onCheck?: () => void;
 }) {
   const t = useT();
   if (!status) return null;
@@ -84,6 +86,9 @@ export function DebateCardCheck({
           "list-none py-1 pr-2.5 pl-2 text-xs leading-[normal] [&::-webkit-details-marker]:hidden",
         )}
         aria-label={`Check ${agentName} card`}
+        onClick={(event) => {
+          if (!event.currentTarget.closest("details")?.open) onCheck?.();
+        }}
       >
         <IconEye size={18} />
         <span>Check card</span>

@@ -2836,6 +2836,15 @@ export class PlatformApi {
     );
   }
 
+  async checkAgentDebateCard(
+    versionId: string,
+    agentMd: string,
+  ): Promise<components["schemas"]["AgentCardResponse"]> {
+    return this.postJson(`agent-versions/${versionId}/debate-card`, {
+      agent_md: agentMd,
+    });
+  }
+
   async previewAgent(
     body: components["schemas"]["AgentPreviewRequest"],
   ): Promise<components["schemas"]["AgentPreviewResponse"]> {
