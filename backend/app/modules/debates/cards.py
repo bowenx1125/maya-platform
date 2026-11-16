@@ -1,18 +1,13 @@
-"""Debate cards: one bounded persona per participant, compiled once.
+"""Bounded Agent persona cards, frozen into each Debate participant.
 
-A student's Agent.md mixes persona with instructions that belong to other
-layers (length, language, output format, debate procedure). When a Debate is
-created each participant's frozen Agent.md is compiled once into a closed card
-that keeps only persona. The card is compiled right before that participant's
-first turn is prepared, inside the same claimed preparation, so it is always
-terminal before the turn is generated: ``ready`` after a usable extract, or
-``fallback`` after the single authorized attempt cannot produce a card.
-Prefer a salvaged card (truncate over-long text; keep usable fields from a
-slightly off-format response). Only when compile truly cannot yield a card
-does the turn speak from the original Agent.md. Compiling peers still use a
-name-only stub in other speakers' prompts. A participant row without a card
-status (a Debate created before cards) never compiles and keeps its old
-prompt bytes.
+AGENT.md mixes persona with length, language, format and procedure instructions.
+The Agent service compiles it through the shared single-attempt provider core.
+Debate setup copies a matching terminal card; a cache miss resolves at Agent
+scope before that participant's first turn, then freezes the result.
+
+Prefer a salvaged extract. If no usable card can be produced, the participant
+speaks from its original frozen AGENT.md. Compiling peers use name-only stubs.
+Participants without a card status predate cards and keep their pinned bytes.
 """
 
 from __future__ import annotations
@@ -21,7 +16,7 @@ import hashlib
 import json
 import logging
 from collections.abc import Callable, Mapping
-from contextlib import ExitStack
+from contextlib import AbstractContextManager, ExitStack, nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Final, Literal, cast, get_args
@@ -40,7 +35,7 @@ from app.modules.agents.tone import extract_card_tone
 from app.modules.debates.generation.four_round import speech_units
 from app.modules.debates.generation.prompt_budget import preflight_prompt_budget
 from app.modules.debates.models import DebateParticipant
-from app.modules.debates.owned_copies import frozen_owner
+from app.modules.debates.owned_copies import FrozenOwner, frozen_owner
 from app.modules.debates.schemas import DebateCardDropReason
 from app.modules.knowledge.providers.product_publication import require_exact_confirmation
 from app.providers.control import (
@@ -154,6 +149,7 @@ class CardOutcome:
     status: Literal["ready", "fallback"]
     card: Mapping[str, object] | None = None
     safe_error_code: str | None = None
+    salvaged: bool = False
 
 
 def _canonical(value: object) -> str:
@@ -673,7 +669,7 @@ def _fallback(row: Any, code: str, pointer: str = "") -> CardOutcome:
     return CardOutcome("fallback", safe_error_code=code)
 
 
-def _response_card(response: object, language: str) -> tuple[dict[str, object], str]:
+def _response_card_details(response: object, language: str) -> tuple[dict[str, object], str, bool]:
     status = getattr(response, "status_code", None)
     reader = getattr(response, "json", None)
     if status != 200 or not callable(reader):
@@ -695,7 +691,13 @@ def _response_card(response: object, language: str) -> tuple[dict[str, object], 
         raise
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
         raise CardRejected("debate_card_invalid", "/choices/0/message/content") from exc
-    return validate_card(correct_card_payload(value), language), _sha256(content)
+    card = validate_card(correct_card_payload(value), language)
+    return card, _sha256(content), card != value
+
+
+def _response_card(response: object, language: str) -> tuple[dict[str, object], str]:
+    card, digest, _salvaged = _response_card_details(response, language)
+    return card, digest
 
 
 def compile_card_with_provider(
@@ -709,8 +711,36 @@ def compile_card_with_provider(
 ) -> CardOutcome:
     """One authorized, ledgered card request; any failure is a fallback, never a retry."""
 
-    language = "zh" if str(debate.output_language) == "zh" else "en"
-    owner = frozen_owner(db, row)
+    return compile_card_core(
+        db,
+        row=row,
+        owner=frozen_owner(db, row),
+        language="zh" if str(debate.output_language) == "zh" else "en",
+        scope_id=str(debate.id),
+        logical_item_id=str(row.id),
+        build_identity={"debate_id": str(debate.id), "participant_id": str(row.id)},
+        adapter=adapter,
+        policy_hash=policy_hash,
+        settings=settings,
+    )
+
+
+def compile_card_core(
+    db: Session,
+    *,
+    row: Any,
+    owner: FrozenOwner,
+    language: str,
+    scope_id: str,
+    logical_item_id: str,
+    build_identity: Mapping[str, str],
+    adapter: DashScopeLLMAdapter,
+    policy_hash: str | None,
+    settings: object,
+    dispatch_guard: Callable[[], AbstractContextManager[bool]] | None = None,
+) -> CardOutcome:
+    """Shared single-attempt provider contract; callers supply immutable ownership."""
+
     if not owner.agent_md.strip():
         return _fallback(row, "debate_card_agent_md_missing")
     repository = ProviderRepository(db)
@@ -783,7 +813,7 @@ def compile_card_with_provider(
     max_tokens = int(budget.input_tokens) + LLM_RESERVED_OUTPUT_TOKEN_CAP
     try:
         manifest = ExportManifestV1(
-            scope_id=str(debate.id),
+            scope_id=scope_id,
             provider_operation=CARD_OPERATION,
             model_key=model_key,
             policy_hash=str(policy_hash),
@@ -791,8 +821,7 @@ def compile_card_with_provider(
                 _canonical(
                     {
                         "version": CARD_PROMPT_VERSION,
-                        "debate_id": str(debate.id),
-                        "participant_id": str(row.id),
+                        **build_identity,
                         "agent_md_hash": markdown_hash(owner.agent_md),
                         "language": language,
                     }
@@ -811,7 +840,7 @@ def compile_card_with_provider(
             max_cost_cny=0.0,
         )
         repository.raise_scope_budget(
-            str(debate.id),
+            scope_id,
             ProviderScopeBudgetV1(
                 max_requests=2_147_483_647,
                 max_total_tokens=9_223_372_036_854_775_807,
@@ -841,55 +870,57 @@ def compile_card_with_provider(
         )
     except Exception as exc:
         return _fallback(row, "debate_card_preflight_blocked", type(exc).__name__)
-    # One attempt per participant for the life of the Debate. An existing row
-    # (a crash mid-call, or a concurrent preparation) is never resent.
+    # Each logical item has one attempt. Agent retries receive a new identity;
+    # an existing operation, including an ambiguous export, is never resent.
     existing = [
         operation
-        for operation in repository.operations(scope_id=str(debate.id))
+        for operation in repository.operations(scope_id=scope_id)
         if operation.provider_operation == CARD_OPERATION
-        and operation.logical_item_id == str(row.id)
+        and operation.logical_item_id == logical_item_id
     ]
     if existing:
         return _fallback(row, "debate_card_attempt_used")
 
-    try:
-        operation = repository.create_prepared(
-            ProviderReservationRequestV1(
-                operation_id=str(uuid4()),
-                scope_id=str(debate.id),
-                provider_operation=CARD_OPERATION,
-                logical_item_id=str(row.id),
-                attempt_no=1,
-                request_hash=request_hash,
-                max_tokens=max_tokens,
-                max_cost_cny=0.0,
-                policy_hash=str(policy_hash),
-                export_manifest_hash=persisted.manifest_hash,
-                build_manifest_hash=persisted.build_manifest_hash,
-                model_key=model_key,
-                budget_bucket=LLM_DEBATE_TURN_BUCKET,
-            )
-        )
-    except Exception:
-        return _fallback(row, "debate_card_attempt_used")
-    headers = {"Content-Type": "application/json"}
-    if adapter.config.api_key:
-        headers["Authorization"] = f"Bearer {adapter.config.api_key}"
-    # The slot is taken before the call is reserved or "sending", as the report
-    # does: a refusal under load leaves nothing in flight.
-    admission = ExitStack()
-    try:
-        admission.enter_context(debate_llm_slot())
-    except PlatformError:
-        _settle(repository, operation.id, "not_sent", "debate_card_admission_refused")
-        return _fallback(row, "debate_card_admission_refused")
-    with admission:
-        try:
-            repository.reserve(operation.id)
-            repository.transition(operation.id, expected="reserved", state="sending")
-        except Exception as exc:
-            _settle(repository, operation.id, "not_sent", "debate_card_ledger_failed")
-            return _fallback(row, "debate_card_ledger_failed", type(exc).__name__)
+    with ExitStack() as admission:
+        with dispatch_guard() if dispatch_guard else nullcontext(True) as allowed:
+            if not allowed:
+                return _fallback(row, "debate_card_attempt_used")
+            try:
+                operation = repository.create_prepared(
+                    ProviderReservationRequestV1(
+                        operation_id=str(uuid4()),
+                        scope_id=scope_id,
+                        provider_operation=CARD_OPERATION,
+                        logical_item_id=logical_item_id,
+                        attempt_no=1,
+                        request_hash=request_hash,
+                        max_tokens=max_tokens,
+                        max_cost_cny=0.0,
+                        policy_hash=str(policy_hash),
+                        export_manifest_hash=persisted.manifest_hash,
+                        build_manifest_hash=persisted.build_manifest_hash,
+                        model_key=model_key,
+                        budget_bucket=LLM_DEBATE_TURN_BUCKET,
+                    )
+                )
+            except Exception:
+                return _fallback(row, "debate_card_attempt_used")
+            headers = {"Content-Type": "application/json"}
+            if adapter.config.api_key:
+                headers["Authorization"] = f"Bearer {adapter.config.api_key}"
+            # The slot is taken before the call is reserved or "sending", as the report
+            # does: a refusal under load leaves nothing in flight.
+            try:
+                admission.enter_context(debate_llm_slot())
+            except PlatformError:
+                _settle(repository, operation.id, "not_sent", "debate_card_admission_refused")
+                return _fallback(row, "debate_card_admission_refused")
+            try:
+                repository.reserve(operation.id)
+                repository.transition(operation.id, expected="reserved", state="sending")
+            except Exception as exc:
+                _settle(repository, operation.id, "not_sent", "debate_card_ledger_failed")
+                return _fallback(row, "debate_card_ledger_failed", type(exc).__name__)
         try:
             response = adapter.transport.post(
                 endpoint,
@@ -914,7 +945,7 @@ def compile_card_with_provider(
             _settle(repository, operation.id, "acceptance_unknown", code)
             return _fallback(row, code, type(exc).__name__)
     try:
-        card, response_hash = _response_card(response, language)
+        card, response_hash, salvaged = _response_card_details(response, language)
     except CardRejected as rejected:
         _settle(repository, operation.id, "failed", rejected.code)
         return _fallback(row, rejected.code, rejected.pointer)
@@ -930,7 +961,7 @@ def compile_card_with_provider(
             operation.id,
             type(exc).__name__,
         )
-    return CardOutcome("ready", card=card)
+    return CardOutcome("ready", card=card, salvaged=salvaged)
 
 
 def _settle(repository: ProviderRepository, operation_id: str, state: str, code: str) -> None:

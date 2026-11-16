@@ -41,6 +41,17 @@ describe("workbench Preview request", () => {
       const create = vi.fn();
       state.api = {
         previewAgent,
+        checkAgentDebateCard: vi.fn(async () => ({
+          card_status: "ready",
+          card: {
+            identity: "Stored nurse persona",
+            position: "A stored position",
+            reasoning: [],
+            speaking_style: "Warm",
+            voice_style: null,
+            dropped: [{ excerpt: "Speak forever", reason: "length_limit" }],
+          },
+        })),
         group: vi.fn(async () => ({ course_id: "course" })),
         knowledge: vi.fn(async () => []),
         workspaceDocuments: vi.fn(async () => []),
@@ -91,6 +102,14 @@ describe("workbench Preview request", () => {
           }
         />,
       );
+      if (scope === "saved") {
+        fireEvent.click(await screen.findByText("Check card"));
+        expect(await screen.findByText("Stored nurse persona")).toBeTruthy();
+        expect(screen.getByText("A stored position")).toBeTruthy();
+        expect(screen.getByText("Speak forever")).toBeTruthy();
+        expect(screen.queryByText("Nothing was dropped.")).toBeNull();
+        expect(state.api).toHaveProperty("checkAgentDebateCard");
+      }
       fireEvent.click(await screen.findByRole("button", { name: "Preview" }));
       fireEvent.change(screen.getByPlaceholderText("Type a message..."), {
         target: { value: "Why?" },

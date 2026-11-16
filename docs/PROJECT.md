@@ -39,7 +39,7 @@ Historical formal micro-rounds:editable Team Ruleset roles/roster order;scorer=a
 
 Oct16 ADR-010:PostgreSQL prod. Compose:BACKEND_REPLICAS,max_connections=200;sign-in overload->auth_login_queued. Oct15:Team revision0,no canned opening;Teachers list formal attempts without Enter;private Agents/Teams/RAG/voices need Enter. Free answers:model relevant=true else guidance. Formal start:shared Knowledge `## Opening`/`## 开场白`,then `收到，第一题是`. Student send:lock executor before model call;parallel call->chat_busy.
 
-Oct17:adaptive login/create/write/LLM queues,AIMD,scoring first;queue-full/180s/chat_busy saves nothing;refused segments not_sent;autoheal≈100s.Record0068 replaces Memory;Accounts visits omit results,revoked/unfinished visible,teacher delete hides0072.System qwen3-tts-flash;clone enrollment/temp upload,VOICE_CLONE_MODEL=qwen-audio-3.1-tts-flash(or3.0).40/60-user PG passed;ledger6 commits/call.0069 atomic vote/barrage increments,collision retry.Oct18:@pick adds space,no All picker,@All/bare sends reach all.Per-sign-in caches6parallel/10s/back-off.0070 owner Chat Team/files;ACL query reduction.Oct19 uploads ready0073,▷ listens.Oct20-23 #225-239/0076:answer guard,public audit,independent Record,cascade recovery/no auto-retry,login fences,stale_base_version,PG poll REPEATABLE READ.50-user Mock p95≤7.85s.
+Oct17:adaptive queues/Record0068/Voices/PG load; ledger6. 
 
 ## Oct24 chats/deletion/Next/create
 
@@ -125,14 +125,20 @@ Nov16:Student music capsule hover overlay fixed;shared Button/music icon,collaps
 
 Rebased onto `503857fe` (batch2 + Immerse Option C). Ordinary AGENT.md free text (`persona_required=False`); cards prefer salvaged extract; fail-open to original AGENT.md only when compile cannot yield a card; Check-card Ready/Compiling only; Lead-approved fail-open clause in card error copy (too_long unchanged; no separate New notice); no migration (head stays 0093).
 
+Nov17 #452 (0094_agent_debate_cards after0093):Done/upload/publish compile post-commit; Check card stores exact source hash, replaces regex. Snapshot copies terminal Agent card; missing/stale resolve Agent-level before first speech; NULL legacy pinned. Approved fail-open copy unchanged. Bounded retries/restart recovery implemented. Liveness probe refresh fixes duplicate compile; crash fixture uses nonempty source. PG:30 per-Agent tests pass×3;66 Debate copy/card pass;Ruff format/check+mypy pass. No new UI strings. Backfill:`python -m app.cli.backfill_agent_cards --dry-run`.0 real calls/deploy. Integration checkpoints:`d3ee51cb500134788ded3b911380ae7142632606` + main`158c4563836a378fb09d7d25ecc1c92005c2f139` (clean).
+
 Nov16 #449 DRAFT:egg speak-yaw;list End no confirm;mouth=audioPlaying;Preview drag-yaw;stage table removed(+wood/collider).0 calls/deploy.
 
 Merge inputs (#449 Phase A): caacc46f193e6462c8bdc1ce305aac37c121fcdc + origin/main 158c4563836a378fb09d7d25ecc1c92005c2f139. Docs conflict resolved; FE/static gates pending;0 calls/deploy.
 
 Nov17 #451 integration:audited head c724562a6b0e2a7babd60f553de6e00289720f6f + origin/main c3506fe6f86799d37d1b1c8c44a9b4019faee52f. Docs-only conflict kept both histories;code merged without conflicts;music-fix files unchanged.0 calls/deploy.
 
+#452 final main integration: input `88623d68` (checkpoint preserving `d3ee51cb` and main `158c4563`) + `origin/main`=`68715ce9c923fc751038d8d2db926cb87046375a`; only PROJECT.md conflicted, both histories preserved. No PR merge/deploy.
+
 ## Nov16 student visibility (teacher Public)
 
 Students see/open/single-chat teacher Public Agents; edit/delete stay owner/course-teacher (groupmate blocked for teacher-owned). Teacher Public Teams (personal/group) usable course-wide; student Teams stay group-scoped with own/personal always kept. Optional `is_teacher_owned`; sticker Teacher. No migration. Targeted pytest/vitest/static/build pass; 0 calls/deploy.
 
-Nov17 #453 fix pass(base2289c371):ordinary personal teacher Team Chats recover exact live/retained publication;group teacher Public Teams share frozen member/shared resources under owner checks,no direct source access.FE filters mixed Team lists,keeps own personal Teams and teacher visits.Original errors restored;Agent editor roles unchanged.PG71/UI72+5skip/static17/build pass.0 real calls/deploy;no main integration.
+Nov17 #453 fix pass(base2289c371):ordinary personal teacher Team Chats recover exact live/retained publication;group teacher Public Teams share frozen member/shared resources under owner checks,no direct source access.FE filters mixed Team lists,keeps own personal Teams and teacher visits.Original errors restored;Agent editor roles unchanged.PG71/UI72+5skip/static17/build pass.0 real calls/deploy.
+
+Nov17 #453 merge origin/main `5f742a79` (#452):docs conflict kept both; OpenAPI hash regenerated from merged yaml.
