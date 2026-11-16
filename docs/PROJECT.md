@@ -133,4 +133,4 @@ Nov16 copy approval:two exact Avatar Save cause/fix messages;drawing bypasses ca
 
 Nov16 Option C:egg floor+crown;Roundtable Banner overlays.Live #448.
 
-Nov16 egg speak-yaw+list End:eggs turn to camera while speaking (snap if reduced-motion;front seat yaw unchanged);Debate list End skips EndRunningDebatePrompt,ErrorNotice on failure only.DRAFT;0 calls/deploy.
+Nov16 #449 DRAFT:egg speak-yaw;list End no confirm;mouth follows audioPlaying (not started_ack status).0 calls/deploy.
