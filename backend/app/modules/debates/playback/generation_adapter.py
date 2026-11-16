@@ -20,7 +20,7 @@ from uuid import UUID
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from app.core.config import Settings, configured_debate_llm_model
+from app.core.config import Settings, configured_debate_llm_model, get_settings
 from app.core.errors import PlatformError, conflict
 from app.core.models import (
     AgentVersion,
@@ -31,12 +31,10 @@ from app.core.models import (
     SnapshotDocument,
 )
 from app.modules.agents.markdown import markdown_hash
+from app.modules.debates.agent_cards import ensure_participant_agent_card
 from app.modules.debates.cards import (
-    CardOutcome,
     CardUnavailable,
     card_persona,
-    compile_card_with_provider,
-    ensure_card_terminal,
 )
 from app.modules.debates.generation import (
     FinalReadyTurn,
@@ -1333,10 +1331,10 @@ class SqlTurnPreparer:
             (row for row in participant_rows if str(row.id) == str(current.participant_id)), None
         )
         if speaker_row is not None and speaker_row.card_status == "compiling":
-            # The speaker's first turn: its card becomes terminal here, before
-            # anything is generated, and stays that way for every later round.
-            ensure_card_terminal(
-                db, speaker_row, lambda: self._compile_card(db, debate, speaker_row)
+            ensure_participant_agent_card(
+                db,
+                speaker_row,
+                self.settings if isinstance(self.settings, Settings) else get_settings(),
             )
         language = debate_output_language(debate)
         participants = tuple(
@@ -1854,34 +1852,6 @@ class SqlTurnPreparer:
         if attempt != 1:
             raise ValueError("generation fencing starts at attempt one")
         return generation_fence(db, debate, turn)
-
-    def _compile_card(self, db: Session, debate: Any, row: DebateParticipant) -> CardOutcome:
-        if self.llm_runtime is not None or not isinstance(self.llm, DashScopeLLMAdapter):
-            # Mock and injected runtimes make no provider call. Prefer a
-            # name-only ready stub (usable extract) over fail-open to raw text.
-            del db, debate
-            return CardOutcome(
-                "ready",
-                card={
-                    "identity": str(row.agent_name),
-                    "position": "",
-                    "reasoning": [],
-                    "speaking_style": "",
-                    "voice_style": None,
-                    "dropped": [],
-                },
-            )
-        policy_hash = self.llm_runtime_options.get("policy_hash") or _provider_policy_hash(
-            self.settings, "llm"
-        )
-        return compile_card_with_provider(
-            db,
-            debate=debate,
-            row=row,
-            adapter=self.llm,
-            policy_hash=policy_hash if isinstance(policy_hash, str) else None,
-            settings=self.settings,
-        )
 
     @staticmethod
     def _participant(

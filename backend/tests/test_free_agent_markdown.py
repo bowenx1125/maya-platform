@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 from app.core.models import (
     Agent,
+    AgentDebateCard,
     AgentVersion,
     FileReference,
     KnowledgeDocument,
@@ -461,4 +462,14 @@ def test_heading_free_agent_md_publishes_and_creates_debate_while_empty_stays_bl
         },
     )
     assert created.status_code == 201, created.text
-    assert {item["card_status"] for item in created.json()["participants"]} == {"compiling"}
+    participants = created.json()["participants"]
+    assert {item["card_status"] for item in participants} == {"fallback"}
+    assert all(
+        item["card"] is None and item["card_teacher_reason"] == "other" for item in participants
+    )
+    with database.session() as db:
+        for item in participants:
+            assert (
+                db.get(AgentDebateCard, item["agent_id"]).card_safe_error_code
+                == "debate_card_mock_provider"
+            )

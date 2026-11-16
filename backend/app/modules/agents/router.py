@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from datetime import UTC, datetime
@@ -9,7 +10,7 @@ from typing import Any, NoReturn, cast
 from unicodedata import normalize
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, Request, Response
 from sqlalchemy import and_, exists, or_, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError
@@ -46,6 +47,12 @@ from app.core.prefetch import prefetched
 from app.core.read_memo import request_read_memo
 from app.core.sqlutil import begin_immediate
 from app.core.version_label import agent_version_label
+from app.modules.agents.debate_cards import (
+    AgentCardRequest,
+    AgentCardResponse,
+    check_agent_card,
+    compile_after_save,
+)
 from app.modules.agents.persona import (
     raw_agent_md_hash,
 )
@@ -74,6 +81,7 @@ from app.modules.avatars import (
     AvatarConfigValidationError,
     validate_avatar_config,
 )
+from app.modules.debates.cards import CARD_TIMEOUT_SECONDS
 from app.modules.demo_baseline.service import (
     reject_baseline_agent_mutation,
     reject_baseline_version_mutation,
@@ -1694,6 +1702,47 @@ def save_agent_avatar(
         raise
 
 
+@router.post(
+    "/agent-versions/{version_id}/debate-card",
+    response_model=AgentCardResponse,
+    operation_id="checkAgentDebateCard",
+    responses={
+        200: {
+            "model": AgentCardResponse,
+            "description": (
+                "Stored card with bounded compilation for changed, failed or abandoned cards."
+            ),
+        },
+        404: {"model": Error, "description": "Version not found."},
+    },
+)
+async def check_agent_debate_card(
+    version_id: UUID,
+    payload: AgentCardRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> AgentCardResponse:
+    scoped = readable_version(db, context, str(version_id))
+    if payload.agent_md is not None and payload.agent_md != scoped.version.agent_md:
+        visible_student_version(db, context, str(version_id))
+    agent_id = scoped.agent.id
+    source = payload.agent_md if payload.agent_md is not None else scoped.version.agent_md
+    db.commit()
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(
+                check_agent_card, db.get_bind().engine, agent_id, str(version_id), source, settings
+            ),
+            timeout=CARD_TIMEOUT_SECONDS,
+        )
+    except TimeoutError:
+        # The independent worker retains the claim and ledger; cancellation
+        # must never cause a resend or close its database session mid-call.
+        return AgentCardResponse(card_status="compiling")
+
+
 @router.get(
     "/agent-versions/{version_id}",
     response_model=AgentVersionDTO,
@@ -1730,6 +1779,7 @@ def update_agent_draft(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    background_tasks: BackgroundTasks = cast(BackgroundTasks, None),
 ) -> AgentVersionDTO:
     reject_baseline_version_mutation(str(version_id))
     visible_student_version(db, context, str(version_id))
@@ -1812,7 +1862,12 @@ def update_agent_draft(
     _touch_last_editor(db, scoped.agent.id, context.user.id)
     db.refresh(scoped.version)
     db.flush()
-    return _version_dto_for_actor(db, scoped.version, scoped.agent, context)
+    result = _version_dto_for_actor(db, scoped.version, scoped.agent, context)
+    agent_id = scoped.agent.id
+    db.commit()
+    if background_tasks is not None:
+        background_tasks.add_task(compile_after_save, db.get_bind(), agent_id, settings)
+    return result
 
 
 @router.post(
@@ -1833,6 +1888,8 @@ async def upload_agent_md(
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    background_tasks: BackgroundTasks = cast(BackgroundTasks, None),
 ) -> AgentVersionDTO:
     reject_baseline_version_mutation(str(version_id))
     scoped = visible_student_version(db, context, str(version_id))
@@ -1883,7 +1940,12 @@ async def upload_agent_md(
     _touch_last_editor(db, scoped.agent.id, context.user.id)
     db.refresh(scoped.version)
     db.flush()
-    return _version_dto_for_actor(db, scoped.version, scoped.agent, context)
+    result = _version_dto_for_actor(db, scoped.version, scoped.agent, context)
+    agent_id = scoped.agent.id
+    db.commit()
+    if background_tasks is not None:
+        background_tasks.add_task(compile_after_save, db.get_bind(), agent_id, settings)
+    return result
 
 
 @router.get(
@@ -1942,6 +2004,7 @@ def publish_agent_version(
     # FastAPI still injects Request by its exact annotation. The default keeps
     # direct non-generation domain tests/callers compatible with the endpoint.
     request: Request = cast(Request, None),
+    background_tasks: BackgroundTasks = cast(BackgroundTasks, None),
 ) -> AgentVersionDTO:
     # Each publish holds its request connection plus short independent
     # sessions for the idempotency lease, so unbounded concurrent publishes
@@ -1953,11 +2016,15 @@ def publish_agent_version(
     # to the pool while we queue; otherwise every waiter pins one and the
     # admitted publishes starve for their own lease sessions.  Loaded ORM
     # state is expired and reloads lazily after admission.
+    agent_id = db.scalar(select(AgentVersion.agent_id).where(AgentVersion.id == str(version_id)))
     db.commit()
     with create_admission_slot(settings):
-        return _publish_agent_version_admitted(
+        result = _publish_agent_version_admitted(
             version_id, payload, idempotency_key, context, db, settings, request
         )
+    if background_tasks is not None and agent_id is not None:
+        background_tasks.add_task(compile_after_save, db.get_bind(), agent_id, settings)
+    return result
 
 
 def _publish_agent_version_admitted(
