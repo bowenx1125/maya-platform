@@ -116,3 +116,5 @@ Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not command
 Confirmed: #434 A Tone label + `Preview` (Identity/Position stay; Tone from AGENT.md else debate/env instruction; Agent/Voice Preview same Tone; student create/edit Check card). #436 C Stomp Line. #437 C Capsule Note-Face. No Alembic (OpenAPI VoicePreviewRequest only). Local: ruff/mypy/format/typecheck/prettier/script+route-compare PASS; FE 1467/13skip; targeted PG voice/preview/cards/tone 189 PASS. Full PG wave4 persona suite fails on clean main too in this env (question None).0 calls.
 
 Nov16 #427 hotfix(base503857fe):Save/Preview finish gestures;Save uses current ink.Back/Escape confirm discard;Pen starts unselected;row panel removed.Saved Egg drawing survives edit/create template switches.FE1477/13skip;focused77/1skip;PG29+freeze1/static/build pass.No backend/contract/freeze changes;0 calls/migrations/deploy.
+
+Nov16:Student music capsule hover overlay fixed;shared Button/music icon,collapsed key,dock chrome;83 focused FE+Chromium390/1440 pass;0 calls/deploy.

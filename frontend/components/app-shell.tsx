@@ -1302,7 +1302,7 @@ export function AppShell({
                     brandHomeLink()
                   ) : (
                     <div
-                      className={`${switcherStyles.capsule} ${switcherStyles.segmented} relative flex min-w-0 rounded-full border-[3px] border-[#111] bg-white ${PRESS_MOTION}`}
+                      className={`${switcherStyles.capsule} ${switcherStyles.segmented} relative flex min-w-0 rounded-full border-[3px] border-[#111] bg-white ${PRESS_MOTION} after:pointer-events-none`}
                     >
                       {brandHomeLink(
                         <span className="block truncate">{t("appName")}</span>,
@@ -1311,11 +1311,14 @@ export function AppShell({
                       )}
                       <MusicKey
                         channel="workspace"
-                        className={`${switcherStyles.capsuleTrigger} ${switcherStyles.segmentTrigger} !size-auto !h-auto !w-auto !min-h-11 !min-w-11 !rounded-none !border-0 !shadow-none active:!shadow-none`}
+                        className={`${switcherStyles.capsuleTrigger} ${switcherStyles.segmentTrigger} !h-auto !w-auto min-h-11 min-w-11 !shadow-none hover:translate-y-0 active:translate-y-0`}
                       />
                     </div>
                   )}
                 </div>
+                {collapsed && !mobile && !teacherSurface ? (
+                  <MusicKey channel="workspace" />
+                ) : null}
                 {groups.map((group) => {
                   const headingId = `sidebar-group-${group.key}`;
 
