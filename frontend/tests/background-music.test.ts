@@ -15,11 +15,9 @@ import {
   useMusicPlaying,
 } from "../lib/background-music";
 
-// 2026-11-03: a music key beside Mayaform (workspace music, on by default
-// per account) and one on the 3D stage (its own music, on while the stage
-// is open). Every hand-off fades; each list loops. A browser that refuses
-// sound before a gesture keeps the key on and starts on the first gesture;
-// a workspace key turned off by hand is remembered per account.
+// Workspace preferences belong to the account; stage choices last one visit.
+// Both channels stay off until chosen. Hand-offs fade and track lists loop;
+// autoplay refusal after an explicit choice waits for another gesture.
 let refuse: false | "autoplay" | "broken" = false;
 
 class FakeAudio {
@@ -161,18 +159,25 @@ describe("background music", () => {
     expect(musicStateForTests("workspace").wanted).toBe(true);
   });
 
-  it("always starts the stage on enter; stage off is not remembered", async () => {
+  it("enters every stage visit off, including after a previous on visit", async () => {
     enterStageMusic();
-    await settle();
+    expect(musicStateForTests("stage").wanted).toBe(false);
+    expect(musicStateForTests("stage").audio).toBeNull();
     toggleMusic("stage");
+    await settle();
+    expect(player("stage").paused).toBe(false);
     leaveStageMusic();
     enterStageMusic();
-    expect(musicStateForTests("stage").wanted).toBe(true);
+    await settle();
+    expect(musicStateForTests("stage").wanted).toBe(false);
+    expect(player("stage").paused).toBe(true);
+    expect(player("stage").play).toHaveBeenCalledTimes(1);
     expect(window.localStorage.getItem("maya.bgm.off.stage")).toBeNull();
   });
 
-  it("restarts stage music from the beginning on every enter", async () => {
+  it("restarts stage music from the beginning only when its key is pressed on reentry", async () => {
     enterStageMusic();
+    toggleMusic("stage");
     await settle();
     const audio = player("stage");
     audio.currentTime = 42;
@@ -182,7 +187,12 @@ describe("background music", () => {
     await settle();
     expect(player("stage").currentTime).toBe(0);
     expect(player("stage").src).toBe("/music/stage.mp3");
+    expect(player("stage").paused).toBe(true);
+    expect(player("stage").play).toHaveBeenCalledTimes(1);
+    toggleMusic("stage");
+    await settle();
     expect(player("stage").paused).toBe(false);
+    expect(player("stage").play).toHaveBeenCalledTimes(2);
   });
 
   it("loops the stage track list continuously while on stage", async () => {
@@ -191,6 +201,7 @@ describe("background music", () => {
       stage: ["/music/stage-a.mp3", "/music/stage-b.mp3"],
     });
     enterStageMusic();
+    toggleMusic("stage");
     await settle();
     const audio = player("stage");
     expect(audio.src).toBe("/music/stage-a.mp3");
@@ -248,10 +259,13 @@ describe("background music", () => {
     toggleMusic("workspace");
     await settle();
     enterStageMusic();
-    // The stage starts by itself, at its own quieter level.
-    expect(musicStateForTests("stage").wanted).toBe(true);
+    expect(musicStateForTests("stage").wanted).toBe(false);
     await settle();
     expect(player("workspace").paused).toBe(true);
+    expect(musicStateForTests("stage").audio).toBeNull();
+    expect(window.localStorage.getItem("maya.bgm.off.workspace.u1")).toBe("on");
+    toggleMusic("stage");
+    await settle();
     expect(player("stage").paused).toBe(false);
     expect(player("stage").volume).toBeCloseTo(0.0562341325, 6);
     // The workspace key stays on while the stage plays.
@@ -267,6 +281,7 @@ describe("background music", () => {
 
   it("leaves the workspace silent after the stage when its key was off", async () => {
     enterStageMusic();
+    toggleMusic("stage");
     await settle();
     leaveStageMusic();
     await settle();
@@ -278,6 +293,7 @@ describe("background music", () => {
     toggleMusic("workspace");
     await settle();
     enterStageMusic();
+    toggleMusic("stage");
     await settle();
     toggleMusic("stage");
     await settle();
@@ -293,6 +309,7 @@ describe("background music", () => {
   it("keeps the stage key on when autoplay is refused", async () => {
     refuse = "autoplay";
     enterStageMusic();
+    toggleMusic("stage");
     await settle();
     expect(musicStateForTests("stage")).toMatchObject({
       wanted: true,
@@ -307,6 +324,7 @@ describe("background music", () => {
   it("turns the key off when the music cannot load", async () => {
     refuse = "broken";
     enterStageMusic();
+    toggleMusic("stage");
     await settle();
     expect(musicStateForTests("stage").wanted).toBe(false);
   });
@@ -315,6 +333,7 @@ describe("background music", () => {
     toggleMusic("workspace");
     await settle();
     enterStageMusic();
+    toggleMusic("stage");
     stopBackgroundMusic();
     expect(player("workspace").paused).toBe(true);
     expect(player("stage").paused).toBe(true);

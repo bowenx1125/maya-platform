@@ -1,9 +1,19 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ScholarSceneProps } from "../components/stage3d/scholar-scene";
 import { BetaDebateStage } from "../components/debate-beta/stage";
 import type { DebateDetail } from "../lib/api";
+import {
+  musicStateForTests,
+  resetBackgroundMusicForTests,
+} from "../lib/background-music";
 import {
   BETA_DOCK,
   BETA_NOTICES,
@@ -44,6 +54,8 @@ vi.mock("../components/ui", () => ({
 
 afterEach(() => {
   cleanup();
+  resetBackgroundMusicForTests();
+  vi.restoreAllMocks();
   scholarSceneProps.length = 0;
 });
 
@@ -163,6 +175,73 @@ function renderStage(readOnly = true) {
 }
 
 describe("BetaDebateStage scene layout", () => {
+  it("keeps configured stage music silent through entry, Start, unrelated gestures and reentry until its key is pressed", async () => {
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    resetBackgroundMusicForTests({
+      workspace: [],
+      stage: ["/music/stage.mp3"],
+    });
+    const initial = detail();
+    initial.status = "draft";
+    initial.playback.status = "ready";
+    const startDebate = vi.fn(() => new Promise<DebateDetail>(() => {}));
+    const mount = () =>
+      render(
+        <BetaDebateStage
+          api={{ ...api, startDebate }}
+          debateId={debateId}
+          detail={initial}
+          socketFactory={() => new IdleSocket()}
+        />,
+      );
+    const expectSilent = () => {
+      expect(
+        screen
+          .getByRole("button", { name: "Play music" })
+          .getAttribute("aria-pressed"),
+      ).toBe("false");
+      expect(musicStateForTests("stage")).toMatchObject({
+        wanted: false,
+        audible: false,
+        playing: false,
+        waiting: false,
+      });
+    };
+
+    for (const visit of [1, 2]) {
+      const view = mount();
+      expectSilent();
+      if (visit === 1) expect(musicStateForTests("stage").audio).toBeNull();
+      else expect(musicStateForTests("stage").audio?.currentTime).toBe(0);
+      expect(play).toHaveBeenCalledTimes(visit - 1);
+      const start = screen.getByRole("button", { name: "Start debate" });
+      fireEvent.pointerDown(start);
+      fireEvent.pointerUp(start);
+      fireEvent.click(start);
+      expect(startDebate).toHaveBeenCalledTimes(visit);
+      fireEvent.pointerDown(document.body);
+      fireEvent.pointerUp(document.body);
+      fireEvent.keyDown(document.body, { key: "a" });
+      await act(async () => {});
+      expectSilent();
+      expect(play).toHaveBeenCalledTimes(visit - 1);
+
+      await act(async () =>
+        fireEvent.click(screen.getByRole("button", { name: "Play music" })),
+      );
+      expect(play).toHaveBeenCalledTimes(visit);
+      expect(musicStateForTests("stage").wanted).toBe(true);
+      const audio = musicStateForTests("stage").audio!;
+      expect(audio.src).toContain("/music/stage.mp3");
+      expect(audio.currentTime).toBe(0);
+      audio.currentTime = 42;
+      view.unmount();
+    }
+  });
+
   it("sends Start intent to the scene before the API or audio responds", () => {
     const initial = detail();
     initial.status = "draft";

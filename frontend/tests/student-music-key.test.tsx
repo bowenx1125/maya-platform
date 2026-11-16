@@ -85,10 +85,21 @@ afterEach(() => {
 });
 
 describe("student music key", () => {
-  describe.each(["expanded", "collapsed", "mobile"])(
+  describe.each(["expanded", "collapsed", "mobile", "stage"])(
     "%s playback animation",
     (layout) => {
+      const channel = layout === "stage" ? "stage" : "workspace";
+
       function mountKey() {
+        if (layout === "stage") {
+          enterStageMusic();
+          render(
+            <div className={BETA_DOCK}>
+              <MusicKey channel="stage" className={BETA_DOCK_MUSIC_KEY} />
+            </div>,
+          );
+          return screen.getByRole("button", { name: "Play music" });
+        }
         if (layout === "collapsed") {
           window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "1");
         }
@@ -123,9 +134,9 @@ describe("student music key", () => {
       it("waits for real playing, stops on pause/end/error, and restarts with the next playing event", async () => {
         const button = mountKey();
         expectAnimation(button, false);
-        expect(musicStateForTests("workspace").audio).toBeNull();
+        expect(musicStateForTests(channel).audio).toBeNull();
         await act(async () => fireEvent.click(button));
-        const audio = musicStateForTests("workspace").audio!;
+        const audio = musicStateForTests(channel).audio!;
         expect(button.getAttribute("aria-pressed")).toBe("true");
         expectAnimation(button, false);
         for (const event of ["pause", "ended", "error"] as const) {
@@ -144,11 +155,11 @@ describe("student music key", () => {
         );
         const button = mountKey();
         await act(async () => fireEvent.click(button));
-        expect(musicStateForTests("workspace").waiting).toBe(true);
+        expect(musicStateForTests(channel).waiting).toBe(true);
         expectAnimation(button, false);
         await act(async () => fireEvent.click(button));
         expectAnimation(button, false);
-        fireEvent.playing(musicStateForTests("workspace").audio!);
+        fireEvent.playing(musicStateForTests(channel).audio!);
         expectAnimation(button, true);
         fireEvent.click(button);
         expectAnimation(button, false);
@@ -202,8 +213,8 @@ describe("student music key", () => {
         <MusicKey channel="stage" className={BETA_DOCK_MUSIC_KEY} />
       </div>,
     );
-    const button = screen.getByRole("button", { name: "Pause music" });
-    fireEvent.click(button);
+    const button = screen.getByRole("button", { name: "Play music" });
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
     toggleTwice(button, "stage");
   });
 

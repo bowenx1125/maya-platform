@@ -119,7 +119,7 @@ Nov16 Option C:egg floor+crown;Roundtable Banner overlays.Live #448.
 
 Nov16 #427 hotfix(base503857fe):Save/Preview finish gestures;Save uses current ink.Back/Escape confirm discard;Pen starts unselected;row panel removed.Saved Egg drawing survives edit/create template switches.FE1477/13skip;focused77/1skip;PG29+freeze1/static/build pass.No backend/contract/freeze changes;0 calls/migrations/deploy.
 
-Nov16:Student music capsule hover overlay fixed;shared Button/music icon,collapsed key,dock chrome. Phase2 vs main552d0286:static17/17,FE1491pass/13skip,build0;Chromium390/1440 before/after+real stage canvas checked. Backend/i18n/music state unchanged. Exact release bake Python exits0 on both refs but leaves stage fadeIn (newline excluded by function slice):pre-existing default-off defect;not fixed here.0 calls/deploy.
+Nov16:Student music capsule hover overlay fixed;shared Button/music icon,collapsed key,dock chrome. Phase2 vs main552d0286:static17/17,FE1491pass/13skip,build0;Chromium390/1440 before/after+real stage canvas checked. Backend/i18n/music state unchanged. Historical Phase2 bake check left stage fadeIn:pre-existing source default-off defect, resolved by B1 below.0 calls/deploy.
 
 ## Nov16 D2 draft (PR442)
 
@@ -130,3 +130,5 @@ Nov16 #449 DRAFT:egg speak-yaw;list End no confirm;mouth=audioPlaying;Preview dr
 Merge inputs (#449 Phase A): caacc46f193e6462c8bdc1ce305aac37c121fcdc + origin/main 158c4563836a378fb09d7d25ecc1c92005c2f139. Docs conflict resolved; FE/static gates pending;0 calls/deploy.
 
 Nov17 #451 integration:audited head c724562a6b0e2a7babd60f553de6e00289720f6f + origin/main c3506fe6f86799d37d1b1c8c44a9b4019faee52f. Docs-only conflict kept both histories;code merged without conflicts;music-fix files unchanged.0 calls/deploy.
+
+Nov17 B1/Task5:stage entry now sets wanted=false, resets the first track and publishes state without fadeIn/play;each visit waits for its own MusicKey. Workspace account preferences/handoff/fades retained. Corrected auto-start expectations;configured-track BetaDebateStage regression covers entry,Start,unrelated gestures,reentry after on;stage key also covers playing/pause/end/error/autoplay refusal. Requested9 FE files:73pass;new regression failed before fix. Source no longer relies on release-bake patch;infrastructure untouched.0 calls/deploy.

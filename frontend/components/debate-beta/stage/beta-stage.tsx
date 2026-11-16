@@ -599,8 +599,7 @@ export function BetaDebateStage({
   interactionBarrages,
   betaLabels,
 }: BetaStageProps) {
-  // The stage's own music: on while the stage is open (the key pauses it);
-  // the workspace music fades out on the way in and back on the way out.
+  // Workspace music yields to the stage; its own key opts in for this visit.
   useStageMusic();
   const labels = useMemo(
     () =>
