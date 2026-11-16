@@ -139,4 +139,4 @@ Nov17 B1/Task5:stage entry now sets wanted=false, resets the first track and pub
 
 Nov17 stage-fix integration: `28fb2db79daeb57c18cf9c9602558b7d331f8e03` + `origin/main`=`5f742a79f32b4eced5a3b0bc65682838d312bb55`;only PROJECT.md conflicted;both histories and all five fix SHAs retained.0 calls/deploy.
 
-#453 main integration: input `787a9ce2e7446a8e608fe0696463467230dbd817` + `origin/main`=`b93767c7926980f31c4f7842f3e0c8252eebd272`. Hash/docs conflicts resolved;0094,per-Agent cards,snapshot copy and stage/music changes retained. Visibility/owner-scoped Team resources and original errors retained;B1 Agent editor roles unchanged.0 calls/deploy.
+#453 integration: `787a9ce2e7446a8e608fe0696463467230dbd817` + main `b93767c7926980f31c4f7842f3e0c8252eebd272`;0094/cards/snapshot,stage/music,visibility/Team ACL/errors/B1 retained. PG73/UI72+5skip/static17/build pass. Concurrent branch `6e03b23bb90842834ef968438183361b1a6700ff` merged into `61985e9215564292beda358c6b25063e7f777e25`;identical code;gates rerun.0 calls/deploy.
