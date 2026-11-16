@@ -2373,13 +2373,14 @@ export interface components {
     schemas: {
         /** AgentPreviewRequest */
         AgentPreviewRequest: {
-            /** Agent Md */
+            /**
+             * Agent Md
+             * @default
+             */
             agent_md: string;
             avatar_config: components["schemas"]["AvatarConfig"];
             /** Course Id */
             course_id?: string | null;
-            /** Document Ids */
-            document_ids?: string[];
             /** Group Id */
             group_id?: string | null;
             /** Message */
@@ -13341,6 +13342,15 @@ export interface operations {
             };
             /** @description Agent or source not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Publish the first Agent version first. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

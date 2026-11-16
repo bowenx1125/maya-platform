@@ -1265,6 +1265,7 @@ export function useT(): Translator {
 }
 
 const errorCodeKeys: Record<string, MessageKey> = {
+  agent_not_published: "agentIssueNotPublished",
   knowledge_import_invalid: "knowledgeImportInvalid",
   knowledge_import_too_large: "knowledgeImportTooLarge",
   knowledge_import_no_text: "knowledgeImportNoText",

@@ -10345,6 +10345,16 @@
             },
             "description": "Agent or source not found."
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Publish the first Agent version first."
+          },
           "422": {
             "description": "Invalid Preview input.",
             "content": {
@@ -10659,7 +10669,7 @@
         "additionalProperties": false,
         "properties": {
           "agent_md": {
-            "minLength": 1,
+            "default": "",
             "title": "Agent Md",
             "type": "string"
           },
@@ -10677,14 +10687,6 @@
               }
             ],
             "title": "Course Id"
-          },
-          "document_ids": {
-            "items": {
-              "format": "uuid",
-              "type": "string"
-            },
-            "title": "Document Ids",
-            "type": "array"
           },
           "group_id": {
             "anyOf": [
@@ -10730,7 +10732,6 @@
         },
         "required": [
           "message",
-          "agent_md",
           "avatar_config"
         ],
         "title": "AgentPreviewRequest",

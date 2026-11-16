@@ -57,6 +57,25 @@ describe("single-turn Preview", () => {
     });
     expect(updates.map((s) => s.answer)).not.toContain("Old answer.");
   });
+  it("shows the shared no-publication error in the existing caption", async () => {
+    const request = vi.fn().mockRejectedValue({
+      code: "agent_not_published",
+      status: 409,
+      details: { agent_name: "New Agent" },
+    });
+    render(<AgentPreview onClose={vi.fn()} request={request} />);
+    fireEvent.change(screen.getByPlaceholderText("Type a message..."), {
+      target: { value: "Why?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(
+      await screen.findByText(
+        "Agent “New Agent” has no published version. Open it and press Done to publish it.",
+      ),
+    ).toBeTruthy();
+    expect(request).toHaveBeenCalledOnce();
+    expect(screen.getAllByRole("button")).toHaveLength(2);
+  });
   it("moves the mouth only on real playing and closes on pause/end/error/Close", async () => {
     const { updates, audio, controller } = setup();
     await controller.ask("Hi", async () => ({

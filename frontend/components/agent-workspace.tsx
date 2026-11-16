@@ -1747,7 +1747,6 @@ export function AgentWorkbench({
                       version_id: version?.id || null,
                       course_id: unsavedCreate?.courseId ?? null,
                       group_id: unsavedCreate?.groupId ?? null,
-                      document_ids: selectedDocumentIds,
                     })
                   }
                 />

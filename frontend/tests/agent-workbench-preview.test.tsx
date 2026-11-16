@@ -35,7 +35,9 @@ describe("workbench Preview request", () => {
     "sends the version and scope for %s",
     async (scope) => {
       state.role = scope === "student create" ? "student" : "teacher";
-      const previewAgent = vi.fn(async () => ({ answer: "One sentence." }));
+      const previewAgent = vi.fn(async (_payload: unknown) => ({
+        answer: "One sentence.",
+      }));
       const create = vi.fn();
       state.api = {
         previewAgent,
@@ -104,6 +106,7 @@ describe("workbench Preview request", () => {
           group_id: scope === "student create" ? "group" : null,
         }),
       );
+      expect(previewAgent.mock.calls[0][0]).not.toHaveProperty("document_ids");
       expect(create).not.toHaveBeenCalled();
     },
   );

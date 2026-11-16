@@ -1,3 +1,5 @@
+import { localizeError } from "../../lib/i18n";
+
 export type PreviewReply = {
   answer: string;
   audio_base64?: string | null;
@@ -46,11 +48,11 @@ export class PreviewController {
     let reply: PreviewReply;
     try {
       reply = await request();
-    } catch {
+    } catch (error) {
       if (this.epoch === epoch && !this.closed)
         this.update({
           question,
-          answer: "The preview could not be generated.",
+          answer: localizeError(error),
           playing: false,
         });
       return;

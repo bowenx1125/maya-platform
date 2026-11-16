@@ -207,8 +207,45 @@ def retrieve_sources(
     conversation = db.get(Conversation, scope_id)
     if conversation is None or conversation.snapshot_id != snapshot.id:
         raise not_found()
+    return retrieve_snapshot_sources(
+        db,
+        settings,
+        version,
+        viewer_user_id=conversation.user_id,
+        course_id=course_id,
+        scope_id=scope_id,
+        request_id=request_id,
+        message=message,
+        actor_user_id=actor_user_id,
+        turn_id=turn_id,
+        claim_revision=claim_revision,
+        sending_guard=sending_guard,
+    )
+
+
+def retrieve_snapshot_sources(
+    db: Session,
+    settings: Settings,
+    version: AgentVersion,
+    *,
+    viewer_user_id: str,
+    course_id: str,
+    scope_id: str,
+    request_id: str,
+    message: str,
+    actor_user_id: str | None = None,
+    turn_id: str | None = None,
+    claim_revision: int | None = None,
+    sending_guard: ProviderSendingGuard | None = None,
+) -> list[ChatSource]:
+    """Retrieve authorized frozen evidence without requiring a Chat runtime."""
+    if version.knowledge_snapshot_id is None:
+        return []
+    snapshot = db.get(KnowledgeSnapshot, version.knowledge_snapshot_id)
+    if snapshot is None:
+        raise PlatformError("snapshot_unavailable", "The published knowledge is unavailable.", 409)
     agent = db.get(Agent, version.agent_id)
-    if agent is None or not can_invoke_version(db, conversation.user_id, version, agent):
+    if agent is None or not can_invoke_version(db, viewer_user_id, version, agent):
         raise not_found()
     sources = db.execute(
         select(SnapshotDocument.source_authorization_epoch, KnowledgeDocument)
@@ -218,7 +255,7 @@ def retrieve_sources(
     if any(document.course_id != course_id for _, document in sources) or not (
         snapshot_sources_are_readable(
             db,
-            conversation.user_id,
+            viewer_user_id,
             snapshot.id,
             agent=agent,
             allow_historical_epoch_for_owner=True,

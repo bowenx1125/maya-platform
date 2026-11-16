@@ -1,4 +1,4 @@
-"""Preview has no chat or memory side effects, even for current unsaved drafts."""
+"""Preview has no chat or memory side effects, using the current published snapshot."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from app.core.models import AgentVersion
+from app.core.models import Agent, AgentVersion
 from app.modules.agents import preview
 from app.modules.avatars.catalog import default_config_for
 from app.modules.workspace.models import AgentAccountMemory, Conversation, ConversationTurn
@@ -37,6 +37,25 @@ def body(**extra: Any) -> dict[str, Any]:
     }
 
 
+def published_version(database: Any, *, name: str = "Preview") -> str:
+    from tests.test_wave3_mock_rag_delta import _insert_sql_published_agent
+
+    agent_id = _insert_sql_published_agent(
+        database,
+        group_id=GROUP_DEMO_ID,
+        name=name,
+        evidence="Evidence supports a claim with reasons.",
+    )
+    with database.session() as db:
+        agent = db.get(Agent, agent_id)
+        assert agent is not None and agent.current_published_version_id
+        agent.owner_user_id = "60541c78-30f1-55c5-b2aa-207b6a766883"
+        version = db.get(AgentVersion, agent.current_published_version_id)
+        assert version is not None
+        version.published_visibility = "public"
+        return agent.current_published_version_id
+
+
 @pytest.mark.parametrize(
     "text,expected",
     [
@@ -52,7 +71,7 @@ def test_first_sentence(text: str, expected: str) -> None:
     assert preview.first_sentence(text) == expected
 
 
-def test_endpoint_is_stateless_and_uses_unsaved_persona_and_rag(
+def test_endpoint_is_stateless_and_uses_unsaved_persona_and_published_rag(
     app_factory: Any, monkeypatch: Any
 ) -> None:
     app, database, settings = app_factory()
@@ -67,19 +86,7 @@ def test_endpoint_is_stateless_and_uses_unsaved_persona_and_rag(
     with TestClient(app) as client:
         _, csrf = login(client, "bowen")
         settings.llm_provider = "dashscope"
-        upload = client.post(
-            f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
-            headers=headers(csrf, **{"Idempotency-Key": "preview-evidence"}),
-            files={
-                "file": (
-                    "evidence.md",
-                    b"# Evidence\nEvidence supports a claim with reasons.",
-                    "text/markdown",
-                )
-            },
-        )
-        assert upload.status_code == 201, upload.text
-        document_id = upload.json()["document"]["id"]
+        version_id = published_version(database)
         with database.session() as db:
             before = {
                 model: db.scalar(select(func.count()).select_from(model))
@@ -89,7 +96,7 @@ def test_endpoint_is_stateless_and_uses_unsaved_persona_and_rag(
             response = client.post(
                 "/api/v1/agents/preview",
                 headers=headers(csrf),
-                json=body(message=question, document_ids=[document_id]),
+                json=body(message=question, version_id=version_id),
             )
             assert response.status_code == 200, response.text
             assert response.json() == {
@@ -115,37 +122,36 @@ def test_endpoint_is_stateless_and_uses_unsaved_persona_and_rag(
 
 
 @pytest.mark.parametrize("version", [{}, {"version_id": None}])
-def test_teacher_create_preview_without_version_uses_mock_provider(
-    client: TestClient, version: dict[str, Any]
+def test_teacher_create_preview_requires_publication(
+    client: TestClient, version: dict[str, Any], monkeypatch: Any
 ) -> None:
+    def forbidden(*a: Any, **kw: Any) -> Any:
+        pytest.fail("No provider or retrieval call is allowed without a snapshot")
+
+    monkeypatch.setattr(preview, "retrieve_snapshot_sources", forbidden)
+    monkeypatch.setattr(preview, "preview_reply", forbidden)
     _, csrf = login(client)
     response = client.post(
         "/api/v1/agents/preview",
         headers=headers(csrf),
-        json=body(group_id=None, course_id=COURSE_ID, **version),
+        json=body(group_id=None, course_id=COURSE_ID, agent_md="", **version),
     )
-    assert response.status_code == 200, response.text
-    assert response.json() == {
-        "answer": "This is a single-turn preview.",
-        "audio_base64": None,
-        "audio_content_type": None,
-    }
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "agent_not_published"
+    assert response.json()["message"] == "Agent “New Agent” has no published version."
 
 
-def test_preview_rejects_foreign_sources_and_history(client: TestClient) -> None:
+def test_preview_rejects_draft_sources_and_history(client: TestClient) -> None:
     _, csrf = login(client, "bowen")
-    response = client.post(
-        "/api/v1/agents/preview", headers=headers(csrf), json=body(document_ids=[str(uuid4())])
-    )
-    assert response.status_code == 404
-    response = client.post("/api/v1/agents/preview", headers=headers(csrf), json=body(history=[]))
-    assert response.status_code == 400
+    for extra in ({"document_ids": [str(uuid4())]}, {"history": []}):
+        response = client.post("/api/v1/agents/preview", headers=headers(csrf), json=body(**extra))
+        assert response.status_code == 400
 
 
 def test_preview_uses_configured_voice_and_keeps_text_on_tts_failure(
     app_factory: Any, monkeypatch: Any
 ) -> None:
-    app, _, settings = app_factory()
+    app, database, settings = app_factory()
     profile = SimpleNamespace(target_model_key="fixture")
     monkeypatch.setattr(
         preview,
@@ -169,7 +175,9 @@ def test_preview_uses_configured_voice_and_keeps_text_on_tts_failure(
     with TestClient(app) as client:
         _, csrf = login(client, "bowen")
         settings.tts_provider = "dashscope"
-        request = body(voice_profile_id=str(uuid4()))
+        version_id = published_version(database)
+        monkeypatch.setattr(preview, "validate_voice_binding", lambda *a: None)
+        request = body(version_id=version_id, voice_profile_id=str(uuid4()))
         result = client.post("/api/v1/agents/preview", headers=headers(csrf), json=request)
         assert result.status_code == 200, result.text
         assert base64.b64decode(result.json()["audio_base64"]) == stream.getvalue()
@@ -248,6 +256,7 @@ def test_debate_snapshot_freezes_egg_after_agent_changes(app_factory: Any) -> No
             headers=headers(csrf, **{"Idempotency-Key": "egg-snapshot-freeze"}),
             json={
                 "topic": "What is evidence?",
+                "round_unit_caps": [300, 300, 300, 300],
                 "participants": [
                     {"agent_id": a, "stance_mode": "open"},
                     {"agent_id": b, "stance_mode": "open"},
@@ -312,7 +321,11 @@ def test_real_preview_path_accounts_once_without_chat_rows(
         _, csrf = login(client, "bowen")
         settings.llm_provider = "dashscope"
         settings.llm_provider_policy_hash = policy.policy_hash
-        result = client.post("/api/v1/agents/preview", headers=headers(csrf), json=body())
+        result = client.post(
+            "/api/v1/agents/preview",
+            headers=headers(csrf),
+            json=body(version_id=published_version(database)),
+        )
         assert result.status_code == 200, result.text
         assert result.json()["answer"] == "One sentence."
     assert len(calls) == 1

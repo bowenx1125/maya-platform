@@ -271,13 +271,12 @@ class AgentPreviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     message: str = Field(min_length=1)
-    agent_md: str = Field(min_length=1)
+    agent_md: str = ""
     avatar_config: AvatarConfig
     voice_profile_id: UUID | None = None
     version_id: UUID | None = None
     course_id: UUID | None = None
     group_id: UUID | None = None
-    document_ids: list[UUID] = Field(default_factory=list)
 
 
 class AgentPreviewResponse(BaseModel):

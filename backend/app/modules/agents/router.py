@@ -2079,6 +2079,7 @@ def _publish_agent_version_admitted(
             "model": AgentPreviewResponse,
             "description": "Disposable single-sentence reply and optional voice.",
         },
+        409: {"model": Error, "description": "Publish the first Agent version first."},
         404: {"model": Error, "description": "Agent or source not found."},
         422: {"model": Error, "description": "Invalid Preview input."},
     },

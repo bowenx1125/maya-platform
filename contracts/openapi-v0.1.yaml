@@ -6284,6 +6284,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: Agent or source not found.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Publish the first Agent version first.
         '422':
           description: Invalid Preview input.
           content:
@@ -6492,7 +6498,7 @@ components:
       additionalProperties: false
       properties:
         agent_md:
-          minLength: 1
+          default: ''
           title: Agent Md
           type: string
         avatar_config:
@@ -6503,12 +6509,6 @@ components:
             type: string
           - type: 'null'
           title: Course Id
-        document_ids:
-          items:
-            format: uuid
-            type: string
-          title: Document Ids
-          type: array
         group_id:
           anyOf:
           - format: uuid
@@ -6533,7 +6533,6 @@ components:
           title: Voice Profile Id
       required:
       - message
-      - agent_md
       - avatar_config
       title: AgentPreviewRequest
       type: object
