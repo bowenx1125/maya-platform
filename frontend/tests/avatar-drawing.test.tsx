@@ -23,6 +23,7 @@ import {
 } from "../components/avatar/drawing";
 import { AvatarCanvas } from "../components/avatar/avatar-canvas";
 import { AVATAR_TEMPLATE_DEFAULT_CONFIGS } from "../components/avatar/types";
+import styles from "../components/avatar/drawing-board.module.css";
 
 vi.mock("../components/avatar/egg-canvas", () => ({
   EggCanvas: ({ drawing }: { drawing?: Drawing }) => (
@@ -195,6 +196,72 @@ describe("editable shell drawing", () => {
     render(<DrawingBoard {...props} open={false} />);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
+  it("leaves Pen unselected until its first click opens the color and width panel", () => {
+    board();
+    const pen = screen.getByRole("button", { name: "Pen" });
+    expect(pen.getAttribute("aria-pressed")).toBe("false");
+    expect(pen.classList.contains(styles.active)).toBe(false);
+    expect(screen.queryByLabelText("Custom color")).toBeNull();
+    expect(screen.queryByLabelText("Pen width")).toBeNull();
+    fireEvent.click(pen);
+    expect(pen.getAttribute("aria-pressed")).toBe("true");
+    expect(pen.classList.contains(styles.active)).toBe(true);
+    expect(screen.getByLabelText("Custom color")).toBeTruthy();
+    expect(screen.getByLabelText("Pen width")).toBeTruthy();
+  });
+  it.each(["Back", "Escape"])(
+    "%s confirms leaving without saving and preserves the drawing on cancel",
+    (action) => {
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      const props = board();
+      drawLine();
+      const before = ink();
+      const leave = () =>
+        action === "Back"
+          ? fireEvent.click(screen.getByRole("button", { name: "Back" }))
+          : fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+      leave();
+      expect(confirm).toHaveBeenCalledWith(
+        "Leave without saving your drawing?",
+      );
+      expect(props.onClose).not.toHaveBeenCalled();
+      expect(ink()).toEqual(before);
+      confirm.mockReturnValue(true);
+      leave();
+      expect(props.onClose).toHaveBeenCalledOnce();
+      expect(props.onSave).not.toHaveBeenCalled();
+    },
+  );
+  it("allows leaving an unchanged drawing without confirmation", () => {
+    const confirm = vi.spyOn(window, "confirm");
+    const props = board(art);
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(props.onClose).toHaveBeenCalledOnce();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(props.onSave).not.toHaveBeenCalled();
+  });
+  it.each(["Save", "Preview"])(
+    "%s includes an interrupted pointer gesture instead of dropping it or doing nothing",
+    async (action) => {
+      const props = board();
+      fireEvent.pointerDown(surface(), sample({ x: 0.4, y: 0.2 }));
+      fireEvent.pointerMove(surface(), sample({ x: 0.6, y: 0.2 }));
+      const before = ink();
+      expect(before.strokes).toHaveLength(1);
+      fireEvent.click(screen.getByRole("button", { name: action }));
+      if (action === "Save") {
+        await waitFor(() => expect(props.onClose).toHaveBeenCalledOnce());
+        expect(props.onSave).toHaveBeenCalledWith(before, expect.any(String));
+      } else {
+        expect(props.onPreview).toHaveBeenCalledWith(before);
+        expect(props.onSave).not.toHaveBeenCalled();
+        expect(props.onClose).not.toHaveBeenCalled();
+        expect(ink()).toEqual(before);
+        fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+        expect(ink()).toEqual(BLANK_DRAWING);
+      }
+    },
+  );
   it("groups the swept whole strokes on release and restores both with one Undo", () => {
     board(art);
     fireEvent.click(screen.getByRole("button", { name: "Stroke" }));

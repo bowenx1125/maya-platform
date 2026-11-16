@@ -52,7 +52,7 @@ function DrawingSession({
 }: Props) {
   const [drawing, setDrawingState] = useState(initial ?? BLANK_DRAWING);
   const [history, setHistory] = useState<Drawing[]>([]);
-  const [tool, setTool] = useState<Tool>("pen");
+  const [tool, setTool] = useState<Tool | null>(null);
   const [options, setOptions] = useState(false);
   const [color, setColor] = useState("#111111");
   const [width, setWidth] = useState(8);
@@ -107,6 +107,27 @@ function DrawingSession({
     if (gesture.current) setDrawing(gesture.current.before);
     gesture.current = null;
     setFaded(new Set());
+  }
+  function finishGesture() {
+    const g = gesture.current;
+    if (!g) return;
+    const next =
+      g.tool === "stroke" ? eraseStrokes(g.before, g.touched) : current.current;
+    if (!sameDrawing(g.before, next)) {
+      setHistory((h) => [...h.slice(-49), g.before]);
+      setDrawing(next);
+    }
+    gesture.current = null;
+    setFaded(new Set());
+  }
+  function leave() {
+    if (
+      !sameDrawing(current.current, initial ?? BLANK_DRAWING) &&
+      !window.confirm("Leave without saving your drawing?")
+    )
+      return;
+    cancel();
+    onClose();
   }
   function move(event: PointerEvent) {
     const p = point(event);
@@ -187,14 +208,16 @@ function DrawingSession({
       Math.min(size.width, size.height)) /
     EGG_VIEW.height;
   async function save() {
-    if (gesture.current || saving) return;
-    const body = JSON.stringify(drawing);
+    if (saving) return;
+    finishGesture();
+    const snapshot = current.current;
+    const body = JSON.stringify(snapshot);
     if (saveAttempt.current?.body !== body)
       saveAttempt.current = { body, key: crypto.randomUUID() };
     setSaving(true);
     setError(null);
     try {
-      await onSave(drawing, saveAttempt.current.key);
+      await onSave(snapshot, saveAttempt.current.key);
       onClose();
     } catch (cause) {
       // These Save-specific messages share codes with unrelated catalog copy.
@@ -223,8 +246,7 @@ function DrawingSession({
         onKeyDown={(e) => {
           if (e.key === "Escape" && !saving) {
             e.preventDefault();
-            cancel();
-            onClose();
+            leave();
           }
           if (e.key === "Tab") {
             const items = dialog.current?.querySelectorAll<HTMLElement>(
@@ -254,7 +276,7 @@ function DrawingSession({
             className={styles.preview}
             disabled={saving}
             onClick={() => {
-              cancel();
+              finishGesture();
               onPreview(current.current);
             }}
           >
@@ -285,7 +307,7 @@ function DrawingSession({
               mouthTarget ||
               (Math.abs(e.clientX - r.left - m.x) <= mouthWidth / 2 + 16 &&
                 Math.abs(e.clientY - r.top - m.y) <= 22);
-            const active = hit ? "mouth" : tool;
+            const active = hit ? "mouth" : (tool ?? "pen");
             if (active === "mouth" && !hit) return;
             if (active === "pen" && drawing.strokes.length >= 256) return;
             if (hit) {
@@ -310,16 +332,7 @@ function DrawingSession({
             const g = gesture.current;
             if (!g || g.id !== e.pointerId) return;
             move(e);
-            const next =
-              g.tool === "stroke"
-                ? eraseStrokes(g.before, g.touched)
-                : current.current;
-            if (!sameDrawing(g.before, next)) {
-              setHistory((h) => [...h.slice(-49), g.before]);
-              setDrawing(next);
-            }
-            gesture.current = null;
-            setFaded(new Set());
+            finishGesture();
           }}
           onPointerCancel={cancel}
           onLostPointerCapture={() => {
@@ -444,14 +457,7 @@ function DrawingSession({
             </Button>
           </div>
           <div className={styles.actions}>
-            <Button
-              variant="neutral"
-              disabled={saving}
-              onClick={() => {
-                cancel();
-                onClose();
-              }}
-            >
+            <Button variant="neutral" disabled={saving} onClick={leave}>
               <WorkspaceIcon name="back" />
               Back
             </Button>
