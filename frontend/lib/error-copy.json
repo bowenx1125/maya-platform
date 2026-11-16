@@ -321,7 +321,7 @@
       "en": "The voice couldn't be generated. The text is still shown; try again later."
     },
     "debateCardFallback": {
-      "en": "The card could not be prepared."
+      "en": "The debate card could not be prepared from this Agent's AGENT.md. Open Check card, fix the Agent text if needed, then try again."
     }
   },
   "codes": {

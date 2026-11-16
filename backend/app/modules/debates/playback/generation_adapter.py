@@ -1905,7 +1905,11 @@ class SqlTurnPreparer:
         except CardUnavailable as exc:
             raise PlatformError(
                 exc.code,
-                "The debate card could not be prepared for this Agent.",
+                (
+                    "The debate card could not be prepared from this Agent's "
+                    "AGENT.md. Open Check card, fix the Agent text if needed, "
+                    "then try again."
+                ),
                 503,
             ) from exc
         return ParticipantContext(

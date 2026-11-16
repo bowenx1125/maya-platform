@@ -78,7 +78,9 @@ describe("debate cards on the teacher preview", () => {
     expect(within(fallback).queryByTestId("debate-card-status")).toBeNull();
     expect(within(fallback).queryByText("Fallback")).toBeNull();
     expect(
-      within(fallback).getByText("The card could not be prepared."),
+      within(fallback).getByText(
+        "The debate card could not be prepared from this Agent's AGENT.md. Open Check card, fix the Agent text if needed, then try again.",
+      ),
     ).toBeTruthy();
     expect(within(fallback).queryByText(/original AGENT\.md/)).toBeNull();
   });
@@ -101,7 +103,7 @@ describe("debate cards on the teacher preview", () => {
     fireEvent.click(within(check).getByText("Check card"));
     expect(
       within(check).getByText(
-        "The card could not be read in the expected format.",
+        "The card response was not in the expected format. Open Check card and try again; if it keeps failing, edit the Agent's AGENT.md and re-check.",
       ),
     ).toBeTruthy();
     expect(screen.getByTestId("debate-card-check")).toBeTruthy();
@@ -139,7 +141,9 @@ describe("debate cards on the teacher preview", () => {
     const check = screen.getByTestId("debate-card-check");
     fireEvent.click(within(check).getByText("Check card"));
     expect(
-      within(check).getByText("The card exceeded the safe length limit."),
+      within(check).getByText(
+        "The extracted card exceeded the safe length limit. Shorten the Agent's AGENT.md, then open Check card and try again.",
+      ),
     ).toBeTruthy();
     expect(within(check).queryByText(/original AGENT\.md/)).toBeNull();
     expect(within(check).queryByText(/This session can continue/)).toBeNull();
@@ -163,7 +167,9 @@ describe("debate cards on the teacher preview", () => {
     fireEvent.click(within(check).getByText("Check card"));
     expect(within(check).getByText(card.identity)).toBeTruthy();
     expect(
-      within(check).queryByText("The card could not be prepared."),
+      within(check).queryByText(
+        "The debate card could not be prepared from this Agent's AGENT.md. Open Check card, fix the Agent text if needed, then try again.",
+      ),
     ).toBeNull();
     expect(
       within(check).queryByText(

@@ -170,15 +170,20 @@ const enMessages = {
     "{round} must be an integer from {minimum} to 2,000 {unit}.",
   debateRoundCapsUnitChanged:
     "The counting unit changed; edited values were kept.",
-  debateCardReasonCompileTimeout: "Card compilation timed out.",
+  debateCardReasonCompileTimeout:
+    "Card compilation timed out. Wait a moment, then open Check card and try again.",
   debateCardReasonFormatInvalid:
-    "The card could not be read in the expected format.",
-  debateCardReasonTooLong: "The card exceeded the safe length limit.",
-  debateCardReasonServiceBusy: "The card service was temporarily unavailable.",
+    "The card response was not in the expected format. Open Check card and try again; if it keeps failing, edit the Agent's AGENT.md and re-check.",
+  debateCardReasonTooLong:
+    "The extracted card exceeded the safe length limit. Shorten the Agent's AGENT.md, then open Check card and try again.",
+  debateCardReasonServiceBusy:
+    "The card service was temporarily unavailable. Wait a moment, then open Check card and try again.",
   debateCardReasonConfigProblem:
-    "The card service could not prepare this Agent's card.",
-  debateCardReasonOther: "The card could not be prepared.",
-  debateCardFallbackContinues: "The card could not be prepared.",
+    "The card could not be prepared because of a configuration problem. Try again later, or edit the Agent's AGENT.md and open Check card again.",
+  debateCardReasonOther:
+    "The debate card could not be prepared from this Agent's AGENT.md. Open Check card, fix the Agent text if needed, then try again.",
+  debateCardFallbackContinues:
+    "The debate card could not be prepared from this Agent's AGENT.md. Open Check card, fix the Agent text if needed, then try again.",
   debateCurrent: "current",
   debateRounds: "{count} Rounds",
   debateStageTitle: "Classroom debate",
