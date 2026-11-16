@@ -2632,6 +2632,14 @@ paths:
       operationId: createVoicePreview
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/VoicePreviewRequest'
+              - type: 'null'
+              title: Body
       responses:
         '200':
           description: Short-lived platform preview URL.
@@ -9094,6 +9102,17 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RetrievalSource'
+    VoicePreviewRequest:
+      type: object
+      description: Optional Tone line so Preview speech matches debate delivery.
+      properties:
+        instruction:
+          type:
+          - string
+          - 'null'
+          maxLength: 500
+          title: Instruction
+      title: VoicePreviewRequest
     VoiceProfile:
       type: object
       required:

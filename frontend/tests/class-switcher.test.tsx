@@ -619,7 +619,14 @@ describe("teacher shell integration", () => {
         <p>Content</p>
       </AppShell>,
     );
-    expect(await screen.findByRole("button", { name: /music/i })).toBeTruthy();
+    const music = await screen.findByRole("button", { name: /music/i });
+    expect(music).toBeTruthy();
     expect(screen.queryByTestId("class-switcher-trigger")).toBeNull();
+    // Capsule Note-Face (#437 C): Mayaform home + MusicKey share teacher capsule chrome.
+    expect(screen.getByTestId("class-switcher-home")).toBeTruthy();
+    expect(
+      music.closest("[data-music-key]")?.getAttribute("data-music-key"),
+    ).toBe("workspace");
+    expect(music.closest(".rounded-full")).toBeTruthy();
   });
 });

@@ -48,6 +48,20 @@ class RenameVoiceProfileRequest(BaseModel):
         return value
 
 
+class VoicePreviewRequest(BaseModel):
+    """Optional Tone line so Preview speech matches debate delivery."""
+
+    instruction: str | None = Field(default=None, max_length=500)
+
+    @field_validator("instruction")
+    @classmethod
+    def strip_instruction(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
+
+
 class PlaybackResource(BaseModel):
     playback_url: str = Field(json_schema_extra={"format": "uri-reference"})
     expires_at: datetime

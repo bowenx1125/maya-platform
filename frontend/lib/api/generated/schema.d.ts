@@ -3617,6 +3617,14 @@ export interface components {
             grounding_mode: "rag_grounded" | "mixed" | "general_reasoning";
             sources: components["schemas"]["RetrievalSource"][];
         };
+        /**
+         * VoicePreviewRequest
+         * @description Optional Tone line so Preview speech matches debate delivery.
+         */
+        VoicePreviewRequest: {
+            /** Instruction */
+            instruction?: string | null;
+        };
         VoiceProfile: {
             id: components["schemas"]["Uuid"];
             /** @enum {string} */
@@ -9982,7 +9990,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["VoicePreviewRequest"] | null;
+            };
+        };
         responses: {
             /** @description Short-lived platform preview URL. */
             200: {

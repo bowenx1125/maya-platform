@@ -139,7 +139,7 @@ def test_direct_preview_route_logs_unknown_runtime_failure_without_exception_bod
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    def fail(*_args: Any) -> Any:
+    def fail(*_args: Any, **_kwargs: Any) -> Any:
         raise RuntimeError("private-provider-response")
 
     monkeypatch.setattr(voice_router, "create_voice_preview", fail)
