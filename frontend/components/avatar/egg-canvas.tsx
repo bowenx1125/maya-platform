@@ -122,7 +122,7 @@ export function EggCanvas({
           const dt = Math.max(1, now - lastT) / 1000;
           const dx = event.clientX - lastX;
           yaw = eggOrbitYawAfterDrag(yaw, dx);
-          velocity = (-dx / dt) * 0.01;
+          velocity = (dx / dt) * 0.01;
           lastX = event.clientX;
           lastT = now;
         };

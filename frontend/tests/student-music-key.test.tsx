@@ -85,6 +85,88 @@ afterEach(() => {
 });
 
 describe("student music key", () => {
+  describe.each(["expanded", "collapsed", "mobile", "stage"])(
+    "%s playback animation",
+    (layout) => {
+      const channel = layout === "stage" ? "stage" : "workspace";
+
+      function mountKey() {
+        if (layout === "stage") {
+          enterStageMusic();
+          render(
+            <div className={BETA_DOCK}>
+              <MusicKey channel="stage" className={BETA_DOCK_MUSIC_KEY} />
+            </div>,
+          );
+          return screen.getByRole("button", { name: "Play music" });
+        }
+        if (layout === "collapsed") {
+          window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "1");
+        }
+        if (layout === "mobile") {
+          vi.stubGlobal("matchMedia", () => ({
+            matches: true,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+          }));
+        }
+        render(<AppShell role="student">Content</AppShell>);
+        if (layout === "mobile") {
+          fireEvent.click(
+            screen.getByRole("button", { name: "Expand sidebar" }),
+          );
+        }
+        return screen.getByRole("button", { name: "Play music" });
+      }
+
+      function expectAnimation(button: HTMLElement, playing: boolean) {
+        expect(button.hasAttribute("data-playing")).toBe(playing);
+        expect(button.className.includes("[&_svg]:animate-[music-hop_")).toBe(
+          playing,
+        );
+        if (playing) {
+          expect(button.className).toContain(
+            "motion-reduce:[&_svg]:animate-none",
+          );
+        }
+      }
+
+      it("waits for real playing, stops on pause/end/error, and restarts with the next playing event", async () => {
+        const button = mountKey();
+        expectAnimation(button, false);
+        expect(musicStateForTests(channel).audio).toBeNull();
+        await act(async () => fireEvent.click(button));
+        const audio = musicStateForTests(channel).audio!;
+        expect(button.getAttribute("aria-pressed")).toBe("true");
+        expectAnimation(button, false);
+        for (const event of ["pause", "ended", "error"] as const) {
+          fireEvent.playing(audio);
+          expectAnimation(button, true);
+          fireEvent(audio, new Event(event));
+          expectAnimation(button, false);
+        }
+      });
+
+      it("stays still while autoplay is blocked, then animates only after playback starts", async () => {
+        vi.mocked(HTMLMediaElement.prototype.play).mockRejectedValueOnce(
+          Object.assign(new Error("gesture required"), {
+            name: "NotAllowedError",
+          }),
+        );
+        const button = mountKey();
+        await act(async () => fireEvent.click(button));
+        expect(musicStateForTests(channel).waiting).toBe(true);
+        expectAnimation(button, false);
+        await act(async () => fireEvent.click(button));
+        expectAnimation(button, false);
+        fireEvent.playing(musicStateForTests(channel).audio!);
+        expectAnimation(button, true);
+        fireEvent.click(button);
+        expectAnimation(button, false);
+      });
+    },
+  );
+
   it("lets the expanded capsule's music segment receive clicks through its moving frame", () => {
     render(<AppShell role="student">Content</AppShell>);
     const button = screen.getByRole("button", { name: "Play music" });
@@ -131,8 +213,8 @@ describe("student music key", () => {
         <MusicKey channel="stage" className={BETA_DOCK_MUSIC_KEY} />
       </div>,
     );
-    const button = screen.getByRole("button", { name: "Pause music" });
-    fireEvent.click(button);
+    const button = screen.getByRole("button", { name: "Play music" });
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
     toggleTwice(button, "stage");
   });
 

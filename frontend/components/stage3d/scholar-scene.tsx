@@ -39,6 +39,8 @@ export type ScholarSceneProps = {
   bubbleText?: string;
   /** Mount the bubble shell while audio is starting, even before text arrives. */
   bubbleOpen?: boolean;
+  /** Latched Start intent, including while the renderer is still loading. */
+  started?: boolean;
   loadingLabel: string;
   unavailableLabel: string;
   layout?: "classroom" | "preview";
@@ -66,6 +68,7 @@ export function ScholarScene({
   speakingClock = null,
   bubbleText,
   bubbleOpen = false,
+  started = false,
   loadingLabel,
   unavailableLabel,
   layout = "classroom",
@@ -365,7 +368,10 @@ export function ScholarScene({
         />
 
         {status !== "failed" ? (
-          <StageCurtain loading={status === "loading"} label={loadingLabel} />
+          <StageCurtain
+            loading={status === "loading" && !started}
+            label={loadingLabel}
+          />
         ) : null}
 
         {status === "failed" ? (

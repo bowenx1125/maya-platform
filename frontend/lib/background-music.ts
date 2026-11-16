@@ -11,13 +11,12 @@ import { useEffect, useSyncExternalStore } from "react";
  *   choice is remembered per signed-in account (localStorage) and only for
  *   workspace; a visit with no choice stays silent. Logout stops sound but
  *   keeps the saved preference.
- * - stage: the 3D Debate stage's own music key. Entering the stage always
- *   starts it from the beginning of the track (and hands the workspace music
- *   off); pressing its key pauses it for this visit only. Leaving the stage
- *   stops it and gives the workspace music back if its key is on. Stage off
- *   is never remembered across visits.
+ * - stage: the 3D Debate stage's own music key. Each visit starts off and
+ *   hands the workspace music off. Pressing the stage key starts its first
+ *   track from the beginning; the choice lasts this visit only. Leaving the
+ *   stage stops it and gives the workspace music back if its key is on.
  *
- * Browsers refuse sound before the person has touched the page. Then the key
+ * Browsers may refuse an enabled channel before a page gesture. Then the key
  * stays on and the music starts (fading in) on their first click, tap or key
  * press anywhere on the site.
  *
@@ -148,6 +147,8 @@ class Channel {
     // Buffer ahead so a press gives sound quickly; the file streams.
     created.preload = "auto";
     const next = () => {
+      this.playing = false;
+      emit();
       this.trackIndex = (this.trackIndex + 1) % this.tracks.length;
       created.src = this.tracks[this.trackIndex];
       void created.play().catch((error: unknown) => this.playFailed(error));
@@ -181,6 +182,7 @@ class Channel {
   /** Nothing loads: the key turns off. */
   private refused(): void {
     this.stopFade();
+    this.playing = false;
     this.audible = false;
     this.waiting = false;
     this.wanted = false;
@@ -194,6 +196,7 @@ class Channel {
       return;
     }
     this.stopFade();
+    this.playing = false;
     this.audible = false;
     this.waiting = true;
     armFirstGesture();
@@ -355,15 +358,14 @@ export function toggleMusic(name: MusicChannelName): void {
   else emit();
 }
 
-/** The 3D stage opened: the workspace music fades out, the stage's fades in. */
+/** The 3D stage opened: workspace fades out; stage waits for its own key. */
 export function enterStageMusic(): void {
   if (onStage) return;
   onStage = true;
   channels.workspace.fadeOut();
-  // Stage always tries to start from the beginning; off is only for this visit.
-  channels.stage.wanted = true;
+  channels.stage.wanted = false;
   channels.stage.prepareRestart();
-  channels.stage.fadeIn();
+  emit();
 }
 
 /** The signed-in site loaded. Workspace music stays off unless this account turned it on. */
@@ -425,7 +427,7 @@ export function useMusicPlaying(name: MusicChannelName): boolean {
   );
 }
 
-/** Mount on the 3D stage: its music plays while the stage is open. */
+/** Keep the workspace/stage hand-off scoped to the stage visit. */
 export function useStageMusic(): void {
   useEffect(() => {
     enterStageMusic();

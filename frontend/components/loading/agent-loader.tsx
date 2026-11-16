@@ -59,7 +59,7 @@ export function AgentLoader({
 
 /**
  * Stage loading (loading-v3 stage-B): pink curtains with a yellow valance
- * and the label on a white plate; they open (0.6s) once the scene is ready.
+ * and the label on a white plate; they open (0.6s) on Start or scene readiness.
  */
 export function StageCurtain({
   loading,
@@ -69,17 +69,24 @@ export function StageCurtain({
   label: string;
 }) {
   const [shown, setShown] = useState(loading);
-  if (loading && !shown) setShown(true);
+  const [opening, setOpening] = useState(!loading);
+  if (!loading && !opening) setOpening(true);
   useEffect(() => {
-    if (loading || !shown) return;
+    if (opening) return;
+    // Asset downloads may never settle; they must not keep the curtain shut.
+    const timer = window.setTimeout(() => setOpening(true), 3000);
+    return () => window.clearTimeout(timer);
+  }, [opening]);
+  useEffect(() => {
+    if (!opening || !shown) return;
     const timer = window.setTimeout(() => setShown(false), 600);
     return () => window.clearTimeout(timer);
-  }, [loading, shown]);
+  }, [opening, shown]);
   if (!shown) return null;
   return (
     <div
-      className={loading ? "stage-curtain" : "stage-curtain open"}
-      role={loading ? "status" : undefined}
+      className={opening ? "stage-curtain open" : "stage-curtain"}
+      role={opening ? undefined : "status"}
       data-testid="stage-curtain"
     >
       <span className="cur l" aria-hidden="true" />

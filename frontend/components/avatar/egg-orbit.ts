@@ -3,7 +3,7 @@ export const EGG_ORBIT_YAW_PER_PX = 0.01;
 
 /**
  * Preview-only body yaw from a horizontal drag. Dragging right spins the egg
- * so the front moves with the pointer (negative Three.js Y rotation).
+ * so the front moves with the pointer (positive Three.js Y rotation).
  * Ephemeral — never written to drawing / avatar_config.
  */
 export function eggOrbitYawAfterDrag(
@@ -12,7 +12,7 @@ export function eggOrbitYawAfterDrag(
   radiansPerPx = EGG_ORBIT_YAW_PER_PX,
 ): number {
   if (!Number.isFinite(deltaX) || deltaX === 0) return yaw;
-  return yaw - deltaX * radiansPerPx;
+  return yaw + deltaX * radiansPerPx;
 }
 
 /**
