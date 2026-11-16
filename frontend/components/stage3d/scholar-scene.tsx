@@ -453,7 +453,7 @@ export function ScholarScene({
             }
           >
             <span className={styles.bubbleWho}>{speakingCharacter?.name}</span>
-            {bubbleWindow}
+            <span className={styles.bubbleText}>{bubbleWindow}</span>
           </div>
         ) : null}
 
