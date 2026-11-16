@@ -1,4 +1,8 @@
-import { prepareEggModel, type EggModel } from "./egg-model";
+import {
+  eggCrownWorldPosition,
+  prepareEggModel,
+  type EggModel,
+} from "./egg-model";
 
 import type { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
 import * as THREE from "three";
@@ -1905,9 +1909,13 @@ export class ScholarStage {
     this.lastAnchorAt = now;
     const anchors: StageAnchor[] = [];
     for (const character of this.characters) {
-      const bone = character.headBone ?? character.root;
-      bone.getWorldPosition(this.projection);
-      this.projection.y += 0.18;
+      if (character.egg) {
+        eggCrownWorldPosition(character.root, this.projection);
+      } else {
+        const bone = character.headBone ?? character.root;
+        bone.getWorldPosition(this.projection);
+        this.projection.y += 0.18;
+      }
       this.projection.project(this.camera);
       const nx = (this.projection.x + 1) / 2;
       anchors.push({

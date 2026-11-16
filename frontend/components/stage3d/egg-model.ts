@@ -19,6 +19,33 @@ export type EggModel = {
   frame: (time: number, playing: boolean, reduced: boolean) => void;
 };
 
+/** Crown world point for stage overlays; pad lifts the bead above the tip. */
+export const EGG_CROWN_PAD = 0.06;
+
+export function eggCrownWorldPosition(
+  root: THREE.Object3D,
+  target: THREE.Vector3,
+  pad = EGG_CROWN_PAD,
+): THREE.Vector3 {
+  const shell = root.getObjectByName("Shell");
+  if (!(shell instanceof THREE.Mesh)) {
+    root.getWorldPosition(target);
+    target.y += pad;
+    return target;
+  }
+  if (!shell.geometry.boundingBox) shell.geometry.computeBoundingBox();
+  const box = shell.geometry.boundingBox;
+  if (!box) {
+    root.getWorldPosition(target);
+    target.y += pad;
+    return target;
+  }
+  target.set(0, box.max.y, 0);
+  shell.localToWorld(target);
+  target.y += pad;
+  return target;
+}
+
 /** Adapt the supplied GLB, preserving its shell topology and limb meshes. */
 export function prepareEggModel(
   root: THREE.Object3D,
@@ -120,6 +147,9 @@ export function prepareEggModel(
   shell.scale.set(1, 1, 1);
   pos.needsUpdate = true;
   g.computeVertexNormals();
+  // groundCharacter trusts a cached bbox; refresh after the remap or the
+  // pre-remap Shell extent floats the feet above the shared floor.
+  g.computeBoundingBox();
   g.computeBoundingSphere();
   const fillet = (
     name: string,
