@@ -148,6 +148,8 @@ class Channel {
     // Buffer ahead so a press gives sound quickly; the file streams.
     created.preload = "auto";
     const next = () => {
+      this.playing = false;
+      emit();
       this.trackIndex = (this.trackIndex + 1) % this.tracks.length;
       created.src = this.tracks[this.trackIndex];
       void created.play().catch((error: unknown) => this.playFailed(error));
@@ -181,6 +183,7 @@ class Channel {
   /** Nothing loads: the key turns off. */
   private refused(): void {
     this.stopFade();
+    this.playing = false;
     this.audible = false;
     this.waiting = false;
     this.wanted = false;
@@ -194,6 +197,7 @@ class Channel {
       return;
     }
     this.stopFade();
+    this.playing = false;
     this.audible = false;
     this.waiting = true;
     armFirstGesture();

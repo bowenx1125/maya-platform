@@ -85,6 +85,77 @@ afterEach(() => {
 });
 
 describe("student music key", () => {
+  describe.each(["expanded", "collapsed", "mobile"])(
+    "%s playback animation",
+    (layout) => {
+      function mountKey() {
+        if (layout === "collapsed") {
+          window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "1");
+        }
+        if (layout === "mobile") {
+          vi.stubGlobal("matchMedia", () => ({
+            matches: true,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+          }));
+        }
+        render(<AppShell role="student">Content</AppShell>);
+        if (layout === "mobile") {
+          fireEvent.click(
+            screen.getByRole("button", { name: "Expand sidebar" }),
+          );
+        }
+        return screen.getByRole("button", { name: "Play music" });
+      }
+
+      function expectAnimation(button: HTMLElement, playing: boolean) {
+        expect(button.hasAttribute("data-playing")).toBe(playing);
+        expect(button.className.includes("[&_svg]:animate-[music-hop_")).toBe(
+          playing,
+        );
+        if (playing) {
+          expect(button.className).toContain(
+            "motion-reduce:[&_svg]:animate-none",
+          );
+        }
+      }
+
+      it("waits for real playing, stops on pause/end/error, and restarts with the next playing event", async () => {
+        const button = mountKey();
+        expectAnimation(button, false);
+        expect(musicStateForTests("workspace").audio).toBeNull();
+        await act(async () => fireEvent.click(button));
+        const audio = musicStateForTests("workspace").audio!;
+        expect(button.getAttribute("aria-pressed")).toBe("true");
+        expectAnimation(button, false);
+        for (const event of ["pause", "ended", "error"] as const) {
+          fireEvent.playing(audio);
+          expectAnimation(button, true);
+          fireEvent(audio, new Event(event));
+          expectAnimation(button, false);
+        }
+      });
+
+      it("stays still while autoplay is blocked, then animates only after playback starts", async () => {
+        vi.mocked(HTMLMediaElement.prototype.play).mockRejectedValueOnce(
+          Object.assign(new Error("gesture required"), {
+            name: "NotAllowedError",
+          }),
+        );
+        const button = mountKey();
+        await act(async () => fireEvent.click(button));
+        expect(musicStateForTests("workspace").waiting).toBe(true);
+        expectAnimation(button, false);
+        await act(async () => fireEvent.click(button));
+        expectAnimation(button, false);
+        fireEvent.playing(musicStateForTests("workspace").audio!);
+        expectAnimation(button, true);
+        fireEvent.click(button);
+        expectAnimation(button, false);
+      });
+    },
+  );
+
   it("lets the expanded capsule's music segment receive clicks through its moving frame", () => {
     render(<AppShell role="student">Content</AppShell>);
     const button = screen.getByRole("button", { name: "Play music" });

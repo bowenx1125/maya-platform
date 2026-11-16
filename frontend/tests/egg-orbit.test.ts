@@ -30,7 +30,9 @@ describe("egg preview orbit yaw", () => {
       expect(Math.sign(screenX(yaw) - screenX(0))).toBe(Math.sign(dx));
       const velocity = (yaw - 0) / 0.1;
       const released = eggOrbitYawAfterInertia(yaw, velocity, 0.05, false);
-      expect(Math.sign(screenX(released.yaw) - screenX(yaw))).toBe(Math.sign(dx));
+      expect(Math.sign(screenX(released.yaw) - screenX(yaw))).toBe(
+        Math.sign(dx),
+      );
     },
   );
 
