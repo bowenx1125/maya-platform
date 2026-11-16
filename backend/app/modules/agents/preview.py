@@ -17,6 +17,7 @@ from app.modules.agents.markdown import markdown_hash
 from app.modules.agents.preview_provider import preview_reply
 from app.modules.agents.readiness import ISSUE_MESSAGES
 from app.modules.agents.schemas import AgentPreviewRequest, AgentPreviewResponse
+from app.modules.agents.tone import extract_tone
 from app.modules.auth.service import AuthContext
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
 from app.modules.debates.generation.retrieval import RAGRetrievalError
@@ -175,11 +176,20 @@ def preview_agent(
         voice = resolve_effective_voice_profile(db, voice_id, group_id, settings, owner_id)
         if voice.profile is not None and not voice.fallback_active:
             try:
+                tone = extract_tone(
+                    payload.agent_md,
+                    fallback=settings.debate_tts_instruction,
+                )
+                synthesize_kwargs: dict[str, object] = {
+                    "language": "auto",
+                    "target_model_key": voice.profile.target_model_key,
+                }
+                if tone:
+                    synthesize_kwargs["voice_params"] = {"instruction": tone}
                 output = tts_provider(settings).synthesize(
                     answer,
                     _profile_external_id(voice.profile, settings),
-                    language="auto",
-                    target_model_key=voice.profile.target_model_key,
+                    **synthesize_kwargs,  # type: ignore[arg-type]
                 )
                 audio = base64.b64encode(read_pcm16_wav_bytes(output.audio_bytes)).decode("ascii")
             except (

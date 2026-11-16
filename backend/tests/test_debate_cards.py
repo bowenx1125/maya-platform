@@ -777,7 +777,7 @@ def test_a_ready_card_voice_line_replaces_the_debate_instruction() -> None:
         **base,
         "instruction": CARD["voice_style"],
     }
-    # No voice line, no ready card, or an unreadable card: the Debate's values stay.
+    # No voice line and no AGENT.md Tone: the Debate's values stay.
     silent = json.dumps({**CARD, "voice_style": None})
     for status, stored in (
         ("ready", silent),
@@ -788,6 +788,16 @@ def test_a_ready_card_voice_line_replaces_the_debate_instruction() -> None:
     ):
         assert cards.voice_params_with_card(base, status, stored) == base
     assert base["instruction"] == "Everyone sounds formal."
+
+
+def test_agent_md_tone_fills_missing_card_voice_line() -> None:
+    base = {"rate": 1.0, "instruction": "Everyone sounds formal.", "seed": None}
+    silent = json.dumps({**CARD, "voice_style": None})
+    md = "# Ada\n\n## Speaking style\n\n- Tone: Crisp debate finalist\n"
+    assert cards.voice_params_with_card(base, "ready", silent, agent_md=md) == {
+        **base,
+        "instruction": "Crisp debate finalist",
+    }
 
 
 def test_a_host_without_the_participant_table_voices_as_before() -> None:

@@ -2958,13 +2958,20 @@ export class PlatformApi {
     });
   }
 
-  async createVoicePreview(profileId: string): Promise<PlaybackResource> {
+  async createVoicePreview(
+    profileId: string,
+    instruction?: string | null,
+  ): Promise<PlaybackResource> {
     return unwrap(
       await this.client.POST("/voice-profiles/{voice_profile_id}/preview", {
         params: {
           path: { voice_profile_id: profileId },
           header: { "X-CSRF-Token": this.csrfToken ?? "" },
         },
+        body:
+          instruction && instruction.trim()
+            ? { instruction: instruction.trim() }
+            : {},
       }),
     );
   }

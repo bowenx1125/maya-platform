@@ -1386,13 +1386,16 @@ def create_voice_preview(
     profile_id: str,
     settings: Settings,
     *,
+    instruction: str | None = None,
     provider: TTSProvider | None = None,
 ) -> PlaybackResource:
     """Compatibility export for the disposable preview boundary."""
 
     from app.modules.voices.preview import create_voice_preview as implementation
 
-    return implementation(db, context, profile_id, settings, provider=provider)
+    return implementation(
+        db, context, profile_id, settings, instruction=instruction, provider=provider
+    )
 
 
 def read_pcm16_wav_bytes(raw: bytes) -> bytes:

@@ -2522,12 +2522,53 @@ dd {
   }
 }
 
+/* Music on: Stomp Line (#436 option C). Odd/even scholars alternate. */
+.academy-mascots[data-music="on"]
+  .academy-scholar:nth-child(odd)
+  .academy-jelly {
+  animation: academy-stomp-line 0.48s steps(2, end) infinite;
+}
+.academy-mascots[data-music="on"]
+  .academy-scholar:nth-child(even)
+  .academy-jelly {
+  animation: academy-stomp-line-alt 0.48s steps(2, end) infinite;
+}
+
+@keyframes academy-stomp-line {
+  0%,
+  100% {
+    translate: 0 0;
+    scale: 1.12 0.88;
+    rotate: -2deg;
+  }
+  50% {
+    translate: 0 -14px;
+    scale: 0.9 1.12;
+    rotate: 3deg;
+  }
+}
+
+@keyframes academy-stomp-line-alt {
+  0%,
+  100% {
+    translate: 0 -14px;
+    scale: 0.9 1.12;
+    rotate: 3deg;
+  }
+  50% {
+    translate: 0 0;
+    scale: 1.12 0.88;
+    rotate: -2deg;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .academy-scholar,
   .academy-jelly,
   .academy-wave-arm,
   .academy-mascots[data-mood] .academy-jelly,
-  .academy-mascots[data-mood] .academy-wave-arm {
+  .academy-mascots[data-mood] .academy-wave-arm,
+  .academy-mascots[data-music="on"] .academy-scholar .academy-jelly {
     transition: none;
     animation: none;
   }
