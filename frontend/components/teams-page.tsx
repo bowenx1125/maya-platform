@@ -119,6 +119,9 @@ function TeamPolaroid({
   const t = useT();
   const faces = teamFaces(team);
   const isPublic = team.visibility === "public";
+  const sticker = isPublic
+    ? t(team.is_teacher_owned ? "teacherOption" : "publicOption")
+    : t("privateOption");
   return (
     <li
       className={cn(POLAROID, LIST_CARD_LIFT, "min-w-0")}
@@ -158,7 +161,7 @@ function TeamPolaroid({
                 isPublic ? "bg-[#22C55E]" : "bg-[#E5E7EB]",
               )}
             >
-              {t(isPublic ? "publicOption" : "privateOption")}
+              {sticker}
             </span>
           </span>
         </span>

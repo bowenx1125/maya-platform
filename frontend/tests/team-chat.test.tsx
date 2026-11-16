@@ -786,6 +786,7 @@ describe("Studyform Team cards", () => {
     );
 
     await screen.findByRole("heading", { name: "Teams" });
+    expect(state.api.teams).toHaveBeenCalledWith("course", "group-1");
     expect(
       screen
         .getByRole("link", { name: /Course Dialogue Team/ })

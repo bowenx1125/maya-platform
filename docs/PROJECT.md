@@ -130,3 +130,6 @@ Nov16 #449 DRAFT:egg speak-yaw;list End no confirm;mouth=audioPlaying;Preview dr
 Merge inputs (#449 Phase A): caacc46f193e6462c8bdc1ce305aac37c121fcdc + origin/main 158c4563836a378fb09d7d25ecc1c92005c2f139. Docs conflict resolved; FE/static gates pending;0 calls/deploy.
 
 Nov17 #451 integration:audited head c724562a6b0e2a7babd60f553de6e00289720f6f + origin/main c3506fe6f86799d37d1b1c8c44a9b4019faee52f. Docs-only conflict kept both histories;code merged without conflicts;music-fix files unchanged.0 calls/deploy.
+## Nov16 student visibility (teacher Public)
+
+Students see/open/single-chat teacher Public Agents; edit/delete stay owner/course-teacher (groupmate blocked for teacher-owned). Teacher Public Teams (personal/group) usable course-wide; student Teams stay group-scoped with own/personal always kept. Optional `is_teacher_owned`; sticker Teacher. No migration. Targeted pytest/vitest/static/build pass; 0 calls/deploy.

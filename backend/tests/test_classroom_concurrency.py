@@ -81,8 +81,7 @@ def _student(
     csrf = session["csrf_token"]
     user_id = session["user"]["id"]
     headers = {"X-CSRF-Token": csrf}
-    # Students reach teachers' public Agents only through Teams (#182), so each
-    # student builds the Team from Agents of their own.
+    # Each concurrent student builds a Team from Agents of their own.
     members = [
         _make_agent_version(
             database, owner_id=user_id, name=f"{username} agent {n}", visibility="private"

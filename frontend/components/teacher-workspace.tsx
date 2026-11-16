@@ -183,7 +183,9 @@ export function TeacherDashboard() {
                 visibility={agent.visibility}
                 visibilityLabel={t(
                   agent.visibility === "public"
-                    ? "publicOption"
+                    ? agent.is_teacher_owned
+                      ? "teacherOption"
+                      : "publicOption"
                     : "privateOption",
                 )}
                 mascot={agentMascot(agent.id, undefined)}
@@ -227,7 +229,11 @@ function PublishedAgentCard({
       pending={hasUnpublishedWork}
       visibility={item.agent.visibility}
       visibilityLabel={t(
-        item.agent.visibility === "public" ? "publicOption" : "privateOption",
+        item.agent.visibility === "public"
+          ? item.agent.is_teacher_owned
+            ? "teacherOption"
+            : "publicOption"
+          : "privateOption",
       )}
       mascot={agentMascot(
         item.agent.id,
@@ -501,6 +507,7 @@ export function TeacherStudyformWorkspace({
                   label={item.current_version.version_label}
                   pending={false}
                   visibility={item.agent.visibility}
+                  isTeacherOwned={item.agent.is_teacher_owned === true}
                   deleting={deletingId !== null}
                   deleteLabel={t("deleteAgent")}
                   onDelete={
@@ -529,6 +536,7 @@ export function TeacherStudyformWorkspace({
                     label={label}
                     pending={false}
                     visibility={agent.visibility}
+                    isTeacherOwned={agent.is_teacher_owned === true}
                     deleting={deletingId !== null}
                     deleteLabel={t("deleteAgent")}
                     onDelete={

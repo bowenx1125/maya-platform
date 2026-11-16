@@ -257,6 +257,7 @@ export function StudentDashboard() {
                 label={item.current_version.version_label}
                 pending={false}
                 visibility={item.agent.visibility}
+                isTeacherOwned={item.agent.is_teacher_owned === true}
                 deleteLabel={t("deleteAgent")}
               />
             ))}
@@ -523,18 +524,12 @@ function GroupWorkspaceSession({
         const courseRequest = groupRequest.then((nextGroup) =>
           Promise.all([
             typeof api.teams === "function"
-              ? // A teacher looking round the group asks for this group's
-                // Teams, its members' private ones included.
-                (() => {
-                  const teamGroup = teacherCourseIds.includes(
-                    nextGroup.course_id,
-                  )
-                    ? groupId
-                    : undefined;
-                  return read("teams", [nextGroup.course_id, teamGroup], () =>
-                    api.teams(nextGroup.course_id, teamGroup),
-                  );
-                })()
+              ? // Students and visiting teachers both scope the list to this
+                // group; the server still includes own Teams and teacher
+                // Public Teams so the group filter never hides those.
+                read("teams", [nextGroup.course_id, groupId], () =>
+                  api.teams(nextGroup.course_id, groupId),
+                )
               : Promise.resolve([]),
             typeof api.chatAgents === "function"
               ? read("chatAgents", [nextGroup.course_id], () =>
@@ -810,6 +805,7 @@ function GroupWorkspaceSession({
                   label={item.current_version.version_label}
                   pending={false}
                   visibility={item.agent.visibility}
+                  isTeacherOwned={item.agent.is_teacher_owned === true}
                   deleteLabel={t("deleteAgent")}
                 />
               ))}
@@ -831,6 +827,7 @@ function GroupWorkspaceSession({
                   label={item.current_version.version_label}
                   pending={false}
                   visibility={item.agent.visibility}
+                  isTeacherOwned={item.agent.is_teacher_owned === true}
                   deleteLabel={t("deleteAgent")}
                 />
               ))}
@@ -898,6 +895,7 @@ function GroupAgentRow({
       label={bubble.label}
       pending={bubble.pending}
       visibility={agent.visibility}
+      isTeacherOwned={agent.is_teacher_owned === true}
       deleting={deleting}
       deleteLabel={t("deleteAgent")}
       onDelete={canDelete ? onDelete : undefined}

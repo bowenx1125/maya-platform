@@ -22,6 +22,7 @@ from app.modules.teams.publication_access import (
     live_teacher_publication,
     log_team_chat_refused,
     teacher_uses_student_public_team,
+    uses_teacher_public_team,
 )
 from app.modules.workspace.models import Conversation
 
@@ -139,18 +140,25 @@ def _read_authorized_provenance(
                 raise not_found()
             # A course teacher using a student's public Team (2026-10-19)
             # follows the Team recheck: checked as the teacher, no publication.
+            # Teacher-owned Public Teams skip the group fence the same way.
             teacher_use = teacher_uses_student_public_team(db, user_id, team)
+            teacher_public = uses_teacher_public_team(db, user_id, team)
             if (
                 team.group_id is not None
                 and not teacher_use
+                and not teacher_public
                 and scoped_group_role_for_user(db, user_id, team.group_id) != "student"
             ):
                 log_team_chat_refused(
                     team, user_id, "not_in_team_group", check="learning_provenance"
                 )
-                raise not_found()
+                raise not_found(
+                    "This Team belongs to another group. Open a Team from your "
+                    "own group, a teacher Public Team, or one you own."
+                )
             if (
                 not teacher_use
+                and not teacher_public
                 and team.owner_user_id != user_id
                 and (
                     team.ownership_scope != "group"
@@ -167,7 +175,10 @@ def _read_authorized_provenance(
                     "not_owner_and_not_public_to_caller",
                     check="learning_provenance",
                 )
-                raise not_found()
+                raise not_found(
+                    "This Team is not available to you. Use a Team you own, a "
+                    "Public Team in your group, or a teacher Public Team."
+                )
         else:
             if conversation.origin != "published_course_team" or not conversation.publication_id:
                 raise not_found()

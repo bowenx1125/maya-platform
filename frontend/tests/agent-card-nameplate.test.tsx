@@ -47,6 +47,16 @@ describe("Agent card information by surface (proposals/37)", () => {
     expect(screen.getByText("Last edited by: Maya")).toBeTruthy();
   });
 
+  it("reads Teacher instead of Public on a teacher-owned Public Agent", () => {
+    render(
+      <ul>
+        <VersionTile variant="list" {...tile} isTeacherOwned />
+      </ul>,
+    );
+    expect(screen.getByText("Teacher")).toBeTruthy();
+    expect(screen.queryByText("Public")).toBeNull();
+  });
+
   it("omits Last edited by on the home card but keeps the group", () => {
     render(
       <ul>

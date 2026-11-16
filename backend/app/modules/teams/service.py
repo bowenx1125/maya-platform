@@ -33,7 +33,6 @@ from app.modules.knowledge.services import (
     course_member_role,
     observes_group,
     scoped_group_role_for_user,
-    teacher_public_agent_hidden_from,
 )
 from app.modules.knowledge_sets import service as knowledge_set_service
 from app.modules.knowledge_sets.models import (
@@ -54,6 +53,8 @@ from app.modules.teams.publication_access import (
     live_teacher_publication,
     log_team_chat_refused,
     teacher_uses_student_public_team,
+    team_owner_is_teacher,
+    uses_teacher_public_team,
 )
 from app.modules.teams.schemas import (
     CreateTeamRequest,
@@ -218,12 +219,11 @@ def _validate_members(
             )
         seen_agent_ids.add(agent.id)
         role = _agent_workspace_role(db, actor, agent)
-        if (
-            role is None
-            or not can_read_version(db, version, agent, role, context=actor)
-            or teacher_public_agent_hidden_from(db, actor, agent)
-        ):
-            raise not_found("An Agent version is not available to the current user.")
+        if role is None or not can_read_version(db, version, agent, role, context=actor):
+            raise not_found(
+                "An Agent version is not available to the current user. "
+                "Choose an Agent you can open, or ask its publisher to make it Public."
+            )
         if group_id is not None and agent.group_id != group_id:
             raise not_found("A group Team can only contain Agents from that group.")
         # Other members can read a public Team's roster, so a private Agent
@@ -842,6 +842,7 @@ def _team_summary(
         member_count=len(members),
         can_edit=team.owner_user_id == user_id,
         can_delete=_can_delete_team(db, user_id, team),
+        is_teacher_owned=team_owner_is_teacher(db, team),
         updated_at=team.updated_at,
         last_edited_by_name=owner_name,
         members=_face_members(members),
@@ -1241,6 +1242,21 @@ def delete_team(db: Session, actor: AuthContext, team_id: str) -> None:
     hard_delete_team(db, team)
 
 
+def _team_on_group_page(db: Session, team: Team, user_id: str, group_id: str) -> bool:
+    """Teams shown on a group's Studyform page.
+
+    That group's Teams, the caller's own Teams (including personal), and every
+    teacher-owned Public Team in the course. Never drops the caller's own
+    items behind a group filter.
+    """
+
+    if team.group_id == group_id:
+        return True
+    if team.owner_user_id == user_id:
+        return True
+    return team.visibility == "public" and team_owner_is_teacher(db, team)
+
+
 def list_course_teams(
     db: Session, actor: AuthContext, course_id: str, group_id: str | None = None
 ) -> list[TeamSummary]:
@@ -1248,17 +1264,21 @@ def list_course_teams(
 
     Only the group listing adds the private Teams of a group a teacher has
     entered: the course listing feeds Chatform and Memory, which would offer
-    a Team the teacher may read but not talk to.
+    a Team the teacher may read but not talk to. A group listing also keeps
+    teacher-owned Public Teams and the caller's own Teams (including personal).
     """
 
     user_id = actor.user.id
     _course_scope(db, user_id, course_id)
     query = select(Team).where(Team.course_id == course_id, Team.deleted_at.is_(None))
-    if group_id is not None:
-        query = query.where(Team.group_id == group_id)
     rows = db.scalars(query.order_by(Team.updated_at.desc(), Team.id)).all()
     readable = can_view_team if group_id is not None else can_read_team
-    shown = [team for team in rows if readable(db, user_id, team)]
+    shown = [
+        team
+        for team in rows
+        if readable(db, user_id, team)
+        and (group_id is None or _team_on_group_page(db, team, user_id, group_id))
+    ]
     owner_ids = {team.owner_user_id for team in shown if team.owner_user_id}
     owner_names: dict[str, str] = {}
     if owner_ids:
@@ -1687,13 +1707,20 @@ def _resolve_frozen_chat_selection(
         # publication: resource_owner_id below stays the teacher, so a member
         # or shared Set the teacher may not read is refused, never borrowed.
         pass
+    elif uses_teacher_public_team(db, user_id, team):
+        # Teacher-owned Public Teams (personal or group) are usable by every
+        # course member; do not refuse with not_in_team_group.
+        pass
     else:
         if team.group_id is not None:
             try:
                 _can_access_group_scope(db, user_id, team.group_id, team.course_id)
             except PlatformError:
                 log_team_chat_refused(team, user_id, "not_in_team_group", check="team_recheck")
-                raise
+                raise not_found(
+                    "This Team belongs to another group. Open a Team from your "
+                    "own group, a teacher Public Team, or one you own."
+                ) from None
         if team.owner_user_id != user_id and (
             team.ownership_scope != "group"
             or team.visibility != "public"
@@ -1712,7 +1739,10 @@ def _resolve_frozen_chat_selection(
                 log_team_chat_refused(
                     team, user_id, "not_owner_and_not_public_to_caller", check="team_recheck"
                 )
-                raise not_found()
+                raise not_found(
+                    "This Team is not available to you. Use a Team you own, a "
+                    "Public Team in your group, or a teacher Public Team."
+                )
 
     current_members = _member_rows(db, version.id)
     frozen_members = {member.binding_id: member for member in frozen_selection.members}

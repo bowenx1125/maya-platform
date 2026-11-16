@@ -66,6 +66,36 @@ def live_teacher_publication(
     )
 
 
+def team_owner_is_teacher(db: Session, team: Team) -> bool:
+    """True when the Team's owner holds the course teacher role.
+
+    Any course teacher counts; never keyed to a single account.
+    """
+
+    if team.owner_user_id is None:
+        return False
+    return course_member_role(db, team.owner_user_id, team.course_id) == "teacher"
+
+
+def uses_teacher_public_team(db: Session, user_id: str, team: Team) -> bool:
+    """A course member chatting with a teacher's Public Team (personal or group).
+
+    Students and teachers may use every teacher-owned Public Team in the
+    course; group membership is not required. Editing stays with the owner.
+    """
+
+    if (
+        team.deleted_at is not None
+        or team.visibility != "public"
+        or team.owner_user_id is None
+        or team.owner_user_id == user_id
+    ):
+        return False
+    if not team_owner_is_teacher(db, team):
+        return False
+    return course_member_role(db, user_id, team.course_id) in {"student", "teacher"}
+
+
 def teacher_uses_student_public_team(db: Session, user_id: str, team: Team) -> bool:
     """A course teacher chatting with a student's public Team.
 
@@ -99,9 +129,23 @@ def chat_team_open_to_non_owner(
     team_authorization_epoch: int | None,
 ) -> bool:
     """True when someone other than the Team owner may send in an ordinary
-    Team Chat with this frozen Team version: a teacher's live public Team, or
-    a student's public Team used by a course teacher."""
+    Team Chat with this frozen Team version: a teacher's Public Team, or a
+    student's public Team used by a course teacher."""
 
+    if team_id is None or team_version_id is None or team_authorization_epoch is None:
+        return False
+    team = db.get(Team, team_id)
+    version = db.get(TeamVersion, team_version_id)
+    if (
+        team is None
+        or version is None
+        or version.team_id != team.id
+        or team.authorization_epoch != team_authorization_epoch
+        or version.authorization_epoch != team_authorization_epoch
+    ):
+        return False
+    if uses_teacher_public_team(db, actor_user_id, team):
+        return True
     if chat_team_is_live_teacher_public(
         db,
         team_id=team_id,
@@ -109,18 +153,7 @@ def chat_team_open_to_non_owner(
         team_authorization_epoch=team_authorization_epoch,
     ):
         return True
-    if team_id is None or team_version_id is None or team_authorization_epoch is None:
-        return False
-    team = db.get(Team, team_id)
-    version = db.get(TeamVersion, team_version_id)
-    return (
-        team is not None
-        and version is not None
-        and version.team_id == team.id
-        and team.authorization_epoch == team_authorization_epoch
-        and version.authorization_epoch == team_authorization_epoch
-        and teacher_uses_student_public_team(db, actor_user_id, team)
-    )
+    return teacher_uses_student_public_team(db, actor_user_id, team)
 
 
 def chat_team_is_live_teacher_public(

@@ -32,6 +32,8 @@ export type ChatTargetTeam = {
   display_name: string;
   current_version_seq?: number;
   visibility?: "private" | "public";
+  /** Public sticker reads Teacher when the owner is a course teacher. */
+  is_teacher_owned?: boolean | null;
   /** Used by Studyform teamFaces when members are absent. */
   member_count?: number;
   /** Prefer member Agent mascots (Studyform Teams list). */
@@ -177,7 +179,7 @@ export function ChatTargetPicker({
               >
                 {team.visibility === "private"
                   ? t("privateOption")
-                  : t("publicOption")}
+                  : t(team.is_teacher_owned ? "teacherOption" : "publicOption")}
               </span>
             ) : null}
             <span className={cn(styles.pickBadge, styles.pickBadgeMuted)}>

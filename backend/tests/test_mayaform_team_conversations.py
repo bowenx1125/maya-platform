@@ -577,8 +577,6 @@ def test_a_chat_says_its_publisher_deleted_the_agent_or_a_team_member(
     agent_id, version_id = _make_agent_version(
         database, owner_id=MAYA_ID, name="Shared tutor", visibility="public"
     )
-    # Students no longer open single chats with a teacher's public Agent (#182);
-    # this is a chat opened before that rule.
     from tests.test_studyform_teacher_public_agents import _legacy_single_chat
 
     single_id = _legacy_single_chat(database, version_id, BOWEN_ID)

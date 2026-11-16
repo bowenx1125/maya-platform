@@ -96,6 +96,9 @@ class AgentSummary(BaseModel):
     # Creator, same-group student (public only) or course teacher (public only).
     can_delete: bool | None = None
     is_creator: bool | None = None
+    # Owner holds CourseMember.role == teacher in this course. Optional so
+    # older clients keep working; the Studyform sticker reads "Teacher".
+    is_teacher_owned: bool | None = None
     last_edited_by_name: str | None = None
     last_edited_at: datetime | None = None
     # Label of the current published version (e.g. "1.2"), for the open
