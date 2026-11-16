@@ -33,7 +33,10 @@ def save_avatar(
     db: Session, agent: Agent, version: AgentVersion, payload: SaveAvatarRequest
 ) -> AgentVersion:
     if agent.status != "active" or agent.deleted_at is not None:
-        raise invalid_state("The Agent is unavailable.")
+        raise invalid_state(
+            "This Agent was deleted or deactivated, so it can't be saved. "
+            "Go back to Agents and open an active one."
+        )
     expected = (
         str(payload.expected_published_version_id)
         if payload.expected_published_version_id
@@ -54,7 +57,9 @@ def save_avatar(
         previous = validate_avatar_config(json.loads(version.avatar_config_json))
     except (AvatarConfigValidationError, ValueError) as exc:
         raise validation_failure(
-            "The avatar configuration is invalid.", code="avatar_missing"
+            "Your drawing couldn't be saved because it is too large or damaged. "
+            "Undo some strokes or redraw it, then save again.",
+            code="avatar_missing",
         ) from exc
     if (
         config.drawing is not None

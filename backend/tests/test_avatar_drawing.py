@@ -315,3 +315,54 @@ def test_published_save_rejects_a_separate_draft_without_partial_changes(app_fac
             ]
             == vid
         )
+
+
+@pytest.mark.parametrize("case", ["invalid_config", "archived", "deleted"])
+def test_avatar_save_exact_error_copy(app_factory: Any, case: str) -> None:
+    from datetime import UTC, datetime
+
+    from app.core.errors import PlatformError
+    from app.core.models import AgentVersion
+    from app.modules.agents.avatar_save import save_avatar
+    from app.modules.agents.schemas import SaveAvatarRequest
+
+    app, database, _ = app_factory()
+    with TestClient(app):
+        vid = published_version(database)
+        with database.session() as db:
+            version = db.get(AgentVersion, vid)
+            assert version is not None
+            agent = db.get(Agent, version.agent_id)
+            assert agent is not None
+            if case == "archived":
+                agent.status = "archived"
+            elif case == "deleted":
+                agent.deleted_at = datetime.now(UTC)
+            else:
+                version.avatar_config_json = "{}"
+            with pytest.raises(PlatformError) as caught:
+                save_avatar(
+                    db,
+                    agent,
+                    version,
+                    SaveAvatarRequest(
+                        expected_revision=version.revision,
+                        expected_published_version_id=vid,
+                        avatar_config=config(),
+                    ),
+                )
+            error = caught.value
+            if case == "invalid_config":
+                assert (error.code, error.status_code, error.message) == (
+                    "avatar_missing",
+                    422,
+                    "Your drawing couldn't be saved because it is too large or damaged. "
+                    "Undo some strokes or redraw it, then save again.",
+                )
+            else:
+                assert (error.code, error.status_code, error.message) == (
+                    "invalid_state",
+                    409,
+                    "This Agent was deleted or deactivated, so it can't be saved. "
+                    "Go back to Agents and open an active one.",
+                )
