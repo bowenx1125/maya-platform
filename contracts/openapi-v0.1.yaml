@@ -30,6 +30,54 @@ tags:
 - name: Telemetry
 - name: Classroom Quiz
 paths:
+  /agent-versions/{version_id}/debate-card:
+    post:
+      operationId: checkAgentDebateCard
+      parameters:
+      - in: path
+        name: version_id
+        required: true
+        schema:
+          format: uuid
+          title: Version Id
+          type: string
+      - in: header
+        name: X-CSRF-Token
+        required: true
+        schema:
+          minLength: 32
+          title: X-Csrf-Token
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentCardRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentCardResponse'
+          description: Stored card, compiled only for changed AGENT.md.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Version not found.
+        '422':
+          description: Invalid card request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - sessionCookie: []
+      summary: Check Agent Debate Card
+      tags:
+      - Agents
   /conversations:
     get:
       operationId: listConversations
@@ -6558,6 +6606,52 @@ components:
           schema:
             $ref: '#/components/schemas/AdvancedPlayback'
   schemas:
+    AgentCardResponse:
+      additionalProperties: false
+      properties:
+        card:
+          anyOf:
+          - $ref: '#/components/schemas/DebateCard'
+          - type: 'null'
+        card_status:
+          enum:
+          - compiling
+          - ready
+          - fallback
+          title: Card Status
+          type: string
+        card_teacher_notice:
+          title: Card Teacher Notice
+          type:
+          - string
+          - 'null'
+        card_teacher_reason:
+          enum:
+          - compile_timeout
+          - format_invalid
+          - card_too_long
+          - service_busy
+          - config_problem
+          - other
+          - null
+          title: Card Teacher Reason
+          type:
+          - string
+          - 'null'
+      required:
+      - card_status
+      title: AgentCardResponse
+      type: object
+    AgentCardRequest:
+      additionalProperties: false
+      properties:
+        agent_md:
+          title: Agent Md
+          type:
+          - string
+          - 'null'
+      title: AgentCardRequest
+      type: object
     AgentPreviewRequest:
       additionalProperties: false
       properties:

@@ -40,7 +40,7 @@ from app.modules.agents.tone import extract_card_tone
 from app.modules.debates.generation.four_round import speech_units
 from app.modules.debates.generation.prompt_budget import preflight_prompt_budget
 from app.modules.debates.models import DebateParticipant
-from app.modules.debates.owned_copies import frozen_owner
+from app.modules.debates.owned_copies import FrozenOwner, frozen_owner
 from app.modules.debates.schemas import DebateCardDropReason
 from app.modules.knowledge.providers.product_publication import require_exact_confirmation
 from app.providers.control import (
@@ -154,6 +154,7 @@ class CardOutcome:
     status: Literal["ready", "fallback"]
     card: Mapping[str, object] | None = None
     safe_error_code: str | None = None
+    salvaged: bool = False
 
 
 def _canonical(value: object) -> str:
@@ -673,7 +674,7 @@ def _fallback(row: Any, code: str, pointer: str = "") -> CardOutcome:
     return CardOutcome("fallback", safe_error_code=code)
 
 
-def _response_card(response: object, language: str) -> tuple[dict[str, object], str]:
+def _response_card_details(response: object, language: str) -> tuple[dict[str, object], str, bool]:
     status = getattr(response, "status_code", None)
     reader = getattr(response, "json", None)
     if status != 200 or not callable(reader):
@@ -695,7 +696,13 @@ def _response_card(response: object, language: str) -> tuple[dict[str, object], 
         raise
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
         raise CardRejected("debate_card_invalid", "/choices/0/message/content") from exc
-    return validate_card(correct_card_payload(value), language), _sha256(content)
+    card = validate_card(correct_card_payload(value), language)
+    return card, _sha256(content), card != value
+
+
+def _response_card(response: object, language: str) -> tuple[dict[str, object], str]:
+    card, digest, _salvaged = _response_card_details(response, language)
+    return card, digest
 
 
 def compile_card_with_provider(
@@ -709,8 +716,35 @@ def compile_card_with_provider(
 ) -> CardOutcome:
     """One authorized, ledgered card request; any failure is a fallback, never a retry."""
 
-    language = "zh" if str(debate.output_language) == "zh" else "en"
-    owner = frozen_owner(db, row)
+    return compile_card_core(
+        db,
+        row=row,
+        owner=frozen_owner(db, row),
+        language="zh" if str(debate.output_language) == "zh" else "en",
+        scope_id=str(debate.id),
+        logical_item_id=str(row.id),
+        build_identity={"debate_id": str(debate.id), "participant_id": str(row.id)},
+        adapter=adapter,
+        policy_hash=policy_hash,
+        settings=settings,
+    )
+
+
+def compile_card_core(
+    db: Session,
+    *,
+    row: Any,
+    owner: FrozenOwner,
+    language: str,
+    scope_id: str,
+    logical_item_id: str,
+    build_identity: Mapping[str, str],
+    adapter: DashScopeLLMAdapter,
+    policy_hash: str | None,
+    settings: object,
+) -> CardOutcome:
+    """Shared single-attempt provider contract; callers supply immutable ownership."""
+
     if not owner.agent_md.strip():
         return _fallback(row, "debate_card_agent_md_missing")
     repository = ProviderRepository(db)
@@ -783,7 +817,7 @@ def compile_card_with_provider(
     max_tokens = int(budget.input_tokens) + LLM_RESERVED_OUTPUT_TOKEN_CAP
     try:
         manifest = ExportManifestV1(
-            scope_id=str(debate.id),
+            scope_id=scope_id,
             provider_operation=CARD_OPERATION,
             model_key=model_key,
             policy_hash=str(policy_hash),
@@ -791,8 +825,7 @@ def compile_card_with_provider(
                 _canonical(
                     {
                         "version": CARD_PROMPT_VERSION,
-                        "debate_id": str(debate.id),
-                        "participant_id": str(row.id),
+                        **build_identity,
                         "agent_md_hash": markdown_hash(owner.agent_md),
                         "language": language,
                     }
@@ -811,7 +844,7 @@ def compile_card_with_provider(
             max_cost_cny=0.0,
         )
         repository.raise_scope_budget(
-            str(debate.id),
+            scope_id,
             ProviderScopeBudgetV1(
                 max_requests=2_147_483_647,
                 max_total_tokens=9_223_372_036_854_775_807,
@@ -845,9 +878,9 @@ def compile_card_with_provider(
     # (a crash mid-call, or a concurrent preparation) is never resent.
     existing = [
         operation
-        for operation in repository.operations(scope_id=str(debate.id))
+        for operation in repository.operations(scope_id=scope_id)
         if operation.provider_operation == CARD_OPERATION
-        and operation.logical_item_id == str(row.id)
+        and operation.logical_item_id == logical_item_id
     ]
     if existing:
         return _fallback(row, "debate_card_attempt_used")
@@ -856,9 +889,9 @@ def compile_card_with_provider(
         operation = repository.create_prepared(
             ProviderReservationRequestV1(
                 operation_id=str(uuid4()),
-                scope_id=str(debate.id),
+                scope_id=scope_id,
                 provider_operation=CARD_OPERATION,
-                logical_item_id=str(row.id),
+                logical_item_id=logical_item_id,
                 attempt_no=1,
                 request_hash=request_hash,
                 max_tokens=max_tokens,
@@ -914,7 +947,7 @@ def compile_card_with_provider(
             _settle(repository, operation.id, "acceptance_unknown", code)
             return _fallback(row, code, type(exc).__name__)
     try:
-        card, response_hash = _response_card(response, language)
+        card, response_hash, salvaged = _response_card_details(response, language)
     except CardRejected as rejected:
         _settle(repository, operation.id, "failed", rejected.code)
         return _fallback(row, rejected.code, rejected.pointer)
@@ -930,7 +963,7 @@ def compile_card_with_provider(
             operation.id,
             type(exc).__name__,
         )
-    return CardOutcome("ready", card=card)
+    return CardOutcome("ready", card=card, salvaged=salvaged)
 
 
 def _settle(repository: ProviderRepository, operation_id: str, state: str, code: str) -> None:
