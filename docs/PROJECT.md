@@ -125,8 +125,12 @@ Nov16:Student music capsule hover overlay fixed;shared Button/music icon,collaps
 
 Rebased onto `503857fe` (batch2 + Immerse Option C). Ordinary AGENT.md free text (`persona_required=False`); cards prefer salvaged extract; fail-open to original AGENT.md only when compile cannot yield a card; Check-card Ready/Compiling only; Lead-approved fail-open clause in card error copy (too_long unchanged; no separate New notice); no migration (head stays 0093).
 
+Nov17 #452 (0094_agent_debate_cards after0093):Done/upload/publish compile post-commit; Check card stores exact source hash, replaces regex. Snapshot copies terminal Agent card; missing/stale resolve Agent-level before first speech; NULL legacy pinned. Approved fail-open copy unchanged. Bounded retries/restart recovery implemented. Liveness probe refresh fixes duplicate compile; crash fixture uses nonempty source. PG:30 per-Agent tests pass×3;66 Debate copy/card pass;Ruff format/check+mypy pass. No new UI strings. Backfill:`python -m app.cli.backfill_agent_cards --dry-run`.0 real calls/deploy. Integration checkpoints:`d3ee51cb500134788ded3b911380ae7142632606` + main`158c4563836a378fb09d7d25ecc1c92005c2f139` (clean).
+
 Nov16 #449 DRAFT:egg speak-yaw;list End no confirm;mouth=audioPlaying;Preview drag-yaw;stage table removed(+wood/collider).0 calls/deploy.
 
 Merge inputs (#449 Phase A): caacc46f193e6462c8bdc1ce305aac37c121fcdc + origin/main 158c4563836a378fb09d7d25ecc1c92005c2f139. Docs conflict resolved; FE/static gates pending;0 calls/deploy.
 
 Nov17 #451 integration:audited head c724562a6b0e2a7babd60f553de6e00289720f6f + origin/main c3506fe6f86799d37d1b1c8c44a9b4019faee52f. Docs-only conflict kept both histories;code merged without conflicts;music-fix files unchanged.0 calls/deploy.
+
+#452 final main integration: input `88623d68` (checkpoint preserving `d3ee51cb` and main `158c4563`) + `origin/main`=`68715ce9c923fc751038d8d2db926cb87046375a`; only PROJECT.md conflicted, both histories preserved. No PR merge/deploy.

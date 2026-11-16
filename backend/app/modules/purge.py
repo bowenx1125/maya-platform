@@ -37,6 +37,8 @@ Rule = Literal["delete", "null", "protect"]
 
 # Keyed "child.col_a,col_b->parent" with the child's columns sorted.
 REFERENCE_RULES: dict[str, Rule] = {
+    "agent_debate_cards.agent_id->agents": "delete",
+    "agent_debate_cards.agent_version_id->agent_versions": "delete",
     (
         "assessment_course_report_revisions.activity_id,course_id,r"
         "eport_id->assessment_course_reports"

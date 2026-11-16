@@ -56,6 +56,7 @@ const implemented = new Set([
   "listAgentVersions",
   "createNextAgentVersion",
   "getAgentVersion",
+  "checkAgentDebateCard",
   "updateAgentDraft",
   "saveAgentAvatar",
   "downloadAgentMd",
