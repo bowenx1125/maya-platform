@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Batch 4 · #434 Debate tone · mockups</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Lexend:wght@400;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../shared/mock.css" />
+    <style>
+      .check-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 32px;
+        padding: 4px 10px 4px 8px;
+        border: 3px solid #111;
+        border-radius: 999px;
+        background: #fff;
+        box-shadow: 0 4px 0 #111;
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .status {
+        border: 2px solid #111;
+        border-radius: 999px;
+        background: #a3e635;
+        padding: 1px 8px;
+        font-size: 11px;
+      }
+      .voice-album {
+        display: grid;
+        gap: 8px;
+        max-width: 360px;
+        padding: 12px;
+        border: 3px solid #111;
+        border-radius: 14px;
+        background: #faf6ea;
+        box-shadow: 5px 5px 0 #111;
+      }
+      .disc {
+        width: 56px;
+        height: 56px;
+        border-radius: 999px;
+        border: 3px solid #111;
+        background: radial-gradient(circle at 50% 50%, #fff 0 10px, #c4b5fd 11px);
+        box-shadow: 3px 3px 0 #111;
+      }
+      .frame {
+        background: #fff;
+        border: 3px solid #111;
+        border-radius: 16px;
+        padding: 14px;
+        box-shadow: 6px 6px 0 #111;
+      }
+      .shot {
+        display: none;
+      }
+      body[data-shot] .sheet {
+        display: none;
+      }
+      /* shot visibility controlled by BATCH4_SHOT_BOOT */
+    </style>
+  <script id="BATCH4_SHOT_BOOT">(()=>{const s=new URLSearchParams(location.search).get("shot");if(s){document.documentElement.dataset.shot=s;document.addEventListener("DOMContentLoaded",()=>{document.body.dataset.shot=s;for(const el of document.querySelectorAll(".shot")){el.style.display=el.getAttribute("data-id")===s?"block":"none";}const sheet=document.querySelector(".sheet");if(sheet)sheet.style.display="none";});}})();</script></head>
+  <body>
+    <div class="sheet">
+      <h1 class="sheet-title">#434 · Debate card tone</h1>
+      <p class="sheet-sub">
+        Proposal only. Current Check card already has Speaking style (LLM) and
+        Voice / <code>voice_style</code> (TTS instruction override). These options
+        clarify Tone, wire it into debate speech + Voice Preview, and keep
+        existing copy/test ids unless an option explicitly renames a label.
+      </p>
+
+      <div class="row cols-2">
+        <div class="panel">
+          <div class="panel-head">
+            Current · Check card (ready)
+            <span class="tag white">baseline</span>
+          </div>
+          <div class="panel-body">
+            <div class="check-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"
+                  fill="none"
+                  stroke="#111"
+                  stroke-width="2.4"
+                />
+                <circle cx="12" cy="12" r="3" fill="#111" />
+              </svg>
+              Check card
+              <span class="status">Ready</span>
+            </div>
+            <div class="card-check" style="margin-top: 10px">
+              <div class="card-field">
+                <strong>Identity</strong>
+                <div>A civic-minded high-school debater.</div>
+              </div>
+              <div class="card-field">
+                <strong>Position</strong>
+                <div>Schools should keep phones out of class time.</div>
+              </div>
+              <div class="card-field">
+                <strong>Reasoning</strong>
+                <div>Focus · fairness · evidence over slogans</div>
+              </div>
+              <div class="card-field">
+                <strong>Speaking style</strong>
+                <div>Crisp, formal, short sentences.</div>
+              </div>
+              <div class="card-field">
+                <strong>Voice</strong>
+                <div>Firm and measured, like a debate finalist.</div>
+              </div>
+            </div>
+            <p class="note" style="margin-top: 10px">
+              Today: <code>voice_style</code> already overrides debate TTS
+              <code>instruction</code>. Voices library Preview does not send that
+              line.
+            </p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            Current · Voices Preview
+            <span class="tag white">baseline</span>
+          </div>
+          <div class="panel-body">
+            <div class="voice-album">
+              <div style="display: flex; gap: 12px; align-items: center">
+                <div class="disc"></div>
+                <div>
+                  <div style="font-weight: 800">My voice</div>
+                  <div class="note">Ready</div>
+                </div>
+              </div>
+              <button class="btn pink" type="button">Preview</button>
+              <p class="note">
+                Preview uses a rotating sample line only — no card tone / no
+                debate instruction.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="option-label">A · Tone label (rename Voice → Tone)</h2>
+      <div class="row cols-2">
+        <div class="panel">
+          <div class="panel-head">A · Check card <span class="tag">1440</span></div>
+          <div class="panel-body">
+            <div class="frame">
+              <div class="check-btn">
+                Check card <span class="status">Ready</span>
+              </div>
+              <div class="card-check" style="margin-top: 10px">
+                <div class="card-field">
+                  <strong>Identity</strong>
+                  <div>A civic-minded high-school debater.</div>
+                </div>
+                <div class="card-field">
+                  <strong>Speaking style</strong>
+                  <div>Crisp, formal, short sentences.</div>
+                </div>
+                <div class="card-field">
+                  <strong>Tone</strong>
+                  <div>Firm and measured, like a debate finalist.</div>
+                </div>
+              </div>
+              <div class="preview-row" style="margin-top: 12px">
+                <button class="btn lime" type="button">Preview with tone</button>
+                <span class="sticker">same instruction as debate speech</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">A · 390 <span class="tag cyan">mobile</span></div>
+          <div class="panel-body">
+            <div class="viewport short" data-w="390" style="height: auto; padding: 12px">
+              <div class="card-check" style="max-width: none">
+                <div class="card-field">
+                  <strong>Tone</strong>
+                  <div>Firm and measured, like a debate finalist.</div>
+                </div>
+                <button class="btn lime" type="button">Preview with tone</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="option-label">B · Tone sticker field (keep Speaking style + Voice keys)</h2>
+      <div class="row cols-2">
+        <div class="panel">
+          <div class="panel-head">B · Check card <span class="tag">1440</span></div>
+          <div class="panel-body">
+            <div class="frame">
+              <div class="card-check">
+                <div class="card-field">
+                  <strong>Speaking style</strong>
+                  <div>Crisp, formal, short sentences.</div>
+                </div>
+                <div class="tone-chip">
+                  <span class="sticker">Tone</span>
+                  Firm and measured, like a debate finalist.
+                </div>
+                <div class="preview-row">
+                  <button class="btn pink" type="button">Preview</button>
+                  <span class="note">Preview audio uses this Tone line.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">B · 390 <span class="tag cyan">mobile</span></div>
+          <div class="panel-body">
+            <div class="viewport short" data-w="390" style="height: auto; padding: 12px">
+              <div class="tone-chip" style="width: 100%">
+                <span class="sticker">Tone</span>
+                Firm and measured, like a debate finalist.
+              </div>
+              <button class="btn pink" type="button" style="margin-top: 10px">
+                Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="option-label">C · Tone + Preview strip on Check card</h2>
+      <div class="row cols-2">
+        <div class="panel">
+          <div class="panel-head">C · Check card <span class="tag">1440</span></div>
+          <div class="panel-body">
+            <div class="frame">
+              <div class="card-check">
+                <div class="card-field">
+                  <strong>Speaking style</strong>
+                  <div>Crisp, formal, short sentences.</div>
+                </div>
+                <div
+                  style="
+                    display: grid;
+                    gap: 8px;
+                    border: 3px solid #111;
+                    border-radius: 12px;
+                    background: #fff;
+                    padding: 10px;
+                    box-shadow: 4px 4px 0 #111;
+                  "
+                >
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      gap: 8px;
+                      align-items: center;
+                    "
+                  >
+                    <strong style="font-size: 13px">Tone</strong>
+                    <span class="tag pink">TTS</span>
+                  </div>
+                  <div style="font-size: 14px">
+                    Firm and measured, like a debate finalist.
+                  </div>
+                  <div class="preview-row">
+                    <button class="btn lime" type="button">▶ Preview</button>
+                    <span class="note">Uses Tone as instruction</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">C · 390 <span class="tag cyan">mobile</span></div>
+          <div class="panel-body">
+            <div class="viewport short" data-w="390" style="height: auto; padding: 12px">
+              <div
+                style="
+                  border: 3px solid #111;
+                  border-radius: 12px;
+                  background: #fff;
+                  padding: 10px;
+                  box-shadow: 4px 4px 0 #111;
+                "
+              >
+                <strong style="font-size: 13px">Tone</strong>
+                <div style="font-size: 14px; margin: 6px 0 10px">
+                  Firm and measured, like a debate finalist.
+                </div>
+                <button class="btn lime" type="button">▶ Preview</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Isolated shot targets for headless capture -->
+    <section class="shot" data-id="current-1440" id="shot-current-1440">
+      <div class="viewport" data-w="1440" style="height: 520px">
+        <div class="main" style="padding: 28px">
+          <div class="frame" style="max-width: 560px">
+            <div class="check-btn">
+              Check card <span class="status">Ready</span>
+            </div>
+            <div class="card-check" style="margin-top: 12px">
+              <div class="card-field">
+                <strong>Identity</strong>
+                <div>A civic-minded high-school debater.</div>
+              </div>
+              <div class="card-field">
+                <strong>Position</strong>
+                <div>Schools should keep phones out of class time.</div>
+              </div>
+              <div class="card-field">
+                <strong>Speaking style</strong>
+                <div>Crisp, formal, short sentences.</div>
+              </div>
+              <div class="card-field">
+                <strong>Voice</strong>
+                <div>Firm and measured, like a debate finalist.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="shot" data-id="a-1440">
+      <div class="viewport" data-w="1440" style="height: 520px">
+        <div class="main" style="padding: 28px">
+          <div class="frame" style="max-width: 560px">
+            <div class="check-btn">
+              Check card <span class="status">Ready</span>
+            </div>
+            <div class="card-check" style="margin-top: 12px">
+              <div class="card-field">
+                <strong>Speaking style</strong>
+                <div>Crisp, formal, short sentences.</div>
+              </div>
+              <div class="card-field">
+                <strong>Tone</strong>
+                <div>Firm and measured, like a debate finalist.</div>
+              </div>
+            </div>
+            <div class="preview-row" style="margin-top: 12px">
+              <button class="btn lime" type="button">Preview with tone</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="shot" data-id="a-390">
+      <div class="viewport" data-w="390" style="height: 520px">
+        <div style="padding: 16px">
+          <div class="card-check" style="max-width: none">
+            <div class="card-field">
+              <strong>Tone</strong>
+              <div>Firm and measured, like a debate finalist.</div>
+            </div>
+            <button class="btn lime" type="button">Preview with tone</button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="shot" data-id="b-1440">
+      <div class="viewport" data-w="1440" style="height: 520px">
+        <div class="main" style="padding: 28px">
+          <div class="frame" style="max-width: 560px">
+            <div class="card-check">
+              <div class="card-field">
+                <strong>Speaking style</strong>
+                <div>Crisp, formal, short sentences.</div>
+              </div>
+              <div class="tone-chip">
+                <span class="sticker">Tone</span>
+                Firm and measured, like a debate finalist.
+              </div>
+              <button class="btn pink" type="button">Preview</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="shot" data-id="b-390">
+      <div class="viewport" data-w="390" style="height: 520px">
+        <div style="padding: 16px">
+          <div class="tone-chip" style="width: 100%">
+            <span class="sticker">Tone</span>
+            Firm and measured, like a debate finalist.
+          </div>
+          <button class="btn pink" type="button" style="margin-top: 12px">
+            Preview
+          </button>
+        </div>
+      </div>
+    </section>
+    <section class="shot" data-id="c-1440">
+      <div class="viewport" data-w="1440" style="height: 520px">
+        <div class="main" style="padding: 28px">
+          <div class="frame" style="max-width: 560px">
+            <div
+              style="
+                display: grid;
+                gap: 8px;
+                border: 3px solid #111;
+                border-radius: 12px;
+                background: #fff;
+                padding: 12px;
+                box-shadow: 4px 4px 0 #111;
+              "
+            >
+              <div style="display: flex; justify-content: space-between">
+                <strong style="font-size: 13px">Tone</strong>
+                <span class="tag pink">TTS</span>
+              </div>
+              <div>Firm and measured, like a debate finalist.</div>
+              <button class="btn lime" type="button">▶ Preview</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="shot" data-id="c-390">
+      <div class="viewport" data-w="390" style="height: 520px">
+        <div style="padding: 16px">
+          <div
+            style="
+              border: 3px solid #111;
+              border-radius: 12px;
+              background: #fff;
+              padding: 12px;
+              box-shadow: 4px 4px 0 #111;
+            "
+          >
+            <strong style="font-size: 13px">Tone</strong>
+            <div style="margin: 8px 0 12px">
+              Firm and measured, like a debate finalist.
+            </div>
+            <button class="btn lime" type="button">▶ Preview</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  
+    <section class="shot" data-id="current-390">
+      <div class="viewport" data-w="390" style="height: 520px">
+        <div style="padding: 16px">
+          <div class="card-check" style="max-width: none">
+            <div class="card-field"><strong>Speaking style</strong><div>Crisp, formal, short sentences.</div></div>
+            <div class="card-field"><strong>Voice</strong><div>Firm and measured, like a debate finalist.</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </body>
+</html>
