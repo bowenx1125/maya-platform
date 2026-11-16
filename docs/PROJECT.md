@@ -124,3 +124,5 @@ Rebased onto `503857fe` (batch2 + Immerse Option C). Ordinary AGENT.md free text
 Nov16 per-Agent cards (stacked #442, 0094_agent_debate_cards): Done/upload/publish compile post-commit; Check card stores/reuses exact AGENT.md hash, no regex card. Shared provider contract/consent/admission; one attempt/version+hash, no same-hash retry. Owner follow-up replaces Debate-scoped compile: snapshot copies terminal cards; missing/stale resolve at Agent scope before first speech; NULL legacy stays pinned. Backfill: `python -m app.cli.backfill_agent_cards --dry-run`; 188 focused PG/16 UI tests and 17 static gates pass; 0 real calls/deploy.
 
 Nov16 #452 follow-up: copy/freeze/Agent-scope ledger/legacy/fail-open focused83 pass; post-main checks pending. No new UI strings/calls/deploy.
+
+#452 integration inputs: `d3ee51cb500134788ded3b911380ae7142632606` + `origin/main`=`158c4563836a378fb09d7d25ecc1c92005c2f139`; merge clean, head0094 follows0093. Final queue merge/PR merge awaits orchestrator.
