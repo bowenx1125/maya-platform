@@ -698,21 +698,7 @@ describe("Wave 2 teacher debate setup", () => {
     expect(end.querySelector("svg[aria-hidden='true']")).toBeTruthy();
 
     fireEvent.click(end);
-    const dialog = await screen.findByRole("alertdialog");
-    expect(dialog.textContent).toContain(
-      "“A live classroom” is running. End that debate?",
-    );
-    expect(api.debate).not.toHaveBeenCalled();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    expect(api.finishDebate).not.toHaveBeenCalled();
     expect(screen.queryByRole("alertdialog")).toBeNull();
-
-    fireEvent.click(within(row).getByRole("button", { name: "End" }));
-    fireEvent.click(
-      within(await screen.findByRole("alertdialog")).getByRole("button", {
-        name: "End",
-      }),
-    );
     await screen.findByText("Completed");
     expect(api.debate).toHaveBeenCalledWith(running.id);
     expect(api.finishDebate).toHaveBeenCalledWith(

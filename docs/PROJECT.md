@@ -115,7 +115,11 @@ Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not command
 
 Confirmed: #434 A Tone label + `Preview` (Identity/Position stay; Tone from AGENT.md else debate/env instruction; Agent/Voice Preview same Tone; student create/edit Check card). #436 C Stomp Line. #437 C Capsule Note-Face. No Alembic (OpenAPI VoicePreviewRequest only). Local: ruff/mypy/format/typecheck/prettier/script+route-compare PASS; FE 1467/13skip; targeted PG voice/preview/cards/tone 189 PASS. Full PG wave4 persona suite fails on clean main too in this env (question None).0 calls.
 
+Nov16 Option C:egg floor+crown;Roundtable Banner overlays.Live #448.
+
 Nov16 #427 hotfix(base503857fe):Save/Preview finish gestures;Save uses current ink.Back/Escape confirm discard;Pen starts unselected;row panel removed.Saved Egg drawing survives edit/create template switches.FE1477/13skip;focused77/1skip;PG29+freeze1/static/build pass.No backend/contract/freeze changes;0 calls/migrations/deploy.
+
+Nov16:Student music capsule hover overlay fixed;shared Button/music icon,collapsed key,dock chrome. Phase2 vs main552d0286:static17/17,FE1491pass/13skip,build0;Chromium390/1440 before/after+real stage canvas checked. Backend/i18n/music state unchanged. Exact release bake Python exits0 on both refs but leaves stage fadeIn (newline excluded by function slice):pre-existing default-off defect;not fixed here.0 calls/deploy.
 
 ## Nov16 D2 draft (PR442)
 
@@ -126,3 +130,10 @@ Nov16 per-Agent cards (stacked #442, 0094_agent_debate_cards): Done/upload/publi
 Nov16 #452 follow-up: copy/freeze/Agent-scope ledger/legacy/fail-open focused83 pass; post-main checks pending. No new UI strings/calls/deploy.
 
 #452 integration inputs: `d3ee51cb500134788ded3b911380ae7142632606` + `origin/main`=`158c4563836a378fb09d7d25ecc1c92005c2f139`; merge clean, head0094 follows0093. Final queue merge/PR merge awaits orchestrator.
+Nov16 #449 DRAFT:egg speak-yaw;list End no confirm;mouth=audioPlaying;Preview drag-yaw;stage table removed(+wood/collider).0 calls/deploy.
+
+Merge inputs (#449 Phase A): caacc46f193e6462c8bdc1ce305aac37c121fcdc + origin/main 158c4563836a378fb09d7d25ecc1c92005c2f139. Docs conflict resolved; FE/static gates pending;0 calls/deploy.
+
+Nov17 #451 integration:audited head c724562a6b0e2a7babd60f553de6e00289720f6f + origin/main c3506fe6f86799d37d1b1c8c44a9b4019faee52f. Docs-only conflict kept both histories;code merged without conflicts;music-fix files unchanged.0 calls/deploy.
+
+#452 final main integration: input `88623d68` (checkpoint preserving `d3ee51cb` and main `158c4563`) + `origin/main`=`68715ce991700963fa7703562ad2670c79dd74ca`; only PROJECT.md conflicted, both histories preserved. No PR merge/deploy.

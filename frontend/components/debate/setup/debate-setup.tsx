@@ -60,7 +60,6 @@ import {
   DEBATE_TITLE,
   RIBBON_COLORS,
 } from "../debate-chrome";
-import { EndRunningDebatePrompt } from "../../debate-beta/stage/end-running-debate-prompt";
 import { WorkspaceIcon } from "../../workspace-icon";
 
 import { EmptyCard, ErrorNotice, LoadingCard } from "../../ui";
@@ -175,37 +174,37 @@ export function TeacherDebateList({
 
   const refreshRows = useCallback(() => load(true), [load]);
 
-  const ending = endingId
-    ? debates.find((row) => row.id === endingId)
-    : undefined;
-
-  const finishListedDebate = useCallback(async () => {
-    if (!ending || endBusy) return;
-    if (
-      typeof api.debate !== "function" ||
-      typeof api.finishDebate !== "function"
-    )
-      return;
-    setEndBusy(true);
-    setEndError(null);
-    try {
-      const running = await api.debate(ending.id);
-      await api.finishDebate(
-        ending.id,
-        {
-          expected_control_version: running.playback.control_version,
-          expected_current_turn_id: running.playback.current_turn_id,
-        },
-        { idempotency: createIdempotencyHandle() },
-      );
-      setEndingId(null);
-      await load(true, true);
-    } catch (cause) {
-      setEndError(cause);
-    } finally {
-      setEndBusy(false);
-    }
-  }, [api, ending, endBusy, load]);
+  const finishListedDebate = useCallback(
+    async (debateId: string) => {
+      if (endBusy) return;
+      if (
+        typeof api.debate !== "function" ||
+        typeof api.finishDebate !== "function"
+      )
+        return;
+      setEndingId(debateId);
+      setEndBusy(true);
+      setEndError(null);
+      try {
+        const running = await api.debate(debateId);
+        await api.finishDebate(
+          debateId,
+          {
+            expected_control_version: running.playback.control_version,
+            expected_current_turn_id: running.playback.current_turn_id,
+          },
+          { idempotency: createIdempotencyHandle() },
+        );
+        setEndingId(null);
+        await load(true, true);
+      } catch (cause) {
+        setEndError(cause);
+      } finally {
+        setEndBusy(false);
+      }
+    },
+    [api, endBusy, load],
+  );
 
   useEffect(() => {
     let stopped = false;
@@ -267,25 +266,9 @@ export function TeacherDebateList({
       {endError ? (
         <ErrorNotice
           error={endError}
-          onRetry={() => void finishListedDebate()}
-        />
-      ) : null}
-      {ending ? (
-        <EndRunningDebatePrompt
-          topic={ending.topic}
-          zh={false}
-          busy={endBusy}
-          canEnd={
-            typeof api.finishDebate === "function" &&
-            typeof api.debate === "function"
-          }
-          onCancel={() => {
-            if (!endBusy) {
-              setEndingId(null);
-              setEndError(null);
-            }
+          onRetry={() => {
+            if (endingId) void finishListedDebate(endingId);
           }}
-          onEnd={() => void finishListedDebate()}
         />
       ) : null}
       {!loading && !error ? (
@@ -395,8 +378,7 @@ export function TeacherDebateList({
                           busy={endBusy && endingId === debate.id}
                           disabled={endBusy}
                           onClick={() => {
-                            setEndError(null);
-                            setEndingId(debate.id);
+                            void finishListedDebate(debate.id);
                           }}
                         >
                           {endBusy && endingId === debate.id ? (

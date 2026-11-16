@@ -15,8 +15,8 @@ const FIXED_STANDING_POSITIONS: Record<StageSlot, { x: number; z: number }> = {
 
 export function standingPlacement(slot: StageSlot) {
   const { x, z } = FIXED_STANDING_POSITIONS[slot];
-  const towardTable = Math.atan2(-x, -z);
-  return { x, z, yaw: towardTable * 0.68 };
+  const towardCenter = Math.atan2(-x, -z);
+  return { x, z, yaw: towardCenter * 0.68 };
 }
 
 export type StagePoint = { x: number; z: number };
@@ -26,15 +26,11 @@ export function stageCameraPositionBlocked(
   point: StagePoint,
   walkCenter: StagePoint,
   stageCenterZ: number,
-  tableCollisionRadius: number,
 ): boolean {
   if (
     Math.hypot(point.x - walkCenter.x, point.z - walkCenter.z) >
     STAGE_WALK_RADIUS + Number.EPSILON * 8
   ) {
-    return true;
-  }
-  if (Math.hypot(point.x, point.z - stageCenterZ) < tableCollisionRadius) {
     return true;
   }
   return STAGE_SLOTS.some((slot) => {
