@@ -2350,10 +2350,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Agent Route */
+        post: operations["previewAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AgentPreviewRequest */
+        AgentPreviewRequest: {
+            /** Agent Md */
+            agent_md: string;
+            avatar_config: components["schemas"]["AvatarConfig"];
+            /** Course Id */
+            course_id?: string | null;
+            /** Document Ids */
+            document_ids?: string[];
+            /** Group Id */
+            group_id?: string | null;
+            /** Message */
+            message: string;
+            /** Version Id */
+            version_id?: string | null;
+            /** Voice Profile Id */
+            voice_profile_id?: string | null;
+        };
+        /** AgentPreviewResponse */
+        AgentPreviewResponse: {
+            /** Answer */
+            answer: string;
+            /** Audio Base64 */
+            audio_base64?: string | null;
+            /**
+             * Audio Content Type
+             * @enum {string|null}
+             */
+            audio_content_type?: "audio/wav" | null;
+        };
         /** ChatAgent */
         ChatAgent: {
             /**
@@ -13259,6 +13306,50 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    previewAgent: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Disposable single-sentence reply and optional voice. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPreviewResponse"];
+                };
+            };
+            /** @description Agent or source not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid Preview input. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

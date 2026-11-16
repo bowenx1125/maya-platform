@@ -38,15 +38,17 @@ def test_catalog_registers_local_glb_assets() -> None:
     entries = avatar_catalog_entries()
     assets = registered_avatar_assets()
     assert tuple(entry.id for entry in entries) == AVATAR_TEMPLATE_IDS
-    assert [entry.available for entry in entries] == [True, True, True]
+    assert [entry.available for entry in entries] == [True, True, True, True]
     assert assets == (
         "/avatars/female_1.glb",
         "/avatars/elder-scholar.glb",
         "/avatars/noble-scholar.glb",
+        "/avatars/Maya-Egg.glb",
     )
-    assert compatible_asset_count() == 3
+    assert compatible_asset_count() == 4
     assert [avatar_asset_url(entry.id) for entry in entries] == list(assets)
-    assert all("material_theme" in entry.supported_parameters for entry in entries)
+    assert all("material_theme" in entry.supported_parameters for entry in entries[:3])
+    assert entries[3].supported_parameters == ["template_id"]
     asset_root = Path(__file__).resolve().parents[2] / "frontend" / "public"
     for asset_url in assets:
         assert (asset_root / asset_url.lstrip("/")).is_file()
@@ -63,6 +65,7 @@ def test_each_preset_has_distinct_defaults_and_legacy_config_remains_valid() -> 
         "demo",
         "warm_sand",
         "civic_olive",
+        "demo",
     ]
     assert len({config.material_theme for config in defaults}) == 3
     assert validate_avatar_config(DEFAULT_AVATAR_CONFIG) == DEFAULT_AVATAR_CONFIG
@@ -105,14 +108,18 @@ def test_avatar_catalog_route_is_authenticated_and_stable(app_factory: Any) -> N
         assert all(item["available"] is True for item in payload)
         assert all(
             item["supported_parameters"]
-            == [
-                "template_id",
-                "material_theme",
-                "eye_color",
-                "default_expression",
-                "expression_strength",
-                "motion_style",
-            ]
+            == (
+                ["template_id"]
+                if item["id"] == "egg"
+                else [
+                    "template_id",
+                    "material_theme",
+                    "eye_color",
+                    "default_expression",
+                    "expression_strength",
+                    "motion_style",
+                ]
+            )
             for item in payload
         )
     del app

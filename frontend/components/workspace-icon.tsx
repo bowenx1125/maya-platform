@@ -1,4 +1,6 @@
 export type WorkspaceIconName =
+  | "diamond"
+  | "send"
   | "home"
   | "classroom"
   | "accounts"
@@ -39,6 +41,8 @@ export type WorkspaceIconName =
   | "trash";
 
 const paths: Record<WorkspaceIconName, string> = {
+  diamond: "M12 3 21 12 12 21 3 12Z",
+  send: "m3 3 19 9-19 9 4-9Z M7 12h15",
   home: "M3 10 12 3l9 7M5 9v11h5v-6h4v6h5V9",
   classroom: "M4 4h16v12H4zM8 21l4-5 4 5M8 8h8M8 12h5",
   quiz: "M13 5h8 M13 12h8 M13 19h8 M3 17l2 2 4-4 M3 7l2 2 4-4",

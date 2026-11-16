@@ -90,6 +90,7 @@ const implemented = new Set([
   "setAgentVersionDocuments",
   "getRagPreview",
   "testAgentDraft",
+  "previewAgent",
   "getKnowledgeSnapshot",
   "downloadSnapshotRag",
   "downloadSnapshotDocument",

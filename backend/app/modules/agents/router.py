@@ -52,6 +52,8 @@ from app.modules.agents.persona import (
 from app.modules.agents.schemas import (
     AgentCreateRequest,
     AgentDetail,
+    AgentPreviewRequest,
+    AgentPreviewResponse,
     AgentSummary,
     PublishAgentVersionRequest,
     PublishedAgentAuthor,
@@ -2065,6 +2067,35 @@ def _publish_agent_version_admitted(
         # an injected crash or unexpected infrastructure error occurs.
         _recover_publish_guard(db, guard_id)
         abandon_claim(db, record)
+        raise
+
+
+@router.post(
+    "/agents/preview",
+    response_model=AgentPreviewResponse,
+    operation_id="previewAgent",
+    responses={
+        200: {
+            "model": AgentPreviewResponse,
+            "description": "Disposable single-sentence reply and optional voice.",
+        },
+        404: {"model": Error, "description": "Agent or source not found."},
+        422: {"model": Error, "description": "Invalid Preview input."},
+    },
+)
+def preview_agent_route(
+    payload: AgentPreviewRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> AgentPreviewResponse:
+    from app.modules.agents.preview import preview_agent
+
+    try:
+        return preview_agent(db, context, payload, settings)
+    except PlatformError as exc:
+        logger.warning("agent_preview_failed safe_code=%s", exc.code)
         raise
 
 

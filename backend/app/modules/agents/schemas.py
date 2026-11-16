@@ -265,3 +265,22 @@ class KnowledgeSnapshot(BaseModel):
     total_char_count: int = Field(ge=1)
     documents: list[SnapshotDocument]
     created_at: datetime
+
+
+class AgentPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(min_length=1)
+    agent_md: str = Field(min_length=1)
+    avatar_config: AvatarConfig
+    voice_profile_id: UUID | None = None
+    version_id: UUID | None = None
+    course_id: UUID | None = None
+    group_id: UUID | None = None
+    document_ids: list[UUID] = Field(default_factory=list)
+
+
+class AgentPreviewResponse(BaseModel):
+    answer: str
+    audio_base64: str | None = None
+    audio_content_type: Literal["audio/wav"] | None = None
