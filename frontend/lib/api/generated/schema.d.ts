@@ -3505,6 +3505,11 @@ export interface components {
              * @enum {string}
              */
             state: "draft" | "published" | "superseded";
+            /**
+             * Stored Card Status
+             * @enum {string|null}
+             */
+            stored_card_status?: "compiling" | "ready" | "fallback" | null;
             /** Student Confirmed At */
             student_confirmed_at?: string | null;
             /** Version Label */
