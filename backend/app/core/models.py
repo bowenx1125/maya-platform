@@ -372,6 +372,8 @@ class AgentDebateCard(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     compiled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    claim_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
     __table_args__ = (
         CheckConstraint(
@@ -379,6 +381,7 @@ class AgentDebateCard(Base):
         ),
         CheckConstraint("language IN ('zh', 'en')", name="ck_agent_card_language"),
         CheckConstraint("NOT salvaged OR card_status = 'ready'", name="ck_agent_card_salvaged"),
+        CheckConstraint("retry_count >= 0 AND retry_count <= 3", name="ck_agent_card_retries"),
     )
 
 

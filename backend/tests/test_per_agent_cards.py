@@ -12,7 +12,7 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from app.cli.backfill_agent_cards import backfill
 from app.core.db import ALEMBIC_HEAD
-from app.core.models import Agent, AgentDebateCard, AgentVersion
+from app.core.models import Agent, AgentDebateCard, AgentVersion, ProviderOperation
 from app.modules.agents import debate_cards as service
 from app.modules.agents.markdown import markdown_hash
 from app.modules.debates.cards import CardOutcome
@@ -189,19 +189,120 @@ def test_concurrent_claims_do_not_send_twice(client, database, monkeypatch) -> N
     assert calls == [1]
 
 
-def test_abandoned_compiling_claim_is_terminal_without_resend(
-    client, database, monkeypatch
-) -> None:
+@pytest.mark.parametrize("recovery", ["restart", "expired"])
+def test_check_recovers_abandoned_or_expired_claim(client, database, monkeypatch, recovery) -> None:
+    from contextlib import nullcontext
+    from datetime import UTC, datetime, timedelta
+    from uuid import uuid4
+
+    from app.core.locks import held_lock
+
     agent_id, version, csrf = _agent(client)
     assert _save(client, version, csrf, "Interrupted card").status_code == 200
+    token = str(uuid4())
     with database.session() as db:
         row = db.get(AgentDebateCard, agent_id)
         row.card_status = "compiling"
-        row.card_safe_error_code = None
-    monkeypatch.setattr(service, "compile_source", lambda *args: pytest.fail("must not resend"))
-    assert _check(client, version, csrf).json()["card_status"] == "fallback"
+        row.card_json = row.card_safe_error_code = None
+        row.claim_token = token
+        row.updated_at = datetime.now(UTC) - timedelta(seconds=600 if recovery == "expired" else 0)
+    calls = []
+    monkeypatch.setattr(
+        service,
+        "compile_source",
+        lambda *args: calls.append(args[6]) or CardOutcome("ready", card=CARD),
+    )
+    lock = (
+        held_lock(database.engine, f"agent-card-worker:{token}")
+        if recovery == "expired"
+        else nullcontext()
+    )
+    with lock:
+        assert _check(client, version, csrf).json()["card"] == CARD
+    assert calls == [1]
     with database.session() as db:
-        assert db.get(AgentDebateCard, agent_id).card_safe_error_code == "debate_card_attempt_used"
+        row = db.get(AgentDebateCard, agent_id)
+        assert row.card_status == "ready" and row.claim_token is None
+
+
+def _age_card(database, agent_id):
+    from datetime import UTC, datetime, timedelta
+
+    with database.session() as db:
+        before = datetime.now(UTC) - timedelta(seconds=61)
+        db.get(AgentDebateCard, agent_id).updated_at = before
+        for operation in db.scalars(
+            select(ProviderOperation).where(ProviderOperation.scope_id == f"agent_card:{agent_id}")
+        ):
+            operation.updated_at = before
+
+
+def test_check_retries_fallback_with_cooldown_and_cap(client, database, monkeypatch) -> None:
+    agent_id, version, csrf = _agent(client)
+    calls = []
+    monkeypatch.setattr(
+        service,
+        "compile_source",
+        lambda *args: (
+            calls.append(args[6]) or CardOutcome("fallback", safe_error_code="debate_card_invalid")
+        ),
+    )
+    assert _save(client, version, csrf, "Retry this stored source").status_code == 200
+    assert _check(client, version, csrf).json()["card_status"] == "fallback"
+    assert calls == [0]
+    for retry in range(1, 4):
+        _age_card(database, agent_id)
+        assert _check(client, version, csrf).json()["card_status"] == "fallback"
+        assert calls == list(range(retry + 1))
+        assert _check(client, version, csrf).json()["card_status"] == "fallback"
+        assert len(calls) == retry + 1
+    _age_card(database, agent_id)
+    assert _check(client, version, csrf).json()["card_status"] == "fallback"
+    assert calls == [0, 1, 2, 3]
+    with database.session() as db:
+        row = db.get(AgentDebateCard, agent_id)
+        assert row.retry_count == 3
+        assert row.card_safe_error_code == "debate_card_invalid"
+
+
+def test_expired_worker_cannot_overwrite_recovered_card(client, database, monkeypatch) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    agent_id, version, csrf = _agent(client)
+    entered, release = Event(), Event()
+    calls = []
+
+    def compile_source(*args):
+        calls.append(args[6])
+        if len(calls) == 1:
+            entered.set()
+            assert release.wait(10)
+            return CardOutcome("fallback", safe_error_code="debate_card_failed")
+        return CardOutcome("ready", card=CARD)
+
+    monkeypatch.setattr(service, "compile_source", compile_source)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        first = pool.submit(
+            service.check_agent_card,
+            database.engine,
+            agent_id,
+            version,
+            "A frozen source",
+            service.Settings(maya_env="test"),
+        )
+        assert entered.wait(10)
+        try:
+            with database.session() as db:
+                db.get(AgentDebateCard, agent_id).updated_at = datetime.now(UTC) - timedelta(
+                    seconds=600
+                )
+            assert _check(client, version, csrf, "A frozen source").json()["card"] == CARD
+        finally:
+            release.set()
+        assert first.result(10).card_status == "ready"
+    assert calls == [0, 1]
+    with database.session() as db:
+        assert db.get(AgentDebateCard, agent_id).card_status == "ready"
 
 
 def _backfill_targets(client, database, count: int) -> None:
@@ -341,7 +442,7 @@ def test_real_provider_failures_leave_save_and_card_terminal(
     monkeypatch.setattr(service, "llm_provider", lambda *args, **kwargs: adapter)
     original = service.compile_source
 
-    def compile_source(db, agent, version, markdown, language, settings):
+    def compile_source(db, agent, version, markdown, language, settings, *claim):
         return original(
             db,
             agent,
@@ -349,6 +450,7 @@ def test_real_provider_failures_leave_save_and_card_terminal(
             markdown,
             language,
             settings.model_copy(update={"llm_provider_policy_hash": policy_hash}),
+            *claim,
         )
 
     monkeypatch.setattr(service, "compile_source", compile_source)
@@ -420,6 +522,60 @@ def test_check_http_timeout_keeps_independent_claim(client, database, monkeypatc
             wait=True,
         )
         assert row.card_status == "ready"
+    assert calls == [1]
+
+
+@pytest.mark.parametrize("wait", [False, True])
+def test_worker_finishing_during_liveness_probe_reuses_ready_card(
+    client, database, monkeypatch, wait
+) -> None:
+    from contextlib import contextmanager
+
+    agent_id, version, _ = _agent(client)
+    entered, release = Event(), Event()
+    calls = []
+
+    def compile_source(*args):
+        calls.append(1)
+        entered.set()
+        assert release.wait(10)
+        return CardOutcome("ready", card=CARD)
+
+    monkeypatch.setattr(service, "compile_source", compile_source)
+    settings = service.Settings(maya_env="test")
+    original_lock = service.held_lock
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        first = pool.submit(
+            service.check_agent_card, database.engine, agent_id, version, "Same source", settings
+        )
+        assert entered.wait(10)
+
+        @contextmanager
+        def finish_before_probe(bind, name, *, wait=False):
+            if name.startswith("agent-card-worker:") and not wait:
+                # Completion lands after the waiter read Compiling, before it
+                # checks liveness; the session must discard that stale row.
+                release.set()
+                assert first.result(10).card_status == "ready"
+            with original_lock(bind, name, wait=wait) as acquired:
+                yield acquired
+
+        monkeypatch.setattr(service, "held_lock", finish_before_probe)
+        try:
+            with database.session() as db:
+                row = service.ensure_agent_card(
+                    db,
+                    agent_id,
+                    settings,
+                    version_id=version,
+                    markdown="Same source",
+                    wait=wait,
+                    retry_failed=not wait,
+                )
+                assert row.card_status == "ready"
+                assert json.loads(row.card_json) == CARD
+        finally:
+            release.set()
     assert calls == [1]
 
 
@@ -522,3 +678,193 @@ def test_queued_save_reads_latest_text_after_previous_compile(
         assert db.get(AgentDebateCard, agent_id).agent_md_hash == markdown_hash(
             "Latest committed save"
         )
+
+
+def test_check_retry_has_distinct_ledger_manifest_and_preserves_old_charge(
+    client, database, monkeypatch
+) -> None:
+    agent_id, version, csrf = _agent(client)
+    adapter, transport, policy_hash = _provider(database, _ok({**CARD, "identity": ""}))
+    monkeypatch.setattr(service, "llm_provider", lambda *args, **kwargs: adapter)
+    original = service.compile_source
+
+    def compile_source(db, agent, version, markdown, language, settings, *claim):
+        return original(
+            db,
+            agent,
+            version,
+            markdown,
+            language,
+            settings.model_copy(update={"llm_provider_policy_hash": policy_hash}),
+            *claim,
+        )
+
+    monkeypatch.setattr(service, "compile_source", compile_source)
+    assert _save(client, version, csrf, "Ledgered retry source").status_code == 200
+    assert _check(client, version, csrf).json()["card_status"] == "fallback"
+    assert len(transport.calls) == 1
+    _age_card(database, agent_id)
+    transport.outcome = _ok(CARD)
+    assert _check(client, version, csrf).json()["card"] == CARD
+    assert len(transport.calls) == 2
+    assert _check(client, version, csrf).json()["card"] == CARD
+    assert len(transport.calls) == 2
+    operations = ProviderRepository(database).operations(scope_id=f"agent_card:{agent_id}")
+    base_item = f"{version}:{markdown_hash('Ledgered retry source')}"
+    by_item = {op.logical_item_id: op for op in operations}
+    assert set(by_item) == {base_item, base_item + ":r1"}
+    assert by_item[base_item].state == "failed"
+    assert by_item[base_item + ":r1"].state == "succeeded"
+    assert len({op.export_manifest_hash for op in operations}) == 2
+    for operation in operations:
+        assert operation.attempt_no == 1 and operation.charged_request_count == 1
+        assert ProviderRepository(database).get_export_confirmation(operation.export_manifest_hash)
+
+
+def test_expired_queued_worker_is_fenced_before_provider_dispatch(
+    client, database, monkeypatch
+) -> None:
+    from contextlib import contextmanager
+    from datetime import UTC, datetime, timedelta
+
+    agent_id, version, csrf = _agent(client)
+    adapter, transport, policy_hash = _provider(database, _ok(CARD))
+    monkeypatch.setattr(service, "llm_provider", lambda *args, **kwargs: adapter)
+    entered, release = Event(), Event()
+    original_slot = service.llm_admission_slot
+    slots = []
+
+    @contextmanager
+    def delayed_admission(settings):
+        slots.append(1)
+        if len(slots) == 1:
+            entered.set()
+            assert release.wait(10)
+        with original_slot(settings):
+            yield
+
+    monkeypatch.setattr(service, "llm_admission_slot", delayed_admission)
+    settings = service.Settings(maya_env="test", llm_provider_policy_hash=policy_hash)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        first = pool.submit(
+            service.check_agent_card, database.engine, agent_id, version, "Queued source", settings
+        )
+        assert entered.wait(10)
+        try:
+            with database.session() as db:
+                db.get(AgentDebateCard, agent_id).updated_at = datetime.now(UTC) - timedelta(
+                    seconds=600
+                )
+            current = service.check_agent_card(
+                database.engine, agent_id, version, "Queued source", settings
+            )
+            assert current.card_status == "ready"
+        finally:
+            release.set()
+        assert first.result(10).card_status == "ready"
+    assert len(transport.calls) == 1
+    operations = ProviderRepository(database).operations(scope_id=f"agent_card:{agent_id}")
+    assert len(operations) == 1
+    assert operations[0].logical_item_id.endswith(":r1")
+    assert operations[0].charged_request_count == 1
+
+
+@pytest.mark.parametrize("reason", ["fallback", "abandoned"])
+def test_concurrent_retry_and_recovery_claims_send_once(
+    client, database, monkeypatch, reason
+) -> None:
+    from uuid import uuid4
+
+    agent_id, version, csrf = _agent(client)
+    assert _save(client, version, csrf, "Same source").status_code == 200
+    _age_card(database, agent_id)
+    if reason == "abandoned":
+        with database.session() as db:
+            row = db.get(AgentDebateCard, agent_id)
+            row.card_status = "compiling"
+            row.card_safe_error_code = None
+            row.claim_token = str(uuid4())
+    entered, release = Event(), Event()
+    calls = []
+
+    def compile_source(*args):
+        calls.append(args[6])
+        entered.set()
+        assert release.wait(10)
+        return CardOutcome("ready", card=CARD)
+
+    monkeypatch.setattr(service, "compile_source", compile_source)
+    settings = service.Settings(maya_env="test")
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(
+            service.check_agent_card, database.engine, agent_id, version, "Same source", settings
+        )
+        assert entered.wait(10)
+        try:
+            second = pool.submit(
+                service.check_agent_card,
+                database.engine,
+                agent_id,
+                version,
+                "Same source",
+                settings,
+            )
+            assert second.result(10).card_status == "compiling"
+        finally:
+            release.set()
+        assert first.result(10).card_status == "ready"
+    assert calls == [1]
+
+
+def test_accepted_crash_recovers_without_reusing_operation_or_losing_charge(
+    client, database, monkeypatch
+) -> None:
+    from uuid import uuid4
+
+    agent_id, version, csrf = _agent(client)
+    adapter, transport, policy_hash = _provider(database, _ok(CARD))
+    monkeypatch.setattr(service, "llm_provider", lambda *args, **kwargs: adapter)
+    settings = service.Settings(maya_env="test", llm_provider_policy_hash=policy_hash)
+    # Stop between supplier acceptance and terminal card publication.
+    mark_succeeded = ProviderRepository.mark_succeeded
+    monkeypatch.setattr(ProviderRepository, "mark_succeeded", lambda *args: None)
+    original_dispatch = service.compile_source
+
+    def interrupted(*args):
+        result = original_dispatch(*args)
+        assert result.status == "ready"
+        raise RuntimeError("process interrupted before terminal card CAS")
+
+    monkeypatch.setattr(service, "compile_source", interrupted)
+    with database.session() as db:
+        db.get(AgentVersion, version).agent_md = "Accepted crash recovery source"
+        card = service.ensure_agent_card(db, agent_id, settings)
+        card.card_status = "compiling"
+        card.card_safe_error_code = None
+        card.claim_token = str(uuid4())
+    assert len(transport.calls) == 1
+    original = ProviderRepository(database).operations(scope_id=f"agent_card:{agent_id}")[0]
+    assert original.state == "accepted" and original.charged_request_count == 1
+    monkeypatch.setattr(service, "compile_source", original_dispatch)
+    with database.session() as db:
+        assert (
+            service.ensure_agent_card(db, agent_id, settings).card_safe_error_code
+            == "debate_card_acceptance_unknown"
+        )
+    recovered = ProviderRepository(database).operation(original.id)
+    assert recovered.state == "acceptance_unknown" and recovered.charged_request_count == 1
+    assert len(transport.calls) == 1
+    monkeypatch.setattr(ProviderRepository, "mark_succeeded", mark_succeeded)
+    _age_card(database, agent_id)
+    with database.session() as db:
+        assert (
+            service.ensure_agent_card(db, agent_id, settings, retry_failed=True).card_status
+            == "ready"
+        )
+    operations = ProviderRepository(database).operations(scope_id=f"agent_card:{agent_id}")
+    assert len(operations) == len(transport.calls) == 2
+    assert len({op.logical_item_id for op in operations}) == 2
+    assert ProviderRepository(database).operation(original.id).state == "acceptance_unknown"
+    retried = next(op for op in operations if op.id != original.id)
+    assert retried.state == "succeeded" and retried.charged_request_count == 1
+    assert sum(op.charged_request_count for op in operations) == 2

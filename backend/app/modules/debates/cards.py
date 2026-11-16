@@ -16,7 +16,7 @@ import hashlib
 import json
 import logging
 from collections.abc import Callable, Mapping
-from contextlib import ExitStack
+from contextlib import AbstractContextManager, ExitStack, nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Final, Literal, cast, get_args
@@ -737,6 +737,7 @@ def compile_card_core(
     adapter: DashScopeLLMAdapter,
     policy_hash: str | None,
     settings: object,
+    dispatch_guard: Callable[[], AbstractContextManager[bool]] | None = None,
 ) -> CardOutcome:
     """Shared single-attempt provider contract; callers supply immutable ownership."""
 
@@ -869,8 +870,8 @@ def compile_card_core(
         )
     except Exception as exc:
         return _fallback(row, "debate_card_preflight_blocked", type(exc).__name__)
-    # One attempt per participant for the life of the Debate. An existing row
-    # (a crash mid-call, or a concurrent preparation) is never resent.
+    # Each logical item has one attempt. Agent retries receive a new identity;
+    # an existing operation, including an ambiguous export, is never resent.
     existing = [
         operation
         for operation in repository.operations(scope_id=scope_id)
@@ -880,44 +881,46 @@ def compile_card_core(
     if existing:
         return _fallback(row, "debate_card_attempt_used")
 
-    try:
-        operation = repository.create_prepared(
-            ProviderReservationRequestV1(
-                operation_id=str(uuid4()),
-                scope_id=scope_id,
-                provider_operation=CARD_OPERATION,
-                logical_item_id=logical_item_id,
-                attempt_no=1,
-                request_hash=request_hash,
-                max_tokens=max_tokens,
-                max_cost_cny=0.0,
-                policy_hash=str(policy_hash),
-                export_manifest_hash=persisted.manifest_hash,
-                build_manifest_hash=persisted.build_manifest_hash,
-                model_key=model_key,
-                budget_bucket=LLM_DEBATE_TURN_BUCKET,
-            )
-        )
-    except Exception:
-        return _fallback(row, "debate_card_attempt_used")
-    headers = {"Content-Type": "application/json"}
-    if adapter.config.api_key:
-        headers["Authorization"] = f"Bearer {adapter.config.api_key}"
-    # The slot is taken before the call is reserved or "sending", as the report
-    # does: a refusal under load leaves nothing in flight.
-    admission = ExitStack()
-    try:
-        admission.enter_context(debate_llm_slot())
-    except PlatformError:
-        _settle(repository, operation.id, "not_sent", "debate_card_admission_refused")
-        return _fallback(row, "debate_card_admission_refused")
-    with admission:
-        try:
-            repository.reserve(operation.id)
-            repository.transition(operation.id, expected="reserved", state="sending")
-        except Exception as exc:
-            _settle(repository, operation.id, "not_sent", "debate_card_ledger_failed")
-            return _fallback(row, "debate_card_ledger_failed", type(exc).__name__)
+    with ExitStack() as admission:
+        with dispatch_guard() if dispatch_guard else nullcontext(True) as allowed:
+            if not allowed:
+                return _fallback(row, "debate_card_attempt_used")
+            try:
+                operation = repository.create_prepared(
+                    ProviderReservationRequestV1(
+                        operation_id=str(uuid4()),
+                        scope_id=scope_id,
+                        provider_operation=CARD_OPERATION,
+                        logical_item_id=logical_item_id,
+                        attempt_no=1,
+                        request_hash=request_hash,
+                        max_tokens=max_tokens,
+                        max_cost_cny=0.0,
+                        policy_hash=str(policy_hash),
+                        export_manifest_hash=persisted.manifest_hash,
+                        build_manifest_hash=persisted.build_manifest_hash,
+                        model_key=model_key,
+                        budget_bucket=LLM_DEBATE_TURN_BUCKET,
+                    )
+                )
+            except Exception:
+                return _fallback(row, "debate_card_attempt_used")
+            headers = {"Content-Type": "application/json"}
+            if adapter.config.api_key:
+                headers["Authorization"] = f"Bearer {adapter.config.api_key}"
+            # The slot is taken before the call is reserved or "sending", as the report
+            # does: a refusal under load leaves nothing in flight.
+            try:
+                admission.enter_context(debate_llm_slot())
+            except PlatformError:
+                _settle(repository, operation.id, "not_sent", "debate_card_admission_refused")
+                return _fallback(row, "debate_card_admission_refused")
+            try:
+                repository.reserve(operation.id)
+                repository.transition(operation.id, expected="reserved", state="sending")
+            except Exception as exc:
+                _settle(repository, operation.id, "not_sent", "debate_card_ledger_failed")
+                return _fallback(row, "debate_card_ledger_failed", type(exc).__name__)
         try:
             response = adapter.transport.post(
                 endpoint,

@@ -7138,7 +7138,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Stored card, compiled only for changed AGENT.md. */
+            /** @description Stored card with bounded compilation for changed, failed or abandoned cards. */
             200: {
                 headers: {
                     [name: string]: unknown;

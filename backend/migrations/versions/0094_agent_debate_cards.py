@@ -34,11 +34,14 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("compiled_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("retry_count", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("claim_token", sa.String(36), nullable=True),
         sa.CheckConstraint(
             "card_status IN ('compiling', 'ready', 'fallback')", name="ck_agent_card_status"
         ),
         sa.CheckConstraint("language IN ('zh', 'en')", name="ck_agent_card_language"),
         sa.CheckConstraint("NOT salvaged OR card_status = 'ready'", name="ck_agent_card_salvaged"),
+        sa.CheckConstraint("retry_count >= 0 AND retry_count <= 3", name="ck_agent_card_retries"),
     )
 
 

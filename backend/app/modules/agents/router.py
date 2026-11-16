@@ -1709,7 +1709,9 @@ def save_agent_avatar(
     responses={
         200: {
             "model": AgentCardResponse,
-            "description": "Stored card, compiled only for changed AGENT.md.",
+            "description": (
+                "Stored card with bounded compilation for changed, failed or abandoned cards."
+            ),
         },
         404: {"model": Error, "description": "Version not found."},
     },

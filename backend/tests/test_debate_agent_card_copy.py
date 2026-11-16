@@ -230,3 +230,109 @@ def test_deleted_source_fails_open_without_debate_scoped_compile(debate_app, mon
     )
     assert json.loads(llm.prompts[0].messages[1][1])["persona"]["markdown"] == row.agent_md_snapshot
     assert not ProviderRepository(database).operations(scope_id=debate_id)
+
+
+@pytest.mark.parametrize("recovery", ["restart", "expired"])
+def test_snapshot_miss_recovers_compiling_agent_card_before_first_speech(
+    debate_app, monkeypatch, recovery
+) -> None:
+    from contextlib import nullcontext
+    from datetime import UTC, datetime, timedelta
+
+    from app.core.locks import held_lock
+
+    _, database, client = debate_app
+    ids = _agents(database)
+    with database.session() as db:
+        agent_cards.ensure_agent_card(db, ids[0], get_settings())
+        row = db.get(AgentDebateCard, ids[0])
+        row.card_status = "compiling"
+        row.card_json = row.card_safe_error_code = None
+        row.claim_token = token = str(uuid4())
+        row.updated_at = datetime.now(UTC) - timedelta(seconds=600 if recovery == "expired" else 0)
+    calls = []
+    monkeypatch.setattr(
+        agent_cards,
+        "compile_source",
+        lambda *args: calls.append(args[6]) or CardOutcome("ready", card=CARD),
+    )
+    debate_id = _create(client, ids)
+    assert _participants(database, debate_id)[0].card_status == "compiling"
+    lock = (
+        held_lock(database.engine, f"agent-card-worker:{token}")
+        if recovery == "expired"
+        else nullcontext()
+    )
+    with lock, database.session() as db:
+        row = db.scalar(
+            select(DebateParticipant)
+            .where(DebateParticipant.debate_id == debate_id)
+            .order_by(DebateParticipant.order_index)
+        )
+        ensure_participant_agent_card(db, row, get_settings())
+        assert row.card_status == "ready" and json.loads(row.card_json) == CARD
+        assert _columns(row) == _columns(db.get(AgentDebateCard, ids[0]))
+    assert calls == [1]
+    assert not ProviderRepository(database).operations(scope_id=debate_id)
+
+
+def test_fresh_compiling_snapshot_waits_for_agent_worker_without_resend(
+    debate_app, monkeypatch
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError
+    from contextlib import contextmanager
+    from threading import Event
+
+    _, database, client = debate_app
+    ids = _agents(database)
+    entered, waiting, release = Event(), Event(), Event()
+    calls = []
+
+    def compile_source(*args):
+        calls.append(1)
+        entered.set()
+        assert release.wait(10)
+        return CardOutcome("ready", card=CARD)
+
+    monkeypatch.setattr(agent_cards, "compile_source", compile_source)
+    original_slot = agent_cards._claim_slot
+
+    @contextmanager
+    def observed_slot(db, agent_id, settings, *, wait):
+        if wait:
+            waiting.set()
+        with original_slot(db, agent_id, settings, wait=wait) as acquired:
+            yield acquired
+
+    monkeypatch.setattr(agent_cards, "_claim_slot", observed_slot)
+
+    def compile_agent():
+        with database.session() as db:
+            agent_cards.ensure_agent_card(db, ids[0], get_settings())
+
+    def prepare_participant(debate_id):
+        with database.session() as db:
+            row = db.scalar(
+                select(DebateParticipant)
+                .where(DebateParticipant.debate_id == debate_id)
+                .order_by(DebateParticipant.order_index)
+            )
+            ensure_participant_agent_card(db, row, get_settings())
+            return _columns(row)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(compile_agent)
+        assert entered.wait(10)
+        try:
+            debate_id = _create(client, ids)
+            assert _participants(database, debate_id)[0].card_status == "compiling"
+            second = pool.submit(prepare_participant, debate_id)
+            assert waiting.wait(10)
+            with pytest.raises(TimeoutError):
+                second.result(0.1)
+            assert calls == [1]
+        finally:
+            release.set()
+        first.result(10)
+        assert second.result(10)[0] == "ready"
+    assert calls == [1]

@@ -60,7 +60,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AgentCardResponse'
-          description: Stored card, compiled only for changed AGENT.md.
+          description: Stored card with bounded compilation for changed, failed or abandoned cards.
         '404':
           content:
             application/json:
