@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { createPortal } from "react-dom";
+import { PlatformApiError } from "../../lib/api";
 import { Button } from "../ui/button";
 import { ErrorNotice } from "../ui";
 import { WorkspaceIcon } from "../workspace-icon";
@@ -196,7 +197,16 @@ function DrawingSession({
       await onSave(drawing, saveAttempt.current.key);
       onClose();
     } catch (cause) {
-      setError(cause);
+      // These Save-specific messages share codes with unrelated catalog copy.
+      const saveMessage =
+        cause instanceof PlatformApiError &&
+        ((cause.code === "avatar_missing" &&
+          cause.message ===
+            "Your drawing couldn't be saved because it is too large or damaged. Undo some strokes or redraw it, then save again.") ||
+          (cause.code === "invalid_state" &&
+            cause.message ===
+              "This Agent was deleted or deactivated, so it can't be saved. Go back to Agents and open an active one."));
+      setError(saveMessage ? new Error(cause.message) : cause);
     } finally {
       setSaving(false);
     }

@@ -6,6 +6,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PlatformApiError } from "../lib/api";
+import { localizeError, t } from "../lib/i18n";
 import { DrawingBoard } from "../components/avatar/drawing-board";
 import {
   BLANK_DRAWING,
@@ -258,6 +260,47 @@ describe("editable shell drawing", () => {
     expect(save.mock.calls[0][1]).toBe(save.mock.calls[1][1]);
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(ink()).toEqual(BLANK_DRAWING);
+  });
+  it.each([
+    [
+      "avatar_missing",
+      422,
+      "Your drawing couldn't be saved because it is too large or damaged. Undo some strokes or redraw it, then save again.",
+    ],
+    [
+      "invalid_state",
+      409,
+      "This Agent was deleted or deactivated, so it can't be saved. Go back to Agents and open an active one.",
+    ],
+  ])("shows the exact Save message for %s", async (code, status, message) => {
+    const error = new PlatformApiError(status, message, { code });
+    expect(localizeError(error)).not.toBe(message);
+    board(art, vi.fn().mockRejectedValue(error));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(message)).toBeTruthy();
+    expect(ink()).toEqual(art);
+  });
+  it.each([
+    ["invalid_state", "An Agent can have only one draft version."],
+    ["invalid_state", "The published knowledge is unavailable."],
+    [
+      "avatar_missing",
+      "Choose an available avatar template before saving this draft.",
+    ],
+  ])("keeps existing catalog copy for %s: %s", async (code, message) => {
+    const error = new PlatformApiError(409, message, { code });
+    board(art, vi.fn().mockRejectedValue(error));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(localizeError(error))).toBeTruthy();
+  });
+  it("keeps the existing revision conflict notice", async () => {
+    const error = new PlatformApiError(409, "The draft revision is stale.", {
+      code: "stale_revision",
+    });
+    board(art, vi.fn().mockRejectedValue(error));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(t("retryConflict"))).toBeTruthy();
+    expect(screen.getByText(t("revisionConflict"))).toBeTruthy();
   });
   it("passes saved ink into every shared Egg avatar renderer", () => {
     render(
