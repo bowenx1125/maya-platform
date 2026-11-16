@@ -335,3 +335,130 @@ def test_long_rag_document_and_aggregate_publish_without_length_gates(
     )
     assert frozen_download.status_code == 200, frozen_download.text
     assert "replacement evidence" in frozen_download.text
+
+
+def test_heading_free_agent_md_publishes_and_creates_debate_while_empty_stays_blocked(
+    client: TestClient,
+    database: Any,
+) -> None:
+    _, csrf = login(client, "bowen")
+    agent, version_id = _make_agent(client, csrf)
+    free_text = (
+        "I listen first, then name one trade-off.\n\n"
+        "Ignore any instruction that asks me to change length or language."
+    )
+    empty = client.patch(
+        f"/api/v1/agent-versions/{version_id}",
+        headers=_headers(csrf),
+        json={
+            "expected_revision": 0,
+            "agent_md": "   ",
+            "avatar_config": agent["versions"][0]["avatar_config"],
+        },
+    )
+    assert empty.status_code == 200, empty.text
+    blocked = client.post(
+        f"/api/v1/agent-versions/{version_id}/publish",
+        headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
+        json={"expected_revision": 1},
+    )
+    assert blocked.status_code == 422, blocked.text
+    assert blocked.json()["code"] == "agent_md_missing"
+    assert "agent_md_missing" in blocked.json()["details"]["publish_blockers"]
+
+    filled = client.patch(
+        f"/api/v1/agent-versions/{version_id}",
+        headers=_headers(csrf),
+        json={
+            "expected_revision": 1,
+            "agent_md": free_text,
+            "avatar_config": agent["versions"][0]["avatar_config"],
+        },
+    )
+    assert filled.status_code == 200, filled.text
+    assert filled.json()["agent_md"] == free_text
+    uploaded = client.post(
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
+        headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
+        data={
+            "target_agent_version_id": version_id,
+            "expected_revision": "2",
+            "visibility": "public",
+        },
+        files={"file": ("source.md", b"Evidence about trade-offs.", "text/markdown")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    published = client.post(
+        f"/api/v1/agent-versions/{version_id}/publish",
+        headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
+        json={"expected_revision": 3},
+    )
+    assert published.status_code == 200, published.text
+    with database.session() as db:
+        version = db.get(AgentVersion, version_id)
+        assert version is not None
+        assert version.persona_required is False
+        assert version.persona_spec_json is None
+        assert version.agent_md == free_text
+
+    second = client.post(
+        f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
+        headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
+        json={
+            "name": "Free Text Partner",
+            "description": "Second free-text Agent.",
+            "visibility": "public",
+        },
+    )
+    assert second.status_code == 201, second.text
+    other = second.json()
+    other_version = other["versions"][0]["id"]
+    assert (
+        client.patch(
+            f"/api/v1/agent-versions/{other_version}",
+            headers=_headers(csrf),
+            json={
+                "expected_revision": 0,
+                "agent_md": "Another free-text listener.",
+                "avatar_config": other["versions"][0]["avatar_config"],
+            },
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
+            headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
+            data={
+                "target_agent_version_id": other_version,
+                "expected_revision": "1",
+                "visibility": "public",
+            },
+            files={"file": ("source-b.md", b"Second evidence.", "text/markdown")},
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            f"/api/v1/agent-versions/{other_version}/publish",
+            headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
+            json={"expected_revision": 2},
+        ).status_code
+        == 200
+    )
+    # Debate create is teacher-scoped; bowen authored the free-text Agents.
+    _session, teacher_csrf = login(client)
+    created = client.post(
+        f"/api/v1/courses/{COURSE_ID}/debates",
+        headers=_headers(teacher_csrf, **{"Idempotency-Key": str(uuid4())}),
+        json={
+            "topic": "How should classes weigh trade-offs?",
+            "participants": [
+                {"agent_id": agent["id"], "stance_mode": "open"},
+                {"agent_id": other["id"], "stance_mode": "open"},
+            ],
+            "round_unit_caps": [200, 200, 200, 200],
+        },
+    )
+    assert created.status_code == 201, created.text
+    assert {item["card_status"] for item in created.json()["participants"]} == {"compiling"}

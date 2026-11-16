@@ -88,6 +88,21 @@ _SAFE_GENERATION_CODES = {
     "llm_recovery_input_unavailable",
     # Stuck pending/running prepare work past the agreed watchdog.
     "preparation_timeout",
+    # Card compile failure: one authorized attempt, no raw-AGENT.md speech path.
+    "debate_card_mock_provider",
+    "debate_card_failed",
+    "debate_card_agent_md_missing",
+    "debate_card_preflight_blocked",
+    "debate_card_budget_invalid",
+    "debate_card_attempt_used",
+    "debate_card_admission_refused",
+    "debate_card_ledger_failed",
+    "debate_card_not_sent",
+    "debate_card_acceptance_unknown",
+    "debate_card_transport_failed",
+    "debate_card_http_rejected",
+    "debate_card_invalid",
+    "debate_card_too_long",
 }
 _RECOVERABLE_PROVIDER_GENERATION_CODES = {
     "provider_confirmation_required",

@@ -13,13 +13,16 @@ import { DEBATE_BUTTON, DEBATE_TAG, DEBATE_TAG_TONE } from "../debate-chrome";
 export type DebateCard = components["schemas"]["DebateCard"];
 export type DebateCardStatus = "compiling" | "ready" | "fallback";
 
-const STATUS: Record<
-  DebateCardStatus,
-  { label: string; tone: keyof typeof DEBATE_TAG_TONE }
+const STATUS: Partial<
+  Record<
+    DebateCardStatus,
+    { label: string; tone: keyof typeof DEBATE_TAG_TONE }
+  >
 > = {
   compiling: { label: "Compiling", tone: "thinking" },
   ready: { label: "Ready", tone: "ready" },
-  fallback: { label: "Fallback", tone: "completed" },
+  // Fallback keeps the disclosure and reason body without a status tag.
+  // Honest fail-open notice copy awaits Lead approval before shipping.
 };
 
 const TEACHER_REASON_COPY: Record<DebateCardTeacherReason, MessageKey> = {
@@ -64,7 +67,7 @@ export function DebateCardCheck({
 }) {
   const t = useT();
   if (!status) return null;
-  const { label, tone } = STATUS[status];
+  const tag = STATUS[status];
   const reasonCopy =
     typeof card_teacher_reason === "string" &&
     Object.hasOwn(TEACHER_REASON_COPY, card_teacher_reason)
@@ -84,12 +87,18 @@ export function DebateCardCheck({
       >
         <IconEye size={18} />
         <span>Check card</span>
-        <span
-          className={cn(DEBATE_TAG, DEBATE_TAG_TONE[tone], "px-[7px] py-0")}
-          data-testid="debate-card-status"
-        >
-          {label}
-        </span>
+        {tag ? (
+          <span
+            className={cn(
+              DEBATE_TAG,
+              DEBATE_TAG_TONE[tag.tone],
+              "px-[7px] py-0",
+            )}
+            data-testid="debate-card-status"
+          >
+            {tag.label}
+          </span>
+        ) : null}
       </summary>
       <div className="mt-2 grid min-w-0 gap-2 rounded-[12px] border-2 border-[#111] bg-[#F1F7FF] p-2.5 text-sm leading-[1.45] [&_*]:[overflow-wrap:anywhere]">
         {status === "compiling" ? (
@@ -99,18 +108,9 @@ export function DebateCardCheck({
           </p>
         ) : null}
         {status === "fallback" || (status === "ready" && !card) ? (
-          status === "fallback" && reasonCopy ? (
-            <>
-              <p className="m-0 text-[#6B7280]">{t(reasonCopy)}</p>
-              <p className="m-0 text-[#6B7280]">
-                {t("debateCardFallbackContinues")}
-              </p>
-            </>
-          ) : (
-            <p className="m-0 text-[#6B7280]">
-              Fallback: this Agent speaks from its original AGENT.md.
-            </p>
-          )
+          <p className="m-0 text-[#6B7280]">
+            {t(reasonCopy ?? "debateCardReasonOther")}
+          </p>
         ) : null}
         {status === "ready" && card ? (
           <CardBody

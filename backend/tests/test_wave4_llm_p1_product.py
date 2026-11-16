@@ -23,7 +23,13 @@ from app.modules.debates.generation import (
 from app.modules.debates.generation.recovery_input import build_llm_recovery_input
 from app.modules.debates.generation.runtime import LLMDeferredPublicationV1
 from app.modules.debates.generation_params import RULESET_CONTRACT_V4
-from app.modules.debates.models import Debate, DebatePlaybackState, DebateTurn, TurnSource
+from app.modules.debates.models import (
+    Debate,
+    DebateParticipant,
+    DebatePlaybackState,
+    DebateTurn,
+    TurnSource,
+)
 from app.modules.debates.playback.audio import AudioStore
 from app.modules.debates.playback.llm_publication import SqlLLMPublication
 from app.modules.debates.playback.service import PlaybackService
@@ -224,6 +230,25 @@ def _seed_running_product_debate(
             snapshot.pop("over_length_ratio", None)
             snapshot.pop("repair_feedback_version", None)
             debate.rule_snapshot_json = json.dumps(snapshot)
+            # Mock does not call the card model. Seed a ready extracted card so
+            # preview/live prep never injects raw AGENT.md on fallback.
+            for row in db.scalars(
+                select(DebateParticipant).where(DebateParticipant.debate_id == debate_id)
+            ):
+                row.card_status = "ready"
+                row.card_json = json.dumps(
+                    {
+                        "identity": f"{row.agent_name} is a classroom participant.",
+                        "position": "",
+                        "reasoning": [],
+                        "speaking_style": "",
+                        "voice_style": None,
+                        "dropped": [],
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                row.card_safe_error_code = None
             db.commit()
         # Tests disable background warming; prepare the current four-round
         # Preview explicitly before exercising the live recovery boundary.

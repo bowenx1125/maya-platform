@@ -359,8 +359,9 @@ class DebateParticipant(_ClosedModel):
     initial_stance: Stance | None = None
     current_stance: Stance | None = None
     current_position_summary: str = ""
-    # Null for a Debate created before cards. "fallback" means the turns send
-    # the original AGENT.md; only "ready" carries a card.
+    # Null for a Debate created before cards (legacy pinned AGENT.md). "ready"
+    # carries the extracted card. "fallback" is the existing compile-failure
+    # state: turns must not speak from raw AGENT.md.
     card_status: Literal["compiling", "ready", "fallback"] | None = None
     card: DebateCard | None = None
     # Only set on fallback; ready and older rows stay null.

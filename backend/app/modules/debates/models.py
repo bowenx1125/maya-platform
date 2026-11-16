@@ -202,8 +202,8 @@ class DebateParticipant(Base):
     teacher_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
     initial_position_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
     current_position_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    # 0088 debate card: NULL for a Debate created before cards (it keeps its
-    # raw AGENT.md persona); compiling, then ready (card_json) or fallback.
+    # 0089 debate card: NULL for a Debate created before cards (legacy pinned
+    # AGENT.md); compiling, then ready (card_json) or fallback (no raw speech).
     card_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
     card_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     card_safe_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
