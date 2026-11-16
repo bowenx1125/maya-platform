@@ -133,4 +133,4 @@ Nov16 copy approval:two exact Avatar Save cause/fix messages;drawing bypasses ca
 
 Nov16 Option C:egg floor+crown;Roundtable Banner overlays.Live #448.
 
-Nov16 #449 DRAFT:egg speak-yaw;list End no confirm;mouth=audioPlaying;Preview egg drag-yaw (ephemeral).0 calls/deploy.
+Nov16 #449 DRAFT:egg speak-yaw;list End no confirm;mouth=audioPlaying;Preview drag-yaw;stage table removed(+wood/collider).0 calls/deploy.

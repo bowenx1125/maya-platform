@@ -34,23 +34,16 @@ describe("roundtable standing placement", () => {
 describe("fixed-world stage camera collision", () => {
   const walkCenter = { x: 0, z: -5.4 };
   const centerZ = 1.15;
-  const tableCollisionRadius = 1.63;
 
   it("keeps the walking camera inside the 2.5 metre courtyard envelope", () => {
-    expect(
-      stageCameraPositionBlocked(
-        walkCenter,
-        walkCenter,
-        centerZ,
-        tableCollisionRadius,
-      ),
-    ).toBe(false);
+    expect(stageCameraPositionBlocked(walkCenter, walkCenter, centerZ)).toBe(
+      false,
+    );
     expect(
       stageCameraPositionBlocked(
         { x: 0, z: walkCenter.z - STAGE_WALK_RADIUS },
         walkCenter,
         centerZ,
-        tableCollisionRadius,
       ),
     ).toBe(false);
     expect(
@@ -58,28 +51,23 @@ describe("fixed-world stage camera collision", () => {
         { x: STAGE_WALK_RADIUS + 0.01, z: walkCenter.z },
         walkCenter,
         centerZ,
-        tableCollisionRadius,
       ),
     ).toBe(true);
   });
 
-  it("blocks the live table and all five reserved standing positions", () => {
-    expect(
-      stageCameraPositionBlocked(
-        { x: 0, z: centerZ },
-        walkCenter,
-        centerZ,
-        tableCollisionRadius,
-      ),
-    ).toBe(true);
+  it("blocks reserved standing seats and leaves the open ring center free", () => {
+    const ringCenter = { x: 0, z: centerZ };
+    // No table collider: the ring center is walkable when outside seat radii.
+    expect(stageCameraPositionBlocked(ringCenter, ringCenter, centerZ)).toBe(
+      false,
+    );
     for (const slot of STAGE_SLOTS) {
       const position = standingPlacement(slot);
       expect(
         stageCameraPositionBlocked(
           { x: position.x, z: centerZ + position.z },
-          { x: 0, z: centerZ },
+          ringCenter,
           centerZ,
-          1,
         ),
         `slot ${slot}`,
       ).toBe(true);

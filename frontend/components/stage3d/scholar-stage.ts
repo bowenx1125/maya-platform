@@ -118,9 +118,8 @@ const CAMERA_TARGET = new THREE.Vector3(0, 0.74, 0.2);
 const CAMERA_DEPTH_MARGIN = 0.35;
 const CAMERA_EDGE_MARGIN = 1.08;
 
-const TABLE_RADIUS = 1.05;
-const TABLE_TOP_Y = 0.72;
-const TABLE_CENTER_Z = 0.2;
+/** Standing-ring center for the non-splat stage (seats / floor framing). */
+const STAGE_CENTER_Z = 0.2;
 const SPLAT_STAGE_CENTER_Z = 1.15;
 const FLOOR_Y = -0.42;
 const FLOOR_COLLIDER_WIDTH = 7.2;
@@ -151,8 +150,6 @@ const STAGE_CAMERA_NUDGE = 0.22;
 const STAGE_CAMERA_TURN_NUDGE = THREE.MathUtils.degToRad(7.5);
 const STAGE_CAMERA_MOUSE_SENSITIVITY = 0.0022;
 const STAGE_CAMERA_PITCH_LIMIT = THREE.MathUtils.degToRad(55);
-const STAGE_CAMERA_COLLISION_RADIUS = 0.2;
-const TABLE_COLLISION_RADIUS = TABLE_RADIUS + 0.38;
 const OVERVIEW_POSITION = new THREE.Vector3(0, 2.25, -6.2);
 const OVERVIEW_TARGET = new THREE.Vector3(0, 0.48, SPLAT_STAGE_CENTER_Z);
 const OVERVIEW_TRANSITION_SECONDS = 1.55;
@@ -531,28 +528,6 @@ function makeSoftShadow(): THREE.DataTexture {
   return texture;
 }
 
-function makeWoodTexture(): THREE.DataTexture {
-  const size = 256;
-  const pixels = new Uint8Array(size * size * 4);
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const line = y + Math.sin(x * 0.035) * 3 + Math.sin(x * 0.12);
-      const grain = Math.sin(line * 0.42) * 7 + Math.sin(line * 1.7) * 2;
-      const seam = Math.min(y % 74, 74 - (y % 74)) < 1.5 ? -19 : 0;
-      const shade = grain + seam + ((x * 13 + y * 7) % 17) * 0.3;
-      const offset = (y * size + x) * 4;
-      pixels[offset] = 119 + shade;
-      pixels[offset + 1] = 77 + shade * 0.7;
-      pixels[offset + 2] = 45 + shade * 0.5;
-      pixels[offset + 3] = 255;
-    }
-  }
-  const texture = new THREE.DataTexture(pixels, size, size, THREE.RGBAFormat);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.needsUpdate = true;
-  return texture;
-}
-
 /**
  * One WebGL context, one render loop, every speaker in it.
  *
@@ -567,7 +542,6 @@ export class ScholarStage {
   private readonly loader = new GLTFLoader();
   private readonly draco = new DRACOLoader();
   private readonly shadowTexture = makeSoftShadow();
-  private readonly woodTexture = makeWoodTexture();
   private readonly floorBounds: THREE.Box3;
   private readonly stageCenterZ: number;
   private readonly characterHeight: number;
@@ -578,7 +552,6 @@ export class ScholarStage {
   private templates: THREE.Object3D[] = [];
   private templateScales: number[] = [];
   private loading = 0;
-  private table: THREE.Group | null = null;
   private readonly characters: Character[] = [];
   private pending: StageCharacter[] | null = null;
   private frame: number | null = null;
@@ -674,7 +647,7 @@ export class ScholarStage {
     this.onAnchors = options.onAnchors;
     const backdrop = stageBackdropMode();
     this.stageCenterZ =
-      backdrop === "splat" ? SPLAT_STAGE_CENTER_Z : TABLE_CENTER_Z;
+      backdrop === "splat" ? SPLAT_STAGE_CENTER_Z : STAGE_CENTER_Z;
     this.characterHeight =
       backdrop === "splat" ? SPLAT_CHARACTER_HEIGHT : NORMALISED_HEIGHT;
 
@@ -685,7 +658,7 @@ export class ScholarStage {
       0.1,
       SPLAT_CAMERA_FAR,
     );
-    // Figures, table and splat remain in world space. Navigation mutates this
+    // Figures and splat remain in world space. Navigation mutates this
     // camera only, which prevents any apparent character follow behavior.
     this.camera.position.set(0, CAMERA_HEIGHT, DEFAULT_CAMERA_Z);
     this.camera.lookAt(CAMERA_TARGET);
@@ -700,7 +673,6 @@ export class ScholarStage {
     this.scene.add(fill);
 
     this.floorBounds = this.buildFloorBounds();
-    this.buildTable();
 
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
@@ -879,13 +851,7 @@ export class ScholarStage {
     }
     this.templates.length = 0;
     this.templateScales.length = 0;
-    if (this.table) {
-      this.scene.remove(this.table);
-      disposeObject(this.table);
-      this.table = null;
-    }
     this.shadowTexture.dispose();
-    this.woodTexture.dispose();
     this.disposeSplatBackdrop();
     this.disposeDepthBackdrop();
     this.draco.dispose();
@@ -1162,7 +1128,7 @@ export class ScholarStage {
 
   /**
    * The depth backdrop loads as one all-or-nothing unit: any failed texture
-   * leaves the procedural table visible and the CSS courtyard untouched.
+   * leaves the CSS courtyard untouched.
    */
   private async loadDepthBackdrop(): Promise<void> {
     const token = ++this.depthToken;
@@ -1248,13 +1214,11 @@ export class ScholarStage {
       this.depthCamera = camera;
       adopted = true;
       this.depthLoaded = true;
-      // Only now is the flat image trusted to replace the modeled table.
-      if (this.table) this.table.visible = false;
       this.resize();
     } catch (cause) {
       if (token === this.depthToken && !this.disposed) {
         // The stage's onError flips the whole scene to "failed", so a missing
-        // depth asset only logs and keeps the table + CSS backdrop fallback.
+        // depth asset only logs and keeps the CSS backdrop fallback.
         console.warn("stage_depth_unavailable", cause);
       }
     } finally {
@@ -1286,7 +1250,6 @@ export class ScholarStage {
     // Any later load result sees the bump and cleans up after itself.
     this.depthToken += 1;
     this.depthLoaded = false;
-    if (this.table) this.table.visible = true;
     if (this.depthMesh) {
       this.depthScene?.remove(this.depthMesh);
       this.depthMesh.geometry.dispose();
@@ -1300,69 +1263,6 @@ export class ScholarStage {
     this.depthTextures = [];
     this.depthScene = null;
     this.depthCamera = null;
-  }
-
-  private buildTable(): void {
-    if (this.table) return;
-    const group = new THREE.Group();
-
-    const top = new THREE.Mesh(
-      new THREE.CylinderGeometry(TABLE_RADIUS, TABLE_RADIUS, 0.06, 64),
-      new THREE.MeshStandardMaterial({ color: 0x583822, roughness: 0.83 }),
-    );
-    top.position.set(0, TABLE_TOP_Y, this.stageCenterZ);
-    group.add(top);
-
-    const surface = new THREE.Mesh(
-      new THREE.CircleGeometry(TABLE_RADIUS - 0.045, 64),
-      new THREE.MeshStandardMaterial({
-        map: this.woodTexture,
-        roughness: 0.78,
-        side: THREE.DoubleSide,
-      }),
-    );
-    surface.rotation.x = -Math.PI / 2;
-    surface.position.set(0, TABLE_TOP_Y + 0.031, this.stageCenterZ);
-    group.add(surface);
-
-    for (const radius of [TABLE_RADIUS - 0.09, TABLE_RADIUS - 0.14]) {
-      const inlay = new THREE.Mesh(
-        new THREE.TorusGeometry(radius, 0.004, 4, 64),
-        new THREE.MeshStandardMaterial({ color: 0xa47b4e, roughness: 0.65 }),
-      );
-      inlay.rotation.x = -Math.PI / 2;
-      inlay.position.set(0, TABLE_TOP_Y + 0.033, this.stageCenterZ);
-      group.add(inlay);
-    }
-
-    const pedestalHeight = TABLE_TOP_Y - FLOOR_Y - 0.03;
-    const pedestal = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.13, 0.21, pedestalHeight, 16),
-      new THREE.MeshStandardMaterial({
-        color: 0xc9b49e,
-        map: this.woodTexture,
-        roughness: 0.86,
-      }),
-    );
-    pedestal.position.set(0, FLOOR_Y + pedestalHeight / 2, this.stageCenterZ);
-    group.add(pedestal);
-
-    const shadow = new THREE.Mesh(
-      new THREE.CircleGeometry(0.68, 40),
-      new THREE.MeshBasicMaterial({
-        color: 0x34291e,
-        map: this.shadowTexture,
-        transparent: true,
-        opacity: 0.32,
-        depthWrite: false,
-      }),
-    );
-    shadow.rotation.x = -Math.PI / 2;
-    shadow.position.set(0, FLOOR_Y - 0.02, this.stageCenterZ);
-    group.add(shadow);
-
-    this.table = group;
-    this.scene.add(group);
   }
 
   /**
@@ -1551,7 +1451,7 @@ export class ScholarStage {
   }
 
   /**
-   * Keep every reserved slot, the table and bubbles inside the reset view.
+   * Keep every reserved slot and bubbles inside the reset view.
    */
   private updateCameraFraming(): void {
     if (stageBackdropMode() === "splat") {
@@ -1561,7 +1461,7 @@ export class ScholarStage {
     // Imported skinned-mesh bounds include distant rig helpers; frame the
     // authored standing ring instead of letting those helpers shrink the stage.
     const outer = STAGE_STANDING_RADIUS + 0.5;
-    const halfWidth = Math.max(TABLE_RADIUS + 0.55, outer) * CAMERA_EDGE_MARGIN;
+    const halfWidth = outer * CAMERA_EDGE_MARGIN;
     const aspect = Math.max(this.camera.aspect, 0.1);
     const halfFovRadians = THREE.MathUtils.degToRad(this.camera.fov / 2);
     const requiredDistance =
@@ -1638,7 +1538,6 @@ export class ScholarStage {
       position,
       SPLAT_CAPTURE_ORIGIN,
       this.stageCenterZ,
-      TABLE_COLLISION_RADIUS + STAGE_CAMERA_COLLISION_RADIUS,
     );
   }
 
