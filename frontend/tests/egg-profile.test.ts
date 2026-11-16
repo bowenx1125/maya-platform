@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   EGG_PROFILE as P,
   eggRadius,
@@ -56,6 +56,9 @@ describe("C2 ovoid profile", () => {
         loadTexture: async () => new THREE.Texture(),
       }))
       .parseAsync(buffer, "");
+    const canvasContext = vi
+      .spyOn(HTMLCanvasElement.prototype, "getContext")
+      .mockReturnValue(null);
     const egg = prepareEggModel(gltf.scene);
     const shell = egg.root.getObjectByName("Shell") as THREE.Mesh;
     shell.geometry.computeBoundingBox();
@@ -96,5 +99,64 @@ describe("C2 ovoid profile", () => {
     expect(Array.from(mouth.geometry.attributes.position.array)).toEqual(
       closed,
     );
+
+    const shader = {
+      uniforms: {} as Record<string, { value: unknown }>,
+      vertexShader:
+        "#include <common>\n#include <begin_vertex>\n#include <worldpos_vertex>",
+      fragmentShader:
+        "#include <common>\n#include <color_fragment>\n#include <lights_physical_pars_fragment>\n#include <opaque_fragment>",
+    };
+    const shellMaterial = shell.material as THREE.MeshPhysicalMaterial;
+    shellMaterial.onBeforeCompile(
+      shader as Parameters<THREE.Material["onBeforeCompile"]>[0],
+      {} as THREE.WebGLRenderer,
+    );
+    expect(shader.vertexShader).toContain("vEggLocal = position");
+    expect(shader.fragmentShader).toContain("if(vEggLocal.z > 0.0)");
+    expect(shader.fragmentShader).toContain("texture2D(eggInk, uv)");
+    const texture = shader.uniforms.eggInk.value as THREE.Texture;
+    expect(texture.colorSpace).toBe(THREE.SRGBColorSpace);
+    for (const name of [
+      "Hand_L",
+      "Hand_R",
+      "Foot_L",
+      "Foot_R",
+      "Fillet_Hand_L",
+    ]) {
+      const limb = egg.root.getObjectByName(name) as THREE.Mesh;
+      expect(limb.material).not.toBe(shell.material);
+      expect(
+        (limb.material as THREE.Material).customProgramCacheKey(),
+      ).not.toContain("drawing");
+    }
+    const version = texture.version;
+    egg.setDrawing({
+      version: 1,
+      strokes: [
+        {
+          id: "ink",
+          color: "#8C4B9E",
+          width: 0.02,
+          opacity: 1,
+          points: [{ x: 0.5, y: 0.2 }],
+        },
+      ],
+      mouth: { x: 0.55, y: 0.5 },
+    });
+    expect(texture.version).toBeGreaterThan(version);
+    egg.frame(3, false, true);
+    expect(mouth.geometry.attributes.position.getX(64)).toBeCloseTo(
+      0.05 * P.height * P.widthRatio,
+      5,
+    );
+    expect(mouth.geometry.attributes.position.getY(64)).toBeCloseTo(
+      P.bottom + P.height * 0.5,
+      5,
+    );
+    const dispose = vi.spyOn(texture, "dispose");
+    egg.dispose();
+    expect(dispose).toHaveBeenCalledOnce();
+    canvasContext.mockRestore();
   });
 });

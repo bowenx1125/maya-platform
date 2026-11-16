@@ -49,6 +49,7 @@ EXPRESSION_STRENGTHS: Final[tuple[str, ...]] = ("low", "medium", "high")
 MOTION_STYLES: Final[tuple[str, ...]] = ("calm", "active")
 CONFIG_FIELDS: Final[frozenset[str]] = frozenset(
     {
+        "drawing",
         "template_id",
         "material_theme",
         "eye_color",

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import type { Drawing } from "../avatar/drawing";
 import { EggCanvas } from "../avatar/egg-canvas";
 import { PreviewControls } from "./preview-controls";
 import {
@@ -13,8 +14,10 @@ import styles from "./preview.module.css";
 
 export function AgentPreview({
   onClose,
+  drawing,
   request,
 }: {
+  drawing?: Drawing | null;
   onClose: () => void;
   request: (message: string) => Promise<PreviewReply>;
 }) {
@@ -81,7 +84,7 @@ export function AgentPreview({
     >
       <div className={styles.courtyard} aria-hidden="true" />
       <div className={styles.stage}>
-        <EggCanvas playing={state.playing} />
+        <EggCanvas playing={state.playing} drawing={drawing} />
       </div>
       <PreviewControls
         question={state.question}

@@ -34,7 +34,7 @@ export function AvatarCanvas(props: AvatarCanvasProps) {
   if (props.config?.template_id === "egg")
     return (
       <div className={`w-full ${props.className ?? "aspect-square"}`}>
-        <EggCanvas />
+        <EggCanvas drawing={props.config.drawing} />
       </div>
     );
   return <LegacyAvatarCanvas {...props} />;

@@ -6301,6 +6301,62 @@ paths:
       summary: Preview Agent Route
       tags:
       - Agents
+  /agent-versions/{version_id}/avatar:
+    put:
+      operationId: saveAgentAvatar
+      parameters:
+      - in: path
+        name: version_id
+        required: true
+        schema:
+          format: uuid
+          title: Version Id
+          type: string
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          minLength: 16
+          title: Idempotency-Key
+          type: string
+      - in: header
+        name: X-CSRF-Token
+        required: true
+        schema:
+          minLength: 32
+          title: X-Csrf-Token
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveAvatarRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentVersion'
+          description: Avatar saved immediately.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Version not found.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Revision or base conflict.
+      security:
+      - sessionCookie: []
+      summary: Save Agent Avatar
+      tags:
+      - Agents
+
 components:
   securitySchemes:
     sessionCookie:
@@ -8915,41 +8971,52 @@ components:
       title: UpdateAgentMetadataRequest
       type: object
     AvatarConfig:
-      type: object
-      required:
-      - template_id
-      - material_theme
-      - default_expression
-      - expression_strength
-      - motion_style
       properties:
-        template_id:
-          type: string
-        material_theme:
-          type: string
-        eye_color:
-          type:
-          - string
-          - 'null'
         default_expression:
-          type: string
           enum:
           - neutral
           - attentive
           - happy
           - serious_angry
           - sad
-        expression_strength:
+          title: Default Expression
           type: string
+        drawing:
+          anyOf:
+          - $ref: '#/components/schemas/AvatarDrawing'
+          - type: 'null'
+        expression_strength:
           enum:
           - low
           - medium
           - high
-        motion_style:
+          title: Expression Strength
           type: string
+        eye_color:
+          title: Eye Color
+          type:
+          - string
+          - 'null'
+        material_theme:
+          title: Material Theme
+          type: string
+        motion_style:
           enum:
           - calm
           - active
+          title: Motion Style
+          type: string
+        template_id:
+          title: Template Id
+          type: string
+      required:
+      - template_id
+      - material_theme
+      - default_expression
+      - expression_strength
+      - motion_style
+      title: AvatarConfig
+      type: object
     AvatarTemplate:
       type: object
       required:
@@ -11476,6 +11543,10 @@ components:
       type: object
     AgentCreateRequest:
       properties:
+        avatar_config:
+          anyOf:
+          - $ref: '#/components/schemas/AvatarConfig'
+          - type: 'null'
         description:
           default: ''
           title: Description
@@ -15602,4 +15673,143 @@ components:
       - points_total
       - submitted_at
       title: TeacherQuizAttemptDetailDTO
+      type: object
+    AvatarDrawing:
+      additionalProperties: false
+      properties:
+        mouth:
+          $ref: '#/components/schemas/DrawingMouth'
+        strokes:
+          items:
+            $ref: '#/components/schemas/DrawingStroke'
+          maxItems: 256
+          title: Strokes
+          type: array
+        version:
+          const: 1
+          default: 1
+          title: Version
+          type: integer
+      required:
+      - strokes
+      - mouth
+      title: AvatarDrawing
+      type: object
+    DrawingPoint:
+      additionalProperties: false
+      properties:
+        x:
+          maximum: 1.0
+          minimum: 0.0
+          title: X
+          type: number
+        y:
+          maximum: 1.0
+          minimum: 0.0
+          title: Y
+          type: number
+      required:
+      - x
+      - y
+      title: DrawingPoint
+      type: object
+    DrawingErase:
+      additionalProperties: false
+      properties:
+        points:
+          items:
+            $ref: '#/components/schemas/DrawingPoint'
+          maxItems: 4096
+          minItems: 1
+          title: Points
+          type: array
+        width:
+          maximum: 0.1
+          minimum: 0.0009765625
+          title: Width
+          type: number
+      required:
+      - width
+      - points
+      title: DrawingErase
+      type: object
+    DrawingStroke:
+      additionalProperties: false
+      properties:
+        color:
+          pattern: ^#[0-9a-fA-F]{6}$
+          title: Color
+          type: string
+        erasures:
+          items:
+            $ref: '#/components/schemas/DrawingErase'
+          maxItems: 256
+          title: Erasures
+          type: array
+        id:
+          pattern: ^[a-zA-Z0-9_-]{1,64}$
+          title: Id
+          type: string
+        opacity:
+          default: 1
+          maximum: 1.0
+          minimum: 0.0
+          title: Opacity
+          type: number
+        points:
+          items:
+            $ref: '#/components/schemas/DrawingPoint'
+          maxItems: 4096
+          minItems: 1
+          title: Points
+          type: array
+        width:
+          maximum: 0.1
+          minimum: 0.0009765625
+          title: Width
+          type: number
+      required:
+      - width
+      - points
+      - id
+      - color
+      title: DrawingStroke
+      type: object
+    DrawingMouth:
+      additionalProperties: false
+      properties:
+        x:
+          default: 0.5
+          maximum: 0.6
+          minimum: 0.4
+          title: X
+          type: number
+        y:
+          default: 0.435
+          maximum: 0.65
+          minimum: 0.3
+          title: Y
+          type: number
+      title: DrawingMouth
+      type: object
+    SaveAvatarRequest:
+      additionalProperties: false
+      properties:
+        avatar_config:
+          $ref: '#/components/schemas/AvatarConfig'
+        expected_published_version_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Expected Published Version Id
+        expected_revision:
+          minimum: 0.0
+          title: Expected Revision
+          type: integer
+      required:
+      - expected_revision
+      - expected_published_version_id
+      - avatar_config
+      title: SaveAvatarRequest
       type: object

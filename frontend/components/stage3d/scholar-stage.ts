@@ -1405,7 +1405,7 @@ export class ScholarStage {
       const root = cloneSkinned(
         this.templates[templateIndex] as THREE.Object3D,
       );
-      const egg = isEgg ? prepareEggModel(root) : null;
+      const egg = isEgg ? prepareEggModel(root, spec.config.drawing) : null;
       root.scale.setScalar(
         isEgg ? this.characterHeight / 2.7 : this.templateScales[templateIndex],
       );

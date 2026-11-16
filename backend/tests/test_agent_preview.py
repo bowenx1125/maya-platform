@@ -248,7 +248,9 @@ def test_debate_snapshot_freezes_egg_after_agent_changes(app_factory: Any) -> No
     with database.session() as db:
         version = db.get(AgentVersion, version_id)
         assert version is not None
-        version.avatar_config_json = default_config_for("egg").model_dump_json()
+        from tests.test_avatar_drawing import config
+
+        version.avatar_config_json = json.dumps(config())
     with TestClient(app) as client:
         _, csrf = login(client)
         result = client.post(
@@ -265,6 +267,8 @@ def test_debate_snapshot_freezes_egg_after_agent_changes(app_factory: Any) -> No
         )
         assert result.status_code == 201, result.text
         debate = result.json()
+        frozen_drawing = debate["participants"][0]["avatar_config"]["drawing"]
+        assert frozen_drawing == config()["drawing"]
         assert debate["participants"][0]["avatar_config"]["template_id"] == "egg"
         with database.session() as db:
             version = db.get(AgentVersion, version_id)
@@ -273,6 +277,8 @@ def test_debate_snapshot_freezes_egg_after_agent_changes(app_factory: Any) -> No
         reread = client.get(f"/api/v1/debates/{debate['id']}")
         assert reread.status_code == 200
         assert reread.json()["participants"][0]["avatar_config"]["template_id"] == "egg"
+
+        assert reread.json()["participants"][0]["avatar_config"]["drawing"] == frozen_drawing
 
 
 def test_real_preview_path_accounts_once_without_chat_rows(

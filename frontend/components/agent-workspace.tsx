@@ -1,5 +1,8 @@
 "use client";
 
+import { DrawingBoard } from "./avatar/drawing-board";
+import type { Drawing } from "./avatar/drawing";
+
 import { AgentPreview } from "./agent-preview/agent-preview";
 
 import { AgentHintBar } from "./agent-issue-list";
@@ -308,6 +311,7 @@ export function AgentWorkbench({
     create: (
       name: string,
       visibility: "private" | "public",
+      avatarConfig?: AvatarConfig,
     ) => Promise<AgentDetail>;
     onIdentityEdit?: () => void;
   };
@@ -361,6 +365,8 @@ export function AgentWorkbench({
   const [avatarTemplatesLoading, setAvatarTemplatesLoading] = useState(false);
   const avatarLoadSequence = useRef(0);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [drawingOpen, setDrawingOpen] = useState(false);
+  const [previewDrawing, setPreviewDrawing] = useState<Drawing | null>(null);
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
   const [voiceProfileId, setVoiceProfileId] = useState<string | null>(null);
   const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfile[]>([]);
@@ -1059,7 +1065,9 @@ export function AgentWorkbench({
     let created = createdAgentRef.current;
     if (!created) {
       try {
-        created = await create(draftName.trim(), draftVisibility);
+        created = avatarConfig?.drawing
+          ? await create(draftName.trim(), draftVisibility, avatarConfig)
+          : await create(draftName.trim(), draftVisibility);
         if (!isCurrentScope(requestScope)) return null;
         createdAgentRef.current = created;
         setAgent(created);
@@ -1734,15 +1742,60 @@ export function AgentWorkbench({
               ) : null}
             </div>
             <div className="stage sticky top-5 grid gap-11 self-start max-[767px]:static max-[767px]:order-2">
+              {avatarConfig ? (
+                <DrawingBoard
+                  key={`drawing:${workbenchScope}`}
+                  open={drawingOpen}
+                  drawing={avatarConfig.drawing}
+                  onClose={() => setDrawingOpen(false)}
+                  onPreview={(drawing) => {
+                    setPreviewDrawing(drawing);
+                    setPreviewOpen(true);
+                  }}
+                  onSave={async (drawing, key) => {
+                    const config = { ...avatarConfig, drawing };
+                    if (unsavedCreate && !currentAgent.id) {
+                      unsavedCreate.onIdentityEdit?.();
+                      setAvatarConfig(config);
+                      return;
+                    }
+                    const requestScope = workbenchScope;
+                    const next = await api.saveAgentAvatar(
+                      currentVersion.id,
+                      {
+                        expected_revision: currentVersion.revision,
+                        expected_published_version_id:
+                          currentAgent.current_published_version_id ?? null,
+                        avatar_config: config,
+                      },
+                      key,
+                    );
+                    if (!isCurrentScope(requestScope)) return;
+                    setVersion(next);
+                    setAvatarConfig(next.avatar_config);
+                    if (next.state === "published")
+                      setAgent({
+                        ...currentAgent,
+                        current_published_version_id: next.id,
+                      });
+                  }}
+                />
+              ) : null}
               {previewOpen && avatarConfig ? (
                 <AgentPreview
                   key={workbenchScope}
-                  onClose={() => setPreviewOpen(false)}
+                  onClose={() => {
+                    setPreviewOpen(false);
+                    setPreviewDrawing(null);
+                  }}
+                  drawing={previewDrawing ?? avatarConfig.drawing}
                   request={(message) =>
                     api.previewAgent({
                       message,
                       agent_md: agentMd,
-                      avatar_config: avatarConfig,
+                      avatar_config: previewDrawing
+                        ? { ...avatarConfig, drawing: previewDrawing }
+                        : avatarConfig,
                       voice_profile_id: voiceProfileId,
                       version_id: version?.id || null,
                       course_id: unsavedCreate?.courseId ?? null,
@@ -1769,7 +1822,11 @@ export function AgentWorkbench({
                   ) : null}
                   {avatarTemplatesLoading ? <LoadingCard size="sm" /> : null}
                   <AvatarEditor
-                    onPreview={() => setPreviewOpen(true)}
+                    onPreview={() => {
+                      setPreviewDrawing(null);
+                      setPreviewOpen(true);
+                    }}
+                    onEdit={() => setDrawingOpen(true)}
                     templates={avatarTemplates}
                     value={avatarConfig}
                     onChange={setAvatarConfig}

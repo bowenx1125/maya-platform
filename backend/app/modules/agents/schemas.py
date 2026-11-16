@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -16,6 +16,50 @@ from app.modules.agents.persona import (
 )
 from app.modules.knowledge.schemas import KnowledgeDocument
 
+Coordinate = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False, strict=True)]
+
+
+class DrawingPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    x: Coordinate
+    y: Coordinate
+
+
+class DrawingErase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    width: float = Field(ge=1 / 1024, le=0.1, allow_inf_nan=False, strict=True)
+    points: list[DrawingPoint] = Field(min_length=1, max_length=4096)
+
+
+class DrawingStroke(DrawingErase):
+    id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,64}$")
+    color: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
+    opacity: float = Field(default=1, ge=0, le=1, allow_inf_nan=False, strict=True)
+    erasures: list[DrawingErase] = Field(default_factory=list, max_length=256)
+
+
+class DrawingMouth(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    x: float = Field(default=0.5, ge=0.4, le=0.6, allow_inf_nan=False, strict=True)
+    y: float = Field(default=0.435, ge=0.3, le=0.65, allow_inf_nan=False, strict=True)
+
+
+class AvatarDrawing(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: Literal[1] = 1
+    strokes: list[DrawingStroke] = Field(max_length=256)
+    mouth: DrawingMouth
+
+    @model_validator(mode="after")
+    def bounded_drawing(self) -> AvatarDrawing:
+        if len({stroke.id for stroke in self.strokes}) != len(self.strokes):
+            raise ValueError("duplicate stroke ids")
+        points = sum(len(s.points) + sum(len(e.points) for e in s.erasures) for s in self.strokes)
+        masks = sum(len(s.erasures) for s in self.strokes)
+        if points > 20000 or masks > 2048 or len(self.model_dump_json().encode()) > 524288:
+            raise ValueError("drawing too large")
+        return self
+
 
 class AvatarConfig(BaseModel):
     template_id: str
@@ -24,6 +68,13 @@ class AvatarConfig(BaseModel):
     default_expression: Literal["neutral", "attentive", "happy", "serious_angry", "sad"]
     expression_strength: Literal["low", "medium", "high"]
     motion_style: Literal["calm", "active"]
+    drawing: AvatarDrawing | None = Field(default=None, exclude_if=lambda value: value is None)
+
+    @model_validator(mode="after")
+    def drawing_is_egg_only(self) -> AvatarConfig:
+        if self.drawing is not None and self.template_id != "egg":
+            raise ValueError("drawing requires egg")
+        return self
 
 
 class AgentSummary(BaseModel):
@@ -162,10 +213,18 @@ class UpdateAgentDraftRequest(BaseModel):
     voice_profile_id: UUID | None = None
 
 
+class SaveAvatarRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=0)
+    expected_published_version_id: UUID | None
+    avatar_config: AvatarConfig
+
+
 class AgentCreateRequest(BaseModel):
     # Trimmed and checked by the route so empty / too-long names get the
     # stable ``agent_name_required`` / ``agent_name_too_long`` codes.
     name: str
+    avatar_config: AvatarConfig | None = None
     description: str = ""
     visibility: Literal["private", "public"] = "private"
 

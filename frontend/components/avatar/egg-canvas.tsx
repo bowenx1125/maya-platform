@@ -1,14 +1,28 @@
 "use client";
 
+import type { Drawing } from "./drawing";
+import type { EggModel } from "../stage3d/egg-model";
 import { useEffect, useRef } from "react";
 
 export function EggCanvas({
+  drawing,
+  faded,
   playing = false,
   className = "",
 }: {
+  drawing?: Drawing | null;
+  faded?: ReadonlySet<string>;
   playing?: boolean;
   className?: string;
 }) {
+  const drawingRef = useRef(drawing);
+  const fadedRef = useRef(faded);
+  const eggRef = useRef<EggModel | null>(null);
+  useEffect(() => {
+    drawingRef.current = drawing;
+    fadedRef.current = faded;
+    eggRef.current?.setDrawing(drawing, faded);
+  }, [drawing, faded]);
   const host = useRef<HTMLDivElement>(null);
   const playingRef = useRef(playing);
   useEffect(() => {
@@ -81,6 +95,7 @@ export function EggCanvas({
         const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
         cleanup = () => {
           cancelAnimationFrame(raf);
+          eggRef.current = null;
           disposeEgg();
           observer.disconnect();
           scene.traverse((o) => {
@@ -107,7 +122,9 @@ export function EggCanvas({
             });
             return;
           }
-          const egg = prepareEggModel(gltf.scene);
+          const egg = prepareEggModel(gltf.scene, drawingRef.current);
+          eggRef.current = egg;
+          egg.setDrawing(drawingRef.current, fadedRef.current);
           disposeEgg = egg.dispose;
           scene.add(egg.root);
           const frame = (ms: number) => {

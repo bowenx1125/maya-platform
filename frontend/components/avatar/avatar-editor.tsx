@@ -34,6 +34,7 @@ export type AvatarEditorProps = {
   disabled?: boolean;
   errorMessage?: string;
   onPreview?: () => void;
+  onEdit?: () => void;
 };
 
 function setField<K extends keyof AvatarConfig>(

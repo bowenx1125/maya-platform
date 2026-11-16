@@ -1,5 +1,11 @@
 import * as THREE from "three";
 import {
+  BLANK_DRAWING,
+  DRAWING_WIDTH,
+  renderDrawing,
+  type Drawing,
+} from "../avatar/drawing";
+import {
   EGG_PROFILE as P,
   eggRadius,
   eggFrontZ,
@@ -9,11 +15,15 @@ import {
 export type EggModel = {
   root: THREE.Object3D;
   dispose: () => void;
+  setDrawing: (drawing?: Drawing | null, faded?: ReadonlySet<string>) => void;
   frame: (time: number, playing: boolean, reduced: boolean) => void;
 };
 
 /** Adapt the supplied GLB, preserving its shell topology and limb meshes. */
-export function prepareEggModel(root: THREE.Object3D): EggModel {
+export function prepareEggModel(
+  root: THREE.Object3D,
+  drawing?: Drawing | null,
+): EggModel {
   const shell = root.getObjectByName("Shell") as THREE.Mesh;
   const sourceMouth = root.getObjectByName("Mouth") as THREE.Mesh;
   if (!shell || !sourceMouth) throw new Error("egg_asset_invalid");
@@ -164,7 +174,49 @@ export function prepareEggModel(root: THREE.Object3D): EggModel {
       [0.092, 0.095, 0.13],
     );
   }
-  shell.material = material;
+  const shellMaterial = material.clone();
+  shellMaterial.onBeforeCompile = (shader) => {
+    material.onBeforeCompile(shader, null as unknown as THREE.WebGLRenderer);
+    shader.uniforms.eggInk = { value: texture };
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        "#include <common>\nvarying vec3 vEggLocal;",
+      )
+      .replace(
+        "#include <begin_vertex>",
+        "#include <begin_vertex>\nvEggLocal = position;",
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        "#include <common>\nvarying vec3 vEggLocal;\nuniform sampler2D eggInk;",
+      )
+      .replace(
+        "#include <color_fragment>",
+        `#include <color_fragment>
+        if(vEggLocal.z > 0.0) {
+          vec2 uv = vec2(vEggLocal.x / ${DRAWING_WIDTH.toFixed(8)} + 0.5, (vEggLocal.y - ${P.bottom}) / ${P.height});
+          vec4 ink = texture2D(eggInk, uv);
+          diffuseColor.rgb = mix(diffuseColor.rgb, ink.rgb, ink.a);
+        }`,
+      );
+  };
+  shellMaterial.customProgramCacheKey = () => "egg-amber-c2-drawing-v1";
+  const canvas =
+    typeof document === "undefined" ? null : document.createElement("canvas");
+  const texture = canvas
+    ? new THREE.CanvasTexture(canvas)
+    : new THREE.Texture();
+  texture.colorSpace = THREE.SRGBColorSpace;
+  let currentDrawing = drawing ?? BLANK_DRAWING;
+  const setDrawing = (next?: Drawing | null, faded?: ReadonlySet<string>) => {
+    currentDrawing = next ?? BLANK_DRAWING;
+    if (canvas) renderDrawing(canvas, currentDrawing, faded);
+    texture.needsUpdate = true;
+  };
+  setDrawing(drawing);
+  shell.material = shellMaterial;
   sourceMouth.visible = false;
   const mouthGeometry = new THREE.BufferGeometry();
   const count = 64,
@@ -206,12 +258,12 @@ export function prepareEggModel(root: THREE.Object3D): EggModel {
     const stretch = reduced ? 0 : 0.026 * weight;
     shell.scale.set(1 - stretch * 0.42, 1 + stretch, 1 - stretch * 0.3);
     shell.position.y = -P.bottom * stretch;
-    const anchor = P.bottom + P.height * P.mouthHeight;
+    const anchor = P.bottom + P.height * (1 - currentDrawing.mouth.y);
     const width = 2 * eggRadius(P.mouthHeight) * P.mouthWidthRatio;
     for (let i = 0; i <= count; i++) {
       const u = (i / count) * 2 - 1,
         shape = Math.pow(Math.max(0, 1 - u * u), 0.78),
-        x = (u * width) / 2;
+        x = (u * width) / 2 + (currentDrawing.mouth.x - 0.5) * DRAWING_WIDTH;
       const top = anchor + 0.055 * u * u + weight * 0.025 * shape;
       for (let j = 0; j < 2; j++) {
         const y =
@@ -253,5 +305,13 @@ export function prepareEggModel(root: THREE.Object3D): EggModel {
     aoBottom.value = root.localToWorld(worldBase.set(0, P.bottom, 0)).y;
   };
   frame(0, false, true);
-  return { root, frame, dispose: () => grain.dispose() };
+  return {
+    root,
+    frame,
+    setDrawing,
+    dispose: () => {
+      grain.dispose();
+      texture.dispose();
+    },
+  };
 }

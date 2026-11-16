@@ -1,0 +1,259 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: #dcebff;
+  background-image:
+    linear-gradient(#1111110a 1px, transparent 1px),
+    linear-gradient(90deg, #1111110a 1px, transparent 1px);
+  background-size: 32px 32px;
+  overflow: auto;
+}
+.page {
+  height: 100svh;
+  max-width: 1236px;
+  padding: 28px 40px 32px;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  color: #111;
+  font-family: var(--font-lexend), sans-serif;
+  outline: none;
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.header h1 {
+  margin: 0;
+  font:
+    800 40px var(--font-bricolage),
+    sans-serif;
+}
+.preview {
+  background: #ffe14d;
+  height: 44px;
+  font-weight: 700;
+}
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border: 3px solid #111;
+  border-radius: 16px;
+  box-shadow: 6px 6px #111;
+  background: #ffe9cb
+    repeating-conic-gradient(
+      from 0deg at 50% 48%,
+      #fdba7455 0deg 9deg,
+      transparent 9deg 18deg
+    );
+  overflow: hidden;
+  touch-action: none;
+  cursor: crosshair;
+}
+.stage > div {
+  pointer-events: none;
+}
+.toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  background: #fff;
+  border: 3px solid #111;
+  border-radius: 12px;
+  box-shadow: 6px 6px #111;
+  padding: 18px;
+  flex-shrink: 0;
+}
+.tools,
+.actions {
+  display: flex;
+  gap: 10px;
+}
+.tool {
+  height: 62px;
+  min-width: 88px;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border: 2px solid #111;
+  box-shadow: 0 3px #111;
+  border-radius: 10px;
+}
+.tool svg {
+  width: 22px;
+  height: 22px;
+}
+.active,
+.save {
+  background: #ff4d8d;
+}
+.actions button {
+  height: 48px;
+  border-radius: 10px;
+}
+.options {
+  position: absolute;
+  bottom: calc(100% + 18px);
+  left: 0;
+  background: #fff;
+  border: 3px solid #111;
+  border-radius: 12px;
+  box-shadow: 6px 6px #111;
+  padding: 16px;
+  width: 330px;
+  z-index: 5;
+}
+.swatches {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.swatches button,
+.custom {
+  width: 32px;
+  height: 32px;
+  border: 2px solid #111;
+  border-radius: 50%;
+}
+.swatches button[aria-pressed="true"] {
+  outline: 3px solid #111;
+  outline-offset: 3px;
+}
+.custom {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(
+    #ff4d8d,
+    #ffe14d,
+    #a3e635,
+    #67e8f9,
+    #8c4b9e,
+    #ff4d8d
+  );
+}
+.custom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.width {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 20px;
+}
+.width input {
+  flex: 1;
+  min-width: 0;
+  accent-color: #111;
+}
+.width i {
+  width: 4px;
+  height: 4px;
+  background: #111;
+  border-radius: 50%;
+}
+.width i:last-child {
+  width: 20px;
+  height: 20px;
+}
+.mouth {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  height: 52px;
+  border: 3px solid transparent;
+  border-radius: 30px;
+  background: transparent;
+  cursor: move;
+  touch-action: none;
+}
+.mouth:focus-visible,
+.selected {
+  border-color: #ff4d8d;
+  border-style: dashed;
+  outline: none;
+}
+.mouth span {
+  position: absolute;
+  right: -50px;
+  top: 0;
+  width: 40px;
+  height: 40px;
+  border: 2px solid #111;
+  border-radius: 50%;
+  background: #ff4d8d;
+  display: grid;
+  place-items: center;
+}
+.cursor {
+  position: fixed;
+  pointer-events: none;
+  border: 2px solid #111;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+}
+@media (max-width: 767px) {
+  .page {
+    padding: 20px 14px 24px;
+    gap: 16px;
+    min-height: 650px;
+  }
+  .header h1 {
+    margin: 0;
+    font-size: 32px;
+  }
+  .toolbar {
+    flex-wrap: wrap;
+    padding: 12px;
+    gap: 18px;
+  }
+  .tools {
+    width: 100%;
+    gap: 6px;
+  }
+  .tool {
+    min-width: 0;
+    flex: 1;
+    font-size: 10px;
+    height: 62px;
+    padding: 5px 2px;
+  }
+  .actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .actions button {
+    height: 44px;
+  }
+  .options {
+    width: 100%;
+    padding: 16px;
+    bottom: calc(100% + 16px);
+  }
+}
+
+.actions button {
+  font-weight: 700;
+}
+
+.character {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
