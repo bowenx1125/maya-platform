@@ -51,11 +51,15 @@ def get_ruleset_defaults(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> DebateRulesetDefaults:
-    from app.modules.debates.teaching_rules import default_teaching_prompts, execution_contracts
+    from app.modules.debates.teaching_rules import (
+        default_teaching_prompts,
+        execution_contracts_v5,
+    )
 
     require_teacher_course(db, context.user.id, str(course_id))
     return DebateRulesetDefaults(
-        **default_teaching_prompts(), contract=DebateRulesetContract(**execution_contracts())
+        **default_teaching_prompts(),
+        contract=DebateRulesetContract(**execution_contracts_v5()),
     )
 
 

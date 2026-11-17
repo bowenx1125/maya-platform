@@ -31,7 +31,7 @@ from app.modules.debates.models import Debate
 from app.modules.debates.setup.rules import canonical_rule_snapshot_json
 from app.modules.debates.teaching_rules import (
     default_teaching_prompts,
-    execution_contracts,
+    execution_contracts_v5,
     freeze_teaching_rules,
     frozen_speech_length,
     frozen_system_prompt,
@@ -537,7 +537,7 @@ def test_ruleset_endpoint_contract_and_creation_with_minutes(debate_app) -> None
     ]
     _session, csrf = login(client)
     defaults = client.get(f"/api/v1/courses/{COURSE_ID}/debate-ruleset").json()
-    assert defaults["contract"] == execution_contracts()
+    assert defaults["contract"] == execution_contracts_v5()
     body = {
         "output_language": "en",
         "topic": "Water?",
