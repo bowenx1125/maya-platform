@@ -23,11 +23,13 @@ from app.modules.avatars import (
 from app.modules.debates.models import DebateParticipant
 
 
-def participant_display_avatar(db: Session, participant: DebateParticipant) -> dict[str, Any]:
+def participant_display_avatar(
+    db: Session | None, participant: DebateParticipant
+) -> dict[str, Any]:
     """Avatar the stage should show for this participant right now."""
 
-    agent_id = participant.agent_id
-    if agent_id:
+    agent_id = getattr(participant, "agent_id", None)
+    if agent_id and db is not None:
         agent = db.get(Agent, agent_id)
         if (
             agent is not None
