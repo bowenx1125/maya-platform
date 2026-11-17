@@ -38,6 +38,30 @@ import {
   resetBackgroundMusicForTests,
 } from "../lib/background-music";
 
+const PLAYING_FILL = "#ff4d8d";
+const IDLE_FILL = "#ffffff";
+
+function installMusicPlayingStyles() {
+  const style = document.createElement("style");
+  style.setAttribute("data-music-playing-test", "");
+  // Mirrors the unlayered globals.css rule so jsdom can compute it.
+  style.textContent = `
+    [data-music-key] { background-color: ${IDLE_FILL}; }
+    [data-music-key][data-playing],
+    [data-music-key][data-playing]:hover,
+    [data-music-key][data-playing]:active {
+      background-color: ${PLAYING_FILL};
+    }
+  `;
+  document.head.append(style);
+}
+
+function rgbOf(hex: string) {
+  const value = hex.replace("#", "");
+  const n = Number.parseInt(value, 16);
+  return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+}
+
 function assertInteractive(button: HTMLElement) {
   expect(button.getAttribute("disabled")).toBeNull();
   for (
@@ -69,6 +93,8 @@ function toggleTwice(button: HTMLElement, channel: "workspace" | "stage") {
 beforeEach(() => {
   window.localStorage.clear();
   session.user.courses = [];
+  document.querySelector("[data-music-playing-test]")?.remove();
+  installMusicPlayingStyles();
   vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
   vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
   resetBackgroundMusicForTests({
@@ -79,6 +105,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  document.querySelector("[data-music-playing-test]")?.remove();
   resetBackgroundMusicForTests();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -129,6 +156,9 @@ describe("student music key", () => {
             "motion-reduce:[&_svg]:animate-none",
           );
         }
+        expect(getComputedStyle(button).backgroundColor).toBe(
+          rgbOf(playing ? PLAYING_FILL : IDLE_FILL),
+        );
       }
 
       it("waits for real playing, stops on pause/end/error, and restarts with the next playing event", async () => {
