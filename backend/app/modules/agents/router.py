@@ -102,6 +102,7 @@ from app.modules.knowledge.providers.product_publication import (
 )
 from app.modules.knowledge.services import (
     _enabled_documents,
+    _publisher_is_teacher,
     _visit_edits_agent,
     abandon_claim,
     agent_detail,
@@ -471,22 +472,27 @@ def _version_dto_for_actor(
 
 
 def _student_delete_scope(db: Session, context: AuthContext, agent_id: str) -> Agent:
-    """Creator always; a public Agent also by groupmates and course teachers.
+    """Creator always; student Public Agents also by groupmates and teachers.
 
-    Anyone else (other group, other course, private Agent) gets a 404 so the
-    Agent's existence is not revealed.
+    Teacher-owned Agents stay owner-delete-only even when course students or
+    other teachers may edit them. Anyone else gets a 404 so the Agent's
+    existence is not revealed.
     """
 
     agent = db.get(Agent, agent_id)
     if agent is None or agent.deleted_at is not None:
         raise not_found()
-    if public_agent_editor_role(db, context, agent) is None:
-        # Keep the historical owner path (personal teacher Agents etc.).
-        if (
-            agent.owner_user_id != context.user.id
-            or course_member_role(db, context.user.id, agent.course_id) is None
-        ):
-            raise not_found()
+    editor = public_agent_editor_role(db, context, agent)
+    if editor == "owner":
+        return agent
+    if editor is not None and not _publisher_is_teacher(db, agent):
+        return agent
+    # Keep the historical owner path (personal teacher Agents etc.).
+    if (
+        agent.owner_user_id != context.user.id
+        or course_member_role(db, context.user.id, agent.course_id) is None
+    ):
+        raise not_found()
     return agent
 
 

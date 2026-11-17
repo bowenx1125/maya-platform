@@ -31,6 +31,7 @@ from app.modules.auth.service import AuthContext
 from app.modules.knowledge.files import FileBoundaryError
 from app.modules.knowledge.markdown import MarkdownInputError, normalize_markdown
 from app.modules.knowledge.services import (
+    PUBLIC_AGENT_COLLABORATOR_ROLES,
     _agent_workspace_role,
     can_read_source,
     course_member_role,
@@ -3231,9 +3232,8 @@ def _agent_for_binding(db: Session, context: AuthContext, agent_id: str, *, edit
         raise not_found()
     role = _agent_workspace_role(db, context, agent)
     if edit and role != "owner":
-        # PR #229: a public Agent is also edited by groupmates and course
-        # teachers; a private Agent stays creator-only.
-        if public_agent_editor_role(db, context, agent) not in {"groupmate", "course_teacher"}:
+        # PR #229 / teacher Public: collaborators edit; private stays creator-only.
+        if public_agent_editor_role(db, context, agent) not in PUBLIC_AGENT_COLLABORATOR_ROLES:
             raise not_found()
         return agent
     if role is None:

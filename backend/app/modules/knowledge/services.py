@@ -664,10 +664,9 @@ def visible_version(db: Session, context: AuthContext, version_id: str) -> Scope
     role = _agent_workspace_role(db, context, agent)
     if can_read_version(db, version, agent, role, context=context):
         return ScopedVersion(version, agent, cast(str, role))
-    if public_agent_editor_role(db, context, agent) in {
-        "groupmate",
-        "course_teacher",
-    } and draft_shared_with_editors(db, version, agent):
+    if public_agent_editor_role(
+        db, context, agent
+    ) in PUBLIC_AGENT_COLLABORATOR_ROLES and draft_shared_with_editors(db, version, agent):
         return ScopedVersion(version, agent, role or "student")
     raise not_found()
 
@@ -704,17 +703,25 @@ def visible_snapshot(db: Session, context: AuthContext, snapshot_id: str) -> Sco
     return ScopedSnapshot(snapshot, version, agent, cast(str, role))
 
 
+# Non-creator roles that may edit a live Public Agent. Delete of a teacher-
+# owned Agent stays owner-only; student Public Agents keep the wider delete
+# set (see ``agent_summary`` / ``_student_delete_scope``).
+PUBLIC_AGENT_COLLABORATOR_ROLES = frozenset({"groupmate", "course_teacher", "course_student"})
+
+
 def public_agent_editor_role(
     db: Session,
     actor: AuthContext | str,
     agent: Agent,
 ) -> str | None:
-    """Who may edit/publish/delete an Agent.
+    """Who may edit/publish an Agent (delete is decided separately).
 
     The creator always ("owner"). A *public*, live Agent is also editable by
-    the teachers of its own course ("course_teacher") and by student members
-    of its own group ("groupmate"). Private Agents stay creator-only; nobody
-    outside the course or group gains anything here.
+    the teachers of its own course ("course_teacher"). Student Public Agents
+    are editable by same-group students ("groupmate"). Teacher Public Agents
+    are editable by any course student who may use them ("course_student").
+    Private Agents stay creator-only; nobody outside the course gains anything
+    here.
     """
 
     user_id = _actor_user_id(actor)
@@ -730,18 +737,21 @@ def public_agent_editor_role(
     if role == "teacher":
         # Teachers meet a student's public Agent once it is published; an
         # unpublished draft stays undiscoverable to them (pre-publication rule).
+        # The same published gate applies when editing another teacher's Agent.
         if agent.current_published_version_id is None:
             return None
         return "course_teacher"
-    if (
-        role == "student"
-        and agent.group_id is not None
-        and scoped_group_role_for_user(db, user_id, agent.group_id) == "student"
-    ):
-        # Groupmates edit student Public Agents only; teacher Agents stay
-        # owner/course-teacher editable even when students may use them.
-        if _publisher_is_teacher(db, agent):
+    if role != "student":
+        return None
+    # Teacher Public Agents: any course student who may use them may edit.
+    if _publisher_is_teacher(db, agent):
+        if agent.current_published_version_id is None:
             return None
+        return "course_student" if can_use_agent(db, user_id, agent) else None
+    # Student Public Agents: same-group members only.
+    if agent.group_id is not None and scoped_group_role_for_user(db, user_id, agent.group_id) == (
+        "student"
+    ):
         return "groupmate"
     return None
 
@@ -779,7 +789,7 @@ def visible_student_version(db: Session, context: AuthContext, version_id: str) 
     if role == "owner" and can_read_version(db, version, agent, role, context=context):
         return ScopedVersion(version, agent, role)
     editor = public_agent_editor_role(db, context, agent)
-    if editor in {"groupmate", "course_teacher"} and (
+    if editor in PUBLIC_AGENT_COLLABORATOR_ROLES and (
         draft_shared_with_editors(db, version, agent) or version_is_currently_public(version, agent)
     ):
         return ScopedVersion(version, agent, editor)
@@ -798,7 +808,7 @@ def visible_student_agent(db: Session, context: AuthContext, agent_id: str) -> S
     if role == "owner":
         return ScopedAgent(agent, role)
     editor = public_agent_editor_role(db, context, agent)
-    if editor in {"groupmate", "course_teacher"}:
+    if editor in PUBLIC_AGENT_COLLABORATOR_ROLES:
         return ScopedAgent(agent, editor)
     if _visit_edits_agent(db, context, agent):
         return ScopedAgent(agent, "visit_editor")
@@ -1896,7 +1906,7 @@ def agent_summary(
         else ("owner" if role == "owner" else None)
     )
     visit_edit = context is not None and _visit_edits_agent(db, context, agent)
-    if draft is None and include_draft and editor in {"groupmate", "course_teacher"}:
+    if draft is None and include_draft and editor in PUBLIC_AGENT_COLLABORATOR_ROLES:
         shared = db.scalar(
             select(AgentVersion).where(
                 AgentVersion.agent_id == agent.id, AgentVersion.state == "draft"
@@ -1925,6 +1935,13 @@ def agent_summary(
     from app.core.version_label import agent_version_label
 
     published_label = _current_version_label(db, agent)
+    teacher_owned = _publisher_is_teacher(db, agent)
+    # Teacher Public Agents: only the owner deletes. Student Public Agents keep
+    # creator / groupmate / course-teacher delete (visit still cannot delete).
+    if teacher_owned:
+        may_delete = editor == "owner"
+    else:
+        may_delete = editor is not None
     return AgentSummary(
         id=UUID(agent.id),
         group_id=UUID(agent.group_id) if agent.group_id else None,
@@ -1935,11 +1952,9 @@ def agent_summary(
         # Same edit role as can_edit, and only while the Agent is still private.
         # A visit can edit content without being that role, so it cannot publish.
         can_manage_visibility=editor is not None and agent.visibility == "private",
-        # Delete stays with the creator and the public-agent editors. A visit
-        # can change the Agent's content without removing it.
-        can_delete=editor is not None,
+        can_delete=may_delete,
         is_creator=context is not None and agent.owner_user_id == context.user.id,
-        is_teacher_owned=_publisher_is_teacher(db, agent),
+        is_teacher_owned=teacher_owned,
         last_edited_by_name=last_editor,
         last_edited_at=audit.last_edited_at if audit is not None else None,
         current_version_label=published_label,

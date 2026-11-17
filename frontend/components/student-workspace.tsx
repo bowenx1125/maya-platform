@@ -777,8 +777,8 @@ function GroupWorkspaceSession({
                   key={agent.id}
                   deleting={deleting !== null}
                   onDelete={() => void deleteAgent(agent.id)}
-                  // Creator; for a public Agent also groupmates and course
-                  // teachers (the API answers 404 for everyone else).
+                  // Prefer API can_delete: teacher-owned Public stays
+                  // owner-delete-only even when students may edit.
                   canDelete={
                     agent.can_delete ??
                     (!teacherIdentity && agent.can_edit === true)
