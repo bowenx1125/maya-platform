@@ -2136,7 +2136,6 @@ export function AgentWorkbench({
                       };
                     return api.checkAgentDebateCard(target.id, agentMd);
                   }}
-                  voiceProfileId={voiceProfileId}
                   agentMd={agentMd}
                 />
               ) : null}

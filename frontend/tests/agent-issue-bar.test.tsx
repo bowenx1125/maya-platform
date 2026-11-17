@@ -88,7 +88,9 @@ function readiness(issues: Issue[]) {
     agent_id: "agent-id",
     agent_name: "Agent",
     issue: item.issue,
-    blocking: item.blocking ?? item.issue !== "voice_missing",
+    blocking:
+      item.blocking ??
+      (item.issue !== "voice_missing" && item.issue !== "avatar_missing"),
     message: messages[item.issue] ?? item.issue,
   }));
 }

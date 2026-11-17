@@ -43,9 +43,14 @@ from app.core.models import (
     VoiceProfile,
 )
 from app.core.version_label import agent_version_label
-from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
+from app.modules.avatars import (
+    DEFAULT_AVATAR_CONFIG,
+    AvatarConfigValidationError,
+    validate_avatar_config,
+)
 from app.modules.debates.agent_cards import copy_stored_agent_card
 from app.modules.debates.cards import card_teacher_projection, initial_card_status, stored_card
+from app.modules.debates.display_avatar import participant_display_avatar
 from app.modules.debates.generation_params import (
     UNSTORED_V4_PARAMS,
     resolve_params,
@@ -422,13 +427,14 @@ def _resolve_agent_version(
         raise validation_failure(
             "The current Agent has no published knowledge snapshot.", code="rag_missing"
         )
+    # Avatar is not frozen for Immerse; keep a NOT NULL column value only.
+    # Invalid configs fall back to the catalog default so create is not refused.
     try:
-        avatar = json.loads(version.avatar_config_json)
-        avatar_model = validate_avatar_config(avatar)
-    except (ValueError, TypeError, json.JSONDecodeError, AvatarConfigValidationError) as exc:
-        raise validation_failure(
-            "The current Agent has no usable Avatar configuration.", code="avatar_missing"
-        ) from exc
+        avatar = validate_avatar_config(json.loads(version.avatar_config_json)).model_dump(
+            mode="json"
+        )
+    except (ValueError, TypeError, json.JSONDecodeError, AvatarConfigValidationError):
+        avatar = DEFAULT_AVATAR_CONFIG.model_dump(mode="json")
 
     from app.modules.voices.service import _groupmate_owner_ids, baseline_configured_voice_id
 
@@ -483,7 +489,7 @@ def _resolve_agent_version(
         group,
         version,
         snapshot,
-        avatar_model.model_dump(mode="json"),
+        avatar,
         requested_voice_id,
         effective_voice_id,
         effective_voice_kind,
@@ -546,7 +552,6 @@ def _fence_resolved_agent_chain(
             AgentVersion.version_seq == version.version_seq,
             AgentVersion.agent_md == version.agent_md,
             AgentVersion.knowledge_snapshot_id == snapshot.id,
-            AgentVersion.avatar_config_json == version.avatar_config_json,
             AgentVersion.voice_profile_id == version.voice_profile_id,
             AgentVersion.published_at == version.published_at,
             AgentVersion.raw_agent_md_hash == version.raw_agent_md_hash,
@@ -636,7 +641,6 @@ _PARTICIPANT_CODES = {
     "agent_archived": "agent_archived",
     "agent_not_current": "agent_not_current",
     "rag_missing": "rag_missing",
-    "avatar_missing": "avatar_missing",
 }
 
 
@@ -1016,7 +1020,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                 ),
                 "version_label": row.version_label,
                 "knowledge_snapshot_id": _as_uuid(row.knowledge_snapshot_id),
-                "avatar_config": json.loads(row.avatar_config_json),
+                "avatar_config": participant_display_avatar(db, row),
                 "effective_voice_profile_id": (
                     _as_uuid(row.effective_voice_profile_id)
                     if row.effective_voice_profile_id

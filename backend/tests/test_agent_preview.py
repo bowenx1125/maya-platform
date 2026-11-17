@@ -199,7 +199,9 @@ def test_preview_uses_configured_voice_and_keeps_text_on_tts_failure(
         assert result.json()["audio_base64"] is None
 
 
-def test_debate_snapshot_freezes_egg_after_agent_changes(app_factory: Any) -> None:
+def test_debate_detail_uses_live_agent_avatar_not_create_snapshot(app_factory: Any) -> None:
+    """Immerse/detail reads the Agent's current published avatar, not create-time."""
+
     app, database, _ = app_factory()
     with TestClient(app) as client:
         _, csrf = login(client, "bowen")
@@ -207,7 +209,7 @@ def test_debate_snapshot_freezes_egg_after_agent_changes(app_factory: Any) -> No
         for name in ("Egg", "Scholar"):
             result = client.post(
                 f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
-                headers=headers(csrf, **{"Idempotency-Key": "egg-freeze-create-" + name}),
+                headers=headers(csrf, **{"Idempotency-Key": "egg-live-avatar-create-" + name}),
                 json={"name": name, "visibility": "public"},
             )
             assert result.status_code == 201, result.text
@@ -227,7 +229,7 @@ def test_debate_snapshot_freezes_egg_after_agent_changes(app_factory: Any) -> No
             revision = result.json()["revision"]
             upload = client.post(
                 f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
-                headers=headers(csrf, **{"Idempotency-Key": "freeze-evidence-" + vid}),
+                headers=headers(csrf, **{"Idempotency-Key": "live-avatar-evidence-" + vid}),
                 data={
                     "target_agent_version_id": vid,
                     "expected_revision": str(revision),
@@ -255,7 +257,7 @@ def test_debate_snapshot_freezes_egg_after_agent_changes(app_factory: Any) -> No
         _, csrf = login(client)
         result = client.post(
             f"/api/v1/courses/{COURSE_ID}/debates",
-            headers=headers(csrf, **{"Idempotency-Key": "egg-snapshot-freeze"}),
+            headers=headers(csrf, **{"Idempotency-Key": "egg-live-avatar-create"}),
             json={
                 "topic": "What is evidence?",
                 "round_unit_caps": [300, 300, 300, 300],
@@ -267,18 +269,28 @@ def test_debate_snapshot_freezes_egg_after_agent_changes(app_factory: Any) -> No
         )
         assert result.status_code == 201, result.text
         debate = result.json()
-        frozen_drawing = debate["participants"][0]["avatar_config"]["drawing"]
-        assert frozen_drawing == config()["drawing"]
+        assert debate["participants"][0]["avatar_config"]["drawing"] == config()["drawing"]
         assert debate["participants"][0]["avatar_config"]["template_id"] == "egg"
         with database.session() as db:
             version = db.get(AgentVersion, version_id)
             assert version is not None
             version.avatar_config_json = default_config_for("maya-warm-scholar").model_dump_json()
+            # Stored create-time JSON stays egg; display must ignore it.
+            from app.modules.debates.models import DebateParticipant
+
+            row = db.scalar(
+                select(DebateParticipant).where(
+                    DebateParticipant.debate_id == debate["id"],
+                    DebateParticipant.agent_id == a,
+                )
+            )
+            assert row is not None
+            assert json.loads(row.avatar_config_json)["template_id"] == "egg"
         reread = client.get(f"/api/v1/debates/{debate['id']}")
         assert reread.status_code == 200
-        assert reread.json()["participants"][0]["avatar_config"]["template_id"] == "egg"
-
-        assert reread.json()["participants"][0]["avatar_config"]["drawing"] == frozen_drawing
+        live = reread.json()["participants"][0]["avatar_config"]
+        assert live["template_id"] == "maya-warm-scholar"
+        assert live.get("drawing") != config()["drawing"]
 
 
 def test_real_preview_path_accounts_once_without_chat_rows(

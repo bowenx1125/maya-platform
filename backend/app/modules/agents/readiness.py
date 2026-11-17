@@ -6,7 +6,8 @@ that Agent's editor. The same rules drive the hint bar on the Agent page.
 
 Voice None is shown to the teacher but never refuses a Debate: speech falls
 back to the configured voice or to text, and text publication never waits on
-a voice (AGENTS.md).
+a voice (AGENTS.md). Avatar missing is the same class: Immerse uses the live
+Agent avatar or the catalog default, so create is not refused.
 
 Owner decision (2026-10-24): none of these stop an Agent being saved or
 published. They are hints on the Agent page and on the Debate form, read from
@@ -37,7 +38,10 @@ ISSUE_MESSAGES = {
         "Agent “{name}” has Voice set to None: it will speak with the default voice, or as text."
     ),
 }
-NON_BLOCKING = frozenset({"voice_missing"})
+# Avatar is not part of the Debate semantic snapshot (card/RAG/voice). Immerse
+# reads the live Agent avatar or the catalog default, so a missing Avatar must
+# not refuse Debate create — same class as Voice None.
+NON_BLOCKING = frozenset({"voice_missing", "avatar_missing"})
 
 
 def issue(agent: Agent, kind: str) -> dict[str, Any]:

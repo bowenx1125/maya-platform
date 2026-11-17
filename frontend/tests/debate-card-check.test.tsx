@@ -12,12 +12,6 @@ import {
   type DebatePreviewSnapshot,
 } from "../components/debate/preview";
 
-vi.mock("../components/session-provider", () => ({
-  useSession: () => ({
-    api: { createVoicePreview: vi.fn() },
-  }),
-}));
-
 afterEach(() => cleanup());
 
 const card = {
@@ -195,7 +189,7 @@ describe("debate cards on the teacher preview", () => {
     expect(screen.getByText("Ada")).toBeTruthy();
   });
 
-  it("offers Preview on a ready card when a voice profile is known", () => {
+  it("Ready Check card shows Tone without a Preview button", () => {
     renderPreview(
       snapshot([
         {
@@ -209,8 +203,9 @@ describe("debate cards on the teacher preview", () => {
     );
     const check = screen.getByTestId("debate-card-check");
     fireEvent.click(within(check).getByText("Check card"));
-    expect(
-      within(check).getByTestId("debate-card-tone-preview").textContent,
-    ).toBe("Preview");
+    expect(within(check).getByText("Tone")).toBeTruthy();
+    expect(within(check).getByText("A calm, low voice.")).toBeTruthy();
+    expect(within(check).queryByRole("button", { name: "Preview" })).toBeNull();
+    expect(within(check).queryByTestId("debate-card-tone-preview")).toBeNull();
   });
 });

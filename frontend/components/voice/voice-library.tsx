@@ -357,8 +357,12 @@ export function VoiceLibrary({
       const failure = results.find((result) => result.status === "error");
       const denial = results.find((result) => result.status === "denied");
       const ready = results.some((result) => result.status === "ready");
-      // A refused group is not an empty library. Say so when nothing else loaded.
-      const cause = failure?.cause ?? (!ready && denial ? denial.cause : null);
+      // Group list denials still toast (Voice catalog tests). Personal course
+      // lists are teacher-owned: a student editing a teacher Public Agent gets
+      // an expected 404 — keep empty/denied without a tray toast.
+      const cause =
+        failure?.cause ??
+        (!ready && denial && listKind !== "personal" ? denial.cause : null);
       setFailure((current) => {
         if (current && current.retry?.kind !== "load") return current;
         return cause ? { cause, retry: { kind: "load" } } : null;
