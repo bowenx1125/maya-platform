@@ -449,6 +449,47 @@ def test_teacher_public_private_draft_stays_hidden_from_student_editors(
     assert ready.json()["stored_card_status"] == "ready"
 
 
+def test_student_workbench_apis_for_teacher_public_personal_agent(
+    client: TestClient, database: Database
+) -> None:
+    """Editor entry needs version+agent; personal workspace docs stay teacher-only.
+
+    AgentWorkbench loads ``GET /courses/{id}/workspace-documents`` for personal
+    Agents. That list is owner-teacher scoped (404 for students). The frontend
+    soft-fails that 404 and keeps ``enabled_documents`` from the published
+    version — so students must still read the version and edit/publish without
+    ever listing the teacher's personal workspace.
+    """
+
+    agent_id, version_id = _teacher_public(
+        database, owner_id=MAYA_ID, name="Teacher personal workbench"
+    )
+    _student, csrf = login(client, "bowen")
+
+    workspace = client.get(f"/api/v1/courses/{COURSE_ID}/workspace-documents")
+    assert workspace.status_code == 404, workspace.text
+
+    detail = client.get(f"/api/v1/agents/{agent_id}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["can_edit"] is True
+    assert detail.json()["can_delete"] is False
+    assert detail.json()["ownership_scope"] == "personal"
+    assert detail.json()["group_id"] is None
+
+    version = client.get(f"/api/v1/agent-versions/{version_id}")
+    assert version.status_code == 200, version.text
+    body = version.json()
+    assert body["agent_md"] == TEACHER_MD
+    assert "enabled_documents" in body
+
+    knowledge = client.get(f"/api/v1/agents/{agent_id}/knowledge-sets")
+    assert knowledge.status_code == 200, knowledge.text
+
+    edited = _edit_and_publish(client, csrf, agent_id, version_id, "\n<!-- workbench student -->")
+    assert edited.status_code == 200, edited.text
+    assert "<!-- workbench student -->" in edited.json()["agent_md"]
+
+
 def test_student_public_agent_editor_rule_unchanged(client: TestClient, database: Database) -> None:
     """Same-group students and course teachers still edit student Public Agents."""
 
