@@ -417,3 +417,15 @@
   --font-display: var(--arc-font-display);
   --font-body: var(--arc-font-body);
 }
+
+/* Student MusicKey playing fill (Scheme B pink). Must stay unlayered:
+   app.css imports globals.css as @layer legacy, and MusicKey keeps a
+   Tailwind bg-white utility plus (on 1440) unlayered .capsuleTrigger white /
+   hover yellow. A legacy-layer pink rule loses all of those; unlayered +
+   attribute specificity wins idle white, hover yellow, and stage dock
+   button:hover utilities. Color follows real playback only. */
+[data-music-key][data-playing],
+[data-music-key][data-playing]:hover,
+[data-music-key][data-playing]:active {
+  background-color: #ff4d8d;
+}

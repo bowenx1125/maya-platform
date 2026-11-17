@@ -2781,12 +2781,3 @@ dd {
     animation: none;
   }
 }
-
-/* Student MusicKey playing fill (Scheme B pink). Unlayered so it wins over
-   .capsuleTrigger { background-color: white } / hover yellow and the stage
-   dock's button:hover white/blue. Color follows real playback only. */
-[data-music-key][data-playing],
-[data-music-key][data-playing]:hover,
-[data-music-key][data-playing]:active {
-  background-color: #ff4d8d;
-}

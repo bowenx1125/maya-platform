@@ -5,6 +5,9 @@ import {
   render,
   screen,
 } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const session = vi.hoisted(() => ({
@@ -44,7 +47,7 @@ const IDLE_FILL = "#ffffff";
 function installMusicPlayingStyles() {
   const style = document.createElement("style");
   style.setAttribute("data-music-playing-test", "");
-  // Mirrors the unlayered globals.css rule so jsdom can compute it.
+  // Mirrors the unlayered arcade.css rule so jsdom can compute it.
   style.textContent = `
     [data-music-key] { background-color: ${IDLE_FILL}; }
     [data-music-key][data-playing],
@@ -275,5 +278,21 @@ describe("student music key", () => {
     session.user.courses = [{ course_id: "course", role: "teacher" }];
     render(<AppShell role="student">Content</AppShell>);
     expect(document.querySelector("[data-music-key]")).toBeNull();
+  });
+
+  it("keeps the playing pink rule unlayered so bg-white and capsuleTrigger cannot cover it", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const arcade = readFileSync(join(here, "../styles/arcade.css"), "utf8");
+    const appCss = readFileSync(join(here, "../app/app.css"), "utf8");
+    const globals = readFileSync(join(here, "../app/globals.css"), "utf8");
+    expect(appCss).toMatch(/@import\s+"\.\/globals\.css"\s+layer\(legacy\)/);
+    expect(appCss).toMatch(/@import\s+"\.\.\/styles\/arcade\.css"/);
+    expect(appCss).not.toMatch(
+      /@import\s+"\.\.\/styles\/arcade\.css"\s+layer\(/,
+    );
+    expect(arcade).toMatch(
+      /\[data-music-key\]\[data-playing\][\s\S]*background-color:\s*#ff4d8d/,
+    );
+    expect(globals).not.toMatch(/\[data-music-key\]\[data-playing\]/);
   });
 });
