@@ -777,8 +777,8 @@ function GroupWorkspaceSession({
                   key={agent.id}
                   deleting={deleting !== null}
                   onDelete={() => void deleteAgent(agent.id)}
-                  // Prefer API can_delete: teacher-owned Public stays
-                  // owner-delete-only even when students may edit.
+                  // Prefer API can_delete: students may edit teacher Public
+                  // Agents without gaining delete (course teachers still can).
                   canDelete={
                     agent.can_delete ??
                     (!teacherIdentity && agent.can_edit === true)

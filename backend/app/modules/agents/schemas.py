@@ -94,8 +94,9 @@ class AgentSummary(BaseModel):
     status: Literal["active", "archived"]
     current_published_version_id: UUID | None = None
     current_draft_version_id: UUID | None = None
-    # Creator always; student Public also groupmates/course teachers.
-    # Teacher-owned Agents stay owner-delete-only.
+    # Creator; Public also course teachers and same-group students
+    # (student-owned). Course students may edit teacher Public Agents but
+    # cannot delete them.
     can_delete: bool | None = None
     is_creator: bool | None = None
     # Owner holds CourseMember.role == teacher in this course. Optional so

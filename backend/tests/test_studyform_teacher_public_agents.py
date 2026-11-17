@@ -1,6 +1,7 @@
 """Studyform: students see, open, chat, and edit teachers' Public Agents.
 
-Delete of a teacher-owned Agent stays owner-only. Teacher Private Agents stay
+Students cannot delete teacher Agents. Course teachers keep main's delete
+right on other teachers' Public Agents. Teacher Private Agents stay
 owner-only. Student Public Agents keep the groupmate/course-teacher rule.
 ``is_teacher_owned`` is true for every course teacher owner (never a single
 hard-coded account).
@@ -178,13 +179,26 @@ def test_student_can_list_open_edit_and_single_chat_teacher_public_agent(
         assert opened.status_code == 200, opened.text
         assert opened.json()["can_send"] is True
 
-    # Student edits and publishes the teacher's Public Agent; cannot delete it.
+    # Student edits and publishes the teacher's Public Agent; cannot delete it
+    # or revert Public→Private (visibility stays owner-only / final).
     first_agent_id, first_version_id = agent_ids[0], versions[0]
     published_edit = _edit_and_publish(
         client, csrf, first_agent_id, first_version_id, "\n<!-- student edit -->"
     )
     assert published_edit.status_code == 200, published_edit.text
     assert "<!-- student edit -->" in published_edit.json()["agent_md"]
+    detail_after = client.get(f"/api/v1/agents/{first_agent_id}")
+    assert detail_after.status_code == 200, detail_after.text
+    assert detail_after.json()["can_manage_visibility"] is False
+    reverted = client.patch(
+        f"/api/v1/agents/{first_agent_id}",
+        headers=_headers(csrf, f"vis-{uuid4()}"),
+        json={
+            "expected_metadata_revision": detail_after.json()["metadata_revision"],
+            "visibility": "private",
+        },
+    )
+    assert reverted.status_code == 404, reverted.text
     refused = client.delete(
         f"/api/v1/agents/{first_agent_id}", headers=_headers(csrf, f"del-{uuid4()}")
     )
@@ -239,22 +253,24 @@ def test_two_teachers_public_agents_are_editable_across_roles(
         )
         assert chat.status_code == 200, chat.text
 
-    # Second teacher edits the first teacher's Public Agent; cannot delete it.
+    # Second teacher edits and may delete the first teacher's Public Agent
+    # (main ba5d0031 delete right; only students lose delete).
     second_csrf = _login_id(client, second_teacher)
     first_agent_id = agents[0][1]
     first_version_id = agents[0][2]
     detail = client.get(f"/api/v1/agents/{first_agent_id}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["can_edit"] is True
-    assert detail.json()["can_delete"] is False
+    assert detail.json()["can_delete"] is True
     edited = _edit_and_publish(
         client, second_csrf, first_agent_id, first_version_id, "\n<!-- peer teacher -->"
     )
     assert edited.status_code == 200, edited.text
-    refused = client.delete(
+    deleted = client.delete(
         f"/api/v1/agents/{first_agent_id}", headers=_headers(second_csrf, f"del-{uuid4()}")
     )
-    assert refused.status_code == 404, refused.text
+    assert deleted.status_code == 204, deleted.text
+    assert client.get(f"/api/v1/agents/{first_agent_id}").status_code == 404
 
 
 def test_teacher_and_student_owned_agents_are_unaffected(

@@ -703,9 +703,8 @@ def visible_snapshot(db: Session, context: AuthContext, snapshot_id: str) -> Sco
     return ScopedSnapshot(snapshot, version, agent, cast(str, role))
 
 
-# Non-creator roles that may edit a live Public Agent. Delete of a teacher-
-# owned Agent stays owner-only; student Public Agents keep the wider delete
-# set (see ``agent_summary`` / ``_student_delete_scope``).
+# Non-creator roles that may edit a live Public Agent. Delete excludes
+# ``course_student`` only (see ``agent_summary`` / ``_student_delete_scope``).
 PUBLIC_AGENT_COLLABORATOR_ROLES = frozenset({"groupmate", "course_teacher", "course_student"})
 
 
@@ -714,7 +713,7 @@ def public_agent_editor_role(
     actor: AuthContext | str,
     agent: Agent,
 ) -> str | None:
-    """Who may edit/publish an Agent (delete is decided separately).
+    """Who may edit/publish an Agent (delete excludes ``course_student``).
 
     The creator always ("owner"). A *public*, live Agent is also editable by
     the teachers of its own course ("course_teacher"). Student Public Agents
@@ -1935,13 +1934,9 @@ def agent_summary(
     from app.core.version_label import agent_version_label
 
     published_label = _current_version_label(db, agent)
-    teacher_owned = _publisher_is_teacher(db, agent)
-    # Teacher Public Agents: only the owner deletes. Student Public Agents keep
-    # creator / groupmate / course-teacher delete (visit still cannot delete).
-    if teacher_owned:
-        may_delete = editor == "owner"
-    else:
-        may_delete = editor is not None
+    # Delete matches main's public-agent editors, minus course_student who may
+    # edit teacher Public Agents but must not remove them. Visit cannot delete.
+    may_delete = editor is not None and editor != "course_student"
     return AgentSummary(
         id=UUID(agent.id),
         group_id=UUID(agent.group_id) if agent.group_id else None,
@@ -1954,7 +1949,7 @@ def agent_summary(
         can_manage_visibility=editor is not None and agent.visibility == "private",
         can_delete=may_delete,
         is_creator=context is not None and agent.owner_user_id == context.user.id,
-        is_teacher_owned=teacher_owned,
+        is_teacher_owned=_publisher_is_teacher(db, agent),
         last_edited_by_name=last_editor,
         last_edited_at=audit.last_edited_at if audit is not None else None,
         current_version_label=published_label,
