@@ -28,6 +28,7 @@ import {
   PageIntro,
   SectionCard,
 } from "../ui";
+import { DestroyConfirmPrompt } from "../ui/destroy-confirm";
 import { IconClose, IconPlay, IconPlus } from "../quiet-icons";
 import { ModuleCard } from "../studyform-layout";
 import { WorkspaceIcon } from "../workspace-icon";
@@ -273,6 +274,10 @@ export function VoiceLibrary({
   const [loading, setLoading] = useState(scopes.length > 0 && !cached);
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [voiceDestroy, setVoiceDestroy] = useState<{
+    profile: ListedVoice;
+    message: string;
+  } | null>(null);
   const controlsDisabled = busy || disabled;
   const [failure, setFailure] = useState<VoiceFailure | null>(null);
   const [notice, setNotice] = useState<MessageKey | null>(null);
@@ -599,14 +604,19 @@ export function VoiceLibrary({
 
   // Agents using a deleted voice get a new version without it (silent in
   // Immerse); Debates keep their own voice, so deleting never blocks one.
-  async function remove(profile: ListedVoice) {
+  async function requestRemove(profile: ListedVoice) {
     if (controlsDisabled) return;
     const message = await deleteConfirmText(
       t("voiceDeleteConfirm"),
       () => api.voiceAffectedAgents(profile.id),
       (names) => t("deleteAffectsAgents", { names }),
     );
-    if (!window.confirm(message)) return;
+    setVoiceDestroy({ profile, message });
+  }
+
+  async function confirmRemove(profile: ListedVoice) {
+    if (disabled || deletingId) return;
+    setVoiceDestroy(null);
     setBusy(true);
     setFailure(null);
     setNotice(null);
@@ -645,7 +655,7 @@ export function VoiceLibrary({
     else if (action.kind === "preview") void makePreview(action.profileId);
     else if (action.kind === "delete") {
       const profile = profiles.find((item) => item.id === action.profileId);
-      if (profile) void remove(profile);
+      if (profile) void confirmRemove(profile);
     } else if (action.kind === "rename")
       void rename(action.profile, action.name, action.restoreFocus);
   }
@@ -984,7 +994,8 @@ export function VoiceLibrary({
             ? cn(voiceAlbum.ib, voiceAlbum.del)
             : cn(
                 buttonVariants({ variant: "neutral", size: "icon" }),
-                "min-h-0 rounded-[10px] p-0",
+                selection.rowAction,
+                "size-10 min-h-0 rounded-[10px] border-2 border-[#111] bg-[#ef4444] p-0 text-white hover:bg-[#ef4444] hover:text-white",
               )
         }
         aria-label={t("voiceDeleteNamed", { name })}
@@ -992,7 +1003,7 @@ export function VoiceLibrary({
         data-ui-guide="voice.delete"
         type="button"
         disabled={controlsDisabled}
-        onClick={() => void remove(profile)}
+        onClick={() => void requestRemove(profile)}
       >
         {deletingId === profile.id ? (
           <span className="spinner" aria-hidden="true" />
@@ -1203,166 +1214,186 @@ export function VoiceLibrary({
     </button>
   );
 
+  const destroyPrompt = voiceDestroy ? (
+    <DestroyConfirmPrompt
+      message={voiceDestroy.message}
+      busy={deletingId === voiceDestroy.profile.id}
+      onCancel={() => {
+        if (deletingId !== voiceDestroy.profile.id) setVoiceDestroy(null);
+      }}
+      onConfirm={() => void confirmRemove(voiceDestroy.profile)}
+    />
+  ) : null;
+
   if (albumList && creating) {
     const titleId = id ? `${id}-title` : "voices-title";
     return (
-      <div id={id} data-voice-album="v2" data-voice-create="p2-tab">
-        <section className={voiceAlbum.alb} aria-labelledby={titleId}>
-          <AlbumRings />
-          <div
-            className={`${voiceAlbum.top} max-md:flex-wrap max-md:gap-x-[12px] max-md:gap-y-[16px] max-md:mb-[22px]`}
-          >
-            <h2 id={titleId} className={voiceAlbum.h2}>
-              {t("voices")}
-            </h2>
-            <span
-              className={`${voiceAlbum.tape} max-md:w-[44px]`}
-              aria-hidden="true"
-            />
-            <span className="flex-1 max-md:basis-full max-md:h-0" />
-            {/* Back / Done inside the album top row (same band as list New). */}
-            <PageAction
-              name="back"
-              placement="page"
-              onClick={cancelCreate}
-              disabled={controlsDisabled}
-              guide="voice.cancelCreate"
-            />
-            <PageAction
-              name="done"
-              placement="page"
-              onClick={() => void submitEnrollment()}
-              disabled={!file || controlsDisabled || !canEnroll}
+      <>
+        {destroyPrompt}
+        <div id={id} data-voice-album="v2" data-voice-create="p2-tab">
+          <section className={voiceAlbum.alb} aria-labelledby={titleId}>
+            <AlbumRings />
+            <div
+              className={`${voiceAlbum.top} max-md:flex-wrap max-md:gap-x-[12px] max-md:gap-y-[16px] max-md:mb-[22px]`}
+            >
+              <h2 id={titleId} className={voiceAlbum.h2}>
+                {t("voices")}
+              </h2>
+              <span
+                className={`${voiceAlbum.tape} max-md:w-[44px]`}
+                aria-hidden="true"
+              />
+              <span className="flex-1 max-md:basis-full max-md:h-0" />
+              {/* Back / Done inside the album top row (same band as list New). */}
+              <PageAction
+                name="back"
+                placement="page"
+                onClick={cancelCreate}
+                disabled={controlsDisabled}
+                guide="voice.cancelCreate"
+              />
+              <PageAction
+                name="done"
+                placement="page"
+                onClick={() => void submitEnrollment()}
+                disabled={!file || controlsDisabled || !canEnroll}
+                busy={busy}
+                describedBy="voice-sample-req voice-consent-text"
+              />
+            </div>
+            {failure ? (
+              <ErrorNotice
+                inline
+                error={failure.cause}
+                onRetry={
+                  controlsDisabled || !failure.retry ? undefined : retryFailure
+                }
+              />
+            ) : null}
+            <VoiceAlbumCreate
               busy={busy}
-              describedBy="voice-sample-req voice-consent-text"
-            />
-          </div>
-          {failure ? (
-            <ErrorNotice
-              inline
-              error={failure.cause}
-              onRetry={
-                controlsDisabled || !failure.retry ? undefined : retryFailure
+              disabled={controlsDisabled}
+              onFile={selectVoiceFile}
+              fileName={file?.name ?? null}
+              requirement={t("voiceSampleFile")}
+              consent={t("voiceConsent")}
+              input={
+                <input
+                  className="sr-only"
+                  type="file"
+                  disabled={controlsDisabled}
+                  accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
+                  onChange={(event) => {
+                    selectVoiceFile(event.currentTarget.files?.[0]);
+                    event.currentTarget.value = "";
+                  }}
+                  aria-label={t("voiceSampleFile")}
+                  aria-describedby="voice-sample-req"
+                />
               }
             />
-          ) : null}
-          <VoiceAlbumCreate
-            busy={busy}
-            disabled={controlsDisabled}
-            onFile={selectVoiceFile}
-            fileName={file?.name ?? null}
-            requirement={t("voiceSampleFile")}
-            consent={t("voiceConsent")}
-            input={
-              <input
-                className="sr-only"
-                type="file"
-                disabled={controlsDisabled}
-                accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
-                onChange={(event) => {
-                  selectVoiceFile(event.currentTarget.files?.[0]);
-                  event.currentTarget.value = "";
-                }}
-                aria-label={t("voiceSampleFile")}
-                aria-describedby="voice-sample-req"
-              />
-            }
-          />
-          {failure ? <AlbumTrayAnchor /> : null}
-        </section>
-      </div>
+            {failure ? <AlbumTrayAnchor /> : null}
+          </section>
+        </div>
+      </>
     );
   }
 
   if (albumList && !creating) {
     const titleId = id ? `${id}-title` : "voices-title";
     return (
-      <div id={id} data-voice-album="v2">
+      <>
+        {destroyPrompt}
+        <div id={id} data-voice-album="v2">
+          {notice ? (
+            <Notice tone="success" onClose={() => setNotice(null)}>
+              {t(notice)}
+            </Notice>
+          ) : null}
+          <section className={voiceAlbum.alb} aria-labelledby={titleId}>
+            <AlbumRings />
+            <div className={voiceAlbum.top}>
+              <h2 id={titleId} className={voiceAlbum.h2}>
+                {t("voices")}
+              </h2>
+              <span className={voiceAlbum.tape} aria-hidden="true" />
+              <span className="flex-1" />
+              {createAction}
+            </div>
+            {failure ? (
+              <ErrorNotice
+                inline
+                error={failure.cause}
+                onRetry={
+                  controlsDisabled || !failure.retry ? undefined : retryFailure
+                }
+              />
+            ) : null}
+            {loading ? <LoadingCard size="lg" count={3} /> : null}
+            {list ??
+              (loading ? null : (
+                <ul className={voiceAlbum.grid}>
+                  {!loading && !failure ? (
+                    <li className={voiceAlbum.ghostFirst}>
+                      <AlbumMic />
+                      <p>{t("voiceNone")}</p>
+                    </li>
+                  ) : (
+                    <li className={voiceAlbum.skel} aria-hidden="true" />
+                  )}
+                  <li
+                    className={failure ? voiceAlbum.skel : voiceAlbum.ghost}
+                    aria-hidden="true"
+                  />
+                  <li
+                    className={failure ? voiceAlbum.skel : voiceAlbum.ghost}
+                    aria-hidden="true"
+                  />
+                </ul>
+              ))}
+            {failure ? <AlbumTrayAnchor /> : null}
+          </section>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {destroyPrompt}
+      <div
+        className={arcadePicker ? "min-w-0" : "grid gap-6"}
+        id={id}
+        data-arcade-voices={arcadePicker ? "v2" : undefined}
+      >
+        {embedded || moduleCard ? null : <PageIntro title={t("voices")} />}
         {notice ? (
           <Notice tone="success" onClose={() => setNotice(null)}>
             {t(notice)}
           </Notice>
         ) : null}
-        <section className={voiceAlbum.alb} aria-labelledby={titleId}>
-          <AlbumRings />
-          <div className={voiceAlbum.top}>
-            <h2 id={titleId} className={voiceAlbum.h2}>
-              {t("voices")}
-            </h2>
-            <span className={voiceAlbum.tape} aria-hidden="true" />
-            <span className="flex-1" />
-            {createAction}
-          </div>
-          {failure ? (
-            <ErrorNotice
-              inline
-              error={failure.cause}
-              onRetry={
-                controlsDisabled || !failure.retry ? undefined : retryFailure
-              }
-            />
-          ) : null}
-          {loading ? <LoadingCard size="lg" count={3} /> : null}
-          {list ??
-            (loading ? null : (
-              <ul className={voiceAlbum.grid}>
-                {!loading && !failure ? (
-                  <li className={voiceAlbum.ghostFirst}>
-                    <AlbumMic />
-                    <p>{t("voiceNone")}</p>
-                  </li>
-                ) : (
-                  <li className={voiceAlbum.skel} aria-hidden="true" />
-                )}
-                <li
-                  className={failure ? voiceAlbum.skel : voiceAlbum.ghost}
-                  aria-hidden="true"
-                />
-                <li
-                  className={failure ? voiceAlbum.skel : voiceAlbum.ghost}
-                  aria-hidden="true"
-                />
-              </ul>
-            ))}
-          {failure ? <AlbumTrayAnchor /> : null}
-        </section>
+        {embedded && !moduleCard ? (
+          // Match Agent Avatar / AGENT.md and Team SectionCard title metrics.
+          <SectionCard
+            title={t("voices")}
+            className={cn(agentCard("voices", profiles.length === 0), "mb-0")}
+          >
+            {body ?? <p className="muted-copy">{t("voiceNone")}</p>}
+            {createAction ? (
+              <div className="mt-4 flex justify-start">{createAction}</div>
+            ) : null}
+          </SectionCard>
+        ) : (
+          <ModuleCard
+            title={t("voices")}
+            labelledBy={id ? `${id}-title` : "voices-title"}
+            empty={body ? undefined : t("voiceNone")}
+            action={createAction}
+          >
+            {body}
+          </ModuleCard>
+        )}
       </div>
-    );
-  }
-
-  return (
-    <div
-      className={arcadePicker ? "min-w-0" : "grid gap-6"}
-      id={id}
-      data-arcade-voices={arcadePicker ? "v2" : undefined}
-    >
-      {embedded || moduleCard ? null : <PageIntro title={t("voices")} />}
-      {notice ? (
-        <Notice tone="success" onClose={() => setNotice(null)}>
-          {t(notice)}
-        </Notice>
-      ) : null}
-      {embedded && !moduleCard ? (
-        // Match Agent Avatar / AGENT.md and Team SectionCard title metrics.
-        <SectionCard
-          title={t("voices")}
-          className={cn(agentCard("voices", profiles.length === 0), "mb-0")}
-        >
-          {body ?? <p className="muted-copy">{t("voiceNone")}</p>}
-          {createAction ? (
-            <div className="mt-4 flex justify-start">{createAction}</div>
-          ) : null}
-        </SectionCard>
-      ) : (
-        <ModuleCard
-          title={t("voices")}
-          labelledBy={id ? `${id}-title` : "voices-title"}
-          empty={body ? undefined : t("voiceNone")}
-          action={createAction}
-        >
-          {body}
-        </ModuleCard>
-      )}
-    </div>
+    </>
   );
 }

@@ -114,17 +114,20 @@ export function KnowledgeCheckOverlay({
   );
 }
 
-/** The eye (view) and download buttons of one Brainform row. */
+/** The eye (view), download, and optional red destroy × of one RAG sticker. */
 export function KnowledgeRowActions({
   name,
   disabled,
   onView,
   onDownload,
+  onDelete,
 }: {
   name: string;
   disabled: boolean;
   onView: () => void;
   onDownload: () => void;
+  /** When set, a red 40px × destroys/hides the shared library file. */
+  onDelete?: () => void;
 }) {
   const t = useT();
   const icon = cn(
@@ -152,6 +155,22 @@ export function KnowledgeRowActions({
       >
         <IconDownload />
       </button>
+      {onDelete ? (
+        <button
+          className={cn(
+            buttonVariants({ variant: "neutral", size: "icon" }),
+            selection.rowAction,
+            "size-10 min-h-0 rounded-[10px] border-2 border-[#111] bg-[#ef4444] p-0 text-white hover:bg-[#ef4444] hover:text-white",
+          )}
+          type="button"
+          disabled={disabled}
+          aria-label={t("brainformHideRagNamed", { name })}
+          data-ui-guide="knowledge.hide"
+          onClick={onDelete}
+        >
+          <IconClose />
+        </button>
+      ) : null}
     </>
   );
 }
