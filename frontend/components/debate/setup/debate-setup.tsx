@@ -1259,6 +1259,9 @@ export function TeacherDebateCreate({
               );
             })}
           </div>
+          <p className="mt-3 mb-0 font-body text-xs leading-normal text-[#4B5563]">
+            {t("debateRoundCapsFlexibility")}
+          </p>
           {countingUnitChanged ? (
             <p
               className="mt-2 mb-0 font-body text-xs leading-normal font-bold text-[#4B5563]"
@@ -1281,6 +1284,12 @@ export function TeacherDebateCreate({
                 : `${estimatedMinutes.toFixed(2)} min`}
             </span>
           </div>
+          <p className="mt-1 mb-0 font-body text-xs leading-normal text-[#4B5563]">
+            {t("debateEstimatedDurationAssumption", {
+              participants: participantsForCaps,
+              rate: assumedVoiceRate.toFixed(2),
+            })}
+          </p>
         </CreateCard>
 
         <RulesetEditor

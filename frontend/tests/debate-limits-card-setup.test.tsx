@@ -334,8 +334,16 @@ describe("debate round unit caps", () => {
         "17.78 min",
       ),
     );
-    expect(screen.queryByText(/Assumes 3 Agents/)).toBeNull();
-    expect(screen.queryByText(/Target \/ suggested upper limits/)).toBeNull();
+    expect(
+      screen.getByText(
+        "Assumes 3 Agents, voice rate 1.25, and a 10% pause allowance. This is an estimate, not a timer or actual playback duration.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Target / suggested upper limits; speeches can vary and are not cut off word for word.",
+      ),
+    ).toBeTruthy();
   });
 
   it.each(["39", "2001"])(

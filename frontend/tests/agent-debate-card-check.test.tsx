@@ -71,7 +71,7 @@ it("shows the stored Ready tag while collapsed and does not load", () => {
   expect(load).not.toHaveBeenCalled();
 });
 
-it("shows Compiling for a stored compiling card and no tag for a stored failure", () => {
+it("shows Compiling for a stored compiling card and a Fallback tag for a stored failure", () => {
   const compiling = vi.fn();
   const { rerender } = render(
     <AgentDebateCardCheck
@@ -95,7 +95,7 @@ it("shows Compiling for a stored compiling card and no tag for a stored failure"
     />,
   );
   expect(screen.getByText("Check card")).toBeTruthy();
-  expect(screen.queryByTestId("debate-card-status")).toBeNull();
+  expect(screen.getByTestId("debate-card-status").textContent).toBe("Fallback");
   expect(screen.queryByText("Compiling")).toBeNull();
   expect(screen.queryByText(/could not be prepared/)).toBeNull();
   expect(failed).not.toHaveBeenCalled();
@@ -134,7 +134,9 @@ it("shows the existing approved fallback reason after an endpoint failure", asyn
   );
   fireEvent.click(screen.getByText("Check card"));
   await waitFor(() =>
-    expect(screen.queryByTestId("debate-card-status")).toBeNull(),
+    expect(screen.getByTestId("debate-card-status").textContent).toBe(
+      "Fallback",
+    ),
   );
   expect(screen.queryByText("unavailable")).toBeNull();
   expect(load).toHaveBeenCalledOnce();

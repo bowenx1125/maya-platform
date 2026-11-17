@@ -1195,10 +1195,10 @@ describe("Wave 2 teacher debate setup", () => {
     ).toBeNull();
     expect(screen.queryByText("Target length")).toBeNull();
     expect(
-      screen.queryByText(
+      screen.getByText(
         "Target / suggested upper limits; speeches can vary and are not cut off word for word.",
       ),
-    ).toBeNull();
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
     fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
     fireEvent.change(screen.getByLabelText("Topic"), {
