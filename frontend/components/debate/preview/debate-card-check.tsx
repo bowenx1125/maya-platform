@@ -1,12 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
 import type { components } from "../../../lib/api/generated/schema";
 import type { DebateCardTeacherReason } from "../../../lib/api";
 import { extractTone } from "../../../lib/agent-tone";
 import { useT, type MessageKey } from "../../../lib/i18n";
 import { cn } from "../../../lib/utils";
-import { useSession } from "../../session-provider";
 import { IconEye } from "../../quiet-icons";
 import { DEBATE_BUTTON, DEBATE_TAG, DEBATE_TAG_TONE } from "../debate-chrome";
 
@@ -51,7 +49,6 @@ export function DebateCardCheck({
   status,
   card,
   card_teacher_reason,
-  voiceProfileId,
   agentMd,
   fallbackTone,
   tagStatus,
@@ -62,8 +59,6 @@ export function DebateCardCheck({
   status?: DebateCardStatus | null;
   card?: DebateCard | null;
   card_teacher_reason?: DebateCardTeacherReason | null;
-  /** When set, ready cards can Preview speech with the resolved Tone. */
-  voiceProfileId?: string | null;
   /** AGENT.md used to resolve Tone when the card has no voice_style. */
   agentMd?: string | null;
   fallbackTone?: string | null;
@@ -128,12 +123,7 @@ export function DebateCardCheck({
           </p>
         ) : null}
         {status === "ready" && card ? (
-          <CardBody
-            card={card}
-            voiceProfileId={voiceProfileId}
-            agentMd={agentMd}
-            fallbackTone={fallbackTone}
-          />
+          <CardBody card={card} agentMd={agentMd} fallbackTone={fallbackTone} />
         ) : null}
       </div>
     </details>
@@ -142,12 +132,10 @@ export function DebateCardCheck({
 
 function CardBody({
   card,
-  voiceProfileId,
   agentMd,
   fallbackTone,
 }: {
   card: DebateCard;
-  voiceProfileId?: string | null;
   agentMd?: string | null;
   fallbackTone?: string | null;
 }) {
@@ -173,14 +161,7 @@ function CardBody({
       {card.speaking_style ? (
         <CardField title="Speaking style">{card.speaking_style}</CardField>
       ) : null}
-      {tone ? (
-        <div className="grid gap-2">
-          <CardField title="Tone">{tone}</CardField>
-          {voiceProfileId ? (
-            <TonePreviewButton profileId={voiceProfileId} instruction={tone} />
-          ) : null}
-        </div>
-      ) : null}
+      {tone ? <CardField title="Tone">{tone}</CardField> : null}
       <div className="border-0 border-t-2 border-dashed border-[#111] pt-2">
         <strong className="text-[13px]">Dropped from AGENT.md</strong>
         {card.dropped.length === 0 ? (
@@ -204,55 +185,6 @@ function CardBody({
         )}
       </div>
     </>
-  );
-}
-
-function TonePreviewButton({
-  profileId,
-  instruction,
-}: {
-  profileId: string;
-  instruction: string;
-}) {
-  const { api } = useSession();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  async function play() {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      audioRef.current?.pause();
-      const resource = await api.createVoicePreview(profileId, instruction);
-      const audio = new Audio(resource.playback_url);
-      audioRef.current = audio;
-      await audio.play();
-    } catch {
-      setError(
-        "Preview could not be generated because the voice service failed. Try again, or pick another voice.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="grid gap-1">
-      <button
-        type="button"
-        className={cn(DEBATE_BUTTON, "w-fit py-1 pr-3 pl-3 text-xs")}
-        data-testid="debate-card-tone-preview"
-        data-ui-guide="voice.preview"
-        disabled={busy}
-        aria-busy={busy || undefined}
-        onClick={() => void play()}
-      >
-        Preview
-      </button>
-      {error ? <p className="m-0 text-[13px] text-[#B91C1C]">{error}</p> : null}
-    </div>
   );
 }
 

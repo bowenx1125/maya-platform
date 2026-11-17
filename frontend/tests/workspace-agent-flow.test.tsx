@@ -67,6 +67,7 @@ const api = {
   chatAgents: vi.fn().mockResolvedValue([]),
   knowledgeSets: vi.fn().mockResolvedValue([]),
   voiceProfiles: vi.fn(),
+  personalVoiceProfiles: vi.fn(),
   version: vi.fn(),
   ragPreview: vi.fn().mockResolvedValue(null),
   avatarTemplates: vi.fn().mockResolvedValue([]),
@@ -89,6 +90,7 @@ describe("Workspace Agent flow", () => {
     api.chatAgents.mockResolvedValue([]);
     api.knowledgeSets.mockResolvedValue([]);
     api.voiceProfiles.mockResolvedValue([]);
+    api.personalVoiceProfiles.mockResolvedValue([]);
     api.version.mockResolvedValue(
       version({ id: "draft-id", state: "draft", version_label: "V1.1" }),
     );
@@ -195,6 +197,10 @@ describe("Workspace Agent flow", () => {
     api.workspaceDocuments.mockRejectedValue(
       new PlatformApiError(404, "Not found", { code: "not_found" }),
     );
+    // Personal voice lists are also teacher-owned; expected 404 must not toast.
+    api.personalVoiceProfiles.mockRejectedValue(
+      new PlatformApiError(404, "Not found", { code: "not_found" }),
+    );
     render(
       <AppShell role="student">
         <AgentOverview agentId="agent-id" />
@@ -208,7 +214,12 @@ describe("Workspace Agent flow", () => {
       ).value,
     ).toBe("# Teacher published guide");
     expect(api.workspaceDocuments).toHaveBeenCalledWith("course-1");
+    await waitFor(() =>
+      expect(api.personalVoiceProfiles).toHaveBeenCalledWith("course-1"),
+    );
     expect(screen.queryByText("No versions yet.")).toBeNull();
+    expect(screen.queryByText(/no longer available to you/i)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(
       within(screen.getByRole("main")).queryByRole("button", {
         name: "Delete",

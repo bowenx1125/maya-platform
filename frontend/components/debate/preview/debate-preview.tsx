@@ -219,7 +219,6 @@ export function DebatePreview({
                     status={participant.card_status}
                     card_teacher_reason={participant.card_teacher_reason}
                     card={participant.card}
-                    voiceProfileId={participant.effective_voice_profile_id}
                   />
                 </div>
               );

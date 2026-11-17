@@ -10,13 +10,11 @@ type LoadedCard = StoredCard & { keepPolling?: boolean };
 export function AgentDebateCardCheck({
   agentName,
   agentMd,
-  voiceProfileId,
   storedStatus = null,
   load,
 }: {
   agentName: string;
   agentMd: string;
-  voiceProfileId?: string | null;
   /** Status of the stored agent_debate_cards row. Null when none exists. */
   storedStatus?: StoredCard["card_status"] | null;
   load: () => Promise<LoadedCard>;
@@ -66,7 +64,6 @@ export function AgentDebateCardCheck({
       showWhenUnknown
       card={result?.card}
       card_teacher_reason={result?.card_teacher_reason}
-      voiceProfileId={voiceProfileId}
       agentMd={agentMd}
       onCheck={() => void check()}
     />

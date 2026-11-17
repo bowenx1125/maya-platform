@@ -51,7 +51,7 @@ function candidate(
       agent_id: id,
       agent_name: name,
       issue,
-      blocking: issue !== "voice_missing",
+      blocking: issue !== "voice_missing" && issue !== "avatar_missing",
       message: issue,
     })),
     group_name: `${name} Group`,

@@ -19,6 +19,7 @@ from app.core.sqlutil import dialect_insert
 from app.modules.agents.schemas import AvatarConfig
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext, get_auth_context
+from app.modules.debates.display_avatar import participant_display_avatar
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn
 from app.modules.debates.playback.router import _websocket_origin_allowed, get_playback_service
 from app.modules.debates.playback.service import PlaybackService
@@ -357,7 +358,7 @@ def live_view(db: Session, service: PlaybackService, debate_id: str) -> LiveSnap
             LiveParticipant(
                 id=UUID(p.id),
                 name=p.agent_name,
-                avatar_config=AvatarConfig.model_validate_json(p.avatar_config_json),
+                avatar_config=AvatarConfig.model_validate(participant_display_avatar(db, p)),
             )
             for p in participants
         ],

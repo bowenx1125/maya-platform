@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 
 from app.core.errors import PlatformError, conflict, forbidden, invalid_state, not_found
 from app.modules.auth.service import AuthContext
+from app.modules.debates.display_avatar import participant_display_avatar
 from app.modules.debates.round_count import debate_teaching_protocol, uses_segment_protocol
 
 from ._core import (
@@ -510,7 +511,7 @@ class PlaybackSessionMixin(PlaybackCore):
                     **self._mutual_phase_payload(debate, turn),
                     "audio_ready": False,
                     "playback_url": None,
-                    "avatar_states": self._avatar_states(participants, turn),
+                    "avatar_states": self._avatar_states(db, participants, turn),
                     "cursor_ms": 0,
                 },
             )
@@ -700,7 +701,7 @@ class PlaybackSessionMixin(PlaybackCore):
                     **self._segment_payload(db, turn),
                     **self._mutual_phase_payload(debate, turn),
                     "playback_url": f"/api/v1/debates/{debate_id}/audio/{turn_id}",
-                    "avatar_states": self._avatar_states(participants, turn),
+                    "avatar_states": self._avatar_states(db, participants, turn),
                     "cursor_ms": 0,
                 }
                 event_type = "playback.started"
@@ -712,19 +713,27 @@ class PlaybackSessionMixin(PlaybackCore):
             await self._enqueue_lookahead(db, debate)
         return self._state_dto(state, db, debate)
 
-    def _avatar_states(self, participants: list[Any], turn: Any) -> list[dict[str, Any]]:
+    def _avatar_states(self, db: Any, participants: list[Any], turn: Any) -> list[dict[str, Any]]:
         current_id = str(turn.participant_id)
         states: list[dict[str, Any]] = []
         for participant in participants:
             participant_id = str(participant.id)
-            config = self._get(participant, "avatar_config", "avatar_config_json", default={}) or {}
-            if isinstance(config, str):
-                try:
-                    import json
+            # Expression is part of Avatar display: use the live Agent avatar
+            # (else catalog default), never the create-time participant column.
+            # Memory playback doubles pass db=None; keep their in-memory config.
+            if db is None:
+                config = (
+                    self._get(participant, "avatar_config", "avatar_config_json", default={}) or {}
+                )
+                if isinstance(config, str):
+                    try:
+                        import json
 
-                    config = json.loads(config)
-                except (TypeError, ValueError):
-                    config = {}
+                        config = json.loads(config)
+                    except (TypeError, ValueError):
+                        config = {}
+            else:
+                config = participant_display_avatar(db, participant)
             speaking = participant_id == current_id
             expression = (
                 "neutral" if not speaking else str(config.get("default_expression", "neutral"))

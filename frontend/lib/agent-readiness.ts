@@ -43,7 +43,9 @@ function parseIssues(value: unknown): AgentIssue[] {
       agent_id: item.agent_id,
       agent_name: item.agent_name,
       issue: item.issue,
-      blocking: item.blocking ?? item.issue !== "voice_missing",
+      blocking:
+        item.blocking ??
+        (item.issue !== "voice_missing" && item.issue !== "avatar_missing"),
     }));
 }
 
