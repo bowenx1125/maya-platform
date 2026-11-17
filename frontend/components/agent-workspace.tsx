@@ -2312,6 +2312,7 @@ export function AgentWorkbench({
                                 name={document.source_filename}
                                 disabled={
                                   knowledgeCheckDisabled ||
+                                  editingLocked ||
                                   document.workspace_state === "hidden" ||
                                   ragDestroyBusy
                                 }
