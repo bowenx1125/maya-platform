@@ -162,6 +162,70 @@ describe("Workspace Agent flow", () => {
     expect(api.nextVersion).not.toHaveBeenCalled();
   });
 
+  it("opens a teacher Public Agent's published version instead of No versions yet", async () => {
+    api.agent.mockResolvedValue(
+      agent({
+        ownership_scope: "personal",
+        group_id: null,
+        is_teacher_owned: true,
+        can_edit: true,
+        can_delete: false,
+        current_published_version_id: "published-id",
+        current_draft_version_id: null,
+      }),
+    );
+    api.versions.mockResolvedValue([
+      version({
+        id: "published-id",
+        state: "published",
+        agent_md: "# Teacher published guide",
+      }),
+    ]);
+    api.version.mockResolvedValue(
+      version({
+        id: "published-id",
+        state: "published",
+        agent_md: "# Teacher published guide",
+      }),
+    );
+    render(
+      <AppShell role="student">
+        <AgentOverview agentId="agent-id" />
+      </AppShell>,
+    );
+    expect(
+      (
+        (await screen.findByRole("textbox", {
+          name: "AGENT.md editor",
+        })) as HTMLTextAreaElement
+      ).value,
+    ).toBe("# Teacher published guide");
+    expect(screen.queryByText("No versions yet.")).toBeNull();
+    expect(
+      within(screen.getByRole("main")).queryByRole("button", {
+        name: "Delete",
+      }),
+    ).toBeNull();
+  });
+
+  it("shows No versions yet only when the student cannot edit and has no editor version path", async () => {
+    api.agent.mockResolvedValue(
+      agent({
+        can_edit: false,
+        can_delete: false,
+        current_published_version_id: null,
+        current_draft_version_id: null,
+      }),
+    );
+    api.versions.mockResolvedValue([]);
+    render(
+      <AppShell role="student">
+        <AgentOverview agentId="agent-id" />
+      </AppShell>,
+    );
+    expect(await screen.findByText("No versions yet.")).toBeTruthy();
+  });
+
   it("opens a Teacher Agent with Back and uses sidebar New for the next version", async () => {
     api.agent.mockResolvedValue(
       agent({

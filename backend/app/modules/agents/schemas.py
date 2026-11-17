@@ -83,7 +83,8 @@ class AgentSummary(BaseModel):
     course_id: UUID
     ownership_scope: Literal["group", "personal"]
     visibility: Literal["private", "public"]
-    # Creator; for a public Agent also same-group students and course teachers.
+    # Creator; Public also course teachers, same-group students (student-owned),
+    # or any course student (teacher-owned Public).
     can_edit: bool
     # That same edit role, and only while the Agent is still private.
     can_manage_visibility: bool = False
@@ -93,7 +94,9 @@ class AgentSummary(BaseModel):
     status: Literal["active", "archived"]
     current_published_version_id: UUID | None = None
     current_draft_version_id: UUID | None = None
-    # Creator, same-group student (public only) or course teacher (public only).
+    # Creator; Public also course teachers and same-group students
+    # (student-owned). Course students may edit teacher Public Agents but
+    # cannot delete them.
     can_delete: bool | None = None
     is_creator: bool | None = None
     # Owner holds CourseMember.role == teacher in this course. Optional so

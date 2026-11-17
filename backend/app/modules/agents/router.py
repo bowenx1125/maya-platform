@@ -471,22 +471,27 @@ def _version_dto_for_actor(
 
 
 def _student_delete_scope(db: Session, context: AuthContext, agent_id: str) -> Agent:
-    """Creator always; a public Agent also by groupmates and course teachers.
+    """Creator always; Public Agents also by course teachers and groupmates.
 
-    Anyone else (other group, other course, private Agent) gets a 404 so the
-    Agent's existence is not revealed.
+    ``course_student`` may edit a teacher Public Agent but never delete it.
+    Course teachers keep the main delete right on other teachers' Public
+    Agents. Anyone else gets a 404 so the Agent's existence is not revealed.
     """
 
     agent = db.get(Agent, agent_id)
     if agent is None or agent.deleted_at is not None:
         raise not_found()
-    if public_agent_editor_role(db, context, agent) is None:
-        # Keep the historical owner path (personal teacher Agents etc.).
-        if (
-            agent.owner_user_id != context.user.id
-            or course_member_role(db, context.user.id, agent.course_id) is None
-        ):
-            raise not_found()
+    editor = public_agent_editor_role(db, context, agent)
+    # Same delete set as main before course_student edit: every public-agent
+    # editor except the new student collaborator role.
+    if editor is not None and editor != "course_student":
+        return agent
+    # Keep the historical owner path (personal teacher Agents etc.).
+    if (
+        agent.owner_user_id != context.user.id
+        or course_member_role(db, context.user.id, agent.course_id) is None
+    ):
+        raise not_found()
     return agent
 
 
