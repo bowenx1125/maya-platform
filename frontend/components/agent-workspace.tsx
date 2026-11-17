@@ -44,12 +44,14 @@ import {
   loadAgentDraftStash,
   saveAgentDraftStash,
 } from "../lib/agent-draft-stash";
+import { deleteConfirmText } from "../lib/affected-agents";
 import { groupLibraryOrClosed } from "../lib/group-library";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { blockerLabel, statusLabel, type MessageKey } from "../lib/i18n";
 import { useT } from "../lib/i18n";
 import { cn } from "../lib/utils";
 import { PRESS_MOTION } from "./ui/button";
+import { DestroyConfirmPrompt } from "./ui/destroy-confirm";
 import selection from "./selection-motion.module.css";
 import {
   AVATAR_TEMPLATE_DEFAULT_CONFIGS,
@@ -410,6 +412,11 @@ export function AgentWorkbench({
   // it never edits RAG and stays usable while editing is locked by publish.
   const knowledgeCheck = useKnowledgeCheck();
   const knowledgeCheckDisabled = saving || knowledgeCheck.busy;
+  const [ragDestroy, setRagDestroy] = useState<{
+    document: KnowledgeDocument;
+    message: string;
+  } | null>(null);
+  const [ragDestroyBusy, setRagDestroyBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   // Shown only after Done on create; empty name / AGENT.md stay quiet until then.
   const [submitHint, setSubmitHint] = useState("");
@@ -901,6 +908,53 @@ export function AgentWorkbench({
       }
     } finally {
       finishSaving(savingRequest);
+    }
+  }
+
+  // Destroy/hide the shared library file (not unbind). Same path as Brainform
+  // library delete; Agents that used it get a new version without it.
+  async function requestHideRag(document: KnowledgeDocument) {
+    if (!document.can_manage_visibility || editingLocked || ragDestroyBusy)
+      return;
+    const message = await deleteConfirmText(
+      t("brainformRagHideConfirm", { filename: document.source_filename }),
+      () => api.knowledgeAffectedAgents(document.id),
+      (names) => t("deleteAffectsAgents", { names }),
+      ", ",
+    );
+    setRagDestroy({ document, message });
+  }
+
+  async function confirmHideRag() {
+    if (!ragDestroy || ragDestroyBusy) return;
+    const document = ragDestroy.document;
+    const requestScope = workbenchScope;
+    const intent = `knowledge-hide:${document.id}`;
+    const handle = mutationStore.handleFor(intent);
+    setRagDestroyBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.hideKnowledge(document.id, { idempotency: handle });
+      if (!isCurrentScope(requestScope)) return;
+      mutationStore.finish(intent, handle);
+      setRagDestroy(null);
+      offeredDocumentIds.current.delete(document.id);
+      setDocuments((current) =>
+        current.filter((item) => item.id !== document.id),
+      );
+      setSelectedDocumentIds((current) =>
+        current.filter((id) => id !== document.id),
+      );
+      void load(true);
+    } catch (cause) {
+      if (isCurrentScope(requestScope)) {
+        mutationStore.abandon(intent, handle);
+        setError(cause);
+        setRagDestroy(null);
+      }
+    } finally {
+      if (isCurrentScope(requestScope)) setRagDestroyBusy(false);
     }
   }
 
@@ -1599,6 +1653,16 @@ export function AgentWorkbench({
 
   return (
     <>
+      {ragDestroy ? (
+        <DestroyConfirmPrompt
+          message={ragDestroy.message}
+          busy={ragDestroyBusy}
+          onCancel={() => {
+            if (!ragDestroyBusy) setRagDestroy(null);
+          }}
+          onConfirm={() => void confirmHideRag()}
+        />
+      ) : null}
       <div className={AGENT_PAGE}>
         <PageBanner
           title={
@@ -2248,7 +2312,9 @@ export function AgentWorkbench({
                                 name={document.source_filename}
                                 disabled={
                                   knowledgeCheckDisabled ||
-                                  document.workspace_state === "hidden"
+                                  editingLocked ||
+                                  document.workspace_state === "hidden" ||
+                                  ragDestroyBusy
                                 }
                                 onView={() =>
                                   void knowledgeCheck.viewMarkdown(
@@ -2261,6 +2327,12 @@ export function AgentWorkbench({
                                     document.source_filename,
                                     loadDocumentMarkdown(api, document),
                                   )
+                                }
+                                onDelete={
+                                  document.can_manage_visibility &&
+                                  document.workspace_state !== "hidden"
+                                    ? () => void requestHideRag(document)
+                                    : undefined
                                 }
                               />
                             </div>

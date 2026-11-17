@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -189,10 +190,14 @@ describe("Studyform voice list cache", () => {
       .mockResolvedValueOnce([voice("v1", "doomed.wav")])
       .mockResolvedValueOnce([]);
     api.deleteVoiceProfile.mockResolvedValue(undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<VoiceLibrary groupId="group-a" moduleCard />);
     expect(await screen.findByText("doomed.wav")).toBeTruthy();
     screen.getByRole("button", { name: "Delete doomed.wav" }).click();
+    fireEvent.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Delete",
+      }),
+    );
     await waitFor(() => expect(screen.queryByText("doomed.wav")).toBeNull());
     expect(api.voiceProfiles).toHaveBeenCalledTimes(2);
     expect(

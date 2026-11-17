@@ -44,6 +44,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+async function confirmVoiceDestroy() {
+  const dialog = await screen.findByRole("alertdialog");
+  expect(dialog.textContent).toContain(
+    "Delete this custom voice? Debates already created keep their voice.",
+  );
+  fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+}
+
 async function openEnrollForm() {
   await waitFor(() =>
     expect(
@@ -294,8 +302,6 @@ describe("M08 voice library", () => {
       .mockResolvedValueOnce([own])
       .mockResolvedValue([{ ...own, status: "deleted" }]);
     api.deleteVoiceProfile.mockResolvedValue({ ...own, status: "deleted" });
-    const confirm = vi.fn(() => true);
-    vi.stubGlobal("confirm", confirm);
     render(
       <AppShell role="student">
         <VoiceLibrary groupId="group-a" />
@@ -304,11 +310,7 @@ describe("M08 voice library", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Delete mine.wav" }),
     );
-    await waitFor(() =>
-      expect(confirm).toHaveBeenCalledWith(
-        "Delete this custom voice? Debates already created keep their voice.",
-      ),
-    );
+    await confirmVoiceDestroy();
     await waitFor(() =>
       expect(api.deleteVoiceProfile).toHaveBeenCalledWith(
         "own-voice",
@@ -319,10 +321,6 @@ describe("M08 voice library", () => {
   });
 
   it("keeps the voice when the delete is cancelled, and offers delete only to the owner, in a picker too", async () => {
-    vi.stubGlobal(
-      "confirm",
-      vi.fn(() => false),
-    );
     api.voiceProfiles.mockResolvedValue([
       {
         id: "own-voice",
@@ -351,6 +349,8 @@ describe("M08 voice library", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Delete mine.wav" }),
     );
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(api.deleteVoiceProfile).not.toHaveBeenCalled();
     expect(
       screen.queryByRole("button", { name: "Delete peer.wav" }),
@@ -397,10 +397,6 @@ describe("M08 voice library", () => {
           finishDelete = resolve;
         }),
     );
-    vi.stubGlobal(
-      "confirm",
-      vi.fn(() => true),
-    );
     render(
       <AppShell role="student">
         <VoiceLibrary groupId="group-a" moduleCard />
@@ -417,6 +413,7 @@ describe("M08 voice library", () => {
       name: "Delete outcome_unknown.wav",
     });
     fireEvent.click(unknown);
+    await confirmVoiceDestroy();
     await waitFor(() =>
       expect(api.deleteVoiceProfile).toHaveBeenCalledWith(
         "voice-outcome_unknown",
@@ -469,10 +466,6 @@ describe("M08 voice library", () => {
       .mockResolvedValueOnce([unconfirmed, failed])
       .mockResolvedValue([unconfirmed]);
     api.deleteVoiceProfile.mockResolvedValue({ ...failed, status: "deleted" });
-    vi.stubGlobal(
-      "confirm",
-      vi.fn(() => true),
-    );
     render(
       <AppShell role="student">
         <VoiceLibrary groupId="group-a" moduleCard />
@@ -501,6 +494,7 @@ describe("M08 voice library", () => {
     fireEvent.click(
       within(failedRow).getByRole("button", { name: "Delete refused.m4a" }),
     );
+    await confirmVoiceDestroy();
     await waitFor(() =>
       expect(api.deleteVoiceProfile).toHaveBeenCalledWith(
         "failed-voice",
@@ -1125,10 +1119,6 @@ describe("Agent voice picker", () => {
   });
 
   it("falls back to None when the chosen voice is deleted", async () => {
-    vi.stubGlobal(
-      "confirm",
-      vi.fn(() => true),
-    );
     api.voiceProfiles
       .mockResolvedValueOnce([mine])
       .mockResolvedValue([{ ...mine, status: "deleted" }]);
@@ -1145,6 +1135,7 @@ describe("Agent voice picker", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Delete mine.wav" }),
     );
+    await confirmVoiceDestroy();
     await waitFor(() => expect(onSelect).toHaveBeenCalledWith(null));
   });
 
