@@ -33,7 +33,7 @@ export function MusicKey({
       data-playing={playing || undefined}
       className={cn(
         // Idle stays white; pink fill is the unlayered [data-playing] rule in
-        // globals.css so capsuleTrigger / dock hover cannot cover it.
+        // arcade.css so capsuleTrigger / bg-white / dock hover cannot cover it.
         "relative size-11 shrink-0 rounded-[10px] border-[3px] border-[#111] bg-white",
         playing &&
           "[&_svg]:origin-bottom [&_svg]:animate-[music-hop_0.6s_ease-in-out_infinite] motion-reduce:[&_svg]:animate-none",
