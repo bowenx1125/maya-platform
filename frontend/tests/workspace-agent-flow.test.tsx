@@ -10,6 +10,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentDetail, AgentVersion } from "../lib/api";
+import { PlatformApiError } from "../lib/api";
 import { AppShell } from "../components/app-shell";
 import { AgentOverview } from "../components/agent-workspace";
 import { GroupWorkspace } from "../components/student-workspace";
@@ -167,6 +168,7 @@ describe("Workspace Agent flow", () => {
       agent({
         ownership_scope: "personal",
         group_id: null,
+        course_id: "course-1",
         is_teacher_owned: true,
         can_edit: true,
         can_delete: false,
@@ -188,6 +190,11 @@ describe("Workspace Agent flow", () => {
         agent_md: "# Teacher published guide",
       }),
     );
+    // Personal workspace docs stay teacher-owned; the workbench must soft-fail
+    // 404 and keep the published version's bound sources (same as group library).
+    api.workspaceDocuments.mockRejectedValue(
+      new PlatformApiError(404, "Not found", { code: "not_found" }),
+    );
     render(
       <AppShell role="student">
         <AgentOverview agentId="agent-id" />
@@ -200,11 +207,47 @@ describe("Workspace Agent flow", () => {
         })) as HTMLTextAreaElement
       ).value,
     ).toBe("# Teacher published guide");
+    expect(api.workspaceDocuments).toHaveBeenCalledWith("course-1");
     expect(screen.queryByText("No versions yet.")).toBeNull();
     expect(
       within(screen.getByRole("main")).queryByRole("button", {
         name: "Delete",
       }),
+    ).toBeNull();
+  });
+
+  it("surfaces a non-404 personal workspace failure instead of opening the editor", async () => {
+    api.agent.mockResolvedValue(
+      agent({
+        ownership_scope: "personal",
+        group_id: null,
+        course_id: "course-1",
+        is_teacher_owned: true,
+        can_edit: true,
+        can_delete: false,
+        current_published_version_id: "published-id",
+        current_draft_version_id: null,
+      }),
+    );
+    api.versions.mockResolvedValue([version()]);
+    api.version.mockResolvedValue(version());
+    api.workspaceDocuments.mockRejectedValue(
+      new PlatformApiError(500, "Workspace list failed", {
+        code: "internal_error",
+      }),
+    );
+    render(
+      <AppShell role="student">
+        <AgentOverview agentId="agent-id" />
+      </AppShell>,
+    );
+    expect(
+      await screen.findByText(
+        "Something went wrong on the server. Please try again.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("textbox", { name: "AGENT.md editor" }),
     ).toBeNull();
   });
 

@@ -152,6 +152,16 @@ describe("groupLibraryOrClosed", () => {
     ).resolves.toEqual([]);
   });
 
+  it("treats a denied personal workspace list as empty", async () => {
+    await expect(
+      groupLibraryOrClosed(
+        Promise.reject(
+          new PlatformApiError(404, "Not found", { code: "not_found" }),
+        ),
+      ),
+    ).resolves.toEqual([]);
+  });
+
   it("still surfaces every other failure", async () => {
     const denied = new PlatformApiError(500, "boom");
     await expect(groupLibraryOrClosed(Promise.reject(denied))).rejects.toBe(

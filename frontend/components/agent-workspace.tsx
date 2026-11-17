@@ -627,9 +627,14 @@ export function AgentWorkbench({
         void loadAvatarTemplates();
         const [nextDocuments, nextPreview, nextAgentKnowledge] =
           await Promise.all([
+            // Personal workspace docs are teacher-owned. A course_student (or
+            // other non-owner) editor of a teacher Public Agent gets 404; keep
+            // the version's bound sources instead of aborting the workbench.
             nextAgent.group_id
               ? groupLibraryOrClosed(api.knowledge(nextAgent.group_id))
-              : api.workspaceDocuments(nextAgent.course_id),
+              : groupLibraryOrClosed(
+                  api.workspaceDocuments(nextAgent.course_id),
+                ),
             // Preview is draft-only. A published version is the editor baseline
             // until Done, and its preview request is a not-found.
             nextVersion.state === "draft"
