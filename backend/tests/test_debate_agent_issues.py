@@ -217,14 +217,16 @@ def test_an_agent_failing_every_hint_still_saves_and_publishes(debate_app: Any) 
         "avatar_missing",
         "voice_missing",
     }
-    # A Debate still refuses it, naming every blocking reason.
+    assert {(item["issue"], item["blocking"]) for item in detail.json()["readiness_issues"]} == {
+        ("rag_missing", True),
+        ("avatar_missing", False),
+        ("voice_missing", False),
+    }
+    # Avatar missing no longer blocks create; RAG still does.
     other, _, _ = _insert_published_agent(database, group_id=GROUP_DEMO_ID, name="Other")
     _, teacher_csrf = login(client)
     issues = _issues(_create(client, teacher_csrf, [agent_id, other]))
-    assert {item["issue"] for item in issues} == {
-        "rag_missing",
-        "avatar_missing",
-    }
+    assert {item["issue"] for item in issues} == {"rag_missing"}
 
 
 def test_a_malformed_debate_names_each_field(debate_app: Any) -> None:

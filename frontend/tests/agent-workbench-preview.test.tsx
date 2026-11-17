@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentWorkbench } from "../components/agent-workspace";
 import type { AgentDetail } from "../lib/api";
+import { PlatformApiError } from "../lib/api";
 import { AVATAR_TEMPLATE_DEFAULT_CONFIGS as defaults } from "../components/avatar/types";
 
 const state = vi.hoisted(() => ({ api: {}, role: "teacher" }));
@@ -266,6 +267,97 @@ describe("workbench Preview request", () => {
     );
     expect(await screen.findByText("From the editor")).toBeTruthy();
     expect(screen.queryByText(/could not be prepared/)).toBeNull();
+  });
+
+  it("student on teacher Public Agent: Check card Ready has no Preview; Avatar Preview uses previewAgent", async () => {
+    state.role = "student";
+    const previewAgent = vi.fn(async () => ({ answer: "One sentence." }));
+    const createVoicePreview = vi.fn();
+    state.api = {
+      previewAgent,
+      createVoicePreview,
+      checkAgentDebateCard: vi.fn(async () => ({
+        card_status: "ready",
+        card: {
+          identity: "许子",
+          position: "A stored position",
+          reasoning: [],
+          speaking_style: "Warm",
+          voice_style: "A calm, low voice.",
+          dropped: [],
+        },
+      })),
+      group: vi.fn(async () => ({ course_id: "course" })),
+      knowledge: vi.fn(async () => []),
+      workspaceDocuments: vi.fn(async () => {
+        throw new PlatformApiError(404, "Not found", { code: "not_found" });
+      }),
+      avatarTemplates: vi.fn(async () => [
+        {
+          id: "egg",
+          name: "Egg",
+          available: true,
+          supported_parameters: ["template_id"],
+        },
+      ]),
+      personalVoiceProfiles: vi.fn(async () => {
+        throw new PlatformApiError(404, "Not found", { code: "not_found" });
+      }),
+      voiceProfiles: vi.fn(async () => []),
+      version: vi.fn(async () => ({
+        id: "8552ddaf-cd67-46f8-9b1c-c22e1b3b66a1",
+        agent_id: "agent",
+        state: "published",
+        revision: 0,
+        avatar_config: defaults.egg,
+        agent_md: "# Teacher published guide",
+        voice_profile_id: "teacher-voice",
+        enabled_documents: [],
+        publish_blockers: [],
+        stored_card_status: "ready",
+      })),
+      agent: vi.fn(async () => ({
+        id: "agent",
+        name: "EGG演示Sample",
+        course_id: "course",
+        group_id: null,
+        ownership_scope: "personal",
+        visibility: "public",
+        is_teacher_owned: true,
+        can_edit: true,
+        can_delete: false,
+      })),
+      ragPreview: vi.fn(async () => null),
+      agentKnowledgeSets: vi.fn(async () => ({ sets: [] })),
+    };
+    render(
+      <AgentWorkbench
+        versionId="8552ddaf-cd67-46f8-9b1c-c22e1b3b66a1"
+        publishOnDone
+      />,
+    );
+    expect((await screen.findByTestId("debate-card-status")).textContent).toBe(
+      "Ready",
+    );
+    fireEvent.click(screen.getByText("Check card"));
+    expect(await screen.findByText("许子")).toBeTruthy();
+    expect(screen.getByText("A calm, low voice.")).toBeTruthy();
+    const check = screen.getByTestId("debate-card-check");
+    expect(
+      check.querySelector('[data-testid="debate-card-tone-preview"]'),
+    ).toBeNull();
+    expect(
+      Array.from(check.querySelectorAll("button")).some(
+        (button) => button.textContent === "Preview",
+      ),
+    ).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    fireEvent.change(screen.getByPlaceholderText("Type a message..."), {
+      target: { value: "Why?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(previewAgent).toHaveBeenCalledOnce());
+    expect(createVoicePreview).not.toHaveBeenCalled();
   });
 
   it("shows Compiling when a new Agent still has no version", async () => {
