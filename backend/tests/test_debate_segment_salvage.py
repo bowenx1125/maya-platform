@@ -183,6 +183,89 @@ def test_defer_publication_salvage_keeps_operation_accepted() -> None:
     assert staged_hash == recomputed
 
 
+def test_teacher_retry_rebinds_spent_failed_attempt_with_new_request_hash() -> None:
+    """Spent attempt_no=2 must accept a clamped rebuild (new request_hash)."""
+
+    frozen = snapshot()
+    # First cycle spends both attempts on empty segments without salvage continue
+    # for the ledger identity; we force-fail attempt 2 on the ledger, then rebuild.
+    provider = OfflineAdapter(
+        [
+            {"segments": []},
+            {"segments": []},
+            {
+                "segments": [
+                    {
+                        "text": (
+                            "I disagree with the opening claim because classroom attention "
+                            "is a scarce resource and distraction lowers practice quality."
+                        ),
+                        "source_ids": [],
+                        "reply_to": None,
+                        "support_mode": "no_match",
+                    }
+                ]
+            },
+        ]
+    )
+    ledger = InMemoryProviderOperationRepository(
+        default_budget=ProviderScopeBudgetV1(
+            max_requests=8,
+            max_total_tokens=400_000,
+            max_cost_cny=10,
+            budget_bucket="llm_debate_turn",
+        )
+    )
+    runtime = SegmentLLMRuntime(ledger=ledger, adapter=provider, defer_publication=True)
+    prepared = runtime.prepare(
+        frozen,
+        debate_id="debate-retry",
+        turn_id="turn-retry",
+        policy_hash="a" * 64,
+        manifest_hash="b" * 64,
+        build_manifest_hash="c" * 64,
+    )
+    first = runtime.run(prepared, context=opening_context(), confirmed=True)
+    # Salvage may succeed on empty segments; force the latest op back to failed
+    # with a stale request identity to mimic pre-clamp production stalls.
+    latest = max(
+        (op for op in ledger._operations.values() if op.logical_item_id == "turn-retry"),
+        key=lambda op: op.attempt_no,
+    )
+    assert latest.attempt_no == 2
+    stale_hash = "d" * 64
+    ledger._operations[latest.id] = replace(
+        latest,
+        state="failed",
+        request_hash=stale_hash,
+        safe_error_code="segment_over_length",
+        staged_response_hash=None,
+    )
+    ledger._llm_stages.pop(latest.id, None)
+    ledger._segment_recovery_inputs.pop(latest.id, None)
+    # Teacher Preview Retry re-prepares: clamps/salvage change the request hash.
+    prepared_again = runtime.prepare(
+        frozen,
+        debate_id="debate-retry",
+        turn_id="turn-retry",
+        policy_hash="a" * 64,
+        manifest_hash="b" * 64,
+        build_manifest_hash="c" * 64,
+    )
+    rebound = ledger.operation(latest.id)
+    assert rebound.state == "prepared"
+    assert rebound.request_hash == prepared_again.request.request_hash
+    assert rebound.request_hash != stale_hash
+    assert rebound.safe_error_code is None
+    # Charged history from the spent cycle is preserved; reserve will add another.
+    assert rebound.charged_request_count >= 1
+    second = runtime.run(prepared_again, context=opening_context(), confirmed=True)
+    assert second.status == "succeeded"
+    assert second.final_ready is not None
+    assert second.final_ready.speech.strip()
+    assert first.status in {"succeeded", "failed"}
+
+
 def test_salvage_keeps_usable_speech_when_provider_returns_only_question() -> None:
     snapshot = _v5_snapshot(round_no=2, language="en", cap=95)
     # Round-2 en snapshot may use a different computed cap; read it.

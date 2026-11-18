@@ -3625,7 +3625,11 @@ class SqlPlaybackRepository(PlaybackRepository):
         turn_sql = (
             "UPDATE debate_turns SET generation_status='pending', "
             "preparation_stage='generation', "
-            + ("" if cached_segment else "transcript_hash=NULL, ")
+            + (
+                ""
+                if cached_segment
+                else "transcript_hash=NULL, speech=NULL, structured_json=NULL, "
+            )
             + "safe_error_code=NULL, updated_at=:updated_at "
             "WHERE id=:turn_id AND debate_id=:debate_id "
             f"AND generation_status IN {status_in} "

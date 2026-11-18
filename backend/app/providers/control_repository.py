@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 from uuid import uuid4
 
@@ -3130,6 +3130,94 @@ class ProviderRepository:
             expected=current.state,
             state="abandoned",
         )
+
+    def reprepare_failed(
+        self,
+        operation_id: str,
+        *,
+        request_hash: str,
+        policy_hash: str,
+        export_manifest_hash: str,
+        build_manifest_hash: str,
+        max_tokens: int,
+        max_cost_cny: float,
+        model_key: str = "",
+    ) -> ProviderOperationV1:
+        """Teacher-authorized resend of a failed attempt with a new request identity."""
+
+        if not _SHA256_RE.fullmatch(request_hash):
+            raise ProviderRepositoryError("request hash is invalid")
+        if not _SHA256_RE.fullmatch(policy_hash):
+            raise ProviderRepositoryError("policy hash is invalid")
+        if not _SHA256_RE.fullmatch(export_manifest_hash):
+            raise ProviderRepositoryError("export manifest hash is invalid")
+        if build_manifest_hash and not _SHA256_RE.fullmatch(build_manifest_hash):
+            raise ProviderRepositoryError("build manifest hash is invalid")
+        if max_tokens < 0:
+            raise ProviderRepositoryError("reservation tokens are invalid")
+        try:
+            amount = Decimal(str(max_cost_cny))
+        except (InvalidOperation, ValueError) as exc:
+            raise ProviderRepositoryError("reservation cost is invalid") from exc
+        if not amount.is_finite() or amount < 0:
+            raise ProviderRepositoryError("reservation cost is invalid")
+        operation_table = _OPERATION_TABLE
+        reservation_table = _RESERVATION_TABLE
+        now = self._now()
+        with self._write_connection() as connection:
+            row = (
+                connection.execute(
+                    select(operation_table).where(operation_table.c.id == operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            if row is None:
+                raise OperationStateError("provider operation does not exist")
+            current = cast(OperationState, str(row["state"]))
+            if current != "failed":
+                raise OperationStateError("provider operation is not failed")
+            if not can_transition("failed", "prepared"):
+                raise OperationStateError(
+                    f"invalid provider operation transition: {current}->prepared"
+                )
+            values: dict[str, object] = {
+                "state": "prepared",
+                "request_hash": request_hash,
+                "policy_hash": policy_hash,
+                "export_manifest_hash": export_manifest_hash,
+                "build_manifest_hash": build_manifest_hash or row["build_manifest_hash"],
+                "max_tokens": max_tokens,
+                "max_cost_cny": float(amount),
+                "safe_error_code": None,
+                "staged_response_hash": None,
+                "updated_at": now,
+            }
+            if model_key:
+                values["model_key"] = model_key
+            changed = connection.execute(
+                update(operation_table)
+                .where(operation_table.c.id == operation_id, operation_table.c.state == "failed")
+                .values(**values)
+            )
+            if changed.rowcount != 1:
+                raise OperationStateError("provider operation CAS fence failed")
+            reservation_row = (
+                connection.execute(
+                    select(reservation_table).where(
+                        reservation_table.c.operation_id == operation_id
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if reservation_row is not None:
+                connection.execute(
+                    update(reservation_table)
+                    .where(reservation_table.c.operation_id == operation_id)
+                    .values(state="prepared", updated_at=now)
+                )
+        return self.operation(operation_id)
 
     def recover_one(
         self,
