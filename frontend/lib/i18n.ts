@@ -606,7 +606,8 @@ const enMessages = {
   errorTeamMemberSourceUnavailable:
     "This Agent's RAG was removed from the library. Open the Agent, choose active RAG, and publish again before adding it to a Team.",
   errorCsrfFailed: "This form has expired. Please try again.",
-  errorInvalidState: "That action is not available in the current state.",
+  errorInvalidState:
+    "That action is not available right now. Refresh Preview, then retry the next unprepared turn. If the error persists, open Diagnostics.",
   errorVersionImmutable: "Published versions are immutable.",
   errorStaleRevision: "Someone else changed this content. Please refresh.",
   agentLastEditedTooltip: "Last edited by: {name}",

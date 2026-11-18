@@ -162,7 +162,9 @@ describe("PW3-E teacher shell and responsive contract", () => {
       remakeDebate: vi
         .fn()
         .mockRejectedValue(
-          new Error("That action is not available in the current state."),
+          new Error(
+            "That action is not available right now. Refresh Preview, then retry the next unprepared turn. If the error persists, open Diagnostics.",
+          ),
         ),
     };
     mockedUseSession.mockReturnValue({
@@ -189,7 +191,9 @@ describe("PW3-E teacher shell and responsive contract", () => {
     );
     expect((stalled as HTMLElement).tabIndex).toBe(0);
     expect(
-      screen.queryByText("That action is not available in the current state."),
+      screen.queryByText(
+        "That action is not available right now. Refresh Preview, then retry the next unprepared turn. If the error persists, open Diagnostics.",
+      ),
     ).toBeNull();
     expect(screen.queryByText("Network unavailable")).toBeNull();
   });

@@ -136,3 +136,7 @@ Scheme B: RAG/Voice × + U3 pink confirm; MusicKey `#FF4D8D` unlayered `arcade.c
 ## Nov18 debate segment salvage (no stall)
 
 Root: temp 1.8 + vague max_units + speech in `question` → attempts exhausted → draft stuck. Fix: send-time temp≤0.9 + max_tokens bound; clearer unit/hard ceiling; normalize question→segment; force-fit; after budget `salvage_segment_output` + soft `segment_output_salvaged` (EN why+Retry). Audit: no `mark_failed` before salvage (defer-publish needs accepted); stage salvaged payload for CAS. No Alembic/env. Targeted PASS.0 calls/deploy.
+
+## Nov18 Preview retry for spent turn_generation_failed + FE static gates
+
+Already-failed draft turns (`safe_error_code=turn_generation_failed`, spent segment_over_length/segment_text_invalid, no local recovery) are teacher-retryable: regenerate with current clamps/salvage, then continue later pending turns (CAS + idempotency; no Alembic/env). Remaining invalid_state copy names why + Refresh/Retry/Diagnostics. FE: prettier on stage yaw/template tests; export `StageSlot`; egg drawing `version: 1 as const`. Base `6a65fa8e`.0 calls/deploy.

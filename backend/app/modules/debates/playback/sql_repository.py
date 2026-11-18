@@ -3585,17 +3585,9 @@ class SqlPlaybackRepository(PlaybackRepository):
             return False
         debate_id = str(debate.id)
         turn_id = str(turn.id)
-        if (
-            code == "turn_generation_failed"
-            and (
-                debate_id,
-                turn_id,
-            )
-            not in self.recoverable_llm_turns(db)
-            and not self.unattempted_llm_turn(db, debate_id, turn_id)
-            and not self.retryable_provider_llm_reject(db, debate_id, turn_id)
-        ):
-            return False
+        # turn_generation_failed is teacher-retryable even after spent segment
+        # contract attempts: regenerating applies current clamps/salvage. Local
+        # recovery and provider-reject helpers remain for other callers.
         cached_segment = code in tts_preview_retry_codes and _has_cached_segment_fence(turn)
         if code in tts_preview_retry_codes and not cached_segment:
             return False
