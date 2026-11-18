@@ -78,6 +78,35 @@ function renderPreview(
 }
 
 describe("teacher debate preview", () => {
+  it("shows a non-blocking salvage warning with Retry and keeps Immerse available", () => {
+    const onRetry = vi.fn();
+    renderPreview(
+      {
+        ...detail,
+        preview_turns: detail.preview_turns!.map((turn) =>
+          turn.id === "turn-a"
+            ? {
+                ...turn,
+                generation_status: "final_ready",
+                audio_ready: true,
+                safe_error_code: "segment_output_salvaged",
+              }
+            : turn,
+        ),
+      },
+      onRetry,
+    );
+
+    expect(
+      screen.getByTestId("preview-segment-salvaged").textContent,
+    ).toContain("missed the length or format contract");
+    expect(screen.getByTestId("preview-turn-salvaged")).toBeTruthy();
+    expect(screen.queryByTestId("preview-audio-failed")).toBeNull();
+    fireEvent.click(screen.getByTestId("preview-salvage-retry"));
+    expect(onRetry.mock.calls).toEqual([[["turn-a"]]]);
+    expect(screen.getByRole("link", { name: "Immerse" })).toBeTruthy();
+  });
+
   it.each([
     "tts_voice_unavailable",
     "tts_provider_unavailable",

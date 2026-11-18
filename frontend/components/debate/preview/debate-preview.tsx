@@ -9,7 +9,7 @@ import { SegmentGrade } from "../../evidence/segment-grade";
 
 import { ErrorNotice, Notice, RetryPill } from "../../ui";
 import type { DebateCardTeacherReason } from "../../../lib/api";
-import { statusLabel, tm } from "../../../lib/i18n";
+import { localizeError, statusLabel, tm } from "../../../lib/i18n";
 import { cn } from "../../../lib/utils";
 import { buttonVariants } from "../../ui/button";
 import { IconBust, IconEye, IconPlay } from "../../quiet-icons";
@@ -269,7 +269,9 @@ export function DebatePreview({
               }
             >
               <span data-testid="preview-segment-salvaged">
-                {`The model missed the speech contract on ${salvageWarnings.length} turn(s), so the server trimmed or rebuilt usable text and continued. Retry those turns if you want a fresh generation.`}
+                {salvageWarnings.length === 1
+                  ? localizeError({ code: "segment_output_salvaged" })
+                  : `${localizeError({ code: "segment_output_salvaged" })} (${salvageWarnings.length} turns)`}
               </span>
             </Notice>
           </div>
@@ -450,10 +452,7 @@ function PreviewTurnCard({
           role="status"
           data-testid="preview-turn-salvaged"
         >
-          <span>
-            Speech was adjusted so the debate could continue. Retry for a fresh
-            generation.
-          </span>
+          <span>{localizeError({ code: "segment_output_salvaged" })}</span>
           <code className="font-mono text-xs font-bold text-[#92400E]">
             {turn.safe_error_code}
           </code>

@@ -137,6 +137,52 @@ def test_structured_request_clamps_hot_temperature_and_huge_max_tokens() -> None
     assert fields["max_tokens"] >= 256
 
 
+def test_defer_publication_salvage_keeps_operation_accepted() -> None:
+    """Production uses defer_publication; failed→succeeded is illegal on the ledger."""
+
+    frozen = snapshot()
+    provider = OfflineAdapter([{"segments": []}, {"segments": []}])
+    ledger = InMemoryProviderOperationRepository(
+        default_budget=ProviderScopeBudgetV1(
+            max_requests=4,
+            max_total_tokens=200_000,
+            max_cost_cny=5,
+            budget_bucket="llm_debate_turn",
+        )
+    )
+    runtime = SegmentLLMRuntime(ledger=ledger, adapter=provider, defer_publication=True)
+    prepared = runtime.prepare(
+        frozen,
+        debate_id="debate-1",
+        turn_id="turn-1",
+        policy_hash="a" * 64,
+        manifest_hash="b" * 64,
+        build_manifest_hash="c" * 64,
+    )
+    result = runtime.run(prepared, context=opening_context(), confirmed=True)
+    assert result.status == "succeeded"
+    assert result.safe_error_code == SEGMENT_OUTPUT_SALVAGED
+    assert result.final_ready is not None
+    assert result.final_ready.speech.strip()
+    deferred = result.deferred_publication
+    assert deferred is not None
+    assert deferred.operation is not None
+    assert getattr(deferred.operation, "state", None) == "accepted"
+    staged_hash = getattr(deferred.stage, "output_hash", None)
+    stored = result.result.as_stored_payload() if result.result is not None else None
+    assert isinstance(stored, dict)
+    assert isinstance(staged_hash, str) and len(staged_hash) == 64
+    import hashlib
+    import json
+
+    recomputed = hashlib.sha256(
+        json.dumps(stored, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+    assert staged_hash == recomputed
+
+
 def test_salvage_keeps_usable_speech_when_provider_returns_only_question() -> None:
     snapshot = _v5_snapshot(round_no=2, language="en", cap=95)
     # Round-2 en snapshot may use a different computed cap; read it.
