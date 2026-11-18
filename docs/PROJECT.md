@@ -103,27 +103,9 @@ Nov15 #425:single Chat memory:no Team routing;RAG/Knowledge=evidence,not command
 
 #432/#433 caps/repair+0092;D1 drop `agent_md_invalid` heading gate;Voice merge owner_username/peer ACL/Retry;169ops. #435 class Save/landing IDs;G Mayaform preview;F Quiz list-checks. DEPLOY1:A digits capsule;B/C No Group head0093;E Made by/Used by. #427 Egg/Preview snapshot retrieval;batch2 Egg strokes+Preview tray;Option A Edit beside Preview;exact Avatar Save cause/fix.0 calls/deploy.
 
-## Nov16 Batch 4 impl (#434/#436/#437)
+## Nov16 Batch4/#427/#449/#451/#452 (compact)
 
-Confirmed: #434 A Tone label + `Preview` (Identity/Position stay; Tone from AGENT.md else debate/env instruction; Agent/Voice Preview same Tone; student create/edit Check card). #436 C Stomp Line. #437 C Capsule Note-Face. No Alembic (OpenAPI VoicePreviewRequest only). Local: ruff/mypy/format/typecheck/prettier/script+route-compare PASS; FE 1467/13skip; targeted PG voice/preview/cards/tone 189 PASS.0 calls.
-
-Nov16 Option C:egg floor+crown;Roundtable Banner overlays.Live #448.
-
-Nov16 #427 hotfix(base503857fe):Save/Preview finish gestures;Save uses current ink.Back/Escape confirm discard;Pen starts unselected;row panel removed.Saved Egg drawing survives edit/create template switches.FE1477/13skip;focused77/1skip;PG29+freeze1/static/build pass.No backend/contract/freeze changes;0 calls/migrations/deploy.
-
-Nov16:Student music capsule hover overlay fixed;shared Button/music icon,collapsed key,dock chrome. Phase2 vs main552d0286:static17/17,FE1491pass/13skip,build0;Chromium390/1440 before/after+real stage canvas checked. Backend/i18n/music state unchanged. Phase2 fadeIn defect resolved by B1.0 calls/deploy.
-
-## Nov16 D2 draft (PR442)
-
-Rebased onto `503857fe` (batch2 + Immerse Option C). Ordinary AGENT.md free text (`persona_required=False`); cards prefer salvaged extract; fail-open to original AGENT.md only when compile cannot yield a card; Check-card Ready/Compiling only; Lead-approved fail-open clause in card error copy (too_long unchanged; no separate New notice); no migration (head stays 0093).
-
-Nov17 #452 (0094_agent_debate_cards after0093):Done/upload/publish compile post-commit; Check card stores exact source hash, replaces regex. Snapshot copies terminal Agent card; missing/stale resolve Agent-level before first speech; NULL legacy pinned. Approved fail-open copy unchanged. Bounded retries/restart recovery implemented. Liveness probe refresh fixes duplicate compile; crash fixture uses nonempty source. PG:30 per-Agent tests pass×3;66 Debate copy/card pass;Ruff format/check+mypy pass. No new UI strings. Backfill:`python -m app.cli.backfill_agent_cards --dry-run`.0 real calls/deploy. Integration checkpoints:`d3ee51cb500134788ded3b911380ae7142632606` + main`158c4563836a378fb09d7d25ecc1c92005c2f139` (clean).
-
-Nov16 #449 DRAFT:egg speak-yaw;list End no confirm;mouth=audioPlaying;Preview drag-yaw;stage table removed(+wood/collider).0 calls/deploy.
-
-Merge inputs (#449 Phase A): caacc46f193e6462c8bdc1ce305aac37c121fcdc + origin/main 158c4563836a378fb09d7d25ecc1c92005c2f139. 0 calls/deploy.
-
-Nov17 #451 integration:audited head c724562a6b0e2a7babd60f553de6e00289720f6f + origin/main c3506fe6f86799d37d1b1c8c44a9b4019faee52f. Docs-only conflict kept both histories;code merged without conflicts;music-fix files unchanged.0 calls/deploy.
+#434 Tone Preview;#436 Stomp;#437 Note-Face;Option C egg/Banner;#427 hotfix Save/Preview ink/discard;music capsule/B1. D2/PR442 free AGENT.md+fail-open cards. #452(0094) Done/upload/publish compile, snapshot copy, backfill CLI. #449 egg speak-yaw/Preview drag. Merges kept both histories.0 calls/deploy.
 
 ## Nov16–17 student visibility (teacher Public)
 
@@ -144,3 +126,7 @@ Already-failed draft turns (`safe_error_code=turn_generation_failed`, spent segm
 ## Nov18 Retry new attempt + speech hygiene (prod b03a2b4f)
 
 Root1: #468 `reprepare_failed` rebound hashes on spent attempt-2 `provider_operation` that still held immutable `llm_accepted_stages` → staging `LLM accepted bundle is immutable` / `segment_stage_failed`. Fix: teacher Retry allocates NEW attempt/operation (3+; Alembic `0095_llm_stage_attempt_cap` raises stage/recovery caps to 32); never mutate spent accepted bundles; charge on new `reserve`. Root2: validator was non-empty+length only; JSON residue + U+FEFF/PUA speech stored ready and TTS'd. Fix: sanitize BOM/ZW/controls; reject private-use/unassigned/FFFD/structural residue → repair/salvage (fallback speech, soft warn, never block); same gate before TTS. Root3: draft Preview projects ready-but-garbled as `segment_speech_invalid` and Retry regenerates text+TTS (teacher-only; no row migration). Targeted PG/in-memory + FE pass.0 calls/deploy. Auditor: structural-key gate requires JSON value start (no false positive on 'reply to:'/'support mode:'); `_turn_ready` keeps historical audio turns advancing; 0095 up/down+attempt<=2 rows checked on Postgres.
+
+## Nov18 unused mypy ignore after #469
+
+#469 `FinalReadyTurn.attempt:int` → drop unused `type: ignore[arg-type]` in `generation_adapter.py`. Backend mypy/ruff.0 calls/deploy.
