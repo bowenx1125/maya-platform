@@ -63,6 +63,7 @@ _SOURCE_ID_RE = re.compile(r"^S[1-9][0-9]*$")
 _BARRAGE_ID_RE = re.compile(r"^B[1-9][0-9]*$")
 _EMAIL_RE = re.compile(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}")
 _WHITESPACE_RE = re.compile(r"\s+")
+_HAN_UNIT = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\U00020000-\U0002ffff]")
 
 
 # A sentence this long (non-space characters) that already appears word for
@@ -1598,6 +1599,11 @@ def load_stored_segment_turn_result(value: Mapping[str, object]) -> StoredSegmen
     return result
 
 
+# Soft warning when local salvage kept the debate moving after provider output
+# failed the contract. Teachers see why and can Retry; later turns continue.
+SEGMENT_OUTPUT_SALVAGED = "segment_output_salvaged"
+
+
 @dataclass(frozen=True, slots=True)
 class SegmentTurnResult:
     """Validated output with server-resolved refs and public speech lineage."""
@@ -1611,6 +1617,8 @@ class SegmentTurnResult:
     replied_barrage_ids: tuple[str, ...]
     question: Mapping[str, str] | None = None
     discussion_memory: Mapping[str, object] | None = None
+    # Not persisted in the closed stored JSON; carried for teacher soft warnings.
+    salvage_warning: str | None = None
 
     @property
     def schema_version(self) -> Literal["segment_turn_v2"]:
@@ -1869,6 +1877,215 @@ def trim_trailing_sentences(
     return result
 
 
+def _truncate_text_to_units(text: str, limit: int, language: str) -> str:
+    """Cut ``text`` to at most ``limit`` speech units without inventing words."""
+
+    if limit < 1 or speech_units(text, language) <= limit:
+        return text.strip()
+    if language == "zh":
+        kept: list[str] = []
+        count = 0
+        for char in text:
+            if _HAN_UNIT.match(char):
+                if count >= limit:
+                    break
+                count += 1
+            kept.append(char)
+        return "".join(kept).strip()
+    words = list(ENGLISH_WORD.finditer(text))
+    if not words:
+        return text.strip()
+    end = words[min(limit, len(words)) - 1].end()
+    return text[:end].strip()
+
+
+def force_fit_segments(
+    segments: Sequence[Segment],
+    limit: int,
+    language: str,
+    *,
+    protected: Sequence[str] = (),
+) -> list[Segment]:
+    """Fit under ``limit`` by sentence trim, then unit truncation if needed.
+
+    One unbroken sentence can still exceed the hard floor after whole-sentence
+    trimming; that leftover must not block the debate.
+    """
+
+    trimmed = trim_trailing_sentences(segments, limit, language, protected=protected)
+    if _segments_units(trimmed, language) <= limit:
+        return trimmed
+    if not trimmed:
+        return list(segments[:1]) if segments else []
+    protected_keys = tuple(key for key in (_copy_key(item) for item in protected) if key)
+    head = list(trimmed[:-1])
+    last = trimmed[-1]
+    budget = limit - _segments_units(head, language)
+    if budget < 1:
+        # Prefer keeping the protected question/closing when present.
+        for item in reversed(trimmed):
+            key = _copy_key(item.text)
+            if any(guard in key or key in guard for guard in protected_keys):
+                return [replace(item, text=_truncate_text_to_units(item.text, limit, language))]
+        return [replace(trimmed[0], text=_truncate_text_to_units(trimmed[0].text, limit, language))]
+    return [*head, replace(last, text=_truncate_text_to_units(last.text, budget, language))]
+
+
+def _segment_shell(text: str) -> dict[str, object]:
+    return {
+        "text": text,
+        "source_ids": [],
+        "reply_to": None,
+        "support_mode": "no_match",
+    }
+
+
+def normalize_segment_provider_output(
+    raw: Mapping[str, object],
+    snapshot: SegmentInputSnapshot,
+) -> tuple[dict[str, object], str | None]:
+    """Repair common provider misplacements before contract validation.
+
+    Production repairs sometimes put the whole speech into ``question.text``
+    and leave ``segments[0].text`` empty. Moving that text back keeps the
+    turn instead of failing with ``segment_text_invalid``.
+    """
+
+    payload = dict(raw)
+    salvage: str | None = None
+    question = payload.get("question")
+    question_text = ""
+    if isinstance(question, Mapping):
+        value = question.get("text")
+        if isinstance(value, str):
+            question_text = value.strip()
+    values = payload.get("segments")
+    segments: list[dict[str, object]] = []
+    if isinstance(values, list):
+        for item in values:
+            if not isinstance(item, Mapping):
+                continue
+            entry = dict(item)
+            text = entry.get("text")
+            if isinstance(text, str) and text.strip():
+                segments.append(entry)
+            elif question_text:
+                entry["text"] = question_text
+                if "source_ids" not in entry or not isinstance(entry.get("source_ids"), list):
+                    entry["source_ids"] = []
+                if "reply_to" not in entry:
+                    entry["reply_to"] = None
+                if "support_mode" not in entry:
+                    entry["support_mode"] = "no_match"
+                segments.append(entry)
+                salvage = SEGMENT_OUTPUT_SALVAGED
+                question_text = ""
+    if not segments and question_text:
+        segments = [_segment_shell(question_text)]
+        salvage = SEGMENT_OUTPUT_SALVAGED
+    if not segments:
+        return payload, salvage
+    # Round 2 keeps routing metadata even when the spoken question was recovered
+    # from the question field into the speech paragraphs.
+    if (
+        snapshot.round.number == 2
+        and isinstance(question, Mapping)
+        and isinstance(question.get("target_agent_id"), str)
+        and segments
+    ):
+        spoken = str(segments[-1].get("text") or "")
+        asked = question_text or str(question.get("text") or "").strip()
+        if asked and _copy_key(asked) not in _copy_key(spoken):
+            # Keep the original question text as the closing sentence when the
+            # recovered body did not already include it.
+            joiner = "" if snapshot.language == "zh" else " "
+            segments[-1] = {
+                **segments[-1],
+                "text": f"{spoken.rstrip()}{joiner}{asked}".strip(),
+            }
+            salvage = salvage or SEGMENT_OUTPUT_SALVAGED
+    payload["segments"] = segments
+    return payload, salvage
+
+
+def fallback_segment_output(snapshot: SegmentInputSnapshot) -> dict[str, object]:
+    """Last-resort usable JSON so a malformed provider turn cannot stall Preview."""
+
+    language = snapshot.language
+    discussion = snapshot.discussion or {}
+    if language == "zh":
+        text = "我先保留自己的判断，这一轮继续把讨论往前推进。"
+        question_text = "你怎么看这一点？"
+    else:
+        text = "I will keep my current judgment and move this round forward."
+        question_text = "What do you think about this point?"
+    payload: dict[str, object] = {"segments": [_segment_shell(text)]}
+    if snapshot.discussion_json is None:
+        return payload
+    if snapshot.round.number == 2:
+        target = discussion.get("question_target_id")
+        if isinstance(target, str) and target.strip():
+            joiner = "" if language == "zh" else " "
+            spoken = f"{text.rstrip()}{joiner}{question_text}"
+            payload["segments"] = [_segment_shell(spoken)]
+            payload["question"] = {"target_agent_id": target, "text": question_text}
+        else:
+            payload["question"] = None
+        payload["discussion_memory"] = None
+    elif snapshot.round.number == 3:
+        payload["question"] = None
+        payload["discussion_memory"] = {
+            "position": text,
+            "change": "retained",
+            "reason": text,
+            "influence": None,
+            "unresolved_question": "",
+        }
+    else:
+        payload["question"] = None
+        payload["discussion_memory"] = None
+    return payload
+
+
+def salvage_segment_output(
+    value: object,
+    snapshot: SegmentInputSnapshot,
+) -> SegmentTurnResult:
+    """Always return a usable turn after provider attempts are exhausted."""
+
+    try:
+        raw = (
+            parse_segment_output_json(value)
+            if isinstance(value, str)
+            else dict(_object(value, "segment output"))
+            if isinstance(value, Mapping)
+            else fallback_segment_output(snapshot)
+        )
+    except SegmentProtocolError:
+        raw = fallback_segment_output(snapshot)
+    normalized, salvage = normalize_segment_provider_output(raw, snapshot)
+    if not isinstance(normalized.get("segments"), list) or not normalized["segments"]:
+        normalized = fallback_segment_output(snapshot)
+        salvage = SEGMENT_OUTPUT_SALVAGED
+    try:
+        result = validate_segment_output(
+            normalized,
+            snapshot,
+            allow_history_copy=True,
+            repairable=False,
+        )
+    except SegmentProtocolError:
+        result = validate_segment_output(
+            fallback_segment_output(snapshot),
+            snapshot,
+            allow_history_copy=True,
+            repairable=False,
+        )
+        salvage = SEGMENT_OUTPUT_SALVAGED
+    warning = result.salvage_warning or salvage or SEGMENT_OUTPUT_SALVAGED
+    return result if result.salvage_warning == warning else replace(result, salvage_warning=warning)
+
+
 def validate_segment_output(
     value: object,
     snapshot: SegmentInputSnapshot,
@@ -1893,19 +2110,34 @@ def validate_segment_output(
 
     if not isinstance(snapshot, SegmentInputSnapshot):
         raise _error("an immutable input snapshot is required.", code="snapshot_invalid")
-    raw = (
+    parsed = (
         parse_segment_output_json(value)
         if isinstance(value, str)
         else _object(value, "segment output")
     )
+    repair = (not allow_history_copy) if repairable is None else repairable
+    raw, salvage_warning = normalize_segment_provider_output(parsed, snapshot)
     values = raw.get("segments")
     if not isinstance(values, list) or not values:
-        raise _error(
-            "output must contain readable segments.",
-            code="segment_count_invalid",
-            pointer="/segments",
-        )
-    parsed_segments = tuple(_output_segment(item, index) for index, item in enumerate(values))
+        if not repair:
+            raw = fallback_segment_output(snapshot)
+            salvage_warning = SEGMENT_OUTPUT_SALVAGED
+            values = cast(list[object], raw["segments"])
+        else:
+            raise _error(
+                "output must contain readable segments.",
+                code="segment_count_invalid",
+                pointer="/segments",
+            )
+    try:
+        parsed_segments = tuple(_output_segment(item, index) for index, item in enumerate(values))
+    except SegmentProtocolError:
+        if repair:
+            raise
+        raw = fallback_segment_output(snapshot)
+        salvage_warning = SEGMENT_OUTPUT_SALVAGED
+        values = cast(list[object], raw["segments"])
+        parsed_segments = tuple(_output_segment(item, index) for index, item in enumerate(values))
     source_map = snapshot.source_map
     barrage_map = snapshot.barrage_map
     segments_list = []
@@ -1924,7 +2156,6 @@ def validate_segment_output(
             )
         )
     task = snapshot.task
-    repair = (not allow_history_copy) if repairable is None else repairable
     language = snapshot.language
     raw_question = raw.get("question")
     protected = (str(raw_question.get("text") or ""),) if isinstance(raw_question, Mapping) else ()
@@ -2032,18 +2263,34 @@ def validate_segment_output(
                     )
             limit = over_length_limit(cap, Fraction(3, 2))
             if units > limit:
-                segments_list = trim_trailing_sentences(
+                segments_list = force_fit_segments(
                     segments_list, limit, language, protected=protected
                 )
+                salvage_warning = salvage_warning or SEGMENT_OUTPUT_SALVAGED
         else:
             limit = over_length_limit(cap)
             if units > limit:
                 # Trimmed at once rather than sent back: a rewrite for length made
                 # the model fall back on sentences it had already said, and used up
                 # the one repair the repetition rules need.
-                segments_list = trim_trailing_sentences(
-                    segments_list, limit, language, protected=protected
-                )
+                fitted = force_fit_segments(segments_list, limit, language, protected=protected)
+                if fitted != list(segments_list):
+                    salvage_warning = salvage_warning or SEGMENT_OUTPUT_SALVAGED
+                segments_list = fitted
+    if not segments_list:
+        if repair:
+            raise _error(
+                "output must contain readable segments.",
+                code="segment_count_invalid",
+                pointer="/segments",
+            )
+        fallback = fallback_segment_output(snapshot)
+        segments_list = [
+            _output_segment(item, index)
+            for index, item in enumerate(cast(list[object], fallback["segments"]))
+        ]
+        raw = fallback
+        salvage_warning = SEGMENT_OUTPUT_SALVAGED
     segments = tuple(segments_list)
     speech = "\n\n".join(item.text for item in segments)
     discussion = snapshot.discussion
@@ -2067,6 +2314,7 @@ def validate_segment_output(
         used_source_ids=tuple(used_sources),
         used_receipts=tuple(source_map[item] for item in used_sources),
         replied_barrage_ids=tuple(replies),
+        salvage_warning=salvage_warning,
     )
 
 
@@ -2133,8 +2381,13 @@ __all__ = [
     "build_segment_system_prompt",
     "coerce_persona",
     "freeze_barrages",
+    "SEGMENT_OUTPUT_SALVAGED",
+    "force_fit_segments",
+    "fallback_segment_output",
     "load_stored_segment_turn_result",
     "load_segment_turn_result",
+    "normalize_segment_provider_output",
     "parse_segment_output_json",
+    "salvage_segment_output",
     "validate_segment_output",
 ]

@@ -127,16 +127,31 @@ def stance_text(language: str, stance: str | None) -> str:
     return _STANCES["zh" if language == "zh" else "en"].get(stance or "", "")
 
 
-def _round_task(language: str, round_number: int, other: str, sentences: int) -> str:
+def _round_task(
+    language: str,
+    round_number: int,
+    other: str,
+    sentences: int,
+    *,
+    unit_cap: int,
+    hard_limit: int,
+) -> str:
     zh = language == "zh"
     # A model keeps to a sentence count far better than to a character count:
     # the first v4 Debate overshot its cap in a quarter of its speeches. An
     # upper bound alone then gave speeches as short as 23 characters and a
     # Debate a third under its target, hence a range and the cap as the aim.
+    # State the unit kind and a hard ceiling in the task text itself: saying
+    # only "接近 max_units" left models free to write 3x the Han-character cap.
+    unit_name = "汉字" if zh else "words"
     limit = (
-        f"写{sentences - 1}到{sentences}句话，总字数接近 max_units。"
+        f"写{sentences - 1}到{sentences}句话，总{unit_name}数接近 task.max_units（{unit_cap}），"
+        f"不得超过 {hard_limit}。"
         if zh
-        else f" Use {sentences - 1} to {sentences} sentences and come close to max_units."
+        else (
+            f" Use {sentences - 1} to {sentences} sentences and about task.max_units "
+            f"({unit_cap}) {unit_name}; stay at or under {hard_limit} {unit_name}."
+        )
     )
     if round_number == 1:
         task = (
@@ -208,8 +223,20 @@ def turn_task(
             round_number=round_number,
         )
     )
+    from app.modules.debates.generation_params import uses_v5_speech_limits
+
+    hard = over_length_limit(
+        cap, Fraction(3, 2) if uses_v5_speech_limits(context.frozen_llm) else None
+    )
     task: dict[str, object] = {
-        "round_task": _round_task(language, round_number, other, sentence_limit(language, cap)),
+        "round_task": _round_task(
+            language,
+            round_number,
+            other,
+            sentence_limit(language, cap),
+            unit_cap=cap,
+            hard_limit=hard,
+        ),
         "max_units": cap,
     }
     if context.participant.stance_mode == "assigned":

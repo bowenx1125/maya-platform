@@ -1524,6 +1524,7 @@ class SqlTurnPreparer:
         if voice_kind == "mock_sentinel" and voice_profile_id is not None:
             raise ValueError("mock voice kind cannot carry a profile")
         voice_token = str(voice_profile_id) if voice_kind == "platform_profile" else "mock"
+        warning = getattr(final.structured, "salvage_warning", None)
         return PreparedTurn(
             speech=final.speech,
             sources=sources,
@@ -1541,6 +1542,7 @@ class SqlTurnPreparer:
             generation_attempt=final.attempt,
             evidence_trace=tuple(dict(item) for item in final.evidence_trace),
             llm_publication=publication,
+            generation_warning=warning if isinstance(warning, str) else None,
         )
 
     def _query_embedding_service(

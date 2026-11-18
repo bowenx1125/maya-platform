@@ -218,7 +218,12 @@ def test_structure_repair_uses_frozen_rules_and_completed_output_is_reused(
     assert "# Per-lesson repair rule" in provider.requests[0].system_message.content
     assert provider.requests[0].user_message.content == provider.requests[1].user_message.content
     assert '"code":"segment_count_invalid"' in provider.requests[1].system_message.content
-    assert result.status == ("succeeded" if repair_success else "failed")
+    # A failed second attempt is salvaged locally so later turns keep moving.
+    assert result.status == "succeeded"
+    assert result.final_ready is not None
+    assert result.final_ready.speech.strip()
+    if not repair_success:
+        assert result.safe_error_code == "segment_output_salvaged"
     if repair_success:
         resumed = runtime.resume_accepted_stage(result.stage, snapshot=frozen, context=context)
         assert resumed.status == "succeeded"

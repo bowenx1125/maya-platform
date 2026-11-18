@@ -49,6 +49,13 @@ PARAM_SPECS: tuple[ParamSpec, ...] = (
     ParamSpec("enable_thinking", "bool", None, None),
     ParamSpec("seed", "int", 0, 2**31 - 1),
 )
+# Structured segment JSON with unit caps fails closed when temperature is set
+# like creative prose (production: frozen 1.8 → ~100% first-attempt over-length).
+# Clamp at send time so existing drafts regenerate without rewriting snapshots.
+STRUCTURED_SEGMENT_TEMPERATURE_MAX = 0.9
+# Enough headroom for JSON + a short speech; never the 32k creative ceiling.
+STRUCTURED_SEGMENT_MAX_TOKENS_FLOOR = 256
+STRUCTURED_SEGMENT_MAX_TOKENS_CEILING = 2048
 PARAM_NAMES = tuple(spec.name for spec in PARAM_SPECS)
 # v3 Debates carry the execution contract inside their frozen Ruleset text; v4
 # (2026-11-10) freezes a code-owned contract beside it plus per-turn tasks and
@@ -140,6 +147,32 @@ def request_fields(params: dict[str, Any]) -> dict[str, Any]:
         if value is None or not spec.sent:
             continue
         fields[spec.name] = bool(value) if spec.kind == "bool" else value
+    return fields
+
+
+def structured_segment_request_fields(
+    params: dict[str, Any], *, unit_cap: int | None = None
+) -> dict[str, Any]:
+    """Frozen Debate params with structured-generation clamps applied at send time."""
+
+    fields = request_fields(params)
+    temperature = fields.get("temperature")
+    if (
+        isinstance(temperature, (int, float))
+        and float(temperature) > STRUCTURED_SEGMENT_TEMPERATURE_MAX
+    ):
+        fields["temperature"] = STRUCTURED_SEGMENT_TEMPERATURE_MAX
+    bound = STRUCTURED_SEGMENT_MAX_TOKENS_CEILING
+    if isinstance(unit_cap, int) and not isinstance(unit_cap, bool) and unit_cap > 0:
+        # JSON overhead plus speech; Han/word units are far smaller than a 32k ceiling.
+        bound = max(
+            STRUCTURED_SEGMENT_MAX_TOKENS_FLOOR,
+            min(STRUCTURED_SEGMENT_MAX_TOKENS_CEILING, unit_cap * 6 + 200),
+        )
+    current = fields.get("max_tokens")
+    oversized = isinstance(current, int) and not isinstance(current, bool) and current > bound
+    if current is None or oversized:
+        fields["max_tokens"] = bound
     return fields
 
 

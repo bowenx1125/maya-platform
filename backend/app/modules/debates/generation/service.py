@@ -46,10 +46,12 @@ from .retrieval import (
 )
 from .runtime import LLMTurnRuntime
 from .segments import (
+    SEGMENT_OUTPUT_SALVAGED,
     SegmentInputSnapshot,
     SegmentProtocolError,
     SegmentTurnResult,
     build_segment_input,
+    salvage_segment_output,
     validate_segment_output,
 )
 from .types import (
@@ -241,6 +243,7 @@ class TurnGenerationService:
             raise GenerationFailed("segments_v2 requires the durable provider runtime.", attempt=1)
 
         feedback: dict[str, object] | None = None
+        last_raw: object | None = None
         for attempt in (1, 2):
             record = GenerationAttempt(
                 attempt=attempt,
@@ -256,6 +259,7 @@ class TurnGenerationService:
                         predecessor_turn_ids=visible_predecessor_ids,
                     )
                 raw = self._segment_generate(snapshot, attempt=attempt, repair_feedback=feedback)
+                last_raw = raw
                 record = replace(record, provider_called=True)
                 segment_result = (
                     raw
@@ -322,12 +326,65 @@ class TurnGenerationService:
                 attempts.append(replace(record, failure_code=exc.code))
                 feedback = {"code": exc.code, "json_pointers": list(exc.json_pointers)}
                 if attempt == 2:
-                    if self.fence is not None and active_claim is not None:
-                        self.fence.release(active_claim)
-                    raise GenerationFailed(
-                        "Segment output failed after the frozen structure repair attempt.",
+                    # Local salvage keeps later turns moving; teachers see a soft warning.
+                    segment_result = salvage_segment_output(
+                        last_raw if isinstance(last_raw, (Mapping, str)) else {},
+                        snapshot,
+                    )
+                    attempts.append(
+                        GenerationAttempt(
+                            attempt=2,
+                            retrieval_count=len(snapshot.receipts),
+                            provider_called=True,
+                            failure_code=segment_result.salvage_warning or SEGMENT_OUTPUT_SALVAGED,
+                        )
+                    )
+                    validated = ValidatedTurn(
+                        result=segment_result,
+                        retrieval_status="matched" if snapshot.receipts else "no_match",
+                        grounding_mode="rag_grounded"
+                        if segment_result.used_receipts
+                        else "general_reasoning",
+                        used_receipts=segment_result.used_receipts,
+                        public_sources=tuple(
+                            PublicSource(
+                                source_filename=item.source_filename,
+                                chunk_id=item.chunk_id,
+                                evidence_id=item.resolved_evidence_id(),
+                                rank=item.rank,
+                                score=item.score,
+                            )
+                            for item in segment_result.used_receipts
+                        ),
+                        word_count=body_count(segment_result.speech, snapshot.language),
+                    )
+                    final = final_ready_turn(
+                        validated,
+                        turn_id=context.turn.turn_id,
+                        participant_id=context.participant.participant_id,
+                        snapshot_id=context.participant.snapshot_id,
+                        round_no=context.turn.round_no,
+                        turn_index=context.turn.turn_index,
+                        predecessor_turn_ids=visible_predecessor_ids,
+                        cutoff_turn_index=max(
+                            (item.turn_index for item in visible),
+                            default=-1,
+                        ),
+                        transcript_hash=transcript_hash,
                         attempt=2,
-                    ) from exc
+                    )
+                    if self.fence is not None:
+                        if active_claim is None or not self.fence.complete(
+                            active_claim,
+                            stage="generation",
+                            attempt=2,
+                            predecessor_turn_ids=final.predecessor_turn_ids,
+                            transcript_hash=transcript_hash,
+                        ):
+                            raise GenerationDiscarded(
+                                "The segment result arrived after its fence changed."
+                            ) from exc
+                    return GenerationResult(final, tuple(attempts))
                 # The second call receives the same immutable snapshot.  A
                 # provider adapter may inspect this safe code/pointer through
                 # its optional keyword; no raw output is forwarded.

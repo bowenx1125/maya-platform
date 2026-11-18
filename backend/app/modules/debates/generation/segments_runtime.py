@@ -39,12 +39,14 @@ from app.providers.llm_transport import LLMAcceptanceUnknown, LLMTransportNotSen
 from .four_round import visible_predecessors
 from .mutual_learning_prompts import compute_mutual_transcript_hash
 from .segments import (
+    SEGMENT_OUTPUT_SALVAGED,
     SegmentInputSnapshot,
     SegmentProtocolError,
     SegmentTurnResult,
     StoredSegmentTurnResult,
     load_segment_turn_result,
     load_stored_segment_turn_result,
+    salvage_segment_output,
     validate_segment_output,
 )
 from .types import (
@@ -805,8 +807,72 @@ class SegmentLLMRuntime:
                         ),
                     )
                     continue
+                result = salvage_segment_output({}, current.snapshot)
+                LOGGER.warning(
+                    "Segment output salvaged after empty provider output "
+                    "safe_code=%s salvage=%s turn_id=%s: the model returned no "
+                    "usable segments; the server built a short fallback speech "
+                    "so the debate can continue. Retry this turn to regenerate.",
+                    code,
+                    result.salvage_warning or SEGMENT_OUTPUT_SALVAGED,
+                    current.turn_id,
+                )
+                final = self._final_ready(result, context, current.attempt_no)
+                if not self.defer_publication:
+                    publisher = _method(
+                        self.publication, "commit_turn_success", "publish_atomic", "publish"
+                    )
+                    if publisher is not None:
+                        _invoke(
+                            publisher,
+                            operation_id=operation_id,
+                            turn_id=current.turn_id,
+                            debate_id=current.debate_id,
+                            stage=stage,
+                            result=result,
+                            final_ready=final,
+                            evidence_trace=(),
+                            request_hash=current.request.request_hash,
+                        )
+                    operation = self._transition(operation_id, "mark_succeeded") or operation
+                traces.append(
+                    SegmentAttempt(
+                        current.attempt_no,
+                        current.request.request_hash,
+                        operation_id,
+                        True,
+                        "accepted",
+                        result.salvage_warning or SEGMENT_OUTPUT_SALVAGED,
+                    )
+                )
+                deferred = (
+                    SegmentDeferredPublicationV2(
+                        operation_id=operation_id or "",
+                        turn_id=current.turn_id,
+                        debate_id=current.debate_id,
+                        request_hash=current.request.request_hash,
+                        operation=operation,
+                        stage=stage,
+                        usage=stage,
+                        result=result,
+                        final_ready=final,
+                        recovery_input=SegmentRecoveryInputV2.from_request(
+                            current.request,
+                            operation_id=operation_id,
+                        ),
+                    )
+                    if self.defer_publication and operation_id is not None and stage is not None
+                    else None
+                )
                 return SegmentRunOutcome(
-                    "failed", tuple(traces), operation, stage, safe_error_code=code
+                    "succeeded",
+                    tuple(traces),
+                    operation,
+                    stage,
+                    result,
+                    final,
+                    safe_error_code=result.salvage_warning or SEGMENT_OUTPUT_SALVAGED,
+                    deferred_publication=deferred,
                 )
             validator = _method(self.adapter, "validate_accepted")
             if validator is None:
@@ -862,8 +928,21 @@ class SegmentLLMRuntime:
                         ),
                     )
                     continue
-                return SegmentRunOutcome(
-                    "failed", tuple(traces), operation, stage, safe_error_code=exc.code
+                # Provider attempts are spent: locally salvage so Preview/later
+                # turns keep moving. Teachers get a non-blocking warning.
+                result = salvage_segment_output(
+                    candidate.provider_output if candidate.provider_output is not None else {},
+                    current.snapshot,
+                )
+                LOGGER.warning(
+                    "Segment output salvaged after provider attempts "
+                    "safe_code=%s salvage=%s turn_id=%s: the model output missed "
+                    "the segment contract; the server trimmed or rebuilt a usable "
+                    "speech so the debate can continue. Retry this turn if the "
+                    "wording looks wrong.",
+                    exc.code,
+                    result.salvage_warning or SEGMENT_OUTPUT_SALVAGED,
+                    current.turn_id,
                 )
             final = self._final_ready(result, context, current.attempt_no)
             if not self.defer_publication:
@@ -914,6 +993,7 @@ class SegmentLLMRuntime:
                 stage,
                 result,
                 final,
+                safe_error_code=result.salvage_warning,
                 deferred_publication=deferred,
             )
         return SegmentRunOutcome(

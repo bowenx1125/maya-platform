@@ -304,7 +304,8 @@ def test_task_group_carries_cap_and_assigned_stance_but_no_teacher_note() -> Non
     assert snapshot.task == {
         "round_task": (
             "State your own judgment on the Topic and your reason. "
-            "Use 3 to 4 sentences and come close to max_units."
+            "Use 3 to 4 sentences and about task.max_units (60) words; "
+            "stay at or under 75 words."
         ),
         "max_units": 60,
         "stance": "oppose the Topic's claim",
@@ -413,7 +414,11 @@ def test_over_length_speech_is_trimmed_by_whole_sentences_without_a_repair() -> 
 def test_trimming_keeps_one_sentence_and_the_spoken_question() -> None:
     snapshot = _snapshot(_v4_context(2))  # cap 50 words, limit 62
     one = " ".join(["word"] * 90) + "."
-    assert validate_segment_output(_output(one), snapshot, repairable=False).speech == one
+    # A single unbroken sentence used to stay over the hard floor; force-fit
+    # now truncates units so Preview cannot stall on one over-long paragraph.
+    fitted = validate_segment_output(_output(one), snapshot, repairable=False)
+    assert speech_units(fitted.speech, "en") <= 62
+    assert fitted.speech.strip()
     question = "Would you still ban phones during lunch breaks?"
     accepted = validate_segment_output(
         _output(_sentences(9) + " " + question, question=question), snapshot, repairable=False

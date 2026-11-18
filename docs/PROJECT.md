@@ -137,4 +137,8 @@ Nov17 follow-up (post-#459): (1) Student editor: personal `voice-profiles` 404, 
 
 ## Nov17 Agent RAG/Voice destroy × + student music pink
 
-Scheme B: Agent create/edit RAG stickers: red 40px × beside View/Download destroys/hides shared library file via existing `hideKnowledge` (not unbind); Voice × uses the same red; both use U3 pink tray confirm (bell/RoundX/Cancel+red Delete/40% scrim) with `brainformRagHideConfirm`/`voiceDeleteConfirm`/`deleteAffectsAgents`. Student MusicKey playing fill `#FF4D8D` uses `data-playing`/`useMusicPlaying`. Audit: `#461` pink rule in `globals.css`, imported by `app.css` as `@layer legacy`; Tailwind `bg-white` / dock utilities and unlayered `.capsuleTrigger` kept the playing key white; rule moved to unlayered `arcade.css`. Idle white, hop animation, teacher key absent, stage default off unchanged. No Alembic (head stays 0094).0 calls/deploy.
+Scheme B: Agent create/edit RAG × via `hideKnowledge`; Voice × same; U3 pink tray confirm. Student MusicKey `#FF4D8D` via unlayered `arcade.css` (not `@layer legacy`). No Alembic (0094).0 calls/deploy.
+
+## Nov18 debate segment salvage (no stall)
+
+Root: frozen temp 1.8 + vague max_units task + repair putting speech in `question` → `segment_over_length`/`segment_text_invalid` exhausted attempts → draft stuck, later turns pending. Fix: send-time clamp temp≤0.9 and max_tokens to unit cap; clearer task unit/hard ceiling; normalize empty segments from question; force-fit over hard floor; after attempt budget always `salvage_segment_output` so Preview continues with soft `segment_output_salvaged` warning (EN why+Retry). Existing drafts regenerate without snapshot rewrite. No Alembic/env. Targeted tests PASS.0 calls/deploy.

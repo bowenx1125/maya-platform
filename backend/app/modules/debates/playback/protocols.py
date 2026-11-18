@@ -78,6 +78,8 @@ class PreparedTurn:
     evidence_trace: tuple[Mapping[str, Any], ...] = ()
     # Server-only accepted-stage handoff; never projected to browser DTOs.
     llm_publication: object | None = None
+    # Soft teacher warning (e.g. segment_output_salvaged); debate continues.
+    generation_warning: str | None = None
 
 
 @dataclass

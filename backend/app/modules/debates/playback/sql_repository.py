@@ -2704,7 +2704,11 @@ class SqlPlaybackRepository(PlaybackRepository):
                 prepared.actual_voice_profile_id if audio is not None else None
             ),
             "safe_error_code": audio_error_code
-            or ("tts_voice_unavailable" if audio is None else None),
+            or (
+                "tts_voice_unavailable"
+                if audio is None
+                else getattr(prepared, "generation_warning", None)
+            ),
             "updated_at": _now(),
         }
         # The M10 schema stores retained bytes through StoredFile and keeps

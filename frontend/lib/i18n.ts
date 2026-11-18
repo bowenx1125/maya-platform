@@ -633,7 +633,8 @@ const enMessages = {
     "Another debate is already running for this course.",
   errorPreviousAudioCleanup:
     "Confirm cleanup of the previous debate audio before starting.",
-  errorTurnGenerationFailed: "This debate could not finish generating a turn.",
+  errorTurnGenerationFailed:
+    "This debate could not finish generating a turn. Use Retry on the failed turn; if it keeps happening, lower Debate temperature toward 0.7 or raise the round unit caps.",
   errorInteractionNotReady: "Classroom interaction is not ready yet.",
   errorInteractionClosed: "Classroom interaction has ended.",
   errorParticipantNotInDebate: "That participant is not part of this debate.",
