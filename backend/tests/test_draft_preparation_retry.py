@@ -597,13 +597,39 @@ def test_draft_retry_allows_turn_generation_failed_after_llm_http_reject(draft_r
                         "digest": digest,
                     },
                 )
+            # Spent segment/schema failures are not HTTP-reject retries, but
+            # teacher Preview may still regenerate (clamps + salvage).
             assert not repository.retryable_provider_llm_reject(db, ids["debate"], ids["turn"])
-            assert not repository.retry_draft_segment_turn(
+            assert repository.retry_draft_segment_turn(
                 db,
                 debate,
                 turn,
                 expected_control_version=0,
                 code="turn_generation_failed",
+            )
+            assert db.execute(
+                text(
+                    "SELECT generation_status, safe_error_code FROM debate_turns WHERE id=:turn_id"
+                ),
+                {"turn_id": ids["turn"]},
+            ).one() == ("pending", None)
+            db.execute(
+                text(
+                    "UPDATE debate_turns SET generation_status='failed', "
+                    "safe_error_code='turn_generation_failed' WHERE id=:turn_id"
+                ),
+                {"turn_id": ids["turn"]},
+            )
+            db.execute(
+                text(
+                    "UPDATE jobs SET state='failed', safe_error_code='turn_generation_failed' "
+                    "WHERE id=:job_id"
+                ),
+                {"job_id": ids["job"]},
+            )
+            db.execute(
+                text("UPDATE playback_states SET control_version=1 WHERE debate_id=:debate_id"),
+                {"debate_id": ids["debate"]},
             )
             db.execute(
                 text(
@@ -623,6 +649,73 @@ def test_draft_retry_allows_turn_generation_failed_after_llm_http_reject(draft_r
                 db,
                 debate,
                 turn,
+                expected_control_version=1,
+                code="turn_generation_failed",
+            )
+            assert db.execute(
+                text(
+                    "SELECT generation_status, safe_error_code FROM debate_turns WHERE id=:turn_id"
+                ),
+                {"turn_id": ids["turn"]},
+            ).one() == ("pending", None)
+    finally:
+        database.dispose()
+
+
+def test_draft_retry_allows_spent_segment_contract_turn_generation_failed(draft_retry_db):
+    """Production stall: attempts spent on segment_over_length with no local recovery."""
+
+    database, ids, _speech, _structured = draft_retry_db
+    repository = SqlPlaybackRepository(session_factory=database.session_factory)
+    digest = "b" * 64
+    try:
+        with database.session() as db:
+            db.execute(
+                text(
+                    "UPDATE debate_turns SET generation_status='failed', "
+                    "safe_error_code='turn_generation_failed', speech=NULL, "
+                    "structured_json=NULL, transcript_hash=NULL WHERE id=:turn_id"
+                ),
+                {"turn_id": ids["turn"]},
+            )
+            db.execute(
+                text(
+                    "UPDATE jobs SET state='failed', safe_error_code='turn_generation_failed' "
+                    "WHERE id=:job_id"
+                ),
+                {"job_id": ids["job"]},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO provider_operations ("
+                    "id, scope_id, provider_operation, logical_item_id, attempt_no, "
+                    "request_hash, max_tokens, max_cost_cny, policy_hash, "
+                    "export_manifest_hash, build_manifest_hash, model_key, state, "
+                    "request_count, charged_request_count, safe_error_code, "
+                    "created_at, updated_at) VALUES ("
+                    ":id, :debate, 'llm_debate_turn', :turn, 2, :digest, 1, 0, "
+                    ":digest, :digest, :digest, 'qwen3.8-flash', 'failed', 1, 1, "
+                    "'segment_over_length', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                ),
+                {
+                    "id": _uid(502),
+                    "debate": ids["debate"],
+                    "turn": ids["turn"],
+                    "digest": digest,
+                },
+            )
+            debate = repository.get_debate(db, ids["debate"])
+            assert debate is not None
+            turn = next(
+                item for item in repository.turns(db, debate) if str(item.id) == ids["turn"]
+            )
+            assert (ids["debate"], ids["turn"]) not in repository.recoverable_llm_turns(db)
+            assert not repository.unattempted_llm_turn(db, ids["debate"], ids["turn"])
+            assert not repository.retryable_provider_llm_reject(db, ids["debate"], ids["turn"])
+            assert repository.retry_draft_segment_turn(
+                db,
+                debate,
+                turn,
                 expected_control_version=0,
                 code="turn_generation_failed",
             )
@@ -631,6 +724,10 @@ def test_draft_retry_allows_turn_generation_failed_after_llm_http_reject(draft_r
                     "SELECT generation_status, safe_error_code FROM debate_turns WHERE id=:turn_id"
                 ),
                 {"turn_id": ids["turn"]},
+            ).one() == ("pending", None)
+            assert db.execute(
+                text("SELECT state, safe_error_code FROM jobs WHERE id=:job_id"),
+                {"job_id": ids["job"]},
             ).one() == ("pending", None)
     finally:
         database.dispose()
@@ -1128,6 +1225,136 @@ def test_prewarm_release_rolls_back_turn_when_job_update_loses_claim(
             db, turn, claim_token="owned", cancellation_generation=0
         )
     assert _claim_rows(database, ids) == before
+
+
+@pytest.mark.asyncio
+async def test_retry_spent_turn_generation_failed_continues_later_turns(
+    pending_draft_runtime,
+):
+    """Teacher Retry on a spent segment-contract failure regenerates and continues."""
+
+    app, database, ids, speech, structured = pending_draft_runtime
+    turn_ids = [ids["turn"], _uid(9201), _uid(9202)]
+    digest = "c" * 64
+    with database.session() as db:
+        first = db.get(DebateTurn, ids["turn"])
+        template = {c.name: getattr(first, c.name) for c in DebateTurn.__table__.columns}
+        first.turn_index = 0
+        first.generation_status = "failed"
+        first.preparation_stage = "failed"
+        first.safe_error_code = "turn_generation_failed"
+        first.speech = None
+        first.structured_json = None
+        first.transcript_hash = None
+        for index, turn_id in enumerate(turn_ids[1:], 1):
+            values = dict(template)
+            values.update(
+                id=turn_id,
+                turn_index=index,
+                round_no=1,
+                generation_status="pending",
+                preparation_stage="generation",
+                safe_error_code=None,
+                speech=None,
+                structured_json=None,
+                transcript_hash=None,
+            )
+            db.add(DebateTurn(**values))
+        db.execute(
+            text(
+                "UPDATE jobs SET state='failed', safe_error_code='turn_generation_failed' "
+                "WHERE id=:id"
+            ),
+            {"id": ids["job"]},
+        )
+        db.execute(
+            text(
+                "INSERT INTO provider_operations ("
+                "id, scope_id, provider_operation, logical_item_id, attempt_no, "
+                "request_hash, max_tokens, max_cost_cny, policy_hash, "
+                "export_manifest_hash, build_manifest_hash, model_key, state, "
+                "request_count, charged_request_count, safe_error_code, "
+                "created_at, updated_at) VALUES ("
+                ":id, :debate, 'llm_debate_turn', :turn, 2, :digest, 1, 0, "
+                ":digest, :digest, :digest, 'qwen3.8-flash', 'failed', 1, 1, "
+                "'segment_text_invalid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            ),
+            {
+                "id": _uid(9203),
+                "debate": ids["debate"],
+                "turn": ids["turn"],
+                "digest": digest,
+            },
+        )
+    service = app.state.playback_service
+    scheduler = app.state.prewarm_scheduler
+    scheduler._closed = False
+    scheduler.bind_running_loop()
+    calls: list[str] = []
+
+    class Preparer:
+        def generation_fence(self, *_args, **_kwargs):
+            return PreparedGenerationFence((), "t" * 64, 0)
+
+        def __call__(self, _db, _debate, turn, **_kwargs):
+            calls.append(str(turn.id))
+            # First call mimics post-#466 salvage success for the spent turn.
+            return PreparedTurn(
+                speech=speech,
+                structured=json.loads(structured),
+                transcript_hash="t" * 64,
+                cutoff_turn_index=0,
+                word_count=80,
+            )
+
+    service.turn_preparer = Preparer()
+
+    class TTS(MockTTSProvider):
+        def synthesize(self, *_args, **_kwargs):
+            raise TTSProviderTimeout()
+
+    service.audio_store.tts_provider = TTS()
+
+    async def wait_for_warmer():
+        async with asyncio.timeout(10):
+            await asyncio.sleep(0)
+            while scheduler.busy:
+                await asyncio.sleep(0.01)
+
+    try:
+        with database.session() as db:
+            repo = service.repository
+            assert not repo.retryable_provider_llm_reject(db, ids["debate"], ids["turn"])
+            assert not repo.unattempted_llm_turn(db, ids["debate"], ids["turn"])
+            await service.retry_preparation(
+                db,
+                ids["debate"],
+                turn_id=turn_ids[0],
+                expected_control_version=0,
+                context=_teacher(ids),
+                idempotency_key="spent-segment-retry-1",
+            )
+        await wait_for_warmer()
+        assert calls == turn_ids
+        with database.session() as db:
+            assert all(
+                db.get(DebateTurn, turn_id).generation_status == "final_ready"
+                for turn_id in turn_ids
+            )
+            # Idempotent replay must not enqueue another paid regeneration.
+            await service.retry_preparation(
+                db,
+                ids["debate"],
+                turn_id=turn_ids[0],
+                expected_control_version=0,
+                context=_teacher(ids),
+                idempotency_key="spent-segment-retry-1",
+            )
+        await wait_for_warmer()
+        assert calls == turn_ids
+    finally:
+        await scheduler.close()
+        await service.task_manager.close()
 
 
 @pytest.mark.asyncio

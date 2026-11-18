@@ -387,12 +387,45 @@ class SegmentLLMRuntime:
                             )
                     if mover is None:
                         raise SegmentRuntimeError(code="segment_preparation_failed") from exc
-                    operation = _invoke(
-                        mover,
-                        reservation.operation_id,
-                        expected=_operation_state(existing),
-                        state="prepared",
-                    )
+                    # Spent failed attempts (teacher Preview Retry) often rebuild
+                    # with current clamps/salvage → a new request_hash. Plain
+                    # failed→prepared keeps the old identity and then staging
+                    # rejects the accepted stage; rebind hashes while preserving
+                    # charged-request history.
+                    reprepare = _method(self.ledger, "reprepare_failed")
+                    if (
+                        reprepare is not None
+                        and _operation_state(existing) == "failed"
+                        and (
+                            _read(existing, "request_hash") != request.request_hash
+                            or _read(existing, "policy_hash") != policy_hash
+                            or _read(existing, "export_manifest_hash") != manifest_hash
+                            or _read(existing, "build_manifest_hash") != build_manifest_hash
+                        )
+                    ):
+                        try:
+                            operation = _invoke(
+                                reprepare,
+                                reservation.operation_id,
+                                request_hash=request.request_hash,
+                                policy_hash=policy_hash,
+                                export_manifest_hash=manifest_hash,
+                                build_manifest_hash=build_manifest_hash,
+                                max_tokens=reservation.max_tokens,
+                                max_cost_cny=reservation.max_cost_cny,
+                                model_key=reservation.model_key,
+                            )
+                        except Exception as reprepare_exc:
+                            raise SegmentRuntimeError(
+                                code="segment_preparation_failed"
+                            ) from reprepare_exc
+                    else:
+                        operation = _invoke(
+                            mover,
+                            reservation.operation_id,
+                            expected=_operation_state(existing),
+                            state="prepared",
+                        )
                 elif (
                     existing is None
                     or _operation_state(existing) != "prepared"

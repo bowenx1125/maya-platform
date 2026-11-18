@@ -43,6 +43,8 @@ import type {
   PerformanceSample,
 } from "./performance-player";
 
+export type { StageSlot };
+
 export type StageCharacter = {
   id: string;
   slot: StageSlot;

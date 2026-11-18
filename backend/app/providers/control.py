@@ -1879,6 +1879,23 @@ class ProviderOperationRepository(Protocol):
     ) -> ProviderOperationV1:
         """Record a terminal validation/provider failure."""
 
+    def reprepare_failed(
+        self,
+        operation_id: str,
+        *,
+        request_hash: str,
+        policy_hash: str,
+        export_manifest_hash: str,
+        build_manifest_hash: str,
+        max_tokens: int,
+        max_cost_cny: float,
+        model_key: str = "",
+    ) -> ProviderOperationV1:
+        """Teacher-authorized resend: failed→prepared with a new request identity.
+
+        Preserves charged-request history. Clears staged response and safe error.
+        """
+
     def recover_startup(self) -> tuple[ProviderOperationV1, ...]:
         """Recover stranded operations without issuing a request."""
 
@@ -2376,6 +2393,57 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
             state="failed",
             safe_error_code=safe_error_code,
         )
+
+    def reprepare_failed(
+        self,
+        operation_id: str,
+        *,
+        request_hash: str,
+        policy_hash: str,
+        export_manifest_hash: str,
+        build_manifest_hash: str,
+        max_tokens: int,
+        max_cost_cny: float,
+        model_key: str = "",
+    ) -> ProviderOperationV1:
+        _hash(request_hash, field_name="request hash")
+        _hash(policy_hash, field_name="policy hash")
+        _hash(export_manifest_hash, field_name="export manifest hash")
+        if build_manifest_hash:
+            _hash(build_manifest_hash, field_name="build manifest hash")
+        if max_tokens < 0:
+            raise ProviderControlError("reservation tokens are invalid")
+        try:
+            amount = Decimal(str(max_cost_cny))
+        except (InvalidOperation, ValueError) as exc:
+            raise ProviderControlError("reservation cost is invalid") from exc
+        if not amount.is_finite() or amount < 0:
+            raise ProviderControlError("reservation cost is invalid")
+        if model_key:
+            _safe_identifier(model_key, field_name="model key")
+        with self._lock:
+            current = self.operation(operation_id)
+            if current.state != "failed":
+                raise OperationStateError("provider operation is not failed")
+            if not can_transition("failed", "prepared"):
+                raise OperationStateError("invalid provider operation transition: failed->prepared")
+            updated = replace(
+                current,
+                state="prepared",
+                request_hash=request_hash,
+                policy_hash=policy_hash,
+                export_manifest_hash=export_manifest_hash,
+                build_manifest_hash=build_manifest_hash or current.build_manifest_hash,
+                max_tokens=max_tokens,
+                max_cost_cny=float(amount),
+                model_key=model_key or current.model_key,
+                safe_error_code=None,
+                staged_response_hash=None,
+            )
+            self._operations[operation_id] = updated
+            if current.reservation_id is not None:
+                self._set_reservation_state(operation_id, "prepared")
+            return updated
 
     def abandon(self, operation_id: str) -> ProviderOperationV1:
         operation = self.operation(operation_id)

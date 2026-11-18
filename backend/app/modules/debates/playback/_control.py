@@ -528,9 +528,15 @@ class PlaybackControlMixin(PlaybackCore):
                 # repository's exact failed turn/Job fence; no playback state
                 # or classroom interaction is announced here.
                 if state.status != "preparing" or state.mode != "live":
-                    raise invalid_state("Preview is not waiting for preparation.")
+                    raise invalid_state(
+                        "Preview is not waiting for preparation. Refresh the page, "
+                        "then retry the next unprepared turn once preparation resumes."
+                    )
                 if state.current_turn_id is not None:
-                    raise invalid_state("Preview has no current playback turn.")
+                    raise invalid_state(
+                        "Preview has a current playback turn, so Retry cannot run here. "
+                        "Return to Preview preparation, then retry the next unprepared turn."
+                    )
                 turns = sorted(
                     self._turns(db, debate),
                     key=lambda item: int(self._get(item, "turn_index", default=0) or 0),
@@ -560,31 +566,22 @@ class PlaybackControlMixin(PlaybackCore):
                         None,
                     )
                 if target is None or str(self._get(target, "id", default="")) != turn_id:
-                    raise invalid_state("Only the next unprepared Preview turn can be retried.")
+                    raise invalid_state(
+                        "Only the next unprepared Preview turn can be retried. "
+                        "Retry the earliest failed or pending turn first."
+                    )
                 code = str(self._get(target, "safe_error_code", "failed_code", default="") or "")
                 if code == "acceptance_unknown":
-                    raise invalid_state("The selected turn needs provider reconciliation.")
-                if code == "turn_generation_failed":
-                    recoverable = getattr(self.repository, "recoverable_llm_turns", None)
-                    accepted = False
-                    if callable(recoverable):
-                        try:
-                            accepted = (debate_id, turn_id) in tuple(recoverable(db))
-                        except Exception:
-                            accepted = False
-                    unattempted = getattr(self.repository, "unattempted_llm_turn", None)
-                    retryable_reject = getattr(
-                        self.repository, "retryable_provider_llm_reject", None
+                    raise invalid_state(
+                        "This turn's provider acceptance is unknown. Open Diagnostics, "
+                        "reconcile the charged request, then retry the next unprepared turn."
                     )
-                    if (
-                        not accepted
-                        and not (callable(unattempted) and unattempted(db, debate_id, turn_id))
-                        and not (
-                            callable(retryable_reject) and retryable_reject(db, debate_id, turn_id)
-                        )
-                    ):
-                        raise invalid_state("The selected turn has no verified local recovery.")
-                elif (
+                # turn_generation_failed includes exhausted segment-contract
+                # failures (segment_over_length / segment_text_invalid, …).
+                # Teacher Retry regenerates with current send-time clamps and
+                # salvage so later pending turns can continue; do not require a
+                # local accepted-stage recovery for that path.
+                if (
                     code
                     not in {
                         "provider_confirmation_required",
@@ -592,11 +589,14 @@ class PlaybackControlMixin(PlaybackCore):
                         "provider_not_sent",
                         "provider_preflight_blocked",
                         "preparation_timeout",
+                        "turn_generation_failed",
                     }
                     and code not in _DRAFT_TTS_RETRY_CODES
                 ):
                     raise invalid_state(
-                        "The selected turn is not waiting for a safe provider retry."
+                        "This turn is not waiting for a safe Preview retry. "
+                        "Refresh Preview and retry the next unprepared turn, "
+                        "or open Diagnostics if the error is still unclear."
                     )
                 retry = getattr(self.repository, "retry_draft_segment_turn", None)
                 if not callable(retry) or not retry(
