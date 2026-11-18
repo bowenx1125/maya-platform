@@ -127,14 +127,12 @@ Nov17 #451 integration:audited head c724562a6b0e2a7babd60f553de6e00289720f6f + o
 
 ## Nov16–17 student visibility (teacher Public)
 
-#453: students list/open/single-chat teacher Public Agents; Teams usable course-wide; `is_teacher_owned` sticker. Stage/music/curtain fixes + #452 cards retained on main `ba5d0031` (+#455 version-scoped card status).
-
-Nov17 owner correction (#456): course students **edit** teacher Public Agents (AGENT.md/Done/Check card); course teachers edit other teachers' Public Agents. Students cannot delete teacher Agents; course teachers retain main `ba5d0031` peer-teacher Public Agent deletion. Teacher Private stays owner-only. Student Public edit/delete kept (creator/groupmate/course teacher). #455 private-draft version/card status hidden; editors read published teacher version+card. "No versions yet.": `AgentOverview` required `can_edit`; #453 left students `can_edit:false`, sending published content to `t("noVersions")`. No migration.0 calls/deploy.
-
-Nov17 hotfix (post-#456 / `9075ecac`): API returned `can_edit:true`, but `AgentWorkbench` aborted personal teacher Agent loads: teacher-owned `GET /courses/{id}/workspace-documents` (404 for students) lacked group-library soft-failure. Fix: personal workspace list wrapped in `groupLibraryOrClosed`; keep published `enabled_documents`. Voice list soft-denial kept. No migration/contract change.0 calls/deploy.
-
-Nov17 follow-up (post-#459): (1) Student editor: personal `voice-profiles` 404, classified denied, still raised `ErrorNotice`/`errorNotFound`; personal denials no longer toast (group denials unchanged). (2) Check card Ready drops Tone Preview button (duplicates Avatar Preview); “voice service failed”: teacher personal voice ACL 404 mislabeled as provider failure—Avatar Preview keeps `/agents/preview` bound-voice path. (3) Debate snapshot avatar: Immerse/Live/`GET debates/{id}` project live Agent published avatar (else catalog default); column retained for NOT NULL, not display; `avatar_missing` non-blocking; no migration.0 calls/deploy. Audit fix: playback WS `_avatar_states` expression also uses live avatar (formerly create-time column).
+#453: students list/open teacher Public Agents; Teams course-wide; `is_teacher_owned`. #456: course students/teachers edit teacher Public Agents; students cannot delete; peer-teacher delete retained; Private owner-only. #455: draft version/card hidden; `can_edit` fixes "No versions yet.". Hotfix `9075ecac`: student personal workspace soft-fail. #459: personal voice 404 no toast; Ready drops Tone Preview; live avatar on Immerse/Live/GET (+WS).0 calls/deploy.
 
 ## Nov17 Agent RAG/Voice destroy × + student music pink
 
-Scheme B: Agent create/edit RAG stickers: red 40px × beside View/Download destroys/hides shared library file via existing `hideKnowledge` (not unbind); Voice × uses the same red; both use U3 pink tray confirm (bell/RoundX/Cancel+red Delete/40% scrim) with `brainformRagHideConfirm`/`voiceDeleteConfirm`/`deleteAffectsAgents`. Student MusicKey playing fill `#FF4D8D` uses `data-playing`/`useMusicPlaying`. Audit: `#461` pink rule in `globals.css`, imported by `app.css` as `@layer legacy`; Tailwind `bg-white` / dock utilities and unlayered `.capsuleTrigger` kept the playing key white; rule moved to unlayered `arcade.css`. Idle white, hop animation, teacher key absent, stage default off unchanged. No Alembic (head stays 0094).0 calls/deploy.
+Scheme B: RAG/Voice × + U3 pink confirm; MusicKey `#FF4D8D` unlayered `arcade.css`. No Alembic (0094).0 calls/deploy.
+
+## Nov18 debate segment salvage (no stall)
+
+Root: temp 1.8 + vague max_units + speech in `question` → attempts exhausted → draft stuck. Fix: send-time temp≤0.9 + max_tokens bound; clearer unit/hard ceiling; normalize question→segment; force-fit; after budget `salvage_segment_output` + soft `segment_output_salvaged` (EN why+Retry). Audit: no `mark_failed` before salvage (defer-publish needs accepted); stage salvaged payload for CAS. No Alembic/env. Targeted PASS.0 calls/deploy.

@@ -9,7 +9,7 @@ import { SegmentGrade } from "../../evidence/segment-grade";
 
 import { ErrorNotice, Notice, RetryPill } from "../../ui";
 import type { DebateCardTeacherReason } from "../../../lib/api";
-import { statusLabel, tm } from "../../../lib/i18n";
+import { localizeError, statusLabel, tm } from "../../../lib/i18n";
 import { cn } from "../../../lib/utils";
 import { buttonVariants } from "../../ui/button";
 import { IconBust, IconEye, IconPlay } from "../../quiet-icons";
@@ -113,11 +113,19 @@ export function DebatePreview({
   // where every turn failed read as still preparing. Say so at the top.
   // An Agent with no voice is a teacher's choice, not a failure: its turns
   // simply play as text, so they never raise this banner.
+  const softWarningCodes = new Set([
+    "segment_output_salvaged",
+    "tts_voice_unavailable",
+  ]);
   const audioFailed = turns.filter(
     (turn) =>
       !turn.audio_ready &&
-      turn.safe_error_code !== "tts_voice_unavailable" &&
+      !softWarningCodes.has(turn.safe_error_code ?? "") &&
       (turn.generation_status === "failed" || Boolean(turn.safe_error_code)),
+  );
+  const salvageWarnings = turns.filter(
+    (turn) =>
+      turn.safe_error_code === "segment_output_salvaged" && turn.speech?.trim(),
   );
   const firstFailed = audioFailed[0];
   const speechFailed = audioFailed.some(
@@ -241,6 +249,34 @@ export function DebatePreview({
           </div>
         ) : null}
 
+        {salvageWarnings.length > 0 ? (
+          <div className="mt-4">
+            <Notice
+              inline
+              tone="warning"
+              action={
+                onRetryTurn ? (
+                  <RetryPill
+                    data-testid="preview-salvage-retry"
+                    disabled={retryingTurnId !== null}
+                    onClick={() =>
+                      onRetryTurn(salvageWarnings.map((turn) => turn.id))
+                    }
+                  >
+                    Retry
+                  </RetryPill>
+                ) : null
+              }
+            >
+              <span data-testid="preview-segment-salvaged">
+                {salvageWarnings.length === 1
+                  ? localizeError({ code: "segment_output_salvaged" })
+                  : `${localizeError({ code: "segment_output_salvaged" })} (${salvageWarnings.length} turns)`}
+              </span>
+            </Notice>
+          </div>
+        ) : null}
+
         {firstFailed ? (
           <div className="mt-4">
             <Notice
@@ -336,8 +372,10 @@ function PreviewTurnCard({
   onRetry?: (turnId: string) => void;
   teachingProtocol?: boolean;
 }) {
+  const salvaged = turn.safe_error_code === "segment_output_salvaged";
   const failed =
-    turn.generation_status === "failed" || Boolean(turn.safe_error_code);
+    turn.generation_status === "failed" ||
+    (Boolean(turn.safe_error_code) && !salvaged);
   const savedSpeech = Boolean(turn.speech.trim());
   const textFallbackReady =
     turn.generation_status === "final_ready" &&
@@ -354,7 +392,13 @@ function PreviewTurnCard({
       "tts_result_download_failed",
       "tts_audio_invalid",
     ].includes(turn.safe_error_code ?? "");
-  const tagTone = turn.audio_ready ? "ready" : failed ? "stalled" : "thinking";
+  const tagTone = turn.audio_ready
+    ? "ready"
+    : failed
+      ? "stalled"
+      : salvaged
+        ? "ready"
+        : "thinking";
   return (
     <article
       className={cn(
@@ -401,6 +445,19 @@ function PreviewTurnCard({
           Speech is not available yet.
         </p>
       )}
+
+      {salvaged ? (
+        <div
+          className="mt-2 flex items-center gap-2.5 rounded-[14px] border-2 border-[#111] bg-[#FEF9C3] px-2 py-1.5 font-body text-[13px] leading-[normal] font-medium"
+          role="status"
+          data-testid="preview-turn-salvaged"
+        >
+          <span>{localizeError({ code: "segment_output_salvaged" })}</span>
+          <code className="font-mono text-xs font-bold text-[#92400E]">
+            {turn.safe_error_code}
+          </code>
+        </div>
+      ) : null}
 
       {failed ? (
         <div

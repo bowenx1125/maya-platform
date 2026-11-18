@@ -39,12 +39,14 @@ from app.providers.llm_transport import LLMAcceptanceUnknown, LLMTransportNotSen
 from .four_round import visible_predecessors
 from .mutual_learning_prompts import compute_mutual_transcript_hash
 from .segments import (
+    SEGMENT_OUTPUT_SALVAGED,
     SegmentInputSnapshot,
     SegmentProtocolError,
     SegmentTurnResult,
     StoredSegmentTurnResult,
     load_segment_turn_result,
     load_stored_segment_turn_result,
+    salvage_segment_output,
     validate_segment_output,
 )
 from .types import (
@@ -490,6 +492,27 @@ class SegmentLLMRuntime:
             kwargs["response_hash"] = response_hash
         return _invoke(transition, operation_id, **kwargs)
 
+    def _stage_salvaged_payload(
+        self, prepared: SegmentPreparedAttempt, raw: object
+    ) -> tuple[str, str]:
+        """Persist a locally salvaged stored payload so deferred publish can CAS."""
+
+        salvaged = salvage_segment_output(
+            raw if isinstance(raw, (Mapping, str)) else {},
+            prepared.snapshot,
+        )
+        stored = salvaged.as_stored_payload()
+        output_json = json.dumps(stored, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return output_json, _hash(stored)
+
+    def _can_structure_repair(self, prepared: SegmentPreparedAttempt, code: str | None) -> bool:
+        return (
+            prepared.attempt_no == 1
+            and self.max_attempts == 2
+            and prepared.request.authorized_max_attempts == 2
+            and code in SEGMENT_REPAIR_CODES
+        )
+
     def _stage(
         self,
         prepared: SegmentPreparedAttempt,
@@ -501,35 +524,44 @@ class SegmentLLMRuntime:
             return None
         output_json = candidate.output_json
         output_hash = candidate.output_hash
+        repairable = prepared.attempt_no < 2 and prepared.request.authorized_max_attempts == 2
         if candidate.provider_output is not None:
             try:
                 checked = validate_segment_output(
                     candidate.provider_output,
                     prepared.snapshot,
                     allow_history_copy=prepared.attempt_no >= 2,
-                    repairable=prepared.attempt_no < 2
-                    and prepared.request.authorized_max_attempts == 2,
+                    repairable=repairable,
                 )
                 stored = checked.as_stored_payload()
                 output_json = json.dumps(
                     stored, ensure_ascii=False, sort_keys=True, separators=(",", ":")
                 )
                 output_hash = _hash(stored)
-            except SegmentProtocolError:
-                # Keep the accepted provider JSON for the repair/recovery
-                # boundary.  It is not a public result until the same frozen
-                # snapshot validates it.
-                pass
+            except SegmentProtocolError as exc:
+                if repairable and self._can_structure_repair(prepared, exc.code):
+                    # Keep the accepted provider JSON for the one repair attempt.
+                    pass
+                else:
+                    # Attempts are spent: stage the salvaged speech so later
+                    # deferred publication can CAS against a usable payload.
+                    output_json, output_hash = self._stage_salvaged_payload(
+                        prepared, candidate.provider_output
+                    )
         if output_json is None or output_hash is None:
-            diagnostic = {
-                "protocol_version": "segments_v2",
-                "status": "diagnostic",
-                "safe_error_code": candidate.safe_error_code or "provider_response_invalid",
-            }
-            output_json = json.dumps(
-                diagnostic, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-            )
-            output_hash = _hash(diagnostic)
+            code = candidate.safe_error_code or "provider_response_invalid"
+            if self._can_structure_repair(prepared, code):
+                diagnostic = {
+                    "protocol_version": "segments_v2",
+                    "status": "diagnostic",
+                    "safe_error_code": code,
+                }
+                output_json = json.dumps(
+                    diagnostic, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                )
+                output_hash = _hash(diagnostic)
+            else:
+                output_json, output_hash = self._stage_salvaged_payload(prepared, {})
         tokenizer_id = str(getattr(self.adapter, "tokenizer", object()).__class__.__name__)
         tokenizer_hash = _hash(tokenizer_id)
         stage = LLMAcceptedStageV1(
@@ -775,13 +807,10 @@ class SegmentLLMRuntime:
                         code,
                     )
                 )
-                operation = self._transition(operation_id, "mark_failed", code=code) or operation
-                if (
-                    current.attempt_no == 1
-                    and self.max_attempts == 2
-                    and current.request.authorized_max_attempts == 2
-                    and code in SEGMENT_REPAIR_CODES
-                ):
+                if self._can_structure_repair(current, code):
+                    operation = (
+                        self._transition(operation_id, "mark_failed", code=code) or operation
+                    )
                     current = self.prepare(
                         current.snapshot,
                         debate_id=current.debate_id,
@@ -805,8 +834,74 @@ class SegmentLLMRuntime:
                         ),
                     )
                     continue
+                # Keep the operation accepted: deferred publication CAS requires
+                # accepted→succeeded, and _stage already stored salvaged speech.
+                result = salvage_segment_output({}, current.snapshot)
+                LOGGER.warning(
+                    "Segment output salvaged after empty provider output "
+                    "safe_code=%s salvage=%s turn_id=%s: the model returned no "
+                    "usable segments; the server built a short fallback speech "
+                    "so the debate can continue. Retry this turn to regenerate.",
+                    code,
+                    result.salvage_warning or SEGMENT_OUTPUT_SALVAGED,
+                    current.turn_id,
+                )
+                final = self._final_ready(result, context, current.attempt_no)
+                if not self.defer_publication:
+                    publisher = _method(
+                        self.publication, "commit_turn_success", "publish_atomic", "publish"
+                    )
+                    if publisher is not None:
+                        _invoke(
+                            publisher,
+                            operation_id=operation_id,
+                            turn_id=current.turn_id,
+                            debate_id=current.debate_id,
+                            stage=stage,
+                            result=result,
+                            final_ready=final,
+                            evidence_trace=(),
+                            request_hash=current.request.request_hash,
+                        )
+                    operation = self._transition(operation_id, "mark_succeeded") or operation
+                traces.append(
+                    SegmentAttempt(
+                        current.attempt_no,
+                        current.request.request_hash,
+                        operation_id,
+                        True,
+                        "accepted",
+                        result.salvage_warning or SEGMENT_OUTPUT_SALVAGED,
+                    )
+                )
+                deferred = (
+                    SegmentDeferredPublicationV2(
+                        operation_id=operation_id or "",
+                        turn_id=current.turn_id,
+                        debate_id=current.debate_id,
+                        request_hash=current.request.request_hash,
+                        operation=operation,
+                        stage=stage,
+                        usage=stage,
+                        result=result,
+                        final_ready=final,
+                        recovery_input=SegmentRecoveryInputV2.from_request(
+                            current.request,
+                            operation_id=operation_id,
+                        ),
+                    )
+                    if self.defer_publication and operation_id is not None and stage is not None
+                    else None
+                )
                 return SegmentRunOutcome(
-                    "failed", tuple(traces), operation, stage, safe_error_code=code
+                    "succeeded",
+                    tuple(traces),
+                    operation,
+                    stage,
+                    result,
+                    final,
+                    safe_error_code=result.salvage_warning or SEGMENT_OUTPUT_SALVAGED,
+                    deferred_publication=deferred,
                 )
             validator = _method(self.adapter, "validate_accepted")
             if validator is None:
@@ -830,15 +925,10 @@ class SegmentLLMRuntime:
                         exc.code,
                     )
                 )
-                operation = (
-                    self._transition(operation_id, "mark_failed", code=exc.code) or operation
-                )
-                if (
-                    current.attempt_no == 1
-                    and self.max_attempts == 2
-                    and current.request.authorized_max_attempts == 2
-                    and exc.code in SEGMENT_REPAIR_CODES
-                ):
+                if self._can_structure_repair(current, exc.code):
+                    operation = (
+                        self._transition(operation_id, "mark_failed", code=exc.code) or operation
+                    )
                     current = self.prepare(
                         current.snapshot,
                         debate_id=current.debate_id,
@@ -862,8 +952,22 @@ class SegmentLLMRuntime:
                         ),
                     )
                     continue
-                return SegmentRunOutcome(
-                    "failed", tuple(traces), operation, stage, safe_error_code=exc.code
+                # Provider attempts are spent: locally salvage so Preview/later
+                # turns keep moving. Leave the ledger accepted — mark_failed
+                # would block deferred publication (accepted→succeeded only).
+                result = salvage_segment_output(
+                    candidate.provider_output if candidate.provider_output is not None else {},
+                    current.snapshot,
+                )
+                LOGGER.warning(
+                    "Segment output salvaged after provider attempts "
+                    "safe_code=%s salvage=%s turn_id=%s: the model output missed "
+                    "the segment contract; the server trimmed or rebuilt a usable "
+                    "speech so the debate can continue. Retry this turn if the "
+                    "wording looks wrong.",
+                    exc.code,
+                    result.salvage_warning or SEGMENT_OUTPUT_SALVAGED,
+                    current.turn_id,
                 )
             final = self._final_ready(result, context, current.attempt_no)
             if not self.defer_publication:
@@ -914,6 +1018,7 @@ class SegmentLLMRuntime:
                 stage,
                 result,
                 final,
+                safe_error_code=result.salvage_warning,
                 deferred_publication=deferred,
             )
         return SegmentRunOutcome(

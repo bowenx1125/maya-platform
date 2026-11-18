@@ -36,7 +36,7 @@ from app.modules.debates.generation.segments import (
 from app.modules.debates.generation_params import (
     RULESET_CONTRACT_V3,
     default_params,
-    request_fields,
+    structured_segment_request_fields,
     uses_code_contract,
 )
 from app.providers.llm_adapter import LLMAdapterError, LLMUsageV1
@@ -102,11 +102,16 @@ SEGMENT_NO_HISTORY_COPY_RULE_ZH = (
 )
 SEGMENT_REPAIR_PREFIX = (
     " Repair the prior output using the same frozen input and this server feedback;"
+    " put the spoken words only in segments[].text (never leave text empty or move the"
+    " speech into question);"
+    " keep total speech units at or under unit_cap when feedback includes it;"
     " follow the prompt's upper-length guidance without padding the answer;"
     " return the complete corrected JSON once: "
 )
 SEGMENT_REPAIR_PREFIX_ZH = (
     "请用同一份冻结输入和下面的服务器反馈修正上一次输出；"
+    "发言正文只写在 segments[].text 里，不要留空，也不要把整段发言放进 question；"
+    "若反馈带有 unit_cap，总字数不得超过该上限；"
     "遵守规则里的篇幅上限，不要凑字数；只返回一次完整的修正后 JSON："
 )
 
@@ -849,13 +854,19 @@ class SegmentLLMAdapter:
             properties.pop("question", None)
             properties.pop("discussion_memory", None)
         schema = _wire_schema(schema_value)
+        task = getattr(snapshot, "task", None)
+        unit_cap = task.get("max_units") if isinstance(task, Mapping) else None
         body: dict[str, object] = {
             "model": getattr(self.config, "model", LLM_MODEL_KEY),
             "messages": [{"role": item.role, "content": item.content} for item in messages],
             "stream": False,
-            # The Debate's frozen parameters (or the DEBATE_LLM_* defaults);
-            # an empty one is not sent.
-            **request_fields(frozen_llm["params"]),
+            # Frozen Debate params with structured-generation clamps: high
+            # temperature and a 32k max_tokens ceiling made length contracts
+            # fail on attempt one; existing drafts keep their snapshot bytes.
+            **structured_segment_request_fields(
+                frozen_llm["params"],
+                unit_cap=unit_cap if isinstance(unit_cap, int) else None,
+            ),
             "n": 1,
             "response_format": {
                 "type": "json_schema",

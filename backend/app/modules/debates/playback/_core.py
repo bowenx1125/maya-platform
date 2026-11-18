@@ -103,6 +103,8 @@ _SAFE_GENERATION_CODES = {
     "debate_card_http_rejected",
     "debate_card_invalid",
     "debate_card_too_long",
+    # Soft: local salvage kept speech; debate continues, teacher may Retry.
+    "segment_output_salvaged",
 }
 _RECOVERABLE_PROVIDER_GENERATION_CODES = {
     "provider_confirmation_required",

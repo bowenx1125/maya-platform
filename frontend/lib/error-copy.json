@@ -19,6 +19,15 @@
     "aiStepFailed": {
       "en": "The AI step didn't finish. Try again; if it keeps happening, tell your teacher."
     },
+    "segmentOutputSalvaged": {
+      "en": "The model speech missed the length or format contract, so the server trimmed or rebuilt a usable turn and continued the debate. Use Retry on this turn if you want a fresh generation."
+    },
+    "segmentOverLength": {
+      "en": "The model speech was longer than this round's unit cap. Retry the turn; if it keeps happening, lower Debate temperature toward 0.7 or raise the round unit caps."
+    },
+    "segmentTextInvalid": {
+      "en": "The model left a speech paragraph empty (sometimes the words landed in the question field). Retry the turn to regenerate."
+    },
     "assessmentInactive": {
       "en": "This assessment is no longer active."
     },
@@ -898,7 +907,8 @@
     "segment_history_stump": "aiStepFailed",
     "segment_identity_missing": "aiStepFailed",
     "segment_language_mismatch": "aiStepFailed",
-    "segment_over_length": "aiStepFailed",
+    "segment_output_salvaged": "segmentOutputSalvaged",
+    "segment_over_length": "segmentOverLength",
     "segment_preparation_failed": "aiStepFailed",
     "segment_request_invalid": "aiStepFailed",
     "segment_reservation_failed": "aiStepFailed",
@@ -910,7 +920,7 @@
     "segment_stage_invalid": "aiStepFailed",
     "segment_stage_unavailable": "aiStepFailed",
     "segment_structure_invalid": "aiStepFailed",
-    "segment_text_invalid": "aiStepFailed",
+    "segment_text_invalid": "segmentTextInvalid",
     "segment_too_short": "aiStepFailed",
     "self_delete_forbidden": "selfDeleteForbidden",
     "self_prerequisite": "conceptSelfPrerequisite",
