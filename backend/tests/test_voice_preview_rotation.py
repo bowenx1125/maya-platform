@@ -33,8 +33,8 @@ EXPECTED_LINES = (
         "To restore Mayaform to its former glory is our duty, and we shall not turn away!"
     ),
     "过得了我，再谈未来。Get past me first. Then we can talk about the future.",
-    "我是要成为海贼王的男人！海賊王に、俺はなる！",
-    "真相永远只有一个！真実はいつもひとつ！",
+    "我是要成为海贼王的男人！",
+    "真相永远只有一个！",
     (
         "或许是不知梦的缘故，流离之人追逐幻影。"
         "Perhaps because they do not know it is a dream, wandering souls keep chasing illusions."
@@ -43,7 +43,9 @@ EXPECTED_LINES = (
         "这一路上我们将不彼此抛弃，不彼此出卖，直到死亡的尽头。"
         "We will neither abandon nor betray each other, not even at the very edge of death."
     ),
-    "从这里开始吧。从一开始，不，从零开始！ここから始めましょう。一から、いいえ、ゼロから！",
+    "从这里开始吧。从一开始，不，从零开始！",
+    "但浪花淘尽，唯我屹立不倒",
+    "But when the waves have washed all away, I alone stand unbowed.",
 )
 
 
@@ -77,8 +79,8 @@ def _enroll(client: TestClient, csrf: str, key: str) -> str:
     return str(response.json()["id"])
 
 
-def test_the_nine_lines_are_exactly_as_specified() -> None:
-    assert len(EXPECTED_LINES) == 9
+def test_the_eleven_lines_are_exactly_as_specified() -> None:
+    assert len(EXPECTED_LINES) == 11
     assert voice_preview.VOICE_PREVIEW_LINES == EXPECTED_LINES
     assert voice_preview.VOICE_PREVIEW_LINES[6] == (
         "或许是不知梦的缘故，流离之人追逐幻影。"
@@ -86,7 +88,7 @@ def test_the_nine_lines_are_exactly_as_specified() -> None:
     )
 
 
-def test_previews_rotate_through_nine_lines_in_global_click_order(
+def test_previews_rotate_through_eleven_lines_in_global_click_order(
     voice_client: tuple[TestClient, Database, Settings],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -108,8 +110,8 @@ def test_previews_rotate_through_nine_lines_in_global_click_order(
 
     monkeypatch.setattr(provider, "synthesize", capture)
     monkeypatch.setattr(voice_preview, "tts_provider", lambda _settings: provider)
-    # 12 clicks alternating voices: lines 1..9, then wrap to lines 1..3.
-    order = [first_voice if index % 3 else second_voice for index in range(12)]
+    # 14 clicks alternating voices: lines 1..11, then wrap to lines 1..3.
+    order = [first_voice if index % 3 else second_voice for index in range(14)]
     for profile_id in order:
         response = client.post(
             f"/api/v1/voice-profiles/{profile_id}/preview",
