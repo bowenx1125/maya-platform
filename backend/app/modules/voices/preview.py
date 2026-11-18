@@ -65,7 +65,7 @@ from app.seed import COURSE_ID
 
 LOGGER = logging.getLogger("maya.voices")
 # Preview samples rotate in the order previews are generated, across every
-# user and voice: the 1st generation reads line 1, the 12th reads line 1 again.
+# user and voice: the 1st generation reads line 1, the 11th reads line 1 again.
 VOICE_PREVIEW_LINES: tuple[str, ...] = (
     (
         "如果遇见你不是奇迹，灵魂便不曾言语。"
@@ -88,8 +88,10 @@ VOICE_PREVIEW_LINES: tuple[str, ...] = (
         "We will neither abandon nor betray each other, not even at the very edge of death."
     ),
     "从这里开始吧。从一开始，不，从零开始！",
-    "但浪花淘尽，唯我屹立不倒",
-    "But when the waves have washed all away, I alone stand unbowed.",
+    (
+        "但浪花淘尽，唯我屹立不倒。"
+        + "But when the waves have washed all away, I alone stand unbowed."
+    ),
 )
 # Kept for callers that want a stable sample; it is the first line.
 VOICE_PREVIEW_TEXT = VOICE_PREVIEW_LINES[0]

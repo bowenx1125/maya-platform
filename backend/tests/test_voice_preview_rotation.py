@@ -44,8 +44,10 @@ EXPECTED_LINES = (
         "We will neither abandon nor betray each other, not even at the very edge of death."
     ),
     "从这里开始吧。从一开始，不，从零开始！",
-    "但浪花淘尽，唯我屹立不倒",
-    "But when the waves have washed all away, I alone stand unbowed.",
+    (
+        "但浪花淘尽，唯我屹立不倒。"
+        + "But when the waves have washed all away, I alone stand unbowed."
+    ),
 )
 
 
@@ -79,8 +81,8 @@ def _enroll(client: TestClient, csrf: str, key: str) -> str:
     return str(response.json()["id"])
 
 
-def test_the_eleven_lines_are_exactly_as_specified() -> None:
-    assert len(EXPECTED_LINES) == 11
+def test_the_ten_lines_are_exactly_as_specified() -> None:
+    assert len(EXPECTED_LINES) == 10
     assert voice_preview.VOICE_PREVIEW_LINES == EXPECTED_LINES
     assert voice_preview.VOICE_PREVIEW_LINES[6] == (
         "或许是不知梦的缘故，流离之人追逐幻影。"
@@ -88,7 +90,7 @@ def test_the_eleven_lines_are_exactly_as_specified() -> None:
     )
 
 
-def test_previews_rotate_through_eleven_lines_in_global_click_order(
+def test_previews_rotate_through_ten_lines_in_global_click_order(
     voice_client: tuple[TestClient, Database, Settings],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -110,8 +112,8 @@ def test_previews_rotate_through_eleven_lines_in_global_click_order(
 
     monkeypatch.setattr(provider, "synthesize", capture)
     monkeypatch.setattr(voice_preview, "tts_provider", lambda _settings: provider)
-    # 14 clicks alternating voices: lines 1..11, then wrap to lines 1..3.
-    order = [first_voice if index % 3 else second_voice for index in range(14)]
+    # 13 clicks alternating voices: lines 1..10, then wrap to lines 1..3.
+    order = [first_voice if index % 3 else second_voice for index in range(13)]
     for profile_id in order:
         response = client.post(
             f"/api/v1/voice-profiles/{profile_id}/preview",
