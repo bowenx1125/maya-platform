@@ -53,3 +53,32 @@ describe("findBone rig-family aliases", () => {
     expect(findBone(root, "jaw")).toBeNull();
   });
 });
+
+describe("female_1 Mixamo aliases on the live stage path", () => {
+  it("resolves head, neck, torso, arms and hands, and has no jaw", () => {
+    const root = rig([
+      "mixamorig:Hips",
+      "mixamorig:Spine",
+      "mixamorig:Spine1",
+      "mixamorig:Spine2",
+      "mixamorig:Neck",
+      "mixamorig:Head",
+      "mixamorig:LeftArm",
+      "mixamorig:LeftForeArm",
+      "mixamorig:LeftHand",
+      "mixamorig:RightArm",
+      "mixamorig:RightForeArm",
+      "mixamorig:RightHand",
+    ]);
+    expect(findBone(root, "head")?.name).toBe("mixamorig:Head");
+    expect(findBone(root, "neck")?.name).toBe("mixamorig:Neck");
+    expect(findBone(root, "torso")?.name).toBe("mixamorig:Spine2");
+    expect(findBone(root, "upperArmL")?.name).toBe("mixamorig:LeftArm");
+    expect(findBone(root, "forearmL")?.name).toBe("mixamorig:LeftForeArm");
+    expect(findBone(root, "handL")?.name).toBe("mixamorig:LeftHand");
+    expect(findBone(root, "upperArmR")?.name).toBe("mixamorig:RightArm");
+    expect(findBone(root, "forearmR")?.name).toBe("mixamorig:RightForeArm");
+    expect(findBone(root, "handR")?.name).toBe("mixamorig:RightHand");
+    expect(findBone(root, "jaw")).toBeNull();
+  });
+});

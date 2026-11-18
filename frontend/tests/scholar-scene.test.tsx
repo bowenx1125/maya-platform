@@ -10,7 +10,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AvatarState, AvatarConfig } from "../components/avatar";
-import { ScholarScene } from "../components/stage3d/scholar-scene";
+import {
+  ScholarScene,
+  stageRosterKey,
+} from "../components/stage3d/scholar-scene";
 import type { StageCharacter } from "../components/stage3d/scholar-stage";
 
 const stageMock = vi.hoisted(() => {
@@ -506,5 +509,73 @@ describe("ScholarScene long names", () => {
       /\.namePlateText\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;/,
     );
     expect(css).toMatch(/\.bubble\s*\{[^}]*overflow-wrap:\s*anywhere;/);
+  });
+});
+
+describe("ScholarScene live template roster key", () => {
+  it("includes template_id so a published template change rebuilds the bench", async () => {
+    const initial = [character("participant-a", "A", "Mozi")];
+    const view = renderScene(initial, { "participant-a": "idle" });
+    await waitFor(() => expect(stageMock.instances).toHaveLength(1));
+    const stage = stageMock.instances[0];
+    const before = stage.rosters.length;
+
+    view.rerender(
+      <ScholarScene
+        characters={[
+          {
+            ...initial[0],
+            config: { ...initial[0].config, material_theme: "demo" },
+          },
+        ]}
+        loadingLabel="Loading"
+        resting
+        unavailableLabel="Unavailable"
+        visuals={{ "participant-a": "idle" }}
+      />,
+    );
+    expect(stage.rosters).toHaveLength(before);
+
+    const updated = [
+      {
+        ...initial[0],
+        config: { ...initial[0].config, template_id: "maya-warm-scholar" },
+      },
+    ];
+    view.rerender(
+      <ScholarScene
+        characters={updated}
+        loadingLabel="Loading"
+        resting
+        unavailableLabel="Unavailable"
+        visuals={{ "participant-a": "idle" }}
+      />,
+    );
+    expect(stage.rosters.length).toBeGreaterThan(before);
+    expect(stage.rosters.at(-1)).toEqual(updated);
+    expect(stageRosterKey(initial)).not.toBe(stageRosterKey(updated));
+  });
+
+  it("includes an egg drawing token in the roster key", () => {
+    const withoutDrawing = {
+      id: "egg-a",
+      slot: "A" as const,
+      name: "Egg",
+      config: {
+        ...avatarConfig,
+        template_id: "egg",
+        drawing: null,
+      },
+    };
+    const withDrawing = {
+      ...withoutDrawing,
+      config: {
+        ...withoutDrawing.config,
+        drawing: { version: 1, mouth: { x: 0.55, y: 0.435 }, strokes: [] },
+      },
+    };
+    expect(stageRosterKey([withoutDrawing])).not.toBe(
+      stageRosterKey([withDrawing]),
+    );
   });
 });

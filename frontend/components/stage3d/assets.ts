@@ -1,19 +1,19 @@
 /**
- * Stage assets for Debates (beta).
+ * Stage assets for Debates (beta) and the shared ScholarScene live classroom.
  *
- * Two rigged figures, shared by every speaker on the stage and cloned per
- * Agent so a five-Agent stage costs two downloads. Both figures follow the
- * Mixamo bone naming the stage maps, and the stage drives first-pass mouth
- * movement through the bone and morph-target fallbacks.
+ * The stage preloads every registered catalog mesh once, then clones the
+ * mesh that matches each speaker's template_id. Seat index never selects
+ * a figure. All paths stay under the local /avatars/ root.
  */
+
+import { AVATAR_TEMPLATE_ASSETS } from "../avatar/types";
 
 export const STAGE_ASSET_ROOT = "/avatars/";
 
-/** Load order doubles as the deterministic variant order for stage slots. */
-export const STAGE_CHARACTER_ASSETS = [
-  `${STAGE_ASSET_ROOT}elder-scholar.glb`,
-  `${STAGE_ASSET_ROOT}noble-scholar.glb`,
-];
+/** Unique catalog GLBs the stage preloads; not a seat-variant order. */
+export const STAGE_CHARACTER_ASSETS = Array.from(
+  new Set(Object.values(AVATAR_TEMPLATE_ASSETS)),
+);
 
 /** Draco decoder, served locally so the scene never reaches a CDN. */
 export const STAGE_DECODER_PATH = `${STAGE_ASSET_ROOT}draco/`;

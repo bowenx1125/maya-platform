@@ -12,6 +12,7 @@ import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js
 
 import {
   applyRelaxedStandingPose,
+  avatarAssetUrlForTemplate,
   avatarMotionFrame,
   expressionForAvatarState,
   hangProfileForAsset,
@@ -531,8 +532,9 @@ function makeSoftShadow(): THREE.DataTexture {
 /**
  * One WebGL context, one render loop, every speaker in it.
  *
- * Two figures are loaded once and cloned per speaker. Neither purchased
- * model contains speech clips, so their jaw bones carry the first pass.
+ * Registered catalog meshes are loaded once and cloned per speaker. The
+ * three human figures have no speech morphs or jaw bones, so the jaw
+ * channel stays a safe no-op, same as the current scholars.
  */
 export class ScholarStage {
   private readonly canvas: HTMLCanvasElement;
@@ -549,8 +551,8 @@ export class ScholarStage {
   private readonly onError?: (error: Error) => void;
   private readonly onAnchors?: (anchors: StageAnchor[]) => void;
 
-  private templates: THREE.Object3D[] = [];
-  private templateScales: number[] = [];
+  private templates = new Map<string, THREE.Object3D>();
+  private templateScales = new Map<string, number>();
   private loading = 0;
   private readonly characters: Character[] = [];
   private pending: StageCharacter[] | null = null;
@@ -709,12 +711,19 @@ export class ScholarStage {
   }
 
   setCharacters(specs: StageCharacter[]): void {
-    if (this.loading !== 0 || this.templates.some((template) => !template)) {
+    if (!this.templatesReady()) {
       this.pending = specs;
       this.updateCameraFraming();
       return;
     }
     this.rebuild(specs);
+  }
+
+  private templatesReady(): boolean {
+    return (
+      this.loading === 0 &&
+      STAGE_CHARACTER_ASSETS.every((url) => this.templates.has(url))
+    );
   }
 
   /** Before the first turn and after the last, the bench is simply calm. */
@@ -846,11 +855,11 @@ export class ScholarStage {
       disposeObject(character.shadow);
     }
     this.characters.length = 0;
-    for (const template of this.templates) {
-      if (template) disposeObject(template);
+    for (const template of this.templates.values()) {
+      disposeObject(template);
     }
-    this.templates.length = 0;
-    this.templateScales.length = 0;
+    this.templates.clear();
+    this.templateScales.clear();
     this.shadowTexture.dispose();
     this.disposeSplatBackdrop();
     this.disposeDepthBackdrop();
@@ -860,7 +869,7 @@ export class ScholarStage {
   }
 
   private load(): void {
-    const assets = [...STAGE_CHARACTER_ASSETS, "/avatars/Maya-Egg.glb"];
+    const assets = STAGE_CHARACTER_ASSETS;
     for (const url of assets) {
       if (!isStageAssetUrl(url)) {
         this.onError?.(new Error("stage_asset_rejected"));
@@ -868,9 +877,9 @@ export class ScholarStage {
       }
     }
     this.loading = assets.length;
-    this.templates = new Array(assets.length);
-    this.templateScales = new Array(assets.length);
-    assets.forEach((url, index) => {
+    this.templates = new Map();
+    this.templateScales = new Map();
+    for (const url of assets) {
       this.loader.load(
         url,
         (gltf) => {
@@ -880,9 +889,11 @@ export class ScholarStage {
           }
           const bounds = new THREE.Box3().setFromObject(gltf.scene);
           const size = bounds.getSize(new THREE.Vector3());
-          this.templateScales[index] =
-            size.y > 0 ? this.characterHeight / size.y : 1;
-          this.templates[index] = gltf.scene;
+          this.templateScales.set(
+            url,
+            size.y > 0 ? this.characterHeight / size.y : 1,
+          );
+          this.templates.set(url, gltf.scene);
           this.assetLoaded();
         },
         undefined,
@@ -890,7 +901,7 @@ export class ScholarStage {
           this.assetFailed(cause);
         },
       );
-    });
+    }
   }
 
   private assetLoaded(): void {
@@ -1324,32 +1335,27 @@ export class ScholarStage {
       disposeObject(character.shadow);
     }
     this.characters.length = 0;
-    if (this.templates.length === 0) return;
+    if (this.templates.size === 0) return;
 
-    specs.forEach((spec, index) => {
-      // Deterministic variant per seat: load order is the roster order, so a
-      // given roster always renders the same mix of the two figures.
+    specs.forEach((spec) => {
       const isEgg = spec.config.template_id === "egg";
-      const templateIndex = isEgg
-        ? STAGE_CHARACTER_ASSETS.length
-        : index % STAGE_CHARACTER_ASSETS.length;
-      const root = cloneSkinned(
-        this.templates[templateIndex] as THREE.Object3D,
-      );
+      const assetUrl = avatarAssetUrlForTemplate(spec.config.template_id);
+      const template = this.templates.get(assetUrl);
+      if (!isStageAssetUrl(assetUrl) || !template) {
+        this.onError?.(new Error("stage_template_missing"));
+        return;
+      }
+      const root = cloneSkinned(template);
       const egg = isEgg ? prepareEggModel(root, spec.config.drawing) : null;
-      root.scale.setScalar(
-        isEgg ? this.characterHeight / 2.7 : this.templateScales[templateIndex],
-      );
+      const humanScale = this.templateScales.get(assetUrl) ?? 1;
+      root.scale.setScalar(isEgg ? this.characterHeight / 2.7 : humanScale);
       const offset = standingPlacement(spec.slot);
       const standingX = offset.x;
       const standingZ = this.stageCenterZ + offset.z;
       root.position.set(standingX, 0, standingZ);
       root.rotation.y = offset.yaw;
       // Root-local hang directions keep the same rest pose after the seat yaw.
-      applyRelaxedStandingPose(
-        root,
-        hangProfileForAsset(STAGE_CHARACTER_ASSETS[templateIndex] ?? ""),
-      );
+      applyRelaxedStandingPose(root, hangProfileForAsset(assetUrl));
       const meshes: MorphMesh[] = [];
       if (!isEgg) this.styleFigure(root, spec.config, meshes);
       const groundY = this.groundCharacter(root);

@@ -20,6 +20,18 @@ import { StageCurtain } from "../loading/agent-loader";
 import styles from "./stage3d.module.css";
 import { requestedStageScenePack, STAGE_SCENE_PACKS } from "./scene-packs";
 
+export function stageRosterKey(characters: readonly StageCharacter[]): string {
+  return characters
+    .map((item) => {
+      const drawingKey =
+        item.config.template_id === "egg"
+          ? JSON.stringify(item.config.drawing ?? null)
+          : "";
+      return `${item.id}:${item.config.template_id}:${item.config.material_theme}:${drawingKey}`;
+    })
+    .join("|");
+}
+
 export type ScholarSceneProps = {
   characters: StageCharacter[];
   /** Motion state per participant id; anything missing renders as idle. */
@@ -218,10 +230,9 @@ export function ScholarScene({
   }, [syncStageRoster]);
 
   // Rebuilding the bench is keyed on identity, not on the array reference the
-  // parent happens to hand over each render.
-  const rosterKey = characters
-    .map((item) => `${item.id}:${item.config.material_theme}`)
-    .join("|");
+  // parent happens to hand over each render. template_id must be in the key
+  // so a published mid-session template change rebuilds that speaker.
+  const rosterKey = stageRosterKey(characters);
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;

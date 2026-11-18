@@ -3,7 +3,6 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { stageMouthVisual } from "../components/debate-beta/stage/mouth-sync";
-import { STAGE_CHARACTER_ASSETS } from "../components/stage3d/assets";
 import { standingPlacement } from "../components/stage3d/placement";
 import {
   ScholarStage,
@@ -32,10 +31,16 @@ afterEach(() => {
   renderer.render.mockClear();
 });
 
+const HUMAN_STAGE_FIGURES = [
+  { template_id: "wave1-default-head", url: "/avatars/female_1.glb" },
+  { template_id: "maya-warm-scholar", url: "/avatars/elder-scholar.glb" },
+  { template_id: "maya-civic-observer", url: "/avatars/noble-scholar.glb" },
+] as const;
+
 describe("stage speaking body yaw", () => {
-  it.each(STAGE_CHARACTER_ASSETS)(
-    "%s faces front on live audio and restores its seat yaw afterwards",
-    (asset) => {
+  it.each(HUMAN_STAGE_FIGURES)(
+    "$url faces front on live audio and restores its seat yaw afterwards",
+    (figure) => {
       let nextFrame: FrameRequestCallback;
       vi.stubGlobal(
         "requestAnimationFrame",
@@ -57,13 +62,13 @@ describe("stage speaking body yaw", () => {
       const stage = new ScholarStage({
         canvas: document.createElement("canvas"),
       });
-      const characters: StageCharacter[] = STAGE_CHARACTER_ASSETS.map(
-        (url, index) => ({
-          id: url,
+      const characters: StageCharacter[] = HUMAN_STAGE_FIGURES.map(
+        (item, index) => ({
+          id: item.url,
           slot: (["A", "B", "C"] as const)[index],
-          name: url,
+          name: item.url,
           config: {
-            template_id: "wave1-default-head",
+            template_id: item.template_id,
             material_theme: "demo",
             eye_color: null,
             default_expression: "neutral",
@@ -80,7 +85,7 @@ describe("stage speaking body yaw", () => {
             stageMouthVisual({
               derived: "speaking",
               participantId: character.id,
-              speakerId: asset,
+              speakerId: figure.url,
               audioPlayingTurnId,
               currentTurnId: "turn-1",
               mediaRetryNeeded: false,
@@ -93,9 +98,9 @@ describe("stage speaking body yaw", () => {
         visual(null);
         frame();
         const scene = renderer.render.mock.calls.at(-1)![0] as THREE.Scene;
-        const root = scene.getObjectByName(asset)!;
+        const root = scene.getObjectByName(figure.url)!;
         const seatYaw = standingPlacement(
-          characters.find((item) => item.id === asset)!.slot,
+          characters.find((item) => item.id === figure.url)!.slot,
         ).yaw;
         expect(root.rotation.y).toBeCloseTo(seatYaw);
 
@@ -104,7 +109,7 @@ describe("stage speaking body yaw", () => {
         expect(root.rotation.y).toBeCloseTo(seatYaw * Math.exp(-6 * 0.1));
         for (let index = 0; index < 20; index++) frame();
         expect(root.rotation.y).toBeCloseTo(0, 4);
-        for (const other of characters.filter((item) => item.id !== asset)) {
+        for (const other of characters.filter((item) => item.id !== figure.url)) {
           expect(scene.getObjectByName(other.id)!.rotation.y).toBeCloseTo(
             standingPlacement(other.slot).yaw,
           );
