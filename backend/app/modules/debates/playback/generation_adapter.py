@@ -2070,7 +2070,7 @@ class SqlTurnPreparer:
             predecessor_turn_ids=predecessor_ids,
             cutoff_turn_index=row.cutoff_turn_index,
             transcript_hash=row.transcript_hash,
-            attempt=row.attempt,  # type: ignore[arg-type]
+            attempt=row.attempt,
             publication_status=("public" if row.publication_status == "public" else "final_ready"),
             evidence_trace=evidence_trace,
         )
