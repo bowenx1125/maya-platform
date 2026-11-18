@@ -78,6 +78,40 @@ function renderPreview(
 }
 
 describe("teacher debate preview", () => {
+  it("marks garbled ready speech as needing regeneration with Retry turn", () => {
+    const onRetry = vi.fn();
+    renderPreview(
+      {
+        ...detail,
+        preview: {
+          prepared_turns: 1,
+          expected_turns: 2,
+          ready: false,
+        },
+        preview_turns: detail.preview_turns!.map((turn) =>
+          turn.id === "turn-a"
+            ? {
+                ...turn,
+                generation_status: "failed",
+                audio_ready: false,
+                speech: ',source_ids: ["S2","supportmode": "no_match"',
+                safe_error_code: "segment_speech_invalid",
+              }
+            : turn,
+        ),
+      },
+      onRetry,
+    );
+
+    expect(screen.getByTestId("preview-safe-error-code").textContent).toBe(
+      "segment_speech_invalid",
+    );
+    expect(screen.getByText(/stored speech is unreadable/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry turn" }));
+    expect(onRetry.mock.calls).toEqual([[["turn-a"]]]);
+    expect(screen.queryByRole("link", { name: "Immerse" })).toBeNull();
+  });
+
   it("shows a non-blocking salvage warning with Retry and keeps Immerse available", () => {
     const onRetry = vi.fn();
     renderPreview(

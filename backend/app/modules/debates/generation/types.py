@@ -539,7 +539,7 @@ class FinalReadyTurn:
     predecessor_turn_ids: tuple[str, ...]
     cutoff_turn_index: int
     transcript_hash: str
-    attempt: Literal[1, 2]
+    attempt: int
     publication_status: Literal["final_ready", "public"] = "final_ready"
     evidence_trace: tuple[Mapping[str, object], ...] = ()
 

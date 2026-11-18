@@ -20,7 +20,11 @@ from uuid import NAMESPACE_URL, uuid5
 from app.core.config import configured_debate_llm_model
 from app.core.errors import PlatformError
 from app.core.llm_admission import debate_llm_slot
-from app.providers.control import LLMAcceptedStageV1, ProviderReservationRequestV1
+from app.providers.control import (
+    LLM_ATTEMPT_NO_MAX,
+    LLMAcceptedStageV1,
+    ProviderReservationRequestV1,
+)
 from app.providers.llm_adapter import LLMAdapterError
 from app.providers.llm_price_card import (
     LLM_INPUT_TOKEN_CAP,
@@ -58,6 +62,10 @@ from .types import (
 from .validator import final_ready_turn
 
 SEGMENT_MAX_ATTEMPTS = 2
+# Structure repair stays at 1–2. Teacher Preview Retry of a spent failed turn
+# opens attempt 3+ into a new provider_operation (never mutates a spent row
+# that already holds an immutable llm_accepted_stages bundle).
+TEACHER_RETRY_ATTEMPT_CAP = LLM_ATTEMPT_NO_MAX
 LOGGER = logging.getLogger(__name__)
 SEGMENT_REPAIR_CODES = frozenset(
     {
@@ -306,7 +314,7 @@ class SegmentLLMRuntime:
             or not build_manifest_hash
         ):
             raise SegmentRuntimeError(code="segment_identity_missing")
-        if confirmation_revision < 1 or attempt_no not in {1, 2} or attempt_no > self.max_attempts:
+        if confirmation_revision < 1 or attempt_no < 1 or attempt_no > TEACHER_RETRY_ATTEMPT_CAP:
             raise SegmentRuntimeError(code="segment_attempt_invalid")
         builder = _method(self.adapter, "build_request", "prepare")
         if builder is None:
@@ -358,82 +366,74 @@ class SegmentLLMRuntime:
             except Exception as exc:
                 getter = _method(self.ledger, "get")
                 existing = _invoke(getter, reservation.operation_id) if getter is not None else None
-                if existing is not None and _operation_state(existing) in {"not_sent", "failed"}:
+                if existing is None:
+                    raise SegmentRuntimeError(code="segment_preparation_failed") from exc
+                state = _operation_state(existing)
+                same_identity = (
+                    _read(existing, "request_hash") == request.request_hash
+                    and _read(existing, "policy_hash") == policy_hash
+                    and _read(existing, "export_manifest_hash") == manifest_hash
+                    and _read(existing, "build_manifest_hash") == build_manifest_hash
+                )
+                has_bundle = self._has_accepted_bundle(reservation.operation_id)
+                if state == "prepared" and same_identity:
+                    operation = existing
+                elif state == "failed" and not has_bundle and attempt_no < self.max_attempts:
+                    # Open the unused structure-repair slot (attempt 1 → 2).
+                    return self.prepare(
+                        snapshot,
+                        debate_id=debate_id,
+                        turn_id=turn_id,
+                        policy_hash=policy_hash,
+                        manifest_hash=manifest_hash,
+                        build_manifest_hash=build_manifest_hash,
+                        confirmation_revision=confirmation_revision,
+                        generation_fence=generation_fence,
+                        repair_policy_hash=repair_policy_hash,
+                        identity_tokens=identity_tokens,
+                        outbound_manifest=outbound_manifest,
+                        attempt_no=attempt_no + 1,
+                        retrieval_reused=retrieval_reused,
+                        repair_feedback=repair_feedback,
+                        queries=queries,
+                    )
+                elif state in {"failed", "not_sent"} and not has_bundle and same_identity:
+                    # Same identity, no staged bundle: supplier reply was never
+                    # stored, so the same attempt can be prepared again.
                     mover = _method(self.ledger, "transition")
-                    if mover is None or (
-                        _operation_state(existing) == "failed" and attempt_no < self.max_attempts
-                    ):
-                        if (
-                            existing is not None
-                            and _operation_state(existing) == "failed"
-                            and attempt_no < self.max_attempts
-                        ):
-                            return self.prepare(
-                                snapshot,
-                                debate_id=debate_id,
-                                turn_id=turn_id,
-                                policy_hash=policy_hash,
-                                manifest_hash=manifest_hash,
-                                build_manifest_hash=build_manifest_hash,
-                                confirmation_revision=confirmation_revision,
-                                generation_fence=generation_fence,
-                                repair_policy_hash=repair_policy_hash,
-                                identity_tokens=identity_tokens,
-                                outbound_manifest=outbound_manifest,
-                                attempt_no=attempt_no + 1,
-                                retrieval_reused=retrieval_reused,
-                                repair_feedback=repair_feedback,
-                                queries=queries,
-                            )
                     if mover is None:
                         raise SegmentRuntimeError(code="segment_preparation_failed") from exc
-                    # Spent failed attempts (teacher Preview Retry) often rebuild
-                    # with current clamps/salvage → a new request_hash. Plain
-                    # failed→prepared keeps the old identity and then staging
-                    # rejects the accepted stage; rebind hashes while preserving
-                    # charged-request history.
-                    reprepare = _method(self.ledger, "reprepare_failed")
-                    if (
-                        reprepare is not None
-                        and _operation_state(existing) == "failed"
-                        and (
-                            _read(existing, "request_hash") != request.request_hash
-                            or _read(existing, "policy_hash") != policy_hash
-                            or _read(existing, "export_manifest_hash") != manifest_hash
-                            or _read(existing, "build_manifest_hash") != build_manifest_hash
-                        )
-                    ):
-                        try:
-                            operation = _invoke(
-                                reprepare,
-                                reservation.operation_id,
-                                request_hash=request.request_hash,
-                                policy_hash=policy_hash,
-                                export_manifest_hash=manifest_hash,
-                                build_manifest_hash=build_manifest_hash,
-                                max_tokens=reservation.max_tokens,
-                                max_cost_cny=reservation.max_cost_cny,
-                                model_key=reservation.model_key,
-                            )
-                        except Exception as reprepare_exc:
-                            raise SegmentRuntimeError(
-                                code="segment_preparation_failed"
-                            ) from reprepare_exc
-                    else:
-                        operation = _invoke(
-                            mover,
-                            reservation.operation_id,
-                            expected=_operation_state(existing),
-                            state="prepared",
-                        )
-                elif (
-                    existing is None
-                    or _operation_state(existing) != "prepared"
-                    or _read(existing, "request_hash") != request.request_hash
-                ):
-                    raise SegmentRuntimeError(code="segment_preparation_failed") from exc
+                    operation = _invoke(
+                        mover,
+                        reservation.operation_id,
+                        expected=state,
+                        state="prepared",
+                    )
+                elif attempt_no < TEACHER_RETRY_ATTEMPT_CAP:
+                    # Spent failed turn (especially one that already holds an
+                    # immutable accepted bundle) or a rebuilt request identity:
+                    # allocate a NEW attempt / provider_operation. Never call
+                    # reprepare_failed — that mutates hashes on a consumed row
+                    # and then staging raises "LLM accepted bundle is immutable".
+                    return self.prepare(
+                        snapshot,
+                        debate_id=debate_id,
+                        turn_id=turn_id,
+                        policy_hash=policy_hash,
+                        manifest_hash=manifest_hash,
+                        build_manifest_hash=build_manifest_hash,
+                        confirmation_revision=confirmation_revision,
+                        generation_fence=generation_fence,
+                        repair_policy_hash=repair_policy_hash,
+                        identity_tokens=identity_tokens,
+                        outbound_manifest=outbound_manifest,
+                        attempt_no=attempt_no + 1,
+                        retrieval_reused=retrieval_reused,
+                        repair_feedback=repair_feedback,
+                        queries=queries,
+                    )
                 else:
-                    operation = existing
+                    raise SegmentRuntimeError(code="segment_attempt_invalid") from exc
         return SegmentPreparedAttempt(
             snapshot=snapshot,
             request=request,
@@ -448,6 +448,35 @@ class SegmentLLMRuntime:
             attempt_no=attempt_no,
             retrieval_reused=retrieval_reused,
         )
+
+    def _has_accepted_bundle(self, operation_id: str | None) -> bool:
+        """True when this operation already owns an immutable accepted stage."""
+
+        if not operation_id:
+            return False
+        for owner in (self.ledger, self.stage_store):
+            if owner is None:
+                continue
+            for name in ("get_llm_accepted_stage", "load_llm_accepted_bundle"):
+                getter = _method(owner, name)
+                if getter is None:
+                    continue
+                try:
+                    value = _invoke(getter, operation_id)
+                except Exception:
+                    continue
+                if value is not None:
+                    return True
+        stages = getattr(self.ledger, "_llm_stages", None)
+        if isinstance(stages, dict) and operation_id in stages:
+            return True
+        recovery = getattr(self.ledger, "_llm_recovery_inputs", None)
+        if isinstance(recovery, dict) and operation_id in recovery:
+            return True
+        segment_recovery = getattr(self.ledger, "_segment_recovery_inputs", None)
+        if isinstance(segment_recovery, dict) and operation_id in segment_recovery:
+            return True
+        return False
 
     def _confirmed(self, prepared: SegmentPreparedAttempt, explicit: object | None) -> bool:
         if explicit is not None:
@@ -715,7 +744,10 @@ class SegmentLLMRuntime:
             )
         current = prepared
         traces: list[SegmentAttempt] = []
-        while current.attempt_no <= self.max_attempts:
+        # Teacher Preview Retry may prepare attempt 3+; still process that one
+        # charged send. Automatic structure repair stays capped at max_attempts.
+        run_limit = max(self.max_attempts, prepared.attempt_no)
+        while current.attempt_no <= run_limit:
             operation_id = current.operation_id
             operation = current.operation
             try:
@@ -1164,6 +1196,7 @@ class SegmentLLMRuntime:
 
 __all__ = [
     "SEGMENT_MAX_ATTEMPTS",
+    "TEACHER_RETRY_ATTEMPT_CAP",
     "SegmentAttempt",
     "SegmentDeferredPublicationV2",
     "SegmentLLMRuntime",

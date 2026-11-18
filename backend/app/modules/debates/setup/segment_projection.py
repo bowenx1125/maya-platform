@@ -193,6 +193,11 @@ def _source_version_label(db: Session, turn: DebateTurn, snapshot_id: str) -> st
 def preview_turn_projection(
     db: Session, turn: DebateTurn, participant: DebateParticipant
 ) -> PreviewTurn:
+    from app.modules.debates.generation.segments import (
+        SEGMENT_SPEECH_INVALID,
+        segment_speech_needs_regeneration,
+    )
+
     result, sources = segment_projection(db, turn, participant)
     audio = db.get(StoredFile, turn.audio_file_id) if turn.audio_file_id else None
     status, error = turn.generation_status, turn.safe_error_code
@@ -209,6 +214,12 @@ def preview_turn_projection(
         )
         if job is not None:
             status, error = "failed", job.safe_error_code or "turn_generation_failed"
+    # Historical ready turns may still hold garbled speech (pre-hygiene). Surface
+    # them as needing regeneration so draft Preview Retry can replace text+TTS.
+    if status in {"final_ready", "ready", "completed"} and segment_speech_needs_regeneration(
+        turn.speech
+    ):
+        status, error = "failed", error or SEGMENT_SPEECH_INVALID
     return PreviewTurn.model_validate(
         {
             "id": turn.id,

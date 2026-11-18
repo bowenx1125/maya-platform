@@ -3573,12 +3573,15 @@ class SqlPlaybackRepository(PlaybackRepository):
             "tts_voice_unavailable",
             "tts_provider_unavailable",
         }
+        from app.modules.debates.generation.segments import SEGMENT_SPEECH_INVALID
+
         retry_codes = {
             "provider_confirmation_required",
             "provider_confirmation_unavailable",
             "provider_not_sent",
             "provider_preflight_blocked",
             "turn_generation_failed",
+            SEGMENT_SPEECH_INVALID,
             _PREPARATION_TIMEOUT_CODE,
         } | tts_preview_retry_codes
         if code not in retry_codes or not self._has_table(db, "playback_states"):
@@ -3596,6 +3599,11 @@ class SqlPlaybackRepository(PlaybackRepository):
             and str(_row_value(turn, "generation_status", "") or "") == "final_ready"
             and code in tts_preview_retry_codes
         )
+        # Already-stored garbled speech on a ready draft turn: clear text+audio
+        # and regenerate like a spent generation failure (full regen, not TTS-only).
+        garbled_ready_retry = code == SEGMENT_SPEECH_INVALID and str(
+            _row_value(turn, "generation_status", "") or ""
+        ) in {"final_ready", "ready", "completed"}
         timestamp = _now()
 
         state = db.execute(
@@ -3620,7 +3628,18 @@ class SqlPlaybackRepository(PlaybackRepository):
         status_in = (
             "('pending','failed','turn_generation_failed','final_ready')"
             if text_fallback_tts
-            else "('pending','failed','turn_generation_failed')"
+            else (
+                "('pending','failed','turn_generation_failed','final_ready','ready','completed')"
+                if garbled_ready_retry
+                else "('pending','failed','turn_generation_failed')"
+            )
+        )
+        # Projection may invent segment_speech_invalid while the row still has
+        # NULL safe_error_code; accept either so draft recovery needs no migration.
+        code_fence = (
+            "(safe_error_code=:code OR safe_error_code IS NULL)"
+            if garbled_ready_retry
+            else "safe_error_code=:code"
         )
         turn_sql = (
             "UPDATE debate_turns SET generation_status='pending', "
@@ -3629,11 +3648,12 @@ class SqlPlaybackRepository(PlaybackRepository):
                 ""
                 if cached_segment
                 else "transcript_hash=NULL, speech=NULL, structured_json=NULL, "
+                "audio_file_id=NULL, audio_duration_ms=NULL, "
             )
             + "safe_error_code=NULL, updated_at=:updated_at "
             "WHERE id=:turn_id AND debate_id=:debate_id "
             f"AND generation_status IN {status_in} "
-            "AND publication_status='unpublished' AND safe_error_code=:code "
+            f"AND publication_status='unpublished' AND {code_fence} "
             "AND CAST(round_no AS INTEGER) < CAST(COALESCE(json_extract(("
             "SELECT rule_snapshot_json FROM debates WHERE id=:debate_id), "
             "'$.round_count'), '2') AS INTEGER) "
@@ -3667,14 +3687,21 @@ class SqlPlaybackRepository(PlaybackRepository):
             return False
         # Soft-fail mark_turn_ready completes the job (often with NULL job code)
         # while the turn keeps tts_*; re-queue completed jobs for TTS retry.
+        # Garbled ready recovery also re-queues a completed prepare job.
+        requeue_completed = text_fallback_tts or garbled_ready_retry
         job_sql = (
             "UPDATE jobs SET state='pending', claim_token=NULL, safe_error_code=NULL, "
             "updated_at=:updated_at WHERE debate_id=:debate_id AND turn_id=:turn_id "
             "AND operation='debate_turn_prepare' AND ("
-            " (state IN ('pending','failed') AND safe_error_code=:code)"
+            " (state IN ('pending','failed') AND "
+            + (
+                "(safe_error_code=:code OR safe_error_code IS NULL))"
+                if garbled_ready_retry
+                else "safe_error_code=:code)"
+            )
             + (
                 " OR (state='completed' AND (safe_error_code IS NULL OR safe_error_code=:code))"
-                if text_fallback_tts
+                if requeue_completed
                 else ""
             )
             + ")"

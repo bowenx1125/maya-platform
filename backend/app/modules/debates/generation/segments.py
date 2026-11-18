@@ -1602,6 +1602,173 @@ def load_stored_segment_turn_result(value: Mapping[str, object]) -> StoredSegmen
 # Soft warning when local salvage kept the debate moving after provider output
 # failed the contract. Teachers see why and can Retry; later turns continue.
 SEGMENT_OUTPUT_SALVAGED = "segment_output_salvaged"
+# Draft Preview code for already-stored ready speech that fails the hygiene gate.
+SEGMENT_SPEECH_INVALID = "segment_speech_invalid"
+
+# Strip BOM / zero-width / C0-C1 controls (keep ordinary space/newline/tab).
+_STRIP_SPEECH_CHARS = dict.fromkeys(
+    (
+        0x00,
+        0x01,
+        0x02,
+        0x03,
+        0x04,
+        0x05,
+        0x06,
+        0x07,
+        0x08,
+        0x0B,
+        0x0C,
+        0x0E,
+        0x0F,
+        0x10,
+        0x11,
+        0x12,
+        0x13,
+        0x14,
+        0x15,
+        0x16,
+        0x17,
+        0x18,
+        0x19,
+        0x1A,
+        0x1B,
+        0x1C,
+        0x1D,
+        0x1E,
+        0x1F,
+        0x7F,
+        0x80,
+        0x81,
+        0x82,
+        0x83,
+        0x84,
+        0x85,
+        0x86,
+        0x87,
+        0x88,
+        0x89,
+        0x8A,
+        0x8B,
+        0x8C,
+        0x8D,
+        0x8E,
+        0x8F,
+        0x90,
+        0x91,
+        0x92,
+        0x93,
+        0x94,
+        0x95,
+        0x96,
+        0x97,
+        0x98,
+        0x99,
+        0x9A,
+        0x9B,
+        0x9C,
+        0x9D,
+        0x9E,
+        0x9F,
+        0xFEFF,
+        0x200B,
+        0x200C,
+        0x200D,
+        0x2060,
+        0x2061,
+        0x2062,
+        0x2063,
+        0x2064,
+        0x00AD,
+    )
+)
+_STRUCTURAL_KEY_RE = re.compile(
+    r"(?:source[_\s]?ids|support[_\s]?mode|reply[_\s]?to)\s*:",
+    re.IGNORECASE,
+)
+_BRACKET_RUN_RE = re.compile(r"[\[\]{}\"'`]{4,}")
+_LETTER_RATIO_MIN_LEN = 24
+_LETTER_RATIO_FLOOR = 0.35
+
+
+def sanitize_segment_text(text: str) -> str:
+    """Strip BOM, zero-width, and control characters from segment speech."""
+
+    if not isinstance(text, str):
+        return ""
+    cleaned = text.translate(_STRIP_SPEECH_CHARS)
+    return cleaned.strip()
+
+
+def _has_forbidden_codepoints(text: str) -> bool:
+    for char in text:
+        if char == "\ufffd":
+            return True
+        category = unicodedata.category(char)
+        # Co = private use; Cn = unassigned (including noncharacters).
+        if category in {"Co", "Cn"}:
+            return True
+    return False
+
+
+def _mostly_non_letters(text: str) -> bool:
+    if len(text) < _LETTER_RATIO_MIN_LEN:
+        return False
+    letters = 0
+    for char in text:
+        if char.isalpha() or _HAN_UNIT.fullmatch(char):
+            letters += 1
+    return (letters / len(text)) < _LETTER_RATIO_FLOOR
+
+
+def segment_text_is_garbled(text: str) -> bool:
+    """True when speech still looks like JSON residue or broken Unicode."""
+
+    if not isinstance(text, str) or not text:
+        return False
+    if _has_forbidden_codepoints(text):
+        return True
+    if _STRUCTURAL_KEY_RE.search(text) is not None:
+        return True
+    if _BRACKET_RUN_RE.search(text) is not None:
+        return True
+    return _mostly_non_letters(text)
+
+
+def segment_speech_needs_regeneration(speech: str | None) -> bool:
+    """Draft Preview: stored ready speech that must not be voiced or kept."""
+
+    if not isinstance(speech, str):
+        return True
+    cleaned = sanitize_segment_text(speech)
+    if not cleaned:
+        return True
+    return segment_text_is_garbled(cleaned)
+
+
+def prepare_segment_speech(text: object) -> str:
+    """Sanitize and reject garbled segment text (repair/salvage, never block)."""
+
+    if not isinstance(text, str):
+        raise _error(
+            "segment text must be non-empty.",
+            code="segment_text_invalid",
+            pointer="/segments/0/text",
+        )
+    cleaned = sanitize_segment_text(text)
+    if not cleaned:
+        raise _error(
+            "segment text must be non-empty after removing invisible characters.",
+            code="segment_text_invalid",
+            pointer="/segments/0/text",
+        )
+    if segment_text_is_garbled(cleaned):
+        raise _error(
+            "segment text contains unreadable or structural residue.",
+            code="segment_text_invalid",
+            pointer="/segments/0/text",
+        )
+    return cleaned
 
 
 @dataclass(frozen=True, slots=True)
@@ -1750,13 +1917,15 @@ SegmentTurnResultV2 = SegmentTurnResult
 def _output_segment(value: object, index: int) -> Segment:
     raw = _object(value, "segment")
     pointer = f"/segments/{index}"
-    text = raw.get("text")
-    if not isinstance(text, str) or not text.strip():
+    try:
+        text = prepare_segment_speech(raw.get("text"))
+    except SegmentProtocolError as exc:
+        # Retarget the pointer to this segment index.
         raise _error(
-            "segment text must be non-empty.",
-            code="segment_text_invalid",
+            str(exc),
+            code=exc.code,
             pointer=f"{pointer}/text",
-        )
+        ) from exc
     source_values = raw.get("source_ids")
     source_ids = (
         tuple(
@@ -2382,12 +2551,17 @@ __all__ = [
     "coerce_persona",
     "freeze_barrages",
     "SEGMENT_OUTPUT_SALVAGED",
+    "SEGMENT_SPEECH_INVALID",
     "force_fit_segments",
     "fallback_segment_output",
     "load_stored_segment_turn_result",
     "load_segment_turn_result",
     "normalize_segment_provider_output",
     "parse_segment_output_json",
+    "prepare_segment_speech",
     "salvage_segment_output",
+    "sanitize_segment_text",
+    "segment_speech_needs_regeneration",
+    "segment_text_is_garbled",
     "validate_segment_output",
 ]

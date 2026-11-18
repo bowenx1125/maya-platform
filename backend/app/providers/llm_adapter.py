@@ -672,6 +672,8 @@ def _validate_attempt_authorization(
     malformed/tampered manifest cannot authorize a network call.
     """
 
+    from app.providers.control import LLM_ATTEMPT_NO_MAX
+
     if (
         isinstance(manifest.max_attempts, bool)
         or not isinstance(manifest.max_attempts, int)
@@ -679,8 +681,18 @@ def _validate_attempt_authorization(
         or not isinstance(manifest.field_classes, (tuple, list))
     ):
         raise LLMAdapterError(code="llm_manifest_invalid")
+    if (
+        isinstance(attempt_no, bool)
+        or not isinstance(attempt_no, int)
+        or attempt_no < 1
+        or attempt_no > LLM_ATTEMPT_NO_MAX
+    ):
+        raise LLMAdapterError(code="llm_attempt_invalid")
     if attempt_no > manifest.max_attempts:
-        raise LLMAdapterError(code="llm_attempt_exceeds_manifest")
+        # Teacher Preview Retry may open attempt 3+ beyond the frozen
+        # structure-repair budget. Repair feedback stays inside that budget.
+        if has_repair_feedback:
+            raise LLMAdapterError(code="llm_attempt_exceeds_manifest")
 
     if manifest.max_attempts == 2:
         if not repair_policy_is_current(
@@ -940,10 +952,13 @@ class DashScopeLLMAdapter:
 
         if not isinstance(prompt, ProviderPromptV1):
             raise LLMAdapterError(code="llm_prompt_invalid")
+        from app.providers.control import LLM_ATTEMPT_NO_MAX
+
         if (
             isinstance(attempt_no, bool)
             or not isinstance(attempt_no, int)
-            or attempt_no not in {1, 2}
+            or attempt_no < 1
+            or attempt_no > LLM_ATTEMPT_NO_MAX
         ):
             raise LLMAdapterError(code="llm_attempt_invalid")
         manifest = outbound_manifest or self.outbound_manifest

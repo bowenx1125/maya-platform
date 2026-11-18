@@ -1991,7 +1991,8 @@ class LlmAcceptedStage(Base):
 
     __table_args__ = (
         UniqueConstraint("turn_id", "attempt_no", name="uq_llm_accepted_stages_turn_attempt"),
-        CheckConstraint("attempt_no >= 1 AND attempt_no <= 2", name="ck_llm_stages_attempt"),
+        # Teacher Preview Retry may open attempt 3+; structure repair stays 1–2.
+        CheckConstraint("attempt_no >= 1 AND attempt_no <= 32", name="ck_llm_stages_attempt"),
         CheckConstraint(
             "length(request_hash) = 64 AND length(schema_hash) = 64 "
             "AND length(prompt_hash) = 64 "
@@ -2068,7 +2069,7 @@ class LlmRecoveryInput(Base):
     __table_args__ = (
         UniqueConstraint("turn_id", "attempt_no", name="uq_llm_recovery_inputs_turn_attempt"),
         CheckConstraint(
-            "attempt_no >= 1 AND attempt_no <= 2",
+            "attempt_no >= 1 AND attempt_no <= 32",
             name="ck_llm_recovery_inputs_attempt",
         ),
         CheckConstraint(

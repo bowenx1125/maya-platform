@@ -25,8 +25,11 @@
     "segmentOverLength": {
       "en": "The model speech was longer than this round's unit cap. Retry the turn; if it keeps happening, lower Debate temperature toward 0.7 or raise the round unit caps."
     },
+    "segmentSpeechInvalid": {
+      "en": "This turn's stored speech is unreadable (broken characters or leftover model JSON). Retry the turn to regenerate the text and audio."
+    },
     "segmentTextInvalid": {
-      "en": "The model left a speech paragraph empty (sometimes the words landed in the question field). Retry the turn to regenerate."
+      "en": "The model left a speech paragraph empty, unreadable, or filled with leftover JSON instead of spoken words. Retry the turn to regenerate."
     },
     "assessmentInactive": {
       "en": "This assessment is no longer active."
@@ -916,6 +919,7 @@
     "segment_self_repetition": "aiStepFailed",
     "segment_shape_invalid": "aiStepFailed",
     "segment_snapshot_invalid": "aiStepFailed",
+    "segment_speech_invalid": "segmentSpeechInvalid",
     "segment_stage_failed": "aiStepFailed",
     "segment_stage_invalid": "aiStepFailed",
     "segment_stage_unavailable": "aiStepFailed",

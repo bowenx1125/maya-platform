@@ -105,6 +105,8 @@ _SAFE_GENERATION_CODES = {
     "debate_card_too_long",
     # Soft: local salvage kept speech; debate continues, teacher may Retry.
     "segment_output_salvaged",
+    # Draft Preview: stored ready speech failed hygiene; Retry regenerates.
+    "segment_speech_invalid",
 }
 _RECOVERABLE_PROVIDER_GENERATION_CODES = {
     "provider_confirmation_required",
@@ -781,11 +783,20 @@ class PlaybackCore:
 
     @staticmethod
     def _turn_ready(turn: Any) -> bool:
+        from app.modules.debates.generation.segments import segment_speech_needs_regeneration
+
         generation = str(PlaybackCore._get(turn, "generation_status", "status", default="pending"))
         audio = PlaybackCore._get(turn, "audio_relative_path", "audio_file_id", default=None)
-        return generation in {"ready", "final_ready", "completed"} and (
-            audio is not None or PlaybackCore._turn_text_only(turn)
-        )
+        if generation not in {"ready", "final_ready", "completed"}:
+            return False
+        if not (audio is not None or PlaybackCore._turn_text_only(turn)):
+            return False
+        # Garbled ready speech must not count as prepared: draft Preview Retry
+        # regenerates text+TTS on those turns.
+        speech = PlaybackCore._get(turn, "speech", default=None)
+        if isinstance(speech, str) and segment_speech_needs_regeneration(speech):
+            return False
+        return True
 
     @staticmethod
     def _turn_text_fallback_ready(turn: Any) -> bool:
