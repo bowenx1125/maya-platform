@@ -76,6 +76,8 @@ REPAIR_FEEDBACK_POLICIES = {
 LLM_TURN_OUTPUT_SCHEMA_HASH = "77769a5fdc0e6ef368c048a6e2b28891c1702a2d904da2471bcf7b2ed9df253f"
 LLM_RECOVERY_INPUT_VERSION = "llm_recovery_input_v1"
 LLM_RECOVERY_INPUT_BYTES_LIMIT = 256 * 1024
+# Structure repair uses attempts 1–2. Teacher Preview Retry may open 3..32.
+LLM_ATTEMPT_NO_MAX = 32
 DEMO_ACCEPTANCE_PLAN_VERSION: Literal["real_core_demo_v2"] = "real_core_demo_v2"
 # The mutual-learning protocol admits 2-5 Agents over 2-5 rounds, so a Demo run
 # has no single call count.  The expected count is computed from the Debate's
@@ -1320,7 +1322,7 @@ class LLMAcceptedStageV1:
             (self.price_card_version, "price card version"),
         ):
             _safe_identifier(value, field_name=name)
-        if self.attempt_no < 1 or self.attempt_no > 2:
+        if self.attempt_no < 1 or self.attempt_no > LLM_ATTEMPT_NO_MAX:
             raise ProviderControlError("LLM stage attempt is invalid", code="llm_stage_invalid")
         for value, name in (
             (self.request_hash, "LLM stage request hash"),
@@ -1618,7 +1620,8 @@ class LLMRecoveryInputV1:
         if (
             isinstance(self.attempt_no, bool)
             or not isinstance(self.attempt_no, int)
-            or self.attempt_no not in {1, 2}
+            or self.attempt_no < 1
+            or self.attempt_no > LLM_ATTEMPT_NO_MAX
         ):
             raise ProviderControlError(
                 "LLM recovery input attempt is invalid",
@@ -2601,6 +2604,7 @@ __all__ = [
     "BUDGET_BUCKETS",
     "EMBEDDING_QUERY_BUCKET",
     "EMBEDDING_SNAPSHOT_BUCKET",
+    "LLM_ATTEMPT_NO_MAX",
     "LLM_BARRAGE_INSIGHT_BUCKET",
     "LLM_DEBATE_TURN_BUCKET",
     "LLM_MAYA_REPORT_BUCKET",

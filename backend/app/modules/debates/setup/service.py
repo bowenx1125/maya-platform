@@ -1154,6 +1154,24 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             )
 
             synthesis = build_mutual_learning_synthesis(final_inputs, topic=debate.topic)
+    preview_turns = (
+        _preview_turns(db, debate, participant_by_id) if uses_segment_protocol(debate) else []
+    )
+    if preview is not None and preview_turns:
+        # Projection marks garbled ready speech as failed; recount from DTOs.
+        preview_prepared = sum(
+            1
+            for item in preview_turns
+            if item.generation_status in {"final_ready", "ready", "completed"}
+            and (item.audio_ready or item.safe_error_code in TTS_UNAVAILABLE_CODES)
+        )
+        preview = {
+            **preview,
+            "prepared_turns": preview_prepared,
+            "ready": (
+                preview_prepared == preview["expected_turns"] and preview["expected_turns"] > 0
+            ),
+        }
     return DebateDetail.model_validate(
         {
             "id": _as_uuid(debate.id),
@@ -1187,9 +1205,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             )
             is not None,
             "preview": preview,
-            "preview_turns": _preview_turns(db, debate, participant_by_id)
-            if uses_segment_protocol(debate)
-            else [],
+            "preview_turns": preview_turns,
             "participants": participant_dtos,
             "public_turns": turn_dtos,
             "playback": playback_dto,

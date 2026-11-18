@@ -554,8 +554,15 @@ def final_ready_turn(
     transcript_hash: str,
     attempt: int,
 ) -> FinalReadyTurn:
-    if attempt not in {1, 2}:
-        raise ValueError("turn attempt must be one or two")
+    from app.providers.control import LLM_ATTEMPT_NO_MAX
+
+    if (
+        isinstance(attempt, bool)
+        or not isinstance(attempt, int)
+        or attempt < 1
+        or attempt > LLM_ATTEMPT_NO_MAX
+    ):
+        raise ValueError("turn attempt is out of range")
     return FinalReadyTurn(
         turn_id=turn_id,
         participant_id=participant_id,
@@ -570,7 +577,7 @@ def final_ready_turn(
         predecessor_turn_ids=tuple(predecessor_turn_ids),
         cutoff_turn_index=cutoff_turn_index,
         transcript_hash=transcript_hash,
-        attempt=attempt,  # type: ignore[arg-type]
+        attempt=attempt,
         evidence_trace=validated.evidence_trace,
     )
 

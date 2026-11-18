@@ -39,6 +39,7 @@ from app.modules.debates.generation_params import (
     structured_segment_request_fields,
     uses_code_contract,
 )
+from app.providers.control import LLM_ATTEMPT_NO_MAX
 from app.providers.llm_adapter import LLMAdapterError, LLMUsageV1
 from app.providers.llm_price_card import (
     LLM_INPUT_TOKEN_CAP,
@@ -383,7 +384,12 @@ class SegmentFrozenRequestV2:
             raise LLMAdapterError(code="llm_owner_invalid")
         if not isinstance(self.generation_fence, str):
             raise LLMAdapterError(code="llm_generation_fence_invalid")
-        if self.attempt_no not in {1, 2} or isinstance(self.attempt_no, bool):
+        if (
+            isinstance(self.attempt_no, bool)
+            or not isinstance(self.attempt_no, int)
+            or self.attempt_no < 1
+            or self.attempt_no > LLM_ATTEMPT_NO_MAX
+        ):
             raise LLMAdapterError(code="llm_attempt_invalid")
         if not isinstance(self.retrieval_reused, bool):
             raise LLMAdapterError(code="llm_retrieval_reused_invalid")
@@ -586,7 +592,9 @@ class SegmentRecoveryInputV2:
             or not isinstance(self.turn_id, str)
             or not self.turn_id
             or isinstance(self.attempt_no, bool)
-            or self.attempt_no not in {1, 2}
+            or not isinstance(self.attempt_no, int)
+            or self.attempt_no < 1
+            or self.attempt_no > LLM_ATTEMPT_NO_MAX
             or self.input_version != SEGMENT_RECOVERY_INPUT_VERSION
             or not isinstance(self.input_json, str)
             or not self.input_json
@@ -785,13 +793,14 @@ class SegmentLLMAdapter:
         if (
             isinstance(attempt_no, bool)
             or not isinstance(attempt_no, int)
-            or attempt_no not in {1, 2}
+            or attempt_no < 1
+            or attempt_no > LLM_ATTEMPT_NO_MAX
         ):
             raise LLMAdapterError(code="llm_attempt_invalid")
         manifest = outbound_manifest or self.outbound_manifest
         if not isinstance(manifest, LLMOutboundManifestV1):
             raise LLMAdapterError(code="llm_manifest_required")
-        if attempt_no > manifest.max_attempts:
+        if attempt_no > manifest.max_attempts and repair_feedback is not None:
             raise LLMAdapterError(code="llm_attempt_exceeds_manifest")
         if snapshot.barrages and LLM_ANONYMOUS_BARRAGE_FIELD_CLASS not in manifest.field_classes:
             raise LLMAdapterError(code="llm_anonymous_barrage_manifest_missing")

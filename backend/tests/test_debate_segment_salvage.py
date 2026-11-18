@@ -183,34 +183,27 @@ def test_defer_publication_salvage_keeps_operation_accepted() -> None:
     assert staged_hash == recomputed
 
 
-def test_teacher_retry_rebinds_spent_failed_attempt_with_new_request_hash() -> None:
-    """Spent attempt_no=2 must accept a clamped rebuild (new request_hash)."""
+def test_teacher_retry_allocates_new_attempt_when_spent_row_has_accepted_bundle() -> None:
+    """Spent attempt 2 with an immutable accepted stage must not be rebound."""
 
     frozen = snapshot()
-    # First cycle spends both attempts on empty segments without salvage continue
-    # for the ledger identity; we force-fail attempt 2 on the ledger, then rebuild.
-    provider = OfflineAdapter(
-        [
-            {"segments": []},
-            {"segments": []},
+    good = {
+        "segments": [
             {
-                "segments": [
-                    {
-                        "text": (
-                            "I disagree with the opening claim because classroom attention "
-                            "is a scarce resource and distraction lowers practice quality."
-                        ),
-                        "source_ids": [],
-                        "reply_to": None,
-                        "support_mode": "no_match",
-                    }
-                ]
-            },
+                "text": (
+                    "I disagree with the opening claim because classroom attention "
+                    "is a scarce resource and distraction lowers practice quality."
+                ),
+                "source_ids": [],
+                "reply_to": None,
+                "support_mode": "no_match",
+            }
         ]
-    )
+    }
+    provider = OfflineAdapter([{"segments": []}, {"segments": []}, good, good, good])
     ledger = InMemoryProviderOperationRepository(
         default_budget=ProviderScopeBudgetV1(
-            max_requests=8,
+            max_requests=12,
             max_total_tokens=400_000,
             max_cost_cny=10,
             budget_bucket="llm_debate_turn",
@@ -226,24 +219,23 @@ def test_teacher_retry_rebinds_spent_failed_attempt_with_new_request_hash() -> N
         build_manifest_hash="c" * 64,
     )
     first = runtime.run(prepared, context=opening_context(), confirmed=True)
-    # Salvage may succeed on empty segments; force the latest op back to failed
-    # with a stale request identity to mimic pre-clamp production stalls.
+    assert first.status == "succeeded"
     latest = max(
         (op for op in ledger._operations.values() if op.logical_item_id == "turn-retry"),
         key=lambda op: op.attempt_no,
     )
     assert latest.attempt_no == 2
+    assert latest.id in ledger._llm_stages
+    # Mimic production: accepted bundle stays, operation marked failed, hashes stale.
     stale_hash = "d" * 64
     ledger._operations[latest.id] = replace(
         latest,
         state="failed",
         request_hash=stale_hash,
-        safe_error_code="segment_over_length",
+        safe_error_code="segment_stage_failed",
         staged_response_hash=None,
     )
-    ledger._llm_stages.pop(latest.id, None)
-    ledger._segment_recovery_inputs.pop(latest.id, None)
-    # Teacher Preview Retry re-prepares: clamps/salvage change the request hash.
+    spent_stage = ledger._llm_stages[latest.id]
     prepared_again = runtime.prepare(
         frozen,
         debate_id="debate-retry",
@@ -252,18 +244,41 @@ def test_teacher_retry_rebinds_spent_failed_attempt_with_new_request_hash() -> N
         manifest_hash="b" * 64,
         build_manifest_hash="c" * 64,
     )
-    rebound = ledger.operation(latest.id)
-    assert rebound.state == "prepared"
-    assert rebound.request_hash == prepared_again.request.request_hash
-    assert rebound.request_hash != stale_hash
-    assert rebound.safe_error_code is None
-    # Charged history from the spent cycle is preserved; reserve will add another.
-    assert rebound.charged_request_count >= 1
+    assert prepared_again.attempt_no == 3
+    assert prepared_again.operation_id != latest.id
+    # Old spent row and its immutable bundle are untouched.
+    spent = ledger.operation(latest.id)
+    assert spent.state == "failed"
+    assert spent.request_hash == stale_hash
+    assert ledger._llm_stages[latest.id] == spent_stage
     second = runtime.run(prepared_again, context=opening_context(), confirmed=True)
     assert second.status == "succeeded"
     assert second.final_ready is not None
     assert second.final_ready.speech.strip()
-    assert first.status in {"succeeded", "failed"}
+    # Repeated Retry clicks allocate further new attempts safely.
+    for expected_attempt in (4, 5):
+        current = max(
+            (op for op in ledger._operations.values() if op.logical_item_id == "turn-retry"),
+            key=lambda op: op.attempt_no,
+        )
+        ledger._operations[current.id] = replace(
+            current,
+            state="failed",
+            safe_error_code="segment_stage_failed",
+            staged_response_hash=None,
+        )
+        nxt = runtime.prepare(
+            frozen,
+            debate_id="debate-retry",
+            turn_id="turn-retry",
+            policy_hash="a" * 64,
+            manifest_hash="b" * 64,
+            build_manifest_hash="c" * 64,
+        )
+        assert nxt.attempt_no == expected_attempt
+        assert nxt.operation_id != current.id
+        outcome = runtime.run(nxt, context=opening_context(), confirmed=True)
+        assert outcome.status == "succeeded"
 
 
 def test_salvage_keeps_usable_speech_when_provider_returns_only_question() -> None:

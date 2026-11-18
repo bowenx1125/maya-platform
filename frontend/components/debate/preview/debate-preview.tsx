@@ -466,7 +466,11 @@ function PreviewTurnCard({
           data-text-fallback-ready={textFallbackReady ? "true" : "false"}
         >
           <span>
-            {savedSpeech ? "Audio needs attention." : "Speech needs attention."}
+            {turn.safe_error_code === "segment_speech_invalid"
+              ? localizeError({ code: "segment_speech_invalid" })
+              : savedSpeech
+                ? "Audio needs attention."
+                : "Speech needs attention."}
           </span>
           {turn.safe_error_code ? (
             <code
@@ -574,6 +578,9 @@ function RagCheck({
 }
 
 function turnPrepared(turn: DebatePreviewTurn): boolean {
+  if (turn.safe_error_code === "segment_speech_invalid") {
+    return false;
+  }
   return (
     ["final_ready", "ready", "completed"].includes(turn.generation_status) &&
     Boolean(turn.speech.trim())

@@ -581,8 +581,19 @@ class AudioStore:
     ) -> AudioMetadata:
         """Use the injected (Mock by default) TTS provider and atomically store WAV."""
 
-        if not speech.strip():
+        from app.modules.debates.generation.segments import (
+            sanitize_segment_text,
+            segment_speech_needs_regeneration,
+        )
+
+        if not isinstance(speech, str) or not speech.strip():
             raise TTSProviderError("speech is empty")
+        if segment_speech_needs_regeneration(speech):
+            raise TTSProviderError(
+                "speech contains unreadable characters and cannot be voiced; "
+                "retry the turn to regenerate the text"
+            )
+        speech = sanitize_segment_text(speech)
         # The caller supplies a server-side kind/profile token; it never leaves
         # the store or appears in a public DTO. The model is the profile's
         # own target, so a preset is not sent to the clone model.
@@ -638,8 +649,19 @@ class AudioStore:
         revision and Job claim fences.
         """
 
-        if not speech.strip():
+        from app.modules.debates.generation.segments import (
+            sanitize_segment_text,
+            segment_speech_needs_regeneration,
+        )
+
+        if not isinstance(speech, str) or not speech.strip():
             raise TTSProviderError("speech is empty")
+        if segment_speech_needs_regeneration(speech):
+            raise TTSProviderError(
+                "speech contains unreadable characters and cannot be voiced; "
+                "retry the turn to regenerate the text"
+            )
+        speech = sanitize_segment_text(speech)
         operation = _uuid_part(operation_id or uuid4())
         relative = audio_staging_relative_path(course_id, debate_id, turn_id, operation)
         target = self.relative_path(course_id, debate_id, turn_id)

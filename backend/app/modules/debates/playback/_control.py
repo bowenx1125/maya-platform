@@ -11,6 +11,10 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from app.core.errors import PlatformError, conflict, forbidden, invalid_state, not_found
 from app.modules.auth.service import AuthContext
 from app.modules.debates.generation.mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
+from app.modules.debates.generation.segments import (
+    SEGMENT_SPEECH_INVALID,
+    segment_speech_needs_regeneration,
+)
 from app.modules.debates.playback.eligibility import has_complete_finished_playback
 from app.modules.debates.round_count import (
     debate_round_count,
@@ -554,7 +558,18 @@ class PlaybackControlMixin(PlaybackCore):
                 )
                 # Text-fallback (final_ready + tts_* + speech, no audio) must remain
                 # retryable so Preview can re-run TTS without touching A-face claim.
-                if requested is not None and self._turn_text_fallback_ready(requested):
+                # Garbled ready speech is also retryable: regenerate text+TTS.
+                garbled_ready = (
+                    requested is not None
+                    and str(self._get(requested, "generation_status", default=""))
+                    in {"final_ready", "ready", "completed"}
+                    and segment_speech_needs_regeneration(
+                        self._get(requested, "speech", default=None)
+                    )
+                )
+                if requested is not None and (
+                    self._turn_text_fallback_ready(requested) or garbled_ready
+                ):
                     target = requested
                 else:
                     target = next(
@@ -571,6 +586,8 @@ class PlaybackControlMixin(PlaybackCore):
                         "Retry the earliest failed or pending turn first."
                     )
                 code = str(self._get(target, "safe_error_code", "failed_code", default="") or "")
+                if not code and garbled_ready and target is requested:
+                    code = SEGMENT_SPEECH_INVALID
                 if code == "acceptance_unknown":
                     raise invalid_state(
                         "This turn's provider acceptance is unknown. Open Diagnostics, "
@@ -581,6 +598,7 @@ class PlaybackControlMixin(PlaybackCore):
                 # Teacher Retry regenerates with current send-time clamps and
                 # salvage so later pending turns can continue; do not require a
                 # local accepted-stage recovery for that path.
+                # segment_speech_invalid covers already-stored garbled ready speech.
                 if (
                     code
                     not in {
@@ -590,6 +608,7 @@ class PlaybackControlMixin(PlaybackCore):
                         "provider_preflight_blocked",
                         "preparation_timeout",
                         "turn_generation_failed",
+                        SEGMENT_SPEECH_INVALID,
                     }
                     and code not in _DRAFT_TTS_RETRY_CODES
                 ):
