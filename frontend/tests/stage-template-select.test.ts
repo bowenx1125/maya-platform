@@ -73,7 +73,14 @@ function mountStage() {
     const scene = new THREE.Group();
     scene.name = url;
     if (url.endsWith("Maya-Egg.glb")) {
-      for (const name of ["Shell", "Mouth", "Hand_L", "Hand_R", "Foot_L", "Foot_R"]) {
+      for (const name of [
+        "Shell",
+        "Mouth",
+        "Hand_L",
+        "Hand_R",
+        "Foot_L",
+        "Foot_R",
+      ]) {
         const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2));
         mesh.name = name;
         scene.add(mesh);
@@ -94,7 +101,10 @@ function mountStage() {
 function meshNames(): string[] {
   const scene = renderer.render.mock.calls.at(-1)![0] as THREE.Scene;
   return scene.children
-    .filter((child) => typeof child.name === "string" && child.name.startsWith("/avatars/"))
+    .filter(
+      (child) =>
+        typeof child.name === "string" && child.name.startsWith("/avatars/"),
+    )
     .map((child) => child.name);
 }
 
@@ -143,7 +153,9 @@ describe("stage template selection", () => {
       frame();
       const names = meshNames();
       expect(names).toHaveLength(5);
-      expect(names.every((name) => name === "/avatars/female_1.glb")).toBe(true);
+      expect(names.every((name) => name === "/avatars/female_1.glb")).toBe(
+        true,
+      );
       expect(names).not.toContain("/avatars/elder-scholar.glb");
       expect(names).not.toContain("/avatars/noble-scholar.glb");
     } finally {
@@ -165,10 +177,18 @@ describe("stage template selection", () => {
       frame();
       expect(loaded).toHaveLength(4);
       const names = meshNames();
-      expect(names.filter((name) => name === "/avatars/female_1.glb")).toHaveLength(2);
-      expect(names.filter((name) => name === "/avatars/elder-scholar.glb")).toHaveLength(1);
-      expect(names.filter((name) => name === "/avatars/noble-scholar.glb")).toHaveLength(1);
-      expect(names.filter((name) => name === "/avatars/Maya-Egg.glb")).toHaveLength(1);
+      expect(
+        names.filter((name) => name === "/avatars/female_1.glb"),
+      ).toHaveLength(2);
+      expect(
+        names.filter((name) => name === "/avatars/elder-scholar.glb"),
+      ).toHaveLength(1);
+      expect(
+        names.filter((name) => name === "/avatars/noble-scholar.glb"),
+      ).toHaveLength(1);
+      expect(
+        names.filter((name) => name === "/avatars/Maya-Egg.glb"),
+      ).toHaveLength(1);
     } finally {
       stage.dispose();
     }
@@ -184,10 +204,7 @@ describe("stage template selection", () => {
       stage.setCharacters(specs);
       frame();
       const names = meshNames();
-      expect(names).toEqual([
-        "/avatars/female_1.glb",
-        "/avatars/female_1.glb",
-      ]);
+      expect(names).toEqual(["/avatars/female_1.glb", "/avatars/female_1.glb"]);
     } finally {
       stage.dispose();
     }
@@ -209,7 +226,9 @@ describe("stage template selection", () => {
   });
 
   it("keeps fitted hang on the female mesh and robe hang on both scholars", () => {
-    expect(hangProfileForAsset("/avatars/female_1.glb")).toBe(AVATAR_FITTED_HANG);
+    expect(hangProfileForAsset("/avatars/female_1.glb")).toBe(
+      AVATAR_FITTED_HANG,
+    );
     expect(hangProfileForAsset("/avatars/elder-scholar.glb")).toBe(
       AVATAR_ROBE_HANG,
     );

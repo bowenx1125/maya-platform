@@ -109,7 +109,9 @@ describe("stage speaking body yaw", () => {
         expect(root.rotation.y).toBeCloseTo(seatYaw * Math.exp(-6 * 0.1));
         for (let index = 0; index < 20; index++) frame();
         expect(root.rotation.y).toBeCloseTo(0, 4);
-        for (const other of characters.filter((item) => item.id !== figure.url)) {
+        for (const other of characters.filter(
+          (item) => item.id !== figure.url,
+        )) {
           expect(scene.getObjectByName(other.id)!.rotation.y).toBeCloseTo(
             standingPlacement(other.slot).yaw,
           );

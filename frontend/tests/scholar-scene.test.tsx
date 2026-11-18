@@ -571,7 +571,11 @@ describe("ScholarScene live template roster key", () => {
       ...withoutDrawing,
       config: {
         ...withoutDrawing.config,
-        drawing: { version: 1, mouth: { x: 0.55, y: 0.435 }, strokes: [] },
+        drawing: {
+          version: 1 as const,
+          mouth: { x: 0.55, y: 0.435 },
+          strokes: [],
+        },
       },
     };
     expect(stageRosterKey([withoutDrawing])).not.toBe(
