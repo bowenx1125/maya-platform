@@ -88,10 +88,7 @@ VOICE_PREVIEW_LINES: tuple[str, ...] = (
         "We will neither abandon nor betray each other, not even at the very edge of death."
     ),
     "从这里开始吧。从一开始，不，从零开始！",
-    (
-        "但浪花淘尽，唯我屹立不倒。"
-        + "But when the waves have washed all away, I alone stand unbowed."
-    ),
+    "但浪花淘尽，唯我屹立不倒。But when the waves have washed all away, I alone stand unbowed.",
 )
 # Kept for callers that want a stable sample; it is the first line.
 VOICE_PREVIEW_TEXT = VOICE_PREVIEW_LINES[0]
