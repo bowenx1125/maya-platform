@@ -1682,8 +1682,10 @@ _STRIP_SPEECH_CHARS = dict.fromkeys(
         0x00AD,
     )
 )
+# Match JSON-field residue only when a structural key is followed by a JSON
+# value start. Plain speech like "reply to: the previous speaker" must pass.
 _STRUCTURAL_KEY_RE = re.compile(
-    r"(?:source[_\s]?ids|support[_\s]?mode|reply[_\s]?to)\s*:",
+    r"""["']?(?:source_ids|support_mode|supportmode|reply_to|replyto)["']?\s*:\s*(?:null|\[|\{|["'])""",
     re.IGNORECASE,
 )
 _BRACKET_RUN_RE = re.compile(r"[\[\]{}\"'`]{4,}")

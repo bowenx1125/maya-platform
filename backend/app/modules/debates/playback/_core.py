@@ -791,11 +791,13 @@ class PlaybackCore:
             return False
         if not (audio is not None or PlaybackCore._turn_text_only(turn)):
             return False
-        # Garbled ready speech must not count as prepared: draft Preview Retry
-        # regenerates text+TTS on those turns.
-        speech = PlaybackCore._get(turn, "speech", default=None)
-        if isinstance(speech, str) and segment_speech_needs_regeneration(speech):
-            return False
+        # Refuse garbled speech only when there is no playable audio yet.
+        # Historical running turns that already have audio must keep advancing;
+        # draft Preview projects segment_speech_invalid separately for Retry.
+        if audio is None:
+            speech = PlaybackCore._get(turn, "speech", default=None)
+            if isinstance(speech, str) and segment_speech_needs_regeneration(speech):
+                return False
         return True
 
     @staticmethod

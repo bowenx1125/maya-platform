@@ -241,7 +241,8 @@ def test_sql_retry_after_accepted_bundle_stages_into_new_attempt(sql_runtime) ->
         attempts = (
             connection.execute(
                 text(
-                    "SELECT attempt_no, state FROM provider_operations "
+                    "SELECT id, attempt_no, state, charged_request_count, request_count "
+                    "FROM provider_operations "
                     "WHERE logical_item_id=:turn ORDER BY attempt_no"
                 ),
                 {"turn": turn_id},
@@ -250,6 +251,10 @@ def test_sql_retry_after_accepted_bundle_stages_into_new_attempt(sql_runtime) ->
             .all()
         )
         assert [int(item["attempt_no"]) for item in attempts] == [1, 2, 3]
+        # New attempt 3 is the charged row; spent attempt 2 stays immutable.
+        assert attempts[1]["id"] == op_id
+        assert int(attempts[2]["charged_request_count"] or 0) >= 1
+        assert int(attempts[2]["request_count"] or 0) >= 1
         assert (
             connection.execute(
                 text("SELECT COUNT(*) FROM llm_accepted_stages WHERE turn_id=:turn"),
@@ -265,6 +270,8 @@ def test_sql_retry_after_accepted_bundle_stages_into_new_attempt(sql_runtime) ->
             ).scalar_one()
             == 1
         )
+        # Attempt 2 must not have been rewritten after Retry.
+        assert repository.get_llm_accepted_stage(op_id) is not None
 
     # Three more Retry clicks remain safe (new attempt each time).
     for expected in (4, 5, 6):
@@ -293,3 +300,89 @@ def test_sql_retry_after_accepted_bundle_stages_into_new_attempt(sql_runtime) ->
         assert outcome.final_ready is not None
 
     assert len(provider.requests) >= 5
+
+
+def test_sql_three_rapid_prepares_after_spent_bundle_are_idempotent_or_advance(
+    sql_runtime,
+) -> None:
+    """Three overlapping prepares must not mutate the spent accepted bundle."""
+
+    database, repository, runtime, provider, debate_id, turn_id = sql_runtime
+    frozen = snapshot()
+    policy = _hash("policy-rapid")
+    manifest = _hash("manifest-rapid")
+    build = _hash("build-rapid")
+    prepared = runtime.prepare(
+        frozen,
+        debate_id=debate_id,
+        turn_id=turn_id,
+        policy_hash=policy,
+        manifest_hash=manifest,
+        build_manifest_hash=build,
+    )
+    first = runtime.run(prepared, context=opening_context(), confirmed=True)
+    assert first.status == "succeeded"
+
+    with database.engine.connect() as connection:
+        spent = (
+            connection.execute(
+                text(
+                    "SELECT id FROM provider_operations "
+                    "WHERE logical_item_id=:turn ORDER BY attempt_no DESC LIMIT 1"
+                ),
+                {"turn": turn_id},
+            )
+            .mappings()
+            .one()
+        )
+        spent_id = str(spent["id"])
+    with database.engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE provider_operations SET state='failed', "
+                "safe_error_code='segment_stage_failed', "
+                "request_hash=:stale, staged_response_hash=NULL, updated_at=CURRENT_TIMESTAMP "
+                "WHERE id=:id"
+            ),
+            {"id": spent_id, "stale": "f" * 64},
+        )
+
+    prepared_rows = [
+        runtime.prepare(
+            frozen,
+            debate_id=debate_id,
+            turn_id=turn_id,
+            policy_hash=policy,
+            manifest_hash=manifest,
+            build_manifest_hash=build,
+        )
+        for _ in range(3)
+    ]
+    assert all(row.attempt_no >= 3 for row in prepared_rows)
+    assert all(row.operation_id != spent_id for row in prepared_rows)
+    # Either they share the first new attempt (idempotent same identity) or
+    # later clicks open later attempts — never rewrite the spent row.
+    assert repository.get_llm_accepted_stage(spent_id) is not None
+    with database.engine.connect() as connection:
+        assert (
+            connection.execute(
+                text("SELECT COUNT(*) FROM llm_accepted_stages WHERE operation_id=:id"),
+                {"id": spent_id},
+            ).scalar_one()
+            == 1
+        )
+        assert (
+            connection.execute(
+                text(
+                    "SELECT COUNT(*) FROM provider_operations "
+                    "WHERE logical_item_id=:turn AND attempt_no >= 3"
+                ),
+                {"turn": turn_id},
+            ).scalar_one()
+            >= 1
+        )
+    # One successful run still stages into a non-spent operation.
+    outcome = runtime.run(prepared_rows[0], context=opening_context(), confirmed=True)
+    assert outcome.status == "succeeded"
+    assert outcome.final_ready is not None
+    assert repository.get_llm_accepted_stage(spent_id) is not None

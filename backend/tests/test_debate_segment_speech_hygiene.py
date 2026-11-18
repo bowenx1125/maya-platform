@@ -85,6 +85,30 @@ def test_clean_speech_still_passes() -> None:
     assert accepted.speech == text
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I disagree with the opening claim because classroom attention is scarce.",
+        "我认为开场发言忽略了课堂注意力的代价，因此我不同意那个立场。",
+        "教室での議論には、より明確な根拠が必要だと私は考えます。",
+        'She said "attention is scarce" and I agree with that claim.',
+        "See claim (A) and counter [B] before round 3.",
+        "In 2024, about 98.5% of students finished the task within 15 minutes.",
+        "I will reply to: the previous speaker with evidence from my notes.",
+        "In support mode: we still need classroom evidence before changing policy.",
+        "The source ids: S1 and S2 do not settle the dispute alone.",
+        "回复：我对刚才的观点持保留意见，并给出三点理由。",
+        "Students' attention drops when devices buzz during practice.",
+        "Really?! Yes — classroom focus matters: practice quality falls.",
+        "My reply to Alice is short; support mode is not a score.",
+    ],
+)
+def test_normal_speech_is_not_false_positive(text: str) -> None:
+    assert prepare_segment_speech(text) == sanitize_segment_text(text)
+    assert not segment_text_is_garbled(sanitize_segment_text(text))
+    assert not segment_speech_needs_regeneration(text)
+
+
 def test_tts_refuses_garbled_speech(tmp_path) -> None:
     store = AudioStore(tmp_path)
     with pytest.raises(TTSProviderError, match="unreadable"):
@@ -109,3 +133,30 @@ def test_tts_refuses_garbled_speech(tmp_path) -> None:
 
 def test_segment_speech_invalid_constant() -> None:
     assert SEGMENT_SPEECH_INVALID == "segment_speech_invalid"
+
+
+def test_turn_ready_keeps_historical_garbled_audio_advancing() -> None:
+    """Running debates with already-voiced garbled speech must not stall."""
+
+    from types import SimpleNamespace
+
+    from app.modules.debates.playback._core import PlaybackCore
+
+    with_audio = SimpleNamespace(
+        generation_status="final_ready",
+        audio_file_id="audio-1",
+        audio_relative_path=None,
+        speech=JSON_FRAGMENT_SPEECH,
+        safe_error_code=None,
+        audio_duration_ms=1200,
+    )
+    without_audio = SimpleNamespace(
+        generation_status="final_ready",
+        audio_file_id=None,
+        audio_relative_path=None,
+        speech=JSON_FRAGMENT_SPEECH,
+        safe_error_code=None,
+        audio_duration_ms=None,
+    )
+    assert PlaybackCore._turn_ready(with_audio) is True
+    assert PlaybackCore._turn_ready(without_audio) is False
