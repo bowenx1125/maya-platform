@@ -22,6 +22,10 @@ AVATAR_TEMPLATE_IDS: Final[tuple[str, ...]] = (
     "wave1-default-head",
     "maya-warm-scholar",
     "maya-civic-observer",
+    "socrates",
+    "plato",
+    "hume",
+    "descartes",
     "egg",
 )
 MATERIAL_THEMES: Final[tuple[str, ...]] = (
@@ -130,6 +134,34 @@ _CATALOG: Final[tuple[_CatalogEntry, ...]] = (
             "medium",
             "active",
         ),
+    ),
+    _CatalogEntry(
+        id="socrates",
+        name="Socrates",
+        available=True,
+        asset_url="/avatars/socrates.glb",
+        defaults=_config("socrates", "warm_sand", "brown", "attentive", "medium", "calm"),
+    ),
+    _CatalogEntry(
+        id="plato",
+        name="Plato",
+        available=True,
+        asset_url="/avatars/plato.glb",
+        defaults=_config("plato", "warm_sand", "gray", "attentive", "medium", "calm"),
+    ),
+    _CatalogEntry(
+        id="hume",
+        name="Hume",
+        available=True,
+        asset_url="/avatars/hume.glb",
+        defaults=_config("hume", "cool_slate", "brown", "neutral", "medium", "calm"),
+    ),
+    _CatalogEntry(
+        id="descartes",
+        name="Descartes",
+        available=True,
+        asset_url="/avatars/descartes.glb",
+        defaults=_config("descartes", "cool_slate", "gray", "neutral", "medium", "calm"),
     ),
     _CatalogEntry(
         id="egg",

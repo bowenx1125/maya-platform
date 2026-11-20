@@ -131,3 +131,7 @@ Root1: #468 `reprepare_failed` rebound hashes on spent attempt-2 `provider_opera
 ## Nov18 unused mypy ignore after #469
 
 #469 `FinalReadyTurn.attempt:int` → drop unused `type: ignore[arg-type]` in `generation_adapter.py`. Backend mypy/ruff.0 calls/deploy.
+
+## Nov20 figures
+
+Catalog +4 rigged philosophers:socrates/plato/hume/descartes.glb(template ids same names);stocky hume/plato rigged via 0.75 X/Z-thinned OBJ then inverse-scaled GLB(positions,bones,IBMs). Robe hang covers togas;synthetic mouth+gestures apply. QA renders+tests green. Not deployed.

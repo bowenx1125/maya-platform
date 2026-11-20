@@ -109,17 +109,21 @@ function meshNames(): string[] {
 }
 
 describe("stage template selection", () => {
-  it("preloads the four registered catalog meshes and nothing else", () => {
+  it("preloads the eight registered catalog meshes and nothing else", () => {
     const { stage, loaded } = mountStage();
     try {
       expect([...loaded].sort()).toEqual([...STAGE_CHARACTER_ASSETS].sort());
-      expect(loaded).toHaveLength(4);
+      expect(loaded).toHaveLength(8);
       expect(loaded).toEqual(
         expect.arrayContaining([
           "/avatars/female_1.glb",
           "/avatars/elder-scholar.glb",
           "/avatars/noble-scholar.glb",
           "/avatars/Maya-Egg.glb",
+          "/avatars/socrates.glb",
+          "/avatars/plato.glb",
+          "/avatars/hume.glb",
+          "/avatars/descartes.glb",
         ]),
       );
     } finally {
@@ -138,6 +142,12 @@ describe("stage template selection", () => {
       "/avatars/noble-scholar.glb",
     );
     expect(avatarAssetUrlForTemplate("egg")).toBe("/avatars/Maya-Egg.glb");
+    expect(avatarAssetUrlForTemplate("socrates")).toBe("/avatars/socrates.glb");
+    expect(avatarAssetUrlForTemplate("plato")).toBe("/avatars/plato.glb");
+    expect(avatarAssetUrlForTemplate("hume")).toBe("/avatars/hume.glb");
+    expect(avatarAssetUrlForTemplate("descartes")).toBe(
+      "/avatars/descartes.glb",
+    );
     expect(avatarAssetUrlForTemplate("not-a-template")).toBe(
       "/avatars/female_1.glb",
     );
@@ -175,7 +185,7 @@ describe("stage template selection", () => {
     try {
       stage.setCharacters(specs);
       frame();
-      expect(loaded).toHaveLength(4);
+      expect(loaded).toHaveLength(8);
       const names = meshNames();
       expect(
         names.filter((name) => name === "/avatars/female_1.glb"),
@@ -219,7 +229,7 @@ describe("stage template selection", () => {
       stage.setCharacters([character("mozi", "wave1-default-head", "A")]);
       frame();
       expect(meshNames()).toEqual(["/avatars/female_1.glb"]);
-      expect(loaded).toHaveLength(4);
+      expect(loaded).toHaveLength(8);
     } finally {
       stage.dispose();
     }
@@ -234,6 +244,14 @@ describe("stage template selection", () => {
     );
     expect(hangProfileForAsset("/avatars/noble-scholar.glb")).toBe(
       AVATAR_ROBE_HANG,
+    );
+    expect(hangProfileForAsset("/avatars/socrates.glb")).toBe(
+      AVATAR_ROBE_HANG,
+    );
+    expect(hangProfileForAsset("/avatars/plato.glb")).toBe(AVATAR_ROBE_HANG);
+    expect(hangProfileForAsset("/avatars/hume.glb")).toBe(AVATAR_FITTED_HANG);
+    expect(hangProfileForAsset("/avatars/descartes.glb")).toBe(
+      AVATAR_FITTED_HANG,
     );
   });
 });

@@ -97,6 +97,38 @@ export const AVATAR_TEMPLATE_DEFAULT_CONFIGS = {
     expression_strength: "medium",
     motion_style: "active",
   },
+  socrates: {
+    template_id: "socrates",
+    material_theme: "warm_sand",
+    eye_color: "brown",
+    default_expression: "attentive",
+    expression_strength: "medium",
+    motion_style: "calm",
+  },
+  plato: {
+    template_id: "plato",
+    material_theme: "warm_sand",
+    eye_color: "gray",
+    default_expression: "attentive",
+    expression_strength: "medium",
+    motion_style: "calm",
+  },
+  hume: {
+    template_id: "hume",
+    material_theme: "cool_slate",
+    eye_color: "brown",
+    default_expression: "neutral",
+    expression_strength: "medium",
+    motion_style: "calm",
+  },
+  descartes: {
+    template_id: "descartes",
+    material_theme: "cool_slate",
+    eye_color: "gray",
+    default_expression: "neutral",
+    expression_strength: "medium",
+    motion_style: "calm",
+  },
 } as const satisfies Readonly<Record<string, AvatarConfig>>;
 
 function isAvatarConfigForTemplate(
@@ -177,6 +209,10 @@ export const AVATAR_TEMPLATE_ASSETS = {
   "wave1-default-head": "/avatars/female_1.glb",
   "maya-warm-scholar": "/avatars/elder-scholar.glb",
   "maya-civic-observer": "/avatars/noble-scholar.glb",
+  socrates: "/avatars/socrates.glb",
+  plato: "/avatars/plato.glb",
+  hume: "/avatars/hume.glb",
+  descartes: "/avatars/descartes.glb",
 } as const satisfies Readonly<Record<string, string>>;
 
 export function avatarAssetUrlForTemplate(templateId: string): string {

@@ -262,7 +262,8 @@ export function boneSide(name: string): AvatarPoseSide | null {
 }
 
 export function hangProfileForAsset(assetUrl: string): AvatarHangProfile {
-  if (/elder-scholar|noble-scholar/i.test(assetUrl)) return AVATAR_ROBE_HANG;
+  if (/elder-scholar|noble-scholar|socrates|plato/i.test(assetUrl))
+    return AVATAR_ROBE_HANG;
   return AVATAR_FITTED_HANG;
 }
 
