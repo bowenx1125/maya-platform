@@ -247,6 +247,61 @@ const CLIPS: Record<string, (phase: number) => ClipFrame> = {
       forearmL: [[1, 0, 0, -0.5 * n]],
     };
   },
+  both_hands_open: (p) => {
+    const n = Math.sin(p * Math.PI);
+    return {
+      head: [0.05 * n, 0, 0],
+      upperArmL: [
+        [1, 0, 0, -0.35 * n],
+        [0, 0, 1, -0.25 * n],
+      ],
+      upperArmR: [
+        [1, 0, 0, -0.35 * n],
+        [0, 0, 1, 0.25 * n],
+      ],
+      forearmL: [[1, 0, 0, -0.45 * n]],
+      forearmR: [[1, 0, 0, -0.45 * n]],
+    };
+  },
+  point_raise: (p) => {
+    const n = Math.sin(p * Math.PI);
+    return {
+      head: [0.02 * n, -0.08 * n, 0],
+      upperArmR: [
+        [1, 0, 0, -0.55 * n],
+        [0, 0, 1, 0.2 * n],
+      ],
+      forearmR: [[1, 0, 0, -0.35 * n]],
+      handR: [[0, 0, 1, 0.15 * n]],
+    };
+  },
+  head_tilt_think: (p) => {
+    const n = Math.sin(p * Math.PI);
+    return {
+      head: [0.06 * n, 0.1 * n, 0.16 * n],
+      neck: [0.03 * n, 0.05 * n, 0.06 * n],
+      torso: [0, 0.06 * n, 0],
+    };
+  },
+  hand_chop: (p) => {
+    const n = Math.sin(p * Math.PI);
+    const chop = Math.sin(p * Math.PI * 2);
+    return {
+      head: [0.08 * n, 0, 0],
+      upperArmR: [[1, 0, 0, -0.3 * n]],
+      forearmR: [[1, 0, 0, -0.5 * n + 0.25 * chop * n]],
+    };
+  },
+  weight_shift: (p) => {
+    const n = Math.sin(p * Math.PI);
+    const sway = Math.sin(p * Math.PI * 2);
+    return {
+      head: [0, 0, -0.04 * sway * n],
+      torso: [0, 0.08 * sway * n, 0.05 * sway * n],
+      upperArmL: [[0, 0, 1, -0.06 * n]],
+      upperArmR: [[0, 0, 1, 0.06 * n]],
+    };
+  },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

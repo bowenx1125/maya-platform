@@ -149,3 +149,19 @@ def test_compile_with_timestamps_emits_timed_visemes() -> None:
     nod = next(e for e in compiled["events"] if e["clip"] == "nod")
     assert nod["t"] == 1.4  # anchor char 1 (方) begins at 1400 ms
     assert compiled["duration"] == 3.0
+
+
+def test_expanded_gesture_rules_cover_new_clips() -> None:
+    cases = {
+        "换句话说，我方再解释一次": "both_hands_open",
+        "关键在于定义": "point_raise",
+        "试想另一种情况": "head_tilt_think",
+        "显然这不成立": "hand_chop",
+        "另一方面还有证据": "weight_shift",
+    }
+    for text, kind in cases.items():
+        beats = rule_based_performance(text)["beats"]
+        assert kind in [b["kind"] for b in beats]
+        compiled = compile_performance(text)
+        events = [e for e in compiled["events"] if e["clip"] == kind]
+        assert events and events[0]["dur"] > 0

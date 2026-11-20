@@ -106,4 +106,35 @@ describe("createPerformancePlayer", () => {
     expect(peak).toBeGreaterThan(rampOut);
     expect(rampIn).toBeGreaterThanOrEqual(0);
   });
+
+  it("expanded clips move arms inside their envelopes and stop outside", () => {
+    const player = createPerformancePlayer({
+      ...TIMELINE,
+      posture: "",
+      events: [
+        { t: 0.5, type: "gesture", clip: "both_hands_open", dur: 1.2, fade_ms: 100 },
+        { t: 2.2, type: "gesture", clip: "point_raise", dur: 1.0, fade_ms: 100 },
+      ],
+    });
+    const open = player.sample(1.1);
+    expect(open.upperArmL).not.toBeNull();
+    expect(open.upperArmR).not.toBeNull();
+    expect(open.forearmL).not.toBeNull();
+    const point = player.sample(2.7);
+    expect(point.upperArmR).not.toBeNull();
+    expect(point.forearmR).not.toBeNull();
+    expect(point.handR).not.toBeNull();
+    expect(player.sample(3.5).upperArmR).toBeNull();
+    expect(player.sample(3.5).forearmR).toBeNull();
+  });
+
+  it("parses every expanded clip name", () => {
+    for (const clip of ["head_tilt_think", "hand_chop", "weight_shift"]) {
+      const parsed = parsePerformanceTimeline({
+        ...TIMELINE,
+        events: [{ t: 1, type: "gesture", clip, dur: 1, fade_ms: 100 }],
+      });
+      expect(parsed?.events).toHaveLength(1);
+    }
+  });
 });

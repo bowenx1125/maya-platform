@@ -31,6 +31,11 @@ GESTURE_DUR = {
     "doubt_shrug": 1.0,
     "settle_calm": 1.6,
     "turn_ack": 0.8,
+    "both_hands_open": 1.2,
+    "point_raise": 1.0,
+    "head_tilt_think": 1.6,
+    "hand_chop": 0.8,
+    "weight_shift": 1.8,
 }
 POSTURES = ("hand_behind_back", "open_palm_listening", "hand_on_chest")
 EMOTIONS = ("calm", "firm", "thoughtful", "friendly", "skeptical")
@@ -53,6 +58,11 @@ _RULES: list[tuple[re.Pattern[str], str, int]] = [
     (re.compile(r"(遗憾|无奈|可惜|说不通|站不住)"), "doubt_shrug", 2),
     (re.compile(r"(谢谢|感谢|承让)"), "turn_ack", 2),
     (re.compile(r"(我认为|我觉得|相信|坚信)"), "nod", 1),
+    (re.compile(r"(换句话说|也就是说|换言之)"), "both_hands_open", 2),
+    (re.compile(r"(关键在于|核心是|要点)"), "point_raise", 2),
+    (re.compile(r"(试想|想想看|不妨想|想象)"), "head_tilt_think", 1),
+    (re.compile(r"(显然|分明|断然)"), "hand_chop", 2),
+    (re.compile(r"(另一方面|与此同时)"), "weight_shift", 1),
     (re.compile(r"[?？]$"), "chin_stroke", 1),
     (re.compile(r"[!！]$"), "emphasis", 1),
 ]
