@@ -10,7 +10,7 @@ from app.modules.debates.teaching_rules import (
     compile_code_contract_prompt,
     compile_system_prompt,
     default_teaching_prompts,
-    execution_contracts,
+    execution_contracts_v5,
     freeze_teaching_rules,
     frozen_system_prompt,
 )
@@ -116,6 +116,24 @@ def test_generation_context_binds_prompt_into_snapshot_identity():
     assert first.frozen_system_prompt == "Rule A"
 
 
+def test_ruleset_defaults_preview_the_v5_execution_contract(debate_app) -> None:
+    _app, _database, client = debate_app
+    _session, csrf = login(client)
+    defaults = client.get(f"/api/v1/courses/{COURSE_ID}/debate-ruleset")
+    assert defaults.status_code == 200
+    contract = defaults.json()["contract"]
+    assert contract == execution_contracts_v5()
+    zh, en = contract["zh"], contract["en"]
+    assert "目标 / 建议上限" in zh and "有弹性" in zh and "150%" in zh
+    assert "超出四分之一以上时，服务器会从末尾整句删去多出的部分" not in zh
+    assert "target / suggested cap" in en and "flexible aim" in en and "150%" in en
+    assert (
+        "When a speech is more than a quarter over, the server removes whole sentences"
+        " from the end until it fits"
+        not in en
+    )
+
+
 def test_creation_freezes_two_languages_and_other_debates_remain_independent(
     debate_app, monkeypatch
 ):
@@ -127,7 +145,7 @@ def test_creation_freezes_two_languages_and_other_debates_remain_independent(
     _session, csrf = login(client)
     defaults = client.get(f"/api/v1/courses/{COURSE_ID}/debate-ruleset")
     assert defaults.status_code == 200
-    assert defaults.json() == {**default_teaching_prompts(), "contract": execution_contracts()}
+    assert defaults.json() == {**default_teaching_prompts(), "contract": execution_contracts_v5()}
     body = {
         "output_language": "en",
         "topic": "Water?",
