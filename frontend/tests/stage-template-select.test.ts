@@ -245,9 +245,7 @@ describe("stage template selection", () => {
     expect(hangProfileForAsset("/avatars/noble-scholar.glb")).toBe(
       AVATAR_ROBE_HANG,
     );
-    expect(hangProfileForAsset("/avatars/socrates.glb")).toBe(
-      AVATAR_ROBE_HANG,
-    );
+    expect(hangProfileForAsset("/avatars/socrates.glb")).toBe(AVATAR_ROBE_HANG);
     expect(hangProfileForAsset("/avatars/plato.glb")).toBe(AVATAR_ROBE_HANG);
     expect(hangProfileForAsset("/avatars/hume.glb")).toBe(AVATAR_FITTED_HANG);
     expect(hangProfileForAsset("/avatars/descartes.glb")).toBe(
