@@ -138,4 +138,4 @@ Catalog +4 rigged philosophers:socrates/plato/hume/descartes.glb(template ids sa
 
 ## Nov24 login research consent
 
-Optional login checkbox + bilingual static PDF (`learning-data-consent-v1`); per-account `user_learning_research_consents` (Alembic `0096_learning_research_consent`); default false; write/revoke only after successful password auth; device-local hashed-username reminder for pre-login restore; no anonymous consent API; research-export fail-closed gate deferred. 0 calls/deploy.
+Optional login checkbox + bilingual static PDF (`learning-data-consent-v1`); per-account `user_learning_research_consents` (Alembic `0096_learning_research_consent`); default false; write/revoke only after successful password auth; device-local hashed-username reminder for pre-login restore; no anonymous consent API; research-export fail-closed gate deferred. Audit: keep 0095 migration test under new head; username blur must not overwrite a manual consent tick. 0 calls/deploy.
