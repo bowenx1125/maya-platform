@@ -11,16 +11,13 @@ import { DEBATE_BUTTON, DEBATE_TAG, DEBATE_TAG_TONE } from "../debate-chrome";
 export type DebateCard = components["schemas"]["DebateCard"];
 export type DebateCardStatus = "compiling" | "ready" | "fallback";
 
-const STATUS: Partial<
-  Record<
-    DebateCardStatus,
-    { label: string; tone: keyof typeof DEBATE_TAG_TONE }
-  >
+const STATUS: Record<
+  DebateCardStatus,
+  { label: string; tone: keyof typeof DEBATE_TAG_TONE }
 > = {
   compiling: { label: "Compiling", tone: "thinking" },
   ready: { label: "Ready", tone: "ready" },
-  // Fallback keeps the disclosure and reason body without a status tag.
-  // Honest fail-open notice copy awaits Lead approval before shipping.
+  fallback: { label: "Fallback", tone: "completed" },
 };
 
 const TEACHER_REASON_COPY: Record<DebateCardTeacherReason, MessageKey> = {
@@ -117,7 +114,17 @@ export function DebateCardCheck({
             first speech.
           </p>
         ) : null}
-        {status === "fallback" || (status === "ready" && !card) ? (
+        {status === "fallback" ? (
+          <>
+            <p className="m-0 text-[#6B7280]">
+              {t(reasonCopy ?? "debateCardReasonOther")}
+            </p>
+            <p className="m-0 text-[#6B7280]">
+              {t("debateCardFallbackContinues")}
+            </p>
+          </>
+        ) : null}
+        {status === "ready" && !card ? (
           <p className="m-0 text-[#6B7280]">
             {t(reasonCopy ?? "debateCardReasonOther")}
           </p>
