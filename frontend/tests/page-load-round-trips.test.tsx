@@ -46,6 +46,10 @@ const team = {
   current_version_seq: 1,
   visibility: "public",
   can_edit: false,
+  // Student Studyform keeps only own / teacher-public / this-group public.
+  group_id: "group-1",
+  owner_user_id: "student-studyform",
+  is_teacher_owned: false,
 };
 const chatAgent = {
   agent_id: "agent-1",

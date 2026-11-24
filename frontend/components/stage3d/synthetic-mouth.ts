@@ -40,9 +40,10 @@ export function selectMouthRegion(
   const inv = 1 / skullSpan;
   for (let i = 0; i < positions.length; i++) {
     if ((headWeights[i] ?? 0) < 0.35) continue;
-    const t = (positions[i].x - headPos.x) * skullAxis.x
-      + (positions[i].y - headPos.y) * skullAxis.y
-      + (positions[i].z - headPos.z) * skullAxis.z;
+    const t =
+      (positions[i].x - headPos.x) * skullAxis.x +
+      (positions[i].y - headPos.y) * skullAxis.y +
+      (positions[i].z - headPos.z) * skullAxis.z;
     const tNorm = t * inv;
     if (tNorm < -0.05 || tNorm > REGION_TOP) continue;
     const weight = Math.min(1, Math.max(0, (REGION_TOP - tNorm) / REGION_TOP));
@@ -90,8 +91,7 @@ export function attachSyntheticMouth(
     userData: Record<string, unknown>;
   };
   const marker = geometry.userData.__syntheticMouth as
-    | { index: number }
-    | undefined;
+    { index: number } | undefined;
 
   if (marker) {
     mesh.morphTargetDictionary = {
@@ -149,7 +149,8 @@ export function attachSyntheticMouth(
   if (skullSpan <= 1e-6) {
     // No headTop joint (Mixamo rigs): estimate the skull span from the
     // vertical extent of the head-weighted vertices instead.
-    let lo = Infinity, hi = -Infinity;
+    let lo = Infinity,
+      hi = -Infinity;
     for (let i = 0; i < positions.length; i++) {
       if ((headWeights[i] ?? 0) < 0.35) continue;
       lo = Math.min(lo, positions[i].y);
