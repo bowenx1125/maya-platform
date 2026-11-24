@@ -20,7 +20,7 @@ from tests.postgres_db import new_database_url
 migration = import_module("migrations.versions.0095_llm_stage_attempt_cap")
 
 
-def test_0095_is_head_and_round_trips_from_0094() -> None:
+def test_0095_round_trips_from_0094_and_head_includes_0096() -> None:
     database = Database(new_database_url())
     database.upgrade_schema()
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
@@ -31,8 +31,8 @@ def test_0095_is_head_and_round_trips_from_0094() -> None:
         database.engine.url.render_as_string(hide_password=False)
     )
     assert ScriptDirectory.from_config(config).get_heads() == [ALEMBIC_HEAD]
-    assert ALEMBIC_HEAD == "0095_llm_stage_attempt_cap"
-    assert migration.revision == ALEMBIC_HEAD
+    assert ALEMBIC_HEAD == "0096_learning_research_consent"
+    assert migration.revision == "0095_llm_stage_attempt_cap"
     assert migration.down_revision == "0094_agent_debate_cards"
 
     command.downgrade(config, migration.down_revision)

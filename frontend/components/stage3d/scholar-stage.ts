@@ -10,10 +10,7 @@ import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 
-import {
-  attachSyntheticMouth,
-  findHeadTopBone,
-} from "./synthetic-mouth";
+import { attachSyntheticMouth, findHeadTopBone } from "./synthetic-mouth";
 
 import {
   applyRelaxedStandingPose,

@@ -111,6 +111,7 @@ REFERENCE_RULES: dict[str, Rule] = {
     "team_versions.created_by_user_id->users": "null",
     "teams.owner_user_id->users": "delete",
     "user_credentials.user_id->users": "delete",
+    "user_learning_research_consents.user_id->users": "delete",
     "voice_profiles.consent_actor_user_id->users": "null",
     "agent_account_memories.agent_id->agents": "delete",
     "agent_conversation_turns.conversation_id->agent_conversations": "delete",

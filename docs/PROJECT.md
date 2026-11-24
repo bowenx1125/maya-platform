@@ -135,3 +135,7 @@ Root1: #468 `reprepare_failed` rebound hashes on spent attempt-2 `provider_opera
 ## Nov20 figures
 
 Catalog +4 rigged philosophers:socrates/plato/hume/descartes.glb(template ids same names);stocky hume/plato rigged via 0.75 X/Z-thinned OBJ then inverse-scaled GLB(positions,bones,IBMs). Robe hang covers togas;synthetic mouth+gestures apply. Gesture +5 clips(both_hands_open/point_raise/head_tilt_think/hand_chop/weight_shift)+rule triggers. QA+tests green. Deployed 0885c3fa;backup maya-pre-0885c3fa-20261120-190650.dump(pg_restore --list OK);schema 0095_llm_stage_attempt_cap;all containers healthy,both backends ready 200,site+4 GLBs HTTP 200.
+
+## Nov24 login research consent
+
+Optional login checkbox + bilingual static PDF (`learning-data-consent-v1`); per-account `user_learning_research_consents` (Alembic `0096_learning_research_consent`); default false; write/revoke only after successful password auth; device-local hashed-username reminder for pre-login restore; no anonymous consent API; research-export fail-closed gate deferred. Audit: keep 0095 migration test under new head; username blur must not overwrite a manual consent tick. 0 calls/deploy.

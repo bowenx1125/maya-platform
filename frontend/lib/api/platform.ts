@@ -1281,6 +1281,8 @@ export class PlatformApi {
       ticket?: string;
       /** Upper bound for riding out a network drop while holding a ticket. */
       reconnectWindowMs?: number;
+      /** Optional research-use consent; never required for access. */
+      researchConsent?: boolean;
     },
   ): Promise<LoginResult> {
     let ticket: string | undefined = options?.ticket;
@@ -1294,7 +1296,11 @@ export class PlatformApi {
       let result;
       try {
         result = await this.client.POST("/auth/login", {
-          body: { username, password },
+          body: {
+            username,
+            password,
+            research_consent: options?.researchConsent === true,
+          },
           headers: ticket ? { "X-Auth-Admission-Ticket": ticket } : {},
         });
         offlineSince = null;

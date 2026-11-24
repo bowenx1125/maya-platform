@@ -112,8 +112,20 @@ describe("createPerformancePlayer", () => {
       ...TIMELINE,
       posture: "",
       events: [
-        { t: 0.5, type: "gesture", clip: "both_hands_open", dur: 1.2, fade_ms: 100 },
-        { t: 2.2, type: "gesture", clip: "point_raise", dur: 1.0, fade_ms: 100 },
+        {
+          t: 0.5,
+          type: "gesture",
+          clip: "both_hands_open",
+          dur: 1.2,
+          fade_ms: 100,
+        },
+        {
+          t: 2.2,
+          type: "gesture",
+          clip: "point_raise",
+          dur: 1.0,
+          fade_ms: 100,
+        },
       ],
     });
     const open = player.sample(1.1);

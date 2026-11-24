@@ -12,6 +12,13 @@ import {
   type LoginQueueNotice,
   type SavedLoginQueue,
 } from "../lib/login-queue";
+import {
+  forgetResearchConsent,
+  normalizeUsernameKey,
+  rememberResearchConsent,
+  RESEARCH_CONSENT_PDF_HREF,
+  shouldRestoreResearchConsent,
+} from "../lib/research-consent-reminder";
 import { usePathname, useRouter } from "next/navigation";
 import {
   createContext,
@@ -64,6 +71,7 @@ type SessionContextValue = {
       onQueued?: (notice: LoginQueueNotice) => void;
       signal?: AbortSignal;
       ticket?: string;
+      researchConsent?: boolean;
     },
   ) => Promise<LoginResult>;
   chooseLoginIdentity: (
@@ -324,12 +332,20 @@ export function SessionProvider({
         onQueued?: (notice: LoginQueueNotice) => void;
         signal?: AbortSignal;
         ticket?: string;
+        researchConsent?: boolean;
       },
     ) =>
       enqueueSessionMutation(async () => {
         const epoch = beginSessionOperation();
         try {
           const next = await api.login(username, password, options);
+          // Local reminder tracks only successful authenticated consent on
+          // this device; it never replaces the server row.
+          if (options?.researchConsent) {
+            void rememberResearchConsent(username);
+          } else {
+            void forgetResearchConsent(username);
+          }
           if ("choice_token" in next) {
             preserveSessionAfterFailure(epoch);
             return next;
@@ -701,6 +717,10 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
   } = useSession();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [researchConsent, setResearchConsent] = useState(false);
+  // Username key already restored (or manually chosen) so blur does not
+  // overwrite an intentional tick/untick for the same account.
+  const researchConsentKeyRef = useRef("");
   const [busy, setBusy] = useState(false);
   const [choice, setChoice] = useState<LoginIdentityChoice | null>(null);
   const [studentExpanded, setStudentExpanded] = useState(false);
@@ -737,6 +757,13 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
       setSavedQueue(saved);
       setResumeQueue(true);
       setUsername((current) => current || saved.username);
+      if (saved.username.trim()) {
+        const key = normalizeUsernameKey(saved.username);
+        researchConsentKeyRef.current = key;
+        void shouldRestoreResearchConsent(saved.username).then(
+          setResearchConsent,
+        );
+      }
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
@@ -802,6 +829,7 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
       const session = await login(name, password, {
         signal: controller.signal,
         ticket: held?.ticket,
+        researchConsent,
         onQueued: (notice) => {
           setMood("attentive");
           setQueue(notice);
@@ -1114,9 +1142,29 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
                   className="aria-invalid:border-err! aria-invalid:shadow-[0_0_0_3px_#FFE4E4,3px_3px_0_#EF4444]!"
                   autoComplete="username"
                   value={username}
-                  onChange={(event) => setUsername(event.target.value)}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setUsername(next);
+                    const key = normalizeUsernameKey(next);
+                    // Changing the typed account clears a restored tick;
+                    // blur may restore again for that username only.
+                    if (key !== researchConsentKeyRef.current) {
+                      researchConsentKeyRef.current = "";
+                      setResearchConsent(false);
+                    }
+                  }}
                   onFocus={() => setMood("attentive")}
-                  onBlur={() => setMood("idle")}
+                  onBlur={(event) => {
+                    setMood("idle");
+                    const name = event.currentTarget.value.trim();
+                    if (!name) return;
+                    const key = normalizeUsernameKey(name);
+                    if (key === researchConsentKeyRef.current) return;
+                    researchConsentKeyRef.current = key;
+                    void shouldRestoreResearchConsent(name).then(
+                      setResearchConsent,
+                    );
+                  }}
                   required
                 />
               </span>
@@ -1139,6 +1187,28 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
                   onBlur={() => setMood("idle")}
                   required
                 />
+              </span>
+            </label>
+            <label className="login-research-consent">
+              <input
+                type="checkbox"
+                checked={researchConsent}
+                onChange={(event) => {
+                  researchConsentKeyRef.current =
+                    normalizeUsernameKey(username);
+                  setResearchConsent(event.target.checked);
+                }}
+              />
+              <span>
+                {t("researchConsent")}{" "}
+                <a
+                  href={RESEARCH_CONSENT_PDF_HREF}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {t("researchConsentPdf")}
+                </a>
               </span>
             </label>
             <button className="primary-action" type="submit" disabled={busy}>

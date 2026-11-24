@@ -544,7 +544,9 @@ describe("U3 login field stickers", () => {
       document.querySelectorAll("form [data-checklist-badge]"),
     ).map((badge) => badge.textContent);
     expect(badges).toEqual(["1", "1"]);
-    for (const input of document.querySelectorAll("form input")) {
+    for (const input of document.querySelectorAll(
+      'form input:not([type="checkbox"])',
+    )) {
       expect(input.getAttribute("aria-describedby")).toBe(line.id);
     }
   });

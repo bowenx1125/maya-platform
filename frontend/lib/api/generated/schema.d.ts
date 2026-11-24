@@ -2932,6 +2932,11 @@ export interface components {
             username: string;
             /** Format: password */
             password: string;
+            /**
+             * @description Optional research-use consent for learning data. Never required for sign-in; default false. Written only after a successful password verify.
+             * @default false
+             */
+            research_consent: boolean;
         };
         LoginIdentityClass: {
             course_id: components["schemas"]["Uuid"];

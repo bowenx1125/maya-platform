@@ -12268,6 +12268,11 @@
             "type": "string",
             "maxLength": 128,
             "format": "password"
+          },
+          "research_consent": {
+            "type": "boolean",
+            "default": false,
+            "description": "Optional research-use consent for learning data. Never required for sign-in; default false. Written only after a successful password verify.\n"
           }
         }
       },

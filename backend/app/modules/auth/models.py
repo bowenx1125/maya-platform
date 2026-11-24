@@ -79,3 +79,26 @@ class UserCredential(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (Index("ix_user_credentials_username", "username", unique=True),)
+
+
+class UserLearningResearchConsent(Base):
+    """Optional research-use consent for platform learning data.
+
+    Absent row means not consented. Written only after a successful password
+    login; never inferred and never required for access.
+    """
+
+    __tablename__ = "user_learning_research_consents"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "users.id",
+            name="fk_user_learning_research_consents_user",
+            ondelete="CASCADE",
+        ),
+        primary_key=True,
+    )
+    consented: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    consent_copy_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
