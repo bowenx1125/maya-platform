@@ -1003,6 +1003,8 @@ const enMessages = {
   loginNeedUsername: "Enter your username.",
   loginNeedPassword: "Enter your password.",
   loginNeedBoth: "Enter your username and password.",
+  researchConsent: "I consent to research use of my learning data.",
+  researchConsentPdf: "Read the consent PDF",
   needAccountLink: "Create an account",
   usernameRule: "Use English letters only, no spaces. Example: student01",
   usernameInvalid: "Use 3 to 64 English letters or digits, with no spaces.",

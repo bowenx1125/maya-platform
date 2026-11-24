@@ -2071,6 +2071,34 @@ dd {
   margin-top: 0;
 }
 
+.auth-arcade .login-research-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #111;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.auth-arcade .login-research-consent input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  flex: 0 0 18px;
+  accent-color: #111;
+}
+
+.auth-arcade .login-research-consent a {
+  color: #111;
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-color: #ff4d8d;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 3px;
+}
+
 .auth-arcade .stack-form label {
   gap: 6px;
   color: #111;

@@ -94,7 +94,7 @@ def resolve_pool_config(
     return size, overflow, timeout
 
 
-ALEMBIC_HEAD = "0095_llm_stage_attempt_cap"
+ALEMBIC_HEAD = "0096_learning_research_consent"
 # The oldest revision this checkout has (migrations squashed 2026-10-25).
 MIGRATION_BASELINE = "0080_drop_playback_rate"
 

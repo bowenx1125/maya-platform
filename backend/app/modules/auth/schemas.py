@@ -12,6 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class LoginRequest(BaseModel):
     username: str = Field(max_length=64)
     password: str = Field(max_length=128, json_schema_extra={"format": "password"})
+    # Optional research consent; default false. Never required for access.
+    research_consent: bool = False
 
 
 class LoginIdentityClass(BaseModel):

@@ -56,6 +56,7 @@ from app.modules.auth.registration import (
     username_exists,
     verify_database_password,
 )
+from app.modules.auth.research_consent import apply_login_research_consent
 from app.modules.auth.schemas import (
     AuthSession,
     CourseMembership,
@@ -290,6 +291,14 @@ def _login_admitted(
             raise PlatformError(
                 "account_inactive", "This account has been deactivated by a teacher.", 401
             )
+        # Consent is recorded only after a successful password verify. It never
+        # blocks the session; untick on a later login revokes a prior true row.
+        apply_login_research_consent(
+            db,
+            user_id=user.id,
+            consented=bool(payload.research_consent),
+            now=now,
+        )
         if user.id == BOWEN_ID:
             challenge = issue_choice(db, client_key(request, settings), now)
             succeeded = True
