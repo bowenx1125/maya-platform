@@ -234,6 +234,22 @@ docker exec <project>-backend-1 sh -c 'echo probe > /app/data/.mount-probe'
 find . -maxdepth 2 -name .mount-probe
 ```
 
+### Cloud Agent dev servers
+
+The saved Cloud Agent environment starts PostgreSQL 16, the API on
+`127.0.0.1:8000`, and `next dev` on `127.0.0.1:3000`. Open
+`http://127.0.0.1:3000`. Providers stay on
+mock. `CLASSROOM_PUBLIC_BASE_URL` is a private address on port 3000 so
+loopback CSRF matches that dev server.
+
+`node -v` must print `v24.14.0`. The machine image also ships Node 22; the
+pinned binaries are first on `PATH` through `/usr/local/cargo/bin`.
+
+Run backend tests from `backend/` with
+`MAYA_TEST_POSTGRES_URL=postgresql+psycopg://postgres:maya-ci@127.0.0.1:5432/maya_test`
+(the committed CI password). Do not print the generated Demo account password.
+If those dev servers are down, read `/tmp/cursor/start-user/start-user.log`.
+
 ## 7. Recording progress
 
 `docs/PROJECT.md` is the only place project progress lives. Update it in the same
